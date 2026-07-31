@@ -13,6 +13,9 @@ state.yml
 # Migration backups (local only, not synced)
 backups/
 
+# Conflict archive
+attic/
+
 # Temporary files
 *.tmp
 *.temp
