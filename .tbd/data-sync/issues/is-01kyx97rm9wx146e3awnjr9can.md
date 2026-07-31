@@ -1,0 +1,51 @@
+---
+type: is
+id: is-01kyx97rm9wx146e3awnjr9can
+title: "fsqlite alpha release: extract from monorepo and publish 0.1.0-alpha.1"
+kind: epic
+status: open
+priority: 1
+version: 37
+spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
+labels: []
+dependencies: []
+child_order_hints:
+  - is-01kyx98pbh8g37xk0534w9xbjc
+  - is-01kyx98pmmk1k8eran9a8ks43a
+  - is-01kyx98q02gh0k8bzswyzg0pff
+  - is-01kyx98qbw638v53gpf5pd2pyy
+  - is-01kyx98qka3sw1nj9r49fqe6jz
+  - is-01kyx98r0gfyvtx3rrpq9n94c4
+  - is-01kyx98r9x73s1szjw21bzn4mp
+  - is-01kyx98rm2gtzbsx08gg3gkbmm
+  - is-01kyx98s04yjwbn8c8rwf9ackf
+  - is-01kyx98sdwrvyjbd10xt6b2t61
+  - is-01kyx98srj03h0xyjm7psw4k1j
+  - is-01kyx98t42td7swxva57kfdaaz
+  - is-01kyx98ted2c7qjf30ba4nre4m
+  - is-01kyx99v203625pmbtk0gabacz
+  - is-01kyx99v911n334wgvgy2ty8zn
+  - is-01kyx99vfpy5rqjfb6mmkje2sn
+  - is-01kyx99vpgm9zxtqhgcw17xbmg
+  - is-01kyx99vxc02bmak7yeqecc2k9
+  - is-01kyx99w458657a67dcykzprw2
+  - is-01kyx99waty66nfkw3s57j60rp
+  - is-01kyx99wh698h6ezajbe6d0ee5
+  - is-01kyx99wqzdxk2r4801q4f0zcb
+  - is-01kyx99wyx4sh7hm0x25z889eq
+  - is-01kyx99x5hf0pg17ggysvkbqvm
+  - is-01kyx99xcafjpj59c1zkbc3xtn
+  - is-01kyx9gmbmwa5vkt7g3jn2twxr
+  - is-01kyx9gmjqvxjc70vdn0h20pvv
+  - is-01kyx9gmsmz1kh69vpkm0n53kp
+  - is-01kyx9gn0ex11h62ydp3y60sxw
+  - is-01kyx9gn7fvnx5n7nhngvfpqb7
+  - is-01kyx9gnev380h947x3hx8cp8n
+  - is-01kyx9gnnxt3y62ej73wxr5h5f
+  - is-01kyx9gnx5tv9aycmebwc9960a
+  - is-01kyx9gp458wzc8e1v41htre2c
+  - is-01kyx9gpb1y0gkwhw9ze32913r
+  - is-01kyx9gpj0yvtab58tgxy5ezk1
+created_at: 2026-07-31T23:48:01.800Z
+updated_at: 2026-07-31T23:52:54.592Z
+---
