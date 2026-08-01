@@ -1,11 +1,11 @@
 ---
 type: is
 id: is-01kyx97rm9wx146e3awnjr9can
-title: "fsqlite alpha release: extract from monorepo and publish 0.1.0-alpha.1"
+title: fsqlite standalone 0.1.0-alpha.1 release
 kind: epic
 status: open
 priority: 1
-version: 38
+version: 41
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels: []
 dependencies: []
@@ -47,6 +47,8 @@ child_order_hints:
   - is-01kyx9gpb1y0gkwhw9ze32913r
   - is-01kyx9gpj0yvtab58tgxy5ezk1
   - is-01kyxeprkr7tg2pakygc3ge1g1
+  - is-01kyxmtrtfxf2sh0badg29wqth
+  - is-01kyxna2edqk58qfnw8fyefp62
 created_at: 2026-07-31T23:48:01.800Z
-updated_at: 2026-08-01T01:23:36.183Z
+updated_at: 2026-08-01T03:19:00.297Z
 ---

@@ -5,7 +5,7 @@ title: First dependency resolution and committed lockfile
 kind: task
 status: in_progress
 priority: 1
-version: 8
+version: 9
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase1
@@ -24,6 +24,6 @@ dependencies:
     target: is-01kyx98srj03h0xyjm7psw4k1j
 parent_id: is-01kyx97rm9wx146e3awnjr9can
 created_at: 2026-07-31T23:48:32.897Z
-updated_at: 2026-08-01T01:27:19.623Z
+updated_at: 2026-08-01T03:12:30.606Z
 ---
-The package has NEVER had a lockfile (it was excluded from the monorepo workspace via '!packages/fsqlite'), so all 7 devDeps are unresolved. This is a genuinely new resolution and the riskiest step in the plan. Expect friction from the tsdown -> rolldown transitive, documented in the QA runbook as blocked by the cool-off. Commit pnpm-lock.yaml; CI installs --frozen-lockfile.
+The standalone pnpm resolution now exists locally and pnpm-lock.yaml has been generated. Review the resolved graph against the 14-day cool-off and install-script policy, validate a frozen reinstall, and commit the lockfile. This bead remains open until the lockfile is committed and reproducible.

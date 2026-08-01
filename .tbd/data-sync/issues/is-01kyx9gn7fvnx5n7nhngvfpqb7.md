@@ -1,17 +1,19 @@
 ---
 type: is
 id: is-01kyx9gn7fvnx5n7nhngvfpqb7
-title: Scrub the QA runbook of monorepo assumptions
+title: Align the QA runbook with the standalone workspace
 kind: task
-status: open
+status: closed
 priority: 2
-version: 1
+version: 4
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase3
 dependencies: []
 parent_id: is-01kyx97rm9wx146e3awnjr9can
 created_at: 2026-07-31T23:52:53.230Z
-updated_at: 2026-07-31T23:52:53.230Z
+updated_at: 2026-08-01T03:15:27.687Z
+closed_at: 2026-08-01T03:15:27.686Z
+close_reason: Aligned the QA, research, format, design-adjacent source-confirmation, release-plan, and tracker surfaces with the standalone f1.0 project. Removed obsolete paths and external product context; updated current runtime/layout/test claims; defined recognition and upgrade semantics; formatted with flowmark; verified relative links, repository searches, and git diff checks.
 ---
-The most entangled doc: 11 references at :18 (cd packages/fsqlite), :24-30 (run from a full repo checkout after pnpm install, no package-local install, resolve tsdown/tsc from ../../node_modules), :33 (monorepo CI job name test-fsqlite), :91, and :236-241. Part C item 1 describes a constraint that CEASES TO EXIST on extraction and must be deleted rather than rewritten. Also fix the stale test counts (:35 and :100 claim 75 while its own Part A table sums to 73; the runner reports 75).
+Keep the QA runbook standalone and executable from the repository root: pnpm frozen-install workflow, no network-time tool runner, current suite counts, f1.0 marker checks, and only genuine residual risks in Part C.

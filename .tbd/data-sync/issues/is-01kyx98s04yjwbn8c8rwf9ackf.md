@@ -1,11 +1,11 @@
 ---
 type: is
 id: is-01kyx98s04yjwbn8c8rwf9ackf
-title: Add package metadata and correct LICENSE attribution
+title: Complete package metadata and verify LICENSE attribution
 kind: task
 status: open
 priority: 2
-version: 3
+version: 4
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase1
@@ -16,6 +16,6 @@ dependencies:
     target: is-01kyx9gpb1y0gkwhw9ze32913r
 parent_id: is-01kyx97rm9wx146e3awnjr9can
 created_at: 2026-07-31T23:48:34.947Z
-updated_at: 2026-07-31T23:53:10.385Z
+updated_at: 2026-08-01T03:11:14.012Z
 ---
-package.json has no repository (with directory field for the workspace), homepage, bugs, or author. publint is already wired via tsdown and will demand them; npm provenance requires repository. Without it the README's relative doc links do not resolve on npmjs.com. LICENSE currently reads 'Copyright (c) 2026 finterm' while this repo is jlevy/fsqlite.
+Add repository metadata with the packages/fsqlite directory field, homepage, bugs, and author Joshua Levy. Verify the MIT LICENSE names Joshua Levy as the sole copyright holder. Ensure publint and npm provenance can resolve the repository metadata.
