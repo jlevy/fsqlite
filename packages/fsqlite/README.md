@@ -34,7 +34,7 @@ Choose fsqlite only when its different publication boundary solves a real proble
 | Independent processes that must capture work without writing one live database file | `SnapshotStore` | Captures row changes in parallel and merges them during reconciliation |
 | Many low-latency writers, rolling schemas, or serializable cross-row business transactions | A client/server database | A service can coordinate writers and schema deployment directly |
 
-In this documentation, an “agent” is simply an independently running local process.
+Here, an “agent” means an independently running local process.
 Agent count alone does not determine fit.
 Snapshot bytes multiplied by write rate and burst size determine most of the cost.
 
@@ -79,7 +79,7 @@ const store = new SnapshotStore('./example.fsqlite', {
   conflictPolicy: { kv: 'lww', '*': 'strict' },
 }).init()
 
-// A lock-free writer records a transaction envelope.
+// A writer records an envelope without taking the publish lease.
 store.write('worker-a', (db) => {
   db.prepare('INSERT INTO kv VALUES (?, ?)').run('answer', '42')
 })

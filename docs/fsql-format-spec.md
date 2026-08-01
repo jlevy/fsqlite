@@ -264,7 +264,7 @@ chronological.
 | `changeset_sha256` | Full 64-hex SHA-256 of the payload; reconcile quarantines a digest mismatch |
 | `tool_version` | Producing implementation (provenance) |
 
-**Writer protocol** (all steps lock-free):
+**Writer protocol** (no step takes the publish lease):
 
 1. **W1.** Validate the writer id against the regex above and verify the configured
    caller-schema identity against the published snapshot.

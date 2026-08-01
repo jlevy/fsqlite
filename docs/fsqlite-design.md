@@ -4,8 +4,8 @@ Status: current explanatory design for the implementation in this repository.
 
 The [format specification](fsql-format-spec.md) is the sole normative authority for the
 `f1.0` directory format and coordination protocol.
-This document explains the system constraints, how the design meets them, and where the
-design deliberately stops.
+`f1.0` coordinates independent processes through immutable snapshots and transaction
+envelopes. The constraints in this design define its operating boundary.
 The [QA runbook](qa-runbook.md) maps those claims to evidence.
 The dated [research report](research/research-2026-06-06-portable-concurrent-sqlite.md)
 records prior art, source analysis, and experiments, but does not define current
@@ -15,8 +15,8 @@ calibrates the alpha against the current implementation and measurements.
 
 ## The Problem
 
-SQLite is an excellent portable file format, but its live concurrency mechanisms assume
-one local filesystem.
+SQLite provides a portable database file format, but its live concurrency mechanisms
+assume one local filesystem.
 WAL mode allows readers alongside one active writer, but it uses shared memory and
 requires every participant to be on the same host.
 Rollback journaling relies on filesystem locks whose behavior varies across NFS, SMB,
@@ -79,22 +79,22 @@ fsqlite is a format plus a Node reference implementation.
 
 Its goals are:
 
-- keep each published state as an ordinary SQLite database;
-- let readers use normal SQLite tools and bindings;
-- coordinate independent writers without a required service or SQLite file locking;
-- bound crash loss at an explicit publication boundary;
-- detect and reject malformed, incompatible, or constraint-breaking input;
-- make store identity and format evolution explicit;
-- keep the Node package small, auditable, and free of runtime dependencies.
+- keep each published state as an ordinary SQLite database
+- let readers use normal SQLite tools and bindings
+- coordinate independent writers without a required service or SQLite file locking
+- bound crash loss at an explicit publication boundary
+- detect and reject malformed, incompatible, or constraint-breaking input
+- make store identity and format evolution explicit
+- keep the Node package small, auditable, and free of runtime dependencies
 
 It does not attempt to provide:
 
-- serializable multi-writer transactions or general predicate conflict detection;
-- safety from processes that bypass the protocol and mutate store files;
-- automatic schema or format migration during open;
-- a claim that every filesystem implements the required primitives correctly;
-- replication, remote transport, consensus, or a database service;
-- arbitrary live-directory backup semantics.
+- serializable multi-writer transactions or general predicate conflict detection
+- safety from processes that bypass the protocol and mutate store files
+- automatic schema or format migration during open
+- a claim that every filesystem implements the required primitives correctly
+- replication, remote transport, consensus, or a database service
+- arbitrary live-directory backup semantics
 
 ## Design Constraints
 
@@ -109,7 +109,7 @@ of the promise.
 | `C1` | Published data stays portable and tool-readable. | Every head is a complete SQLite file. Readers need no fsqlite extension. | The live store is a directory, not one mutable database file. | Spec S1-S6; `portability.test.ts`; QA B4 |
 | `C2` | Ordinary operation needs no server or background service. | Processes coordinate through immutable files, envelopes, atomic rename, and a `mkdir` lease. | Applications schedule reconciliation themselves. | Spec F1-F6 and L1-L5; multiprocess suites |
 | `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, visibility after close, and durable fsync ordering. Publication fails if a required directory fsync is unavailable. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
-| `C4` | Readers stay lock-free and independent writers can capture work concurrently. | Readers open immutable heads. `SnapshotStore` writers create unique transaction envelopes without the publish lease. | Cross-writer visibility occurs only after reconcile. | Spec W1-W4 and reader role; `concurrent.test.ts` |
+| `C4` | Readers do not take the publish lease, and independent writers can capture work concurrently. | Readers open immutable heads. `SnapshotStore` writers create unique transaction envelopes without the publish lease. | Cross-writer visibility occurs only after reconcile. | Spec W1-W4 and reader role; `concurrent.test.ts` |
 | `C5` | A crash cannot destroy a previously published state. | Immutable snapshots, durable snapshot-before-pointer ordering, atomic pointer replacement, fencing, OCC on `current`, and the in-snapshot ledger define one commit point. | Accepted envelopes are not power-loss durable until publication. Arbitrary recursive copies of a live store are outside the guarantee. | Spec R1, P1-P3, F5, and section 10; crash, kill, and fencing suites |
 | `C6` | Detectable inconsistencies fail closed and repair never guesses. | Recognition separates absent, invalid, unsupported, and corrupt stores. Identity, digests, integrity, foreign keys, reserved tables, and schema compatibility are checked before destructive work or publication. | Undetectable hardware or protocol-bypassing corruption remains possible. Repair needs a verified clean recovery point. | Spec R2 and section 11; hardening, store-format, and repair suites |
 | `C7` | Merge results are deterministic, exactly once, and closed over declared SQLite constraints. | Envelopes apply in byte-sorted order; action passes are fixed as `replace`, `omit`, `strict`; data and ledger entry share one transaction; nonreplaceable conflicts quarantine the complete envelope; foreign keys are checked at envelope boundaries. | Same-primary-key DATA/CONFLICT cases still require an application policy. General business invariants need stronger patterns. | Spec F1-F6 and merge policy; `merge-constraints.test.ts` |
@@ -236,8 +236,8 @@ filesystem meets the required capability checks.
 The alpha is validated for local POSIX multi-process use; real cross-host NFS/SMB
 validation remains pending.
 
-- Writer capture is lock-free.
-- Readers never block.
+- Writer capture does not take the publish lease.
+- Readers do not wait for the publish lease.
 - Writers need SQLite session support.
 - Reconcile either quarantines an envelope or applies it; applied envelopes become
   visible and power-loss durable when the new snapshot is published.
@@ -276,7 +276,7 @@ Periodic heartbeat support for long synchronous critical sections remains tracke
 
 ## Operating Envelope
 
-### Snapshot size
+### Snapshot Size
 
 Ordinary SQLite usually writes changed pages for a small transaction.
 Both fsqlite write strategies instead copy the complete published head before changing
@@ -311,17 +311,18 @@ Pending envelope count and bytes determine sorting, hashing, apply, and archive 
 The lifetime `applied_tx` count adds another growing term because reconcile loads the
 complete ledger into memory and every later snapshot carries it.
 
-Lock-free capture permits concurrent agents, but `W` in-flight writers can require about
-`W` working copies of the head.
+Capture without the publish lease permits concurrent agents, but `W` in-flight writers
+can require about `W` working copies of the head.
 A reconcile build, retained predecessors, active read leases, envelopes, and quarantine
 evidence add to peak disk use.
 
 For example, one capture each from 12 agents against a 5 MiB head implies about 60 MiB
 of source-copy traffic and can transiently create about 60 MiB of writer copies before
 reconciliation and retention overhead.
-Repeating that round once a minute is a very different workload from repeating it once a
-second. Agent count is useful only together with head bytes, write frequency, and burst
-shape.
+Repeating that round once a minute produces about 1 MiB/s of average source-copy
+traffic. Repeating it once a second requires at least 60 MiB/s before reconciliation or
+callback overhead. Agent count is useful only together with head bytes, write frequency,
+and burst shape.
 
 Batching several envelopes into one reconcile amortizes the build copy, integrity gate,
 fsync, and pointer publication.
@@ -344,9 +345,8 @@ and needs capacity monitoring.
 Hundreds of MiB to GiB heads with frequent small writes, immediate global visibility, or
 high sustained transaction rates are poor default fits.
 
-This boundary does not make the architecture less useful in its intended lane.
-It makes fsqlite a coordination format for compact local state, not a replacement for a
-general database service.
+Within this envelope, fsqlite is a coordination format for compact local state, not a
+replacement for a general database service.
 SnapshotStore removes the need to wait for a live SQLite writer lock during capture; it
 does not remove storage-bandwidth, capacity, or serialized-publication limits.
 
@@ -362,7 +362,7 @@ The alpha is a protocol design and reference implementation, not universal certi
 of shared filesystems.
 Consumer synchronization folders are not conforming shared filesystems.
 
-### Backup and copying
+### Backup and Copying
 
 Published snapshots are immutable.
 A reader can pin one with `readLease()` and copy that file safely.
@@ -374,7 +374,7 @@ may include recoverable transients, but fsqlite does not promise that arbitrary
 software, copy order, GC races, or an interrupted directory copy will retain a complete
 clean snapshot. Use the provided snapshot, lease, seal, or backup surfaces.
 
-### Threading and processes
+### Threading and Processes
 
 Operations open fresh connections and never share a connection across Worker Threads.
 The filesystem protocol coordinates processes at a store root.
@@ -489,8 +489,7 @@ new DirectStore(dir, options).write((db) => {
 | `src/lock` | Fenced `mkdir` lease used for publication and maintenance |
 | `src/cli` | Schema-agnostic operator commands and diagnostics |
 
-The CLI is part of the reference implementation, not an afterthought.
-It provides `info`, `validate`, `gc`, `seal`, `repair`, `stats`, `doctor`, and
+The CLI provides `info`, `validate`, `gc`, `seal`, `repair`, `stats`, `doctor`, and
 `fsinspect` without requiring application schema code.
 
 ## Validation and Remaining Work
