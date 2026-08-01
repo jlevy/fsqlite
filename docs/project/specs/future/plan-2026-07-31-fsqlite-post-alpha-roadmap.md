@@ -40,8 +40,9 @@ remain disclosed. The system constraints and operating boundaries are in
 - Caller-schema migration and fsqlite directory-format migration are separate protocols.
 - SnapshotStore callbacks run against a full copy of the published head.
   The unsafe schema-only shortcut is not part of `f1.0`.
-- Write callbacks cannot mutate schema, identity, schema version, or fsqlite-owned
-  tables. DirectStore revalidates the candidate before publication.
+- Write callbacks cannot mutate persistent or temporary schema, identity, schema
+  version, or fsqlite-owned tables.
+  DirectStore revalidates the candidate before publication.
 
 ## Workstreams
 

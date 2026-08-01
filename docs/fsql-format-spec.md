@@ -246,10 +246,11 @@ chronological.
    The `f1.0` writer protocol has no empty seed mode.
 3. **W3.** Run the caller’s data work inside one transaction while recording a session
    over all caller tables; extract the changeset; delete the working copy.
-   The callback MUST NOT change the SQLite schema, `application_id`, `user_version`, or
-   fsqlite-owned tables.
-   A writer MUST reject such an attempt rather than silently discard or publish it.
-   An empty changeset means the write is a no-op: produce no envelope.
+   The callback MUST NOT change the persistent or temporary SQLite schema,
+   `application_id`, `user_version`, or fsqlite-owned tables.
+   Temporary schema objects include the callback-protection triggers installed by the
+   implementation. A writer MUST reject such an attempt rather than silently discard or
+   publish it. An empty changeset means the write is a no-op: produce no envelope.
 4. **W4.** Create `<txid>.txn/`, write `changeset.bin`, write `manifest.json`, and
    **write the zero-byte `COMMITTED` marker last**. An envelope without `COMMITTED` MUST
    be ignored by reconcile (it is an aborted/in-progress capture) and is quarantined by

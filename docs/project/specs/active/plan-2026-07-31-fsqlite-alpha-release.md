@@ -305,8 +305,8 @@ The PR review identified two unsafe edges that are resolved before publication:
 - The schema-only writer seed is removed from `f1.0`. A callback now always observes a
   full copy of the published head, so updates, deletes, and existing-key inserts cannot
   silently operate against an empty database.
-- Application callbacks cannot mutate fsqlite-owned rows, SQLite schema, application ID,
-  or caller schema version.
+- Application callbacks cannot mutate fsqlite-owned rows, persistent or temporary SQLite
+  schema, application ID, or caller schema version.
   DirectStore reasserts identity and reserved-table invariants before publishing its
   candidate.
 
@@ -408,6 +408,8 @@ Every item lands with a regression test that fails before the fix.
   quarantine race without weakening fail-closed reason writes
 - [x] (`fsq-rysf`) Protect the callback trust boundary and reassert candidate identity
   before DirectStore publication
+- [x] (`fsq-hv1n`) Reject callback removal or alteration of temporary protection
+  triggers in both write strategies
 - [x] (`fsq-jwyo`) Remove the unsafe schema-only seed mode from the public API and
   `f1.0` protocol
 
@@ -453,7 +455,7 @@ Goal: a stranger can find, understand, install, and use this.
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 119 `node:test` cases
+The current suite is the baseline and must stay green throughout: 121 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 24 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and

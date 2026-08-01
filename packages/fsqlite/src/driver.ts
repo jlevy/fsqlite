@@ -72,6 +72,20 @@ interface CallbackBoundary {
   applicationId: number
   userVersion: number
   schema: string
+  temporarySchema: string
+}
+
+function schemaFingerprint(
+  db: DatabaseSync,
+  catalog: 'sqlite_schema' | 'temp.sqlite_schema',
+): string {
+  return JSON.stringify(
+    db
+      .prepare(
+        `SELECT type, name, tbl_name, sql FROM ${catalog} WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name`,
+      )
+      .all(),
+  )
 }
 
 /** Capture the format and schema state an application callback must leave unchanged. */
@@ -82,14 +96,9 @@ export function captureCallbackBoundary(db: DatabaseSync): CallbackBoundary {
   const userVersion = Number(
     (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
   )
-  const schema = JSON.stringify(
-    db
-      .prepare(
-        "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
-      )
-      .all(),
-  )
-  return { applicationId, userVersion, schema }
+  const schema = schemaFingerprint(db, 'sqlite_schema')
+  const temporarySchema = schemaFingerprint(db, 'temp.sqlite_schema')
+  return { applicationId, userVersion, schema, temporarySchema }
 }
 
 /** Fail a callback that attempts format or schema migration inside a data-write API. */
@@ -103,6 +112,9 @@ export function assertCallbackBoundary(db: DatabaseSync, before: CallbackBoundar
   }
   if (after.schema !== before.schema) {
     throw new Error('application callback changed the SQLite schema')
+  }
+  if (after.temporarySchema !== before.temporarySchema) {
+    throw new Error('application callback changed the SQLite temporary schema')
   }
 }
 

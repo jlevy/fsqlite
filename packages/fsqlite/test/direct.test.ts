@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
@@ -141,6 +141,16 @@ for (const scenario of [
     error: /fsqlite-owned table fsqlite_meta is read-only/,
   },
   {
+    name: 'temporary protection schema',
+    mutate: (db: DatabaseSync) => {
+      db.exec(`
+        DROP TRIGGER fsqlite_protect_applied_tx_insert;
+        INSERT INTO applied_tx VALUES ('forged', '2026-08-01T00:00:00Z');
+      `)
+    },
+    error: /application callback changed the SQLite temporary schema/,
+  },
+  {
     name: 'owned ledger schema',
     mutate: (db: DatabaseSync) => {
       db.exec('DROP TABLE applied_tx')
@@ -180,6 +190,29 @@ test('SnapshotStore callbacks cannot mutate fsqlite-owned rows', () => {
       /fsqlite-owned table applied_tx is read-only/,
     )
     assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(readdirSync(store.txPending), [])
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('SnapshotStore callbacks cannot remove owned-table protection', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    assert.throws(
+      () =>
+        store.write('bad-writer', (db) => {
+          db.exec(`
+            DROP TRIGGER fsqlite_protect_applied_tx_insert;
+            INSERT INTO applied_tx VALUES ('forged', '2026-08-01T00:00:00Z');
+          `)
+        }),
+      /application callback changed the SQLite temporary schema/,
+    )
+    assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(readdirSync(store.txPending), [])
     assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()

@@ -187,7 +187,8 @@ is the normative protocol authority.
   An arbitrary recursive directory copy racing publication or garbage collection is not
   a supported backup contract.
 - Write callbacks are data transactions over a fixed schema.
-  DDL and virtual tables are outside the `f1.0` concurrent-writer contract.
+  Persistent and temporary DDL, including temporary tables and triggers, and virtual
+  tables are outside the `f1.0` concurrent-writer contract.
 
 The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
 tests to guarantees.
