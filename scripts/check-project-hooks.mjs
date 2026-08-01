@@ -286,6 +286,10 @@ try {
       "GIT_SSH_COMMAND='ssh -i /tmp/key' git push origin HEAD",
       'env GIT_CONFIG_COUNT=1 git push origin HEAD',
       'command git push origin HEAD',
+      'if git commit -m test; then git push origin HEAD; fi',
+      'for i in 1; do git push origin HEAD; done',
+      '(git push origin HEAD)',
+      'case x in x) git push origin HEAD ;; esac',
     ]
     for (const command of pushForms) {
       rmSync(closingMarker, { force: true })
@@ -314,6 +318,8 @@ try {
       'git --help push',
       'git --version push',
       'git -h push',
+      'if echo git push; then :; fi',
+      'for git in push; do :; done',
       'printf "git push\\n"',
     ]
     for (const command of nonPushForms) {

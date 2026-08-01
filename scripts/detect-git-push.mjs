@@ -1,8 +1,19 @@
 import { readFileSync } from 'node:fs'
 
 const SINGLE_QUOTE = String.fromCharCode(39)
-const COMMAND_SEPARATORS = new Set(['\n', ';', '&', '|'])
+const COMMAND_SEPARATORS = new Set(['\n', ';', '&', '(', ')', '{', '|', '}'])
 const COMMAND_DECORATORS = new Set(['command', 'env', 'exec', 'nohup', 'sudo', 'time'])
+const COMMAND_PREFIX_KEYWORDS = new Set([
+  '!',
+  'coproc',
+  'do',
+  'elif',
+  'else',
+  'if',
+  'then',
+  'until',
+  'while',
+])
 const DECORATOR_OPTIONS_WITH_VALUE = new Set([
   '-C',
   '-D',
@@ -148,6 +159,7 @@ function containsGitPush(command) {
       continue
     }
     if (isAssignment(token)) continue
+    if (COMMAND_PREFIX_KEYWORDS.has(token)) continue
     if (COMMAND_DECORATORS.has(token)) {
       sawDecorator = true
       continue
