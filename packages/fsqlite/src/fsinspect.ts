@@ -45,6 +45,11 @@ const NETWORK_FS = new Set([
   '9p',
 ])
 
+const MKDIR_PROBE_CONTENDERS = 16
+const MTIME_PROBE_SAMPLES = 12
+const SUBSECOND_MILLISECONDS = 1000
+const EXPECTED_HARDLINK_COUNT = 2
+
 export interface ProbeResult {
   ok: boolean
   error?: string
@@ -61,13 +66,26 @@ export interface FsType {
 export interface InspectReport {
   dir: string
   fs: FsType
-  probes: Record<string, ProbeResult>
+  probes: InspectProbes
   verdict: {
     fsqliteSafe: boolean
     missing: string[]
     walSafe: boolean
     recommendation: string
   }
+}
+
+export interface InspectProbes {
+  mkdirAtomic: ProbeResult
+  renameReplace: ProbeResult
+  exclusiveCreate: ProbeResult
+  closeToOpen: ProbeResult
+  mtimeResolution: ProbeResult
+  symlink: ProbeResult
+  hardlink: ProbeResult
+  fsyncDir: ProbeResult
+  walViable: ProbeResult
+  [key: string]: ProbeResult
 }
 
 const ok = (extra: Record<string, unknown> = {}): ProbeResult => ({ ok: true, ...extra })
@@ -93,14 +111,21 @@ export function detectFsType(dir: string): FsType {
     const lines = readFileSync('/proc/self/mountinfo', 'utf8').split('\n')
     let best: { type: string; mount: string; source: string } | null = null
     for (const line of lines) {
-      if (!line) continue
+      if (!line) {
+        continue
+      }
       // mountinfo: ... <mountpoint> ... - <fstype> <source> <superopts>
       const fields = line.split(' ')
       const mountPoint = fields[4]
       const sep = fields.indexOf('-')
-      if (sep < 0 || !mountPoint) continue
+      if (sep < 0 || !mountPoint) {
+        continue
+      }
       const type = fields[sep + 1]
       const source = fields[sep + 2]
+      if (type === undefined || source === undefined) {
+        continue
+      }
       const isPrefix =
         target === mountPoint || target.startsWith(mountPoint === '/' ? '/' : mountPoint + '/')
       if (isPrefix && (!best || mountPoint.length > best.mount.length)) {
@@ -108,7 +133,7 @@ export function detectFsType(dir: string): FsType {
       }
     }
     if (best) {
-      const base = best.type.split('.')[0]
+      const base = best.type.split('.')[0] ?? best.type
       return { ...best, network: NETWORK_FS.has(best.type) || NETWORK_FS.has(base) }
     }
   } catch {
@@ -124,7 +149,7 @@ export function detectFsType(dir: string): FsType {
  * the deferred real-NFS gate. Treated as a heuristic input to the verdict, not a proof of
  * cross-host atomicity.
  */
-function probeMkdirAtomic(scratch: string, n = 16): ProbeResult {
+function probeMkdirAtomic(scratch: string, n = MKDIR_PROBE_CONTENDERS): ProbeResult {
   const target = join(scratch, 'race.lock')
   let winners = 0
   let eexist = 0
@@ -133,13 +158,18 @@ function probeMkdirAtomic(scratch: string, n = 16): ProbeResult {
       mkdirSync(target)
       winners++
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === 'EEXIST') eexist++
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+        eexist++
+      }
     }
   }
   rmSync(target, { recursive: true, force: true })
   return winners === 1 && eexist === n - 1
     ? ok({ winners, contenders: n })
-    : fail(`expected exactly 1 winner, got ${winners} (eexist=${eexist})`, { winners, contenders: n })
+    : fail(`expected exactly 1 winner, got ${winners} (eexist=${eexist})`, {
+        winners,
+        contenders: n,
+      })
 }
 
 /** rename over an existing file must be atomic-replace (content swapped, source gone). */
@@ -192,7 +222,9 @@ function probeCloseToOpen(scratch: string): ProbeResult {
     writeFileSync(fd, 'published')
     fsyncSync(fd)
     closeSync(fd)
-    return readFileSync(p, 'utf8') === 'published' ? ok() : fail('reader did not observe written bytes')
+    return readFileSync(p, 'utf8') === 'published'
+      ? ok()
+      : fail('reader did not observe written bytes')
   } catch (e) {
     return fail(e)
   } finally {
@@ -206,10 +238,12 @@ function probeMtimeResolution(scratch: string): ProbeResult {
   try {
     const samples: number[] = []
     let last: number | null = null
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < MTIME_PROBE_SAMPLES; i++) {
       writeFileSync(p, String(i))
       const ms = statSync(p).mtimeMs
-      if (last !== null && ms > last) samples.push(ms - last)
+      if (last !== null && ms > last) {
+        samples.push(ms - last)
+      }
       last = ms
       const spin = Date.now() + 2
       while (Date.now() < spin) {
@@ -217,7 +251,10 @@ function probeMtimeResolution(scratch: string): ProbeResult {
       }
     }
     const resolutionMs = samples.length ? Math.min(...samples) : null
-    return ok({ resolutionMs, subSecond: resolutionMs !== null && resolutionMs < 1000 })
+    return ok({
+      resolutionMs,
+      subSecond: resolutionMs !== null && resolutionMs < SUBSECOND_MILLISECONDS,
+    })
   } catch (e) {
     return fail(e)
   } finally {
@@ -250,7 +287,9 @@ function probeHardlink(scratch: string): ProbeResult {
   try {
     writeFileSync(a, 'x')
     linkSync(a, b)
-    return statSync(a).nlink === 2 ? ok() : fail(`nlink=${statSync(a).nlink}, expected 2`)
+    return statSync(a).nlink === EXPECTED_HARDLINK_COUNT
+      ? ok()
+      : fail(`nlink=${statSync(a).nlink}, expected ${EXPECTED_HARDLINK_COUNT}`)
   } catch (e) {
     return fail(e)
   } finally {
@@ -308,7 +347,7 @@ export function inspect(dir: string): InspectReport {
   const scratch = mkdtempSync(join(dir, '.fsinspect-'))
   try {
     const fs = detectFsType(dir)
-    const probes: Record<string, ProbeResult> = {
+    const probes: InspectProbes = {
       mkdirAtomic: probeMkdirAtomic(scratch),
       renameReplace: probeRenameReplace(scratch),
       exclusiveCreate: probeExclusiveCreate(scratch),
@@ -320,7 +359,7 @@ export function inspect(dir: string): InspectReport {
       walViable: probeWalViable(scratch),
     }
     // fsqlite needs the coordination primitives; it does NOT need WAL or hardlink.
-    const required = ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen']
+    const required = ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen'] as const
     const missing = required.filter((k) => !probes[k].ok)
     const verdict = {
       fsqliteSafe: missing.length === 0,
@@ -356,7 +395,9 @@ export function formatReport(report: InspectReport): string {
         : ''
     lines.push(`  ${mark(r.ok)} ${name}${detail}`)
   }
-  lines.push(`  verdict: fsqlite-safe=${mark(report.verdict.fsqliteSafe)} wal-safe=${mark(report.verdict.walSafe)}`)
+  lines.push(
+    `  verdict: fsqlite-safe=${mark(report.verdict.fsqliteSafe)} wal-safe=${mark(report.verdict.walSafe)}`,
+  )
   lines.push(`  → ${report.verdict.recommendation}`)
   return lines.join('\n')
 }

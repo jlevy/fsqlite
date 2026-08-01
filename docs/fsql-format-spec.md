@@ -1,6 +1,6 @@
 # fsqlite On-Disk Format and Coordination Protocol — Specification
 
-**format_version: 1** · Status: Draft (normative for the v1 format; tracks the Node
+**format_version: f1.0** · Status: Draft (normative for the f1.0 format; tracks the Node
 reference implementation at `packages/fsqlite/`)
 
 This is the normative definition of the fsqlite **store format** and **coordination
@@ -48,15 +48,12 @@ language can open a published snapshot with no fsqlite code at all.
 
 ## 2. Store Layout
 
-A store is a directory tree rooted at the **catalog root**. All paths below are relative
-to it.
-
-> The Node implementation nests the catalog root at `<storeDir>/data/catalog/` (a layout
-> inherited from its first consumer); the format is defined from the catalog root down.
-> Whether to flatten that nesting before publish is Open Issue O1 (§14).
+A store is a dedicated directory tree rooted at the caller-provided **store root**. All
+paths below are relative to it.
 
 ```
-<catalog-root>/
+<store-root>/
+  fsqlite.json                    # immutable format and store identity marker
   current                          # the pointer: ASCII decimal version (§4)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
@@ -70,7 +67,7 @@ to it.
     pending/
       <txid>.txn/                  # transaction envelope (§5)
         manifest.json
-        catalog.changeset
+        changeset.bin
         COMMITTED                  #   zero-byte marker, written last
       .work-<writerId>-<hex10>.sqlite  # transient: writer working copy (§5)
     applied/<txid>.txn/            # envelopes folded into a published snapshot
@@ -78,6 +75,35 @@ to it.
   leases/
     <token>.lease                  # read lease: {version, pid, host, at} (§8)
 ```
+
+`fsqlite.json` makes the directory self-identifying.
+Normal store operations never modify it; only an explicit format upgrade may replace it:
+
+```json
+{
+  "format": "fsqlite",
+  "format_version": "f1.0",
+  "required_features": [],
+  "store_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+- **M1.** `format` MUST be `"fsqlite"`; `format_version` MUST be a supported version
+  string matching `^f(0|[1-9]\d*)\.(0|[1-9]\d*)$`; `required_features` MUST be an array
+  of unique strings understood by the reader; and `store_id` MUST be a UUID.
+- **M2.** Marker absence means **not an fsqlite store**. A marker that is malformed or
+  names another format is **invalid**. A valid marker with an unsupported
+  `format_version` or unknown required feature is **unsupported**, not corrupt.
+  Implementations MUST NOT infer store identity from the presence of `current`,
+  `snapshots/`, or other generic path names.
+- **M3.** Initialization MUST create the marker atomically and durably.
+  It MUST refuse to initialize an unmarked non-empty directory.
+- **M4.** The marker’s `store_id` and `format_version` MUST match the corresponding
+  values in every accepted snapshot and transaction envelope.
+  A mismatch MUST fail validation and MUST block destructive operations.
+- **M5.** Consumers MUST ignore unknown marker fields but MUST reject unknown values in
+  `required_features`. Package versions, timestamps, application schema, and mutable
+  operational state do not belong in the marker.
 
 Naming grammar:
 
@@ -100,10 +126,11 @@ Requirements:
 
 - **S1.** It MUST be a well-formed SQLite database passing `PRAGMA integrity_check`.
 
-- **S2.** It MUST carry `PRAGMA application_id` = the store’s app id (caller-chosen; the
-  Node default is `0x534E4C47`) and `PRAGMA user_version` = the store’s
-  `schema_version`. These are the *foreign-readable* capability stamps: any tool can
-  identify the store kind and schema generation without fsqlite code.
+- **S2.** It MUST carry `PRAGMA application_id = 0x4653514C` (ASCII `FSQL`) and
+  `PRAGMA user_version` = the caller’s `schema_version`. The application id belongs to
+  the fsqlite format and MUST NOT be caller-configurable; it lets foreign tools identify
+  an fsqlite snapshot.
+  The user version remains caller-owned schema metadata.
 
 - **S3.** It MUST contain the two reserved tables, copied forward into every successor
   snapshot:
@@ -121,9 +148,9 @@ Requirements:
 
   Defined `fsqlite_meta` keys: `schema_hash` (first 16 lowercase-hex characters of the
   SHA-256 of the caller’s schema DDL string, UTF-8), `tool_version` (informational),
-  `format_version` (this document’s version, currently `'1'`). Implementations MUST
-  ignore unknown keys, and MUST tolerate a missing `fsqlite_meta` table (stores created
-  before format_version was stamped).
+  `format_version` (this document’s version, currently `'f1.0'`), and `store_id`
+  (matching `fsqlite.json`). Implementations MUST ignore unknown keys.
+  The table and all defined keys are required.
 
 - **S4.** Every *caller* table (any table not named `sqlite_*`, `applied_tx`, or
   `fsqlite_meta`) MUST have a primary key, and unless it is a single-column
@@ -144,10 +171,10 @@ both reserved tables, identity stamped).
 First-open MUST be fenced: build under the publish lock through a uniquely-named
 transient, rename into place, then publish the pointer — so concurrent initializers
 converge on one snapshot 0. After init (and on every reopen), an implementation MUST
-verify compatibility: `user_version` equals its `schema_version`, `application_id`
-equals its app id, and — when the stamp is present — `fsqlite_meta.schema_hash` equals
-the hash of its own DDL. The last check rejects a *divergent schema at the same
-version*, which the integer alone cannot catch.
+verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
+equals its `schema_version`, `application_id` equals `0x4653514C`, and
+`fsqlite_meta.schema_hash` equals the hash of its own DDL. The last check rejects a
+*divergent schema at the same version*, which the integer alone cannot catch.
 
 ## 4. The `current` Pointer
 
@@ -184,12 +211,14 @@ chronological.
 | Field | Meaning |
 | --- | --- |
 | `tx_id` | The envelope id (equals the dir name minus `.txn`) |
+| `format_version` | Store format version from `fsqlite.json`; reconcile quarantines a mismatch |
+| `store_id` | Store identity from `fsqlite.json`; reconcile quarantines a mismatch |
 | `writer_id` | The raw writer id (provenance) |
 | `base_version` | The published version the working copy was seeded from (informational; the format is not base-pinned — see §6) |
 | `schema_version` | Writer’s schema generation; reconcile quarantines a mismatch |
-| `schema_hash` | Writer’s DDL hash; reconcile quarantines a mismatch **when present** (older envelopes omit it) |
+| `schema_hash` | Writer’s DDL hash; reconcile quarantines a mismatch |
 | `created_at` | ISO-8601 timestamp (informational) |
-| `changeset` | Payload filename, `catalog.changeset` |
+| `changeset` | Payload filename, `changeset.bin` |
 | `changeset_sha256` | Full 64-hex SHA-256 of the payload; reconcile quarantines a digest mismatch |
 | `seed` | `snapshot` or `schema-only` (how the working copy was built; informational) |
 | `tool_version` | Producing implementation (provenance) |
@@ -205,7 +234,7 @@ chronological.
 3. **W3.** Run the caller’s work inside one transaction while recording a session over
    all tables; extract the changeset; delete the working copy.
    An empty changeset means the write is a no-op: produce no envelope.
-4. **W4.** Create `<txid>.txn/`, write `catalog.changeset`, write `manifest.json`, and
+4. **W4.** Create `<txid>.txn/`, write `changeset.bin`, write `manifest.json`, and
    **write the zero-byte `COMMITTED` marker last**. An envelope without `COMMITTED` MUST
    be ignored by reconcile (it is an aborted/in-progress capture) and is quarantined by
    repair (§11). The marker-last discipline makes envelope visibility atomic without any
@@ -238,9 +267,10 @@ Protocol:
    - already in *seen* → mark **archivable** (it is in this lineage; move to
      `tx/applied/` after publish);
    - payload missing/unreadable, payload larger than the configured cap (Node default 1
-     GiB), digest ≠ `changeset_sha256`, `schema_version` ≠ the reconciler’s, or (when
-     present) `schema_hash` ≠ the reconciler’s → **quarantine** with a reason; never
-     abort the batch;
+     GiB), digest ≠ `changeset_sha256`, manifest `tx_id` differs from the envelope
+     directory, `format_version` or `store_id` differs from the marker, or
+     `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
+     with a reason; never abort the batch;
    - otherwise **apply** the changeset under the per-table merge policy (below) and
      record `tx_id` in `applied_tx` — both into the build snapshot, both before publish;
      if the apply aborts (strict conflict or any error) → **quarantine** with the
@@ -260,6 +290,8 @@ Protocol:
 6. **F6.** After publish (outside the lock), move applied and archivable envelopes to
    `tx/applied/` and quarantined ones to `tx/quarantine/`, writing each quarantined
    envelope a `QUARANTINE` file containing the reason.
+   The reason MUST be written before the move; if it cannot be persisted, leave that
+   envelope in place and fail loudly.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
    archivable on the next run.
 
@@ -297,7 +329,7 @@ tables; it is a client pattern, not a format feature.
 
 ## 7. The Publish Lock
 
-The publish lock is a **`mkdir` lease**: `mkdir(catalog-root/publish.lock)` succeeds for
+The publish lock is a **`mkdir` lease**: `mkdir(store-root/publish.lock)` succeeds for
 exactly one creator on local disk *and* on NFS/SMB (the same primitive git and npm use
 cross-host). It is held only around the publish step (F5) — never around writer work or
 the build.
@@ -349,9 +381,10 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 
 ## 9. The DirectStore Strategy
 
-DirectStore is the easy-local single-writer strategy **over the identical format** — a
-store written by either strategy is read by the other (and by plain `sqlite3`) with no
-markers distinguishing them.
+DirectStore is the easy-local single-writer strategy **over the identical format**. A
+store written by either strategy has the same `fsqlite.json` identity marker and is read
+by the other strategy, and by plain `sqlite3`; no on-disk field records which write
+strategy produced a snapshot.
 
 Protocol (per write): acquire the publish lock → read `current` → base → copy the base
 snapshot to a `.direct-*` transient → mutate it in one transaction → integrity-gate
@@ -373,7 +406,7 @@ The required barriers:
 | Step | Required barriers |
 | --- | --- |
 | Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → rename → fsync `snapshots/` dir → then pointer swap |
-| Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync catalog dir |
+| Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
 
@@ -393,52 +426,101 @@ the previous head is intact (R1).
 
 ## 11. Validation States and Repair
 
-`validate` classifies a store from layout alone, trusting no single file:
+Recognition happens before store-health validation:
+
+| Result | Meaning / detection |
+| --- | --- |
+| `not-a-store` | `fsqlite.json` is absent; no other filename may establish identity |
+| `invalid` | `fsqlite.json` exists but is malformed, has the wrong `format`, or violates the marker schema |
+| `unsupported` | The marker is valid fsqlite metadata but its version or a required feature is not supported by this implementation |
+
+All three results prohibit writes, repair, GC, and automatic metadata changes.
+`unsupported` MUST remain distinct from `corrupt`: an older repair implementation does
+not understand enough to diagnose or modify a newer valid store safely.
+
+After recognizing a supported store, `validate` classifies its health from the full
+layout, trusting no single file:
 
 | State | Meaning / detection |
 | --- | --- |
 | `sealed` | Pointer valid, head passes `integrity_check`, no committed pending envelopes, no in-flight tells |
 | `live` | As `sealed`, but committed pending envelopes await reconcile |
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
-| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, or the head fails `integrity_check` |
+| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity (`application_id`, `format_version`, or `store_id`) mismatches the marker, or the head fails `integrity_check` |
 
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
-`corrupt` → 3.
+`invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
+classification error rather than a store-health result.
 
 **Repair** restores the last consistent point, which is principled because every
 published snapshot was integrity-gated at publish and never modified (S6):
 
-1. If the pointer is valid and its snapshot passes `integrity_check`, keep it.
-   Otherwise re-point at the **newest integrity-clean snapshot**, deleting corrupt ones
-   encountered on the way down; fail loudly if none exists.
-2. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
+1. Scan snapshots without modifying any file.
+   If the pointer is valid and its snapshot passes `integrity_check`, keep it.
+   Otherwise identify the **newest integrity-clean snapshot**. If none exists, fail
+   without deleting or rewriting anything so forensic recovery remains possible.
+   Only after finding a clean destination may repair re-point and delete corrupt
+   snapshots.
+2. Acquire `publish.lock` and revalidate its owner token immediately before every
+   pointer write, snapshot deletion, transient deletion, and envelope move.
+   Repair MUST refuse to begin while any publisher lock is present; it never deletes or
+   breaks that lock itself.
+3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
-3. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
+4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
    reason file).
-4. Remove a `publish.lock` older than the staleness window.
 
 Repair MUST NOT delete committed pending envelopes (they are unpublished work — folded
 by the next reconcile) and MUST NOT modify any snapshot in place.
 
 ## 12. Versioning and Evolution
 
-- **`format_version`** (`fsqlite_meta`) versions *this layout and protocol*. It is
-  bumped only for incompatible layout/protocol changes.
-  Implementations MUST refuse to write a store whose `format_version` they do not
-  support, SHOULD still read older versions they understand, and MUST tolerate its
-  absence (pre-stamp stores are v1).
+- **`format_version`** versions *this layout and protocol*. It is stored in both
+  `fsqlite.json` and each snapshot’s `fsqlite_meta` table as a string of the form
+  `f<major>.<minor>`; this specification defines `f1.0`. The `f` prefix identifies the
+  value as an fsqlite format version when it is encountered outside the marker.
+  The major component changes for an incompatible layout or protocol.
+  The minor component changes for an additive revision within the same major generation.
+  Implementations MUST refuse to write a store whose exact `format_version` they do not
+  support unless that implementation explicitly defines compatibility with the newer
+  minor revision. They SHOULD still read older versions they understand.
+- **Marker evolution** uses three channels.
+  Unknown optional fields are ignored.
+  Mandatory additive behavior is named in `required_features`; an implementation MUST
+  reject any feature it does not understand.
+  An incompatible layout or protocol increments the major component.
+  Package versions and format versions never imply one another.
 - **`schema_version`** (`PRAGMA user_version`) and **`schema_hash`** version the
   *caller’s* schema. Same version and same hash → compatible; same version and different
   hash → reject at open, quarantine at reconcile; different version → reject/quarantine
-  (until schema migration, a planned v-next feature, defines an upgrade path).
+  (until a future caller-schema migration protocol defines an upgrade path).
 - **Unknown manifest fields and unknown `fsqlite_meta` keys MUST be ignored** — they are
   the forward-compatibility channel.
 - The changeset payload format is owned by SQLite’s session extension and versioned by
   SQLite itself; fsqlite inherits its compatibility guarantees.
 
+Normal open, read, write, reconcile, validation, GC, and repair operations MUST NOT
+upgrade a store. A whole-format upgrade is an explicit operator action and is
+side-by-side by default:
+
+1. Fully validate the source and pin a stable source snapshot or require the source to
+   be quiescent.
+2. Build a new destination directory in the target format, preserving `store_id` because
+   it is the same logical store.
+   A clone or fork instead receives a new `store_id`.
+3. Validate the complete destination before exposing it.
+4. Leave the source untouched; operator cutover selects the destination.
+
+An implementation MUST NOT offer an in-place major upgrade without a separately
+specified crash-recoverable maintenance protocol.
+An allowed metadata-only marker rewrite uses a temporary file in the store root, fsync,
+atomic rename, and root-directory fsync, and preserves `store_id`. The first explicit
+upgrade implementation is post-alpha work.
+
 ## 13. Conformance Roles
 
 **Reader** (no fsqlite code required beyond these rules):
+
 - MUST parse `current` per P1 and open only `snapshots/<version>.fsqlite.sqlite`.
 - MUST open snapshots read-only; MUST NOT modify any store file.
 - MUST re-read the pointer to observe a newer publish (close-to-open: a fresh open per
@@ -455,17 +537,12 @@ publish a build whose integrity gate failed, and MUST NOT mutate a published sna
 **Operator tool**: MUST implement `validate` per §11 before any destructive operation;
 `repair` MUST follow §11’s rules; GC MUST follow G1–G3.
 
-**Conformance fixtures** (planned): a directory of golden stores — sealed, live,
+**Conformance fixtures** (post-alpha): a directory of golden stores — sealed, live,
 in-flight (orphan-ahead), corrupt-pointer, corrupt-head, quarantined-envelope — plus a
 verifier script, so any implementation can be tested against the same artifacts.
 
 ## 14. Open Issues in Format v1
 
-- **O1 — Catalog root nesting.** The Node implementation roots the catalog at
-  `<storeDir>/data/catalog/` (first-consumer heritage).
-  The format is defined from the catalog root, but the discovery rule ("where is the
-  catalog root inside a store dir?") should be either flattened or made explicit before
-  publish.
 - **O2 — Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
   semantics; Win32 `rename` fails on an existing target.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
@@ -474,9 +551,6 @@ verifier script, so any implementation can be tested against the same artifacts.
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
-- **O4 — GC retain phrasing.** G1 keeps `retain + 1` snapshots (current plus `retain`
-  predecessors). Earlier prose saying “the most recent `retain`” was ambiguous; G1 is the
-  normative statement.
 - **O5 — Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
@@ -489,10 +563,10 @@ verifier script, so any implementation can be tested against the same artifacts.
 
 ## 15. References
 
-- The build plan and design rationale:
-  [`plan-2026-06-06-fsqlite-standalone-sqlite-package.md`](fsqlite-design.md)
+- Design rationale: [`fsqlite-design.md`](fsqlite-design.md)
 - Source-pinned binding findings:
-  [`upstream-source-confirmations.md`](../upstream-source-confirmations.md)
+  [`upstream-source-confirmations.md`](upstream-source-confirmations.md)
+- Fixed SQLite file identity: [`application-id.md`](application-id.md)
 - Test-to-guarantee map and manual QA: [`qa-runbook.md`](qa-runbook.md)
 - SQLite session extension: https://sqlite.org/sessionintro.html · `VACUUM INTO`:
   https://sqlite.org/lang_vacuum.html

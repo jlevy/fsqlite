@@ -8,9 +8,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
-import { SnapshotStore, withLock, ownerOf } from '../src/index.ts'
+import { SnapshotStore, withLock, ownerOf, heartbeat } from '../src/index.ts'
+import { setOwnerWriterForTest } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
@@ -37,14 +38,20 @@ test('revalidate-before-publish: a holder whose lease was stolen aborts the dest
         mkdirSync(lockPath)
         writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'someone-else' }))
         // Our fencing check: only publish if we still own the lock.
-        if (ownerOf(lockPath) !== token) return 'aborted'
+        if (ownerOf(lockPath) !== token) {
+          return 'aborted'
+        }
         published = true
         return 'published'
       },
       { timeoutMs: 5000, staleMs: 1000 },
     )
     assert.equal(result, 'aborted')
-    assert.equal(published, false, 'must not perform the destructive publish after losing the lease')
+    assert.equal(
+      published,
+      false,
+      'must not perform the destructive publish after losing the lease',
+    )
   } finally {
     cleanup()
   }
@@ -71,6 +78,42 @@ test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', ()
     assert.equal(out, 'ok')
     assert.equal(ran, true, 'a stale lock must be breakable so a live worker can proceed')
   } finally {
+    cleanup()
+  }
+})
+
+test('lock heartbeat reports loss instead of silently succeeding', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    assert.throws(() => {
+      heartbeat(join(dir, 'missing.lock'))
+    }, /ENOENT/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a failed owner metadata write does not orphan the lock directory', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'owner-write-fails.lock')
+  setOwnerWriterForTest(() => {
+    const error = new Error('injected owner write failure') as NodeJS.ErrnoException
+    error.code = 'ENOSPC'
+    throw error
+  })
+  try {
+    assert.throws(() => {
+      withLock(
+        lockPath,
+        () => {
+          return undefined
+        },
+        { timeoutMs: 100, staleMs: 50 },
+      )
+    }, /injected owner write failure/)
+    assert.equal(existsSync(lockPath), false)
+  } finally {
+    setOwnerWriterForTest(null)
     cleanup()
   }
 })

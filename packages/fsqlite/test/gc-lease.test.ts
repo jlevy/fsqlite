@@ -23,7 +23,9 @@ const readVersionCount = (store: SnapshotStore, version: number): number => {
 const advance = (store: SnapshotStore, n: number): void => {
   for (let i = 0; i < n; i++) {
     store.write('A', (db) =>
-      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`a${store.currentVersion()}-${i}`, 'A', 't'),
+      db
+        .prepare('INSERT INTO artifacts VALUES (?,?,?)')
+        .run(`a${store.currentVersion()}-${i}`, 'A', 't'),
     )
     store.reconcile()
   }
@@ -60,7 +62,42 @@ test('a stale lease (past leaseStaleMs) does not pin forever', () => {
     advance(store, 4) // v6
     // With a 0ms stale window, the abandoned lease is swept and v2 is collectible.
     store.gc({ retain: 1, leaseStaleMs: 0 })
-    assert.ok(!existsSync(store.snapshotPath(2)), 'an abandoned lease must not wedge gc permanently')
+    assert.ok(
+      !existsSync(store.snapshotPath(2)),
+      'an abandoned lease must not wedge gc permanently',
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('gc fails closed on a fresh unreadable lease', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 4)
+    const protectedSnapshot = store.snapshotPath(1)
+    writeFileSync(join(store.leaseDir, 'torn.lease'), '{')
+
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      /gc refused: fresh lease torn\.lease is unreadable/,
+    )
+    assert.equal(existsSync(protectedSnapshot), true)
+  } finally {
+    cleanup()
+  }
+})
+
+test('read-lease heartbeat reports when its lease has been lost', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const lease = store.readLease()
+    lease.release()
+    assert.throws(() => {
+      lease.heartbeat()
+    }, /ENOENT/)
   } finally {
     cleanup()
   }
@@ -76,8 +113,15 @@ test('a packager reads a consistent pinned snapshot while writers keep publishin
     advance(store, 3) // v6; current moves ahead of the pin
     store.gc({ retain: 1 })
     // The packager reads the PINNED snapshot directly (not current): stable.
-    assert.ok(existsSync(store.snapshotPath(lease.version)), 'pinned snapshot still present mid-publish')
-    assert.equal(readVersionCount(store, lease.version), 3, 'pinned snapshot is byte-stable while current advances')
+    assert.ok(
+      existsSync(store.snapshotPath(lease.version)),
+      'pinned snapshot still present mid-publish',
+    )
+    assert.equal(
+      readVersionCount(store, lease.version),
+      3,
+      'pinned snapshot is byte-stable while current advances',
+    )
     assert.equal(store.currentVersion(), 6)
     lease.release()
   } finally {
@@ -96,7 +140,11 @@ test('gc sweeps only STALE transients, sparing a fresh (possibly live) build (sp
     const past = new Date(Date.now() - 120_000)
     utimesSync(old, past, past) // crash debris: 2 minutes old
     store.gc({ transientStaleMs: 60_000 })
-    assert.equal(existsSync(fresh), true, 'a fresh transient (live build in another process) is spared')
+    assert.equal(
+      existsSync(fresh),
+      true,
+      'a fresh transient (live build in another process) is spared',
+    )
     assert.equal(existsSync(old), false, 'a stale transient (crash debris) is swept')
   } finally {
     cleanup()

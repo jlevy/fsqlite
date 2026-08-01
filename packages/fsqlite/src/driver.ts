@@ -62,7 +62,8 @@ export function vacuumInto(db: DatabaseSync, destPath: string): void {
 
 function pragmaOk(db: DatabaseSync, pragma: string): boolean {
   const rows = db.prepare(`PRAGMA ${pragma}`).all() as Record<string, unknown>[]
-  return rows.length === 1 && Object.values(rows[0])[0] === 'ok'
+  const row = rows[0]
+  return row !== undefined && rows.length === 1 && Object.values(row)[0] === 'ok'
 }
 
 /** Cheap integrity gate run before publishing a candidate snapshot. */
@@ -105,15 +106,17 @@ export function integrityCheck(db: DatabaseSync): boolean {
  */
 export function capabilities(): Capabilities {
   let session = false
+  let probe: DatabaseSync | undefined
   try {
-    const probe = new DatabaseSync(':memory:')
+    probe = new DatabaseSync(':memory:')
     probe.exec('CREATE TABLE t(x INTEGER PRIMARY KEY)')
     const s = probe.createSession()
     probe.exec('INSERT INTO t VALUES (1)')
     session = s.changeset().length > 0
-    probe.close()
   } catch {
-    session = false
+    // A capability probe is expected to fail on a build without session support.
+  } finally {
+    probe?.close()
   }
   const proto = DatabaseSync.prototype as unknown as Record<string, unknown>
   return {
@@ -131,8 +134,24 @@ export function capabilities(): Capabilities {
  * (never a raw `cp` of an open file). For a cross-host copy of a *published, immutable*
  * snapshot, a plain file copy is already safe because the snapshot never changes.
  */
-export function backupTo(db: DatabaseSync, destPath: string): Promise<void> {
-  return backup(db, destPath)
+export interface BackupDatabaseOptions {
+  /** Pages copied per backup step. Lower values yield more often to concurrent writers. */
+  rate?: number
+  /** Called after each backup step with stable package-owned progress data. */
+  progress?: (progress: { totalPages: number; remainingPages: number }) => void
+}
+
+export async function backupDatabase(
+  sourcePath: string,
+  destPath: string,
+  options: BackupDatabaseOptions = {},
+): Promise<void> {
+  const db = openReadonly(sourcePath)
+  try {
+    await backup(db, destPath, options)
+  } finally {
+    db.close()
+  }
 }
 
 let _writerCapsOk = false
@@ -142,14 +161,21 @@ let _writerCapsOk = false
  * rather than silently recording an empty changeset (which would look like "no changes" and
  * drop the write). Memoized: the capability of a given process never changes.
  */
-export function requireWriterCapabilities(): void {
-  if (_writerCapsOk) return
-  if (!capabilities().session) {
+export function requireWriterCapabilities(
+  getCapabilities: () => Capabilities = capabilities,
+): void {
+  const usingDefaultProbe = getCapabilities === capabilities
+  if (usingDefaultProbe && _writerCapsOk) {
+    return
+  }
+  if (!getCapabilities().session) {
     throw new Error(
       'fsqlite SnapshotStore writers require the SQLite session extension (SQLITE_ENABLE_SESSION), ' +
         'which this SQLite binding/build does not provide. Use a session-enabled build, or use ' +
         'DirectStore, which needs no session extension.',
     )
   }
-  _writerCapsOk = true
+  if (usingDefaultProbe) {
+    _writerCapsOk = true
+  }
 }

@@ -1,24 +1,22 @@
-# Source Confirmations (Attic Checkouts)
+# Upstream Source Confirmations
 
-Every technical claim behind fsqlite — in this package, its
-[spec](docs/fsqlite-design.md), and the
-[research](docs/research/research-2026-06-06-portable-concurrent-sqlite.md) — is first
-established empirically (the `fsinspect` probes / the test suite) and then
-**corroborated against upstream source** checked out into the gitignored `attic/` (per
-the `checkout-third-party-repo` workflow).
-Exact file:line references are recorded here so a reviewer can re-verify.
-`attic/` is gitignored — reference-only, not committed; re-clone to reproduce.
+Every technical claim behind fsqlite — in this package, its [design](fsqlite-design.md),
+and the [research](research/research-2026-06-06-portable-concurrent-sqlite.md) — is
+first established empirically (the `fsinspect` probes / the test suite) and then
+**corroborated against upstream source** at pinned commits.
+Exact repo-relative file:line references are recorded here so a reviewer can clone each
+repository at the listed commit and re-verify them in any scratch directory.
 
 ## Checkouts
 
-| Repo | Where | Commit / version | Why |
-| --- | --- | --- | --- |
-| `sqlite/sqlite` | `attic/sqlite` | `002d33d` (2026-06-04) | Authoritative session/changeset + locking/WAL semantics |
-| `nodejs/node` @ `v22.22.2` | `attic/node` | `2645dc73` (bundles SQLite **3.51.2**) | The `node:sqlite` binding (`src/node_sqlite.cc`) |
-| `WiseLibs/better-sqlite3` | `attic/better-sqlite3` | `f93f490` (v12.10.0, bundles SQLite **3.53.2**) | Alternative Node binding — format + session availability |
-| `moxystudio/node-proper-lockfile` | `attic/node-proper-lockfile` | `9f8c303` (v4.1.2) | Prior art for the NFS-safe `mkdir` lease lock |
+| Repo | Commit / version | Why |
+| --- | --- | --- |
+| `sqlite/sqlite` | `002d33d` (2026-06-04) | Authoritative session/changeset and locking/WAL semantics |
+| `nodejs/node` @ `v22.22.2` | `2645dc73` (bundles SQLite **3.51.2**) | The `node:sqlite` binding (`src/node_sqlite.cc`) |
+| `WiseLibs/better-sqlite3` | `f93f490` (v12.10.0, bundles SQLite **3.53.2**) | Alternative Node binding: format and session availability |
+| `moxystudio/node-proper-lockfile` | `9f8c303` (v4.1.2) | Prior art for the NFS-safe `mkdir` lease lock |
 
-## A. SQLite Engine Semantics (`attic/sqlite`)
+## A. SQLite Engine Semantics (`sqlite/sqlite`)
 
 ### A1. Conflict-handler return dispatch — ABORT, REPLACE-MISUSE, invalid→MISUSE
 
@@ -78,7 +76,7 @@ retry handling at `:1036` and a BSD/macOS NFS `lockd` bug worked around at
 `:2118-2172`). Confirms why the design avoids `fcntl`/`flock` and uses `mkdir`/`rename`
 instead.
 
-## B. The `node:sqlite` Binding (`attic/node`, v22.22.2 → SQLite 3.51.2)
+## B. The `node:sqlite` Binding (`nodejs/node`, v22.22.2 → SQLite 3.51.2)
 
 ### B0. node ships SQLite with SESSION enabled
 
@@ -129,7 +127,12 @@ rolls back the whole apply and returns **`false`** — the strict-conflict detec
 by default (`allowExtension`/`enableLoadExtension`, `:934`/`:2730`). It exposes **no**
 `sqlite3rebaser_*`. → v1 must not need a rebaser (it doesn’t).
 
-## C. `better-sqlite3` (`attic/better-sqlite3`, v12.10.0 → SQLite 3.53.2)
+Node’s public API history records the static `backup` export as added in v22.16.0 and
+v23.8.0. Since fsqlite imports it by name, this is a package load-time floor rather than
+an optional capability:
+<https://nodejs.org/download/release/v25.4.0/docs/api/sqlite.html>.
+
+## C. `better-sqlite3` (`WiseLibs/better-sqlite3`, v12.10.0 → SQLite 3.53.2)
 
 ### C0. Session is NOT compiled in (the decisive fact)
 
@@ -167,7 +170,7 @@ abstraction should therefore allow better-sqlite3 for reader/Direct paths and re
 Its API surface (`transaction()`, `pragma()`, `backup()`, `serialize()`) is a good
 reference for the driver interface.
 
-## D. `node-proper-lockfile` (`attic/node-proper-lockfile`, v4.1.2)
+## D. `node-proper-lockfile` (`moxystudio/node-proper-lockfile`, v4.1.2)
 
 ### D1. It uses `mkdir` (atomic on any FS, incl. NFS) — same primitive as the fsqlite lock
 
@@ -220,5 +223,5 @@ contradiction:
 
 The one genuinely unsettled question remains **real-NFS behavior under contention**
 (mkdir/rename atomicity, attribute-cache staleness, lease-break under partition, fsync
-durability) — which no amount of source reading can settle and which the Phase-2 planned
+durability) — which no amount of source reading can settle and which the post-alpha
 real-mount gate must cover.

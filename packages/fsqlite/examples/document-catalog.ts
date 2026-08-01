@@ -66,7 +66,6 @@ export const openCatalog = (catalogDir: string): SnapshotStore =>
   new SnapshotStore(catalogDir, {
     schema: CATALOG_SCHEMA,
     schemaVersion: 1,
-    appId: 0x43544c47, // "CTLG"
     conflictPolicy: CATALOG_POLICY,
     toolVersion: 'example-catalog',
   }).init()
@@ -79,24 +78,86 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   // Writer A fetches a page, stores the blob, indexes the URL, records a document.
   cat.write('writerA', (db) => {
-    db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run('blob_sha256_aaa', 'sha256:aaa', 1234, 'text/html', 'managed', 'data/blobs/aaa.html.zst', now())
-    db.prepare('INSERT INTO url_index VALUES (?,?,?,?)').run('urlh_1', 'https://example.com/a', 'blob_sha256_aaa', now())
-    db.prepare('INSERT INTO artifacts VALUES (?,?,?,?,?,?)').run('doc_a', 'report', 'Example Report', '{}', now(), now())
-    db.prepare('INSERT INTO relationships VALUES (?,?,?,?,?,?,?)').run('rel_1', 'artifact', 'doc_a', 'derived_from', 'blob', 'blob_sha256_aaa', now())
+    db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run(
+      'blob_sha256_aaa',
+      'sha256:aaa',
+      1234,
+      'text/html',
+      'managed',
+      'data/blobs/aaa.html.zst',
+      now(),
+    )
+    db.prepare('INSERT INTO url_index VALUES (?,?,?,?)').run(
+      'urlh_1',
+      'https://example.com/a',
+      'blob_sha256_aaa',
+      now(),
+    )
+    db.prepare('INSERT INTO artifacts VALUES (?,?,?,?,?,?)').run(
+      'doc_a',
+      'report',
+      'Example Report',
+      '{}',
+      now(),
+      now(),
+    )
+    db.prepare('INSERT INTO relationships VALUES (?,?,?,?,?,?,?)').run(
+      'rel_1',
+      'artifact',
+      'doc_a',
+      'derived_from',
+      'blob',
+      'blob_sha256_aaa',
+      now(),
+    )
   })
   // Writer B, seeded off the same base, refetches the SAME url (newer) and re-adds an edge.
   cat.write('writerB', (db) => {
-    db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run('blob_sha256_bbb', 'sha256:bbb', 999, 'text/html', 'managed', 'data/blobs/bbb.html.zst', now())
-    db.prepare('INSERT INTO url_index VALUES (?,?,?,?)').run('urlh_1', 'https://example.com/a', 'blob_sha256_bbb', now()) // lww: newer fetch wins
-    db.prepare('INSERT INTO relationships VALUES (?,?,?,?,?,?,?)').run('rel_1', 'artifact', 'doc_a', 'derived_from', 'blob', 'blob_sha256_aaa', now()) // dup edge: union → no-op
+    db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run(
+      'blob_sha256_bbb',
+      'sha256:bbb',
+      999,
+      'text/html',
+      'managed',
+      'data/blobs/bbb.html.zst',
+      now(),
+    )
+    db.prepare('INSERT INTO url_index VALUES (?,?,?,?)').run(
+      'urlh_1',
+      'https://example.com/a',
+      'blob_sha256_bbb',
+      now(),
+    ) // lww: newer fetch wins
+    db.prepare('INSERT INTO relationships VALUES (?,?,?,?,?,?,?)').run(
+      'rel_1',
+      'artifact',
+      'doc_a',
+      'derived_from',
+      'blob',
+      'blob_sha256_aaa',
+      now(),
+    ) // dup edge: union → no-op
   })
 
   const res = cat.reconcile()
-  const read1 = <T>(sql: string, ...args: (string | number)[]): T => cat.read((db) => db.prepare(sql).get(...args) as T)
+  const read1 = <T>(sql: string, ...args: (string | number)[]): T =>
+    cat.read((db) => db.prepare(sql).get(...args) as T)
   console.log('reconcile:', JSON.stringify(res))
-  console.log('url_index[urlh_1] →', read1<{ blob_id: string }>('SELECT blob_id FROM url_index WHERE url_hash=?', 'urlh_1').blob_id, '(expect blob_sha256_bbb: last-writer-wins)')
-  console.log('relationships count →', read1<{ c: number }>('SELECT COUNT(*) c FROM relationships').c, '(expect 1: set-union deduped the duplicate edge)')
-  console.log('content_blobs count →', read1<{ c: number }>('SELECT COUNT(*) c FROM content_blobs').c, '(expect 2)')
+  console.log(
+    'url_index[urlh_1] →',
+    read1<{ blob_id: string }>('SELECT blob_id FROM url_index WHERE url_hash=?', 'urlh_1').blob_id,
+    '(expect blob_sha256_bbb: last-writer-wins)',
+  )
+  console.log(
+    'relationships count →',
+    read1<{ c: number }>('SELECT COUNT(*) c FROM relationships').c,
+    '(expect 1: set-union deduped the duplicate edge)',
+  )
+  console.log(
+    'content_blobs count →',
+    read1<{ c: number }>('SELECT COUNT(*) c FROM content_blobs').c,
+    '(expect 2)',
+  )
   console.log('validate:', JSON.stringify(cat.validate()))
   rmSync(dir, { recursive: true, force: true })
 }

@@ -16,9 +16,13 @@ let torn = false
 let reads = 0
 for (let i = 0; i < iterations; i++) {
   try {
-    const n = store.read((db) => (db.prepare('SELECT COUNT(*) AS c FROM artifacts').get() as { c: number }).c)
+    const n = store.read(
+      (db) => (db.prepare('SELECT COUNT(*) AS c FROM artifacts').get() as { c: number }).c,
+    )
     reads++
-    if (n < last) torn = true // a published snapshot count must never go backwards
+    if (n < last) {
+      torn = true
+    } // a published snapshot count must never go backwards
     last = Math.max(last, n)
   } catch {
     /* pointer momentarily mid-swap is fine; retry next loop */

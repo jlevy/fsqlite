@@ -49,15 +49,26 @@ test('init rejects reopening a store with an incompatible schema version', () =>
 test('init rejects reopening a store with a divergent schema at the SAME version', () => {
   const { dir, cleanup } = tmpStore()
   try {
-    new SnapshotStore(dir, { schema: 'CREATE TABLE a (k TEXT PRIMARY KEY NOT NULL);', schemaVersion: 1 }).init()
+    new SnapshotStore(dir, {
+      schema: 'CREATE TABLE a (k TEXT PRIMARY KEY NOT NULL);',
+      schemaVersion: 1,
+    }).init()
     assert.throws(
-      () => new SnapshotStore(dir, { schema: 'CREATE TABLE b (k TEXT PRIMARY KEY NOT NULL);', schemaVersion: 1 }).init(),
+      () =>
+        new SnapshotStore(dir, {
+          schema: 'CREATE TABLE b (k TEXT PRIMARY KEY NOT NULL);',
+          schemaVersion: 1,
+        }).init(),
       /schema is incompatible|schema_hash/i,
       'a changed DDL without a schemaVersion bump must be rejected, not silently accepted',
     )
     // Reopening with the original DDL still succeeds (the hash matches).
     assert.doesNotThrow(
-      () => new SnapshotStore(dir, { schema: 'CREATE TABLE a (k TEXT PRIMARY KEY NOT NULL);', schemaVersion: 1 }).init(),
+      () =>
+        new SnapshotStore(dir, {
+          schema: 'CREATE TABLE a (k TEXT PRIMARY KEY NOT NULL);',
+          schemaVersion: 1,
+        }).init(),
       'the matching schema reopens cleanly',
     )
   } finally {
@@ -105,7 +116,11 @@ test('N processes initializing one fresh store concurrently converge on a clean 
     )
     const store = new SnapshotStore(dir, STORE_OPTS)
     assert.equal(store.currentVersion(), 0, 'exactly the initial published version')
-    assert.notEqual(store.validate().state, 'corrupt', 'snapshot 0 is integrity-clean after the race')
+    assert.notEqual(
+      store.validate().state,
+      'corrupt',
+      'snapshot 0 is integrity-clean after the race',
+    )
     const snaps = readdirSync(store.snapDir)
     assert.deepEqual(
       snaps.filter((f) => f.endsWith('.sqlite')).sort(),

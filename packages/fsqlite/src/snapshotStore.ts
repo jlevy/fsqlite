@@ -5,7 +5,7 @@
 //     selected by a tiny `current` pointer file.
 //   - Writers are lock-free: seed a session from the current immutable snapshot (safe,
 //     never mutated), run their work, and drop a transaction envelope under
-//     tx/pending/<txid>.txn/ (manifest.json, catalog.changeset, and a COMMITTED marker
+//     tx/pending/<txid>.txn/ (manifest.json, changeset.bin, and a COMMITTED marker
 //     written last). Unique paths make this conflict-free on local disk and NFS.
 //   - reconcile() builds the next snapshot in a temp file from current plus the committed
 //     pending tx (skipping any already in the snapshot's applied_tx ledger, quarantining
@@ -38,8 +38,18 @@ import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
-import { fsyncPath, fsyncDir } from './fsutil.ts'
+import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
 import { withLock, ownerOf } from './lock.ts'
+import {
+  createStoreMarker,
+  hasStoreMarker,
+  readStoreMarker,
+  recognizeStore,
+  STORE_FORMAT_VERSION,
+  STORE_MARKER_FILENAME,
+  FSQLITE_APPLICATION_ID,
+} from './storeFormat.ts'
+import type { StoreMarker } from './storeFormat.ts'
 import type { LockOptions } from './lock.ts'
 import type {
   StoreOptions,
@@ -59,11 +69,23 @@ const sha256 = (buf: Uint8Array | string): string => createHash('sha256').update
 const pad = (n: number): string => String(n).padStart(12, '0')
 const nowIso = (): string => new Date().toISOString()
 
+const CHANGESET_FILENAME = 'changeset.bin'
+const DEFAULT_TOOL_VERSION = 'fsqlite'
+const DEFAULT_READ_LEASE_RETRIES = 8
+const DEFAULT_WRITE_RETRIES = 5
+const DEFAULT_RECONCILE_RETRIES = 8
+const DEFAULT_RETAINED_SNAPSHOTS = 3
+const DEFAULT_LEASE_STALE_MS = 60_000
+const DEFAULT_TRANSIENT_STALE_MS = 60_000
+
 // Transient (never-store-state) files, per fsql-format-spec.md §2: reconcile builds,
 // DirectStore builds, init's snapshot-0 temp, and writer working copies. A fresh one is
 // work in flight; an old one is crash debris.
 const isTransientFile = (f: string): boolean =>
-  f.startsWith('.build-') || f.startsWith('.direct-') || f.startsWith('.work-') || f.endsWith('.tmp')
+  f.startsWith('.build-') ||
+  f.startsWith('.direct-') ||
+  f.startsWith('.work-') ||
+  f.endsWith('.tmp')
 
 // writerId is interpolated into filesystem paths (the working copy and the envelope dir),
 // so it must be a safe single path component: no separators, traversal, or oversize names.
@@ -98,10 +120,14 @@ function validatePrimaryKeys(db: driver.DB): void {
     if (pk.length === 0) {
       throw new Error(`table "${t}" has no primary key; fsqlite requires a NON-NULL primary key`)
     }
-    const isRowidAlias = pk.length === 1 && /^integer$/i.test(pk[0].type.trim())
+    const firstPk = pk[0]
+    const isRowidAlias =
+      pk.length === 1 && firstPk !== undefined && /^integer$/i.test(firstPk.type.trim())
     const nullablePk = pk.find((c) => c.notnull === 0)
     if (!isRowidAlias && nullablePk) {
-      throw new Error(`table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`)
+      throw new Error(
+        `table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`,
+      )
     }
   }
 }
@@ -120,17 +146,22 @@ const META_DDL = `CREATE TABLE IF NOT EXISTS fsqlite_meta (
   value TEXT NOT NULL
 );`
 
-// Bumped only if the on-disk store layout changes incompatibly.
-const FORMAT_VERSION = '1'
-
 type CrashAt = 'after-build' | 'after-snapshot' | 'after-pointer' | null
+let reconcileCrashAtForTest: CrashAt = null
+
+/** Internal fault-injection seam for crash recovery tests. */
+export function setReconcileCrashForTest(crashAt: CrashAt): void {
+  reconcileCrashAtForTest = crashAt
+}
 
 interface Manifest {
   tx_id: string
+  format_version: string
+  store_id: string
   writer_id: string
   base_version: number
   schema_version: number
-  schema_hash?: string
+  schema_hash: string
   created_at: string
   changeset: string
   changeset_sha256: string
@@ -148,7 +179,6 @@ interface Manifest {
  */
 export class SnapshotStore {
   readonly dir: string
-  readonly catDir: string
   readonly snapDir: string
   readonly txPending: string
   readonly txApplied: string
@@ -159,7 +189,6 @@ export class SnapshotStore {
   readonly schema: string
   readonly schemaVersion: number
   readonly schemaHash: string
-  readonly appId: number
   readonly conflictPolicy: NormalizedPolicy
   readonly toolVersion: string
   readonly maxEnvelopeBytes: number
@@ -167,23 +196,21 @@ export class SnapshotStore {
 
   constructor(dir: string, opts: StoreOptions = {}) {
     this.dir = dir
-    this.catDir = join(dir, 'data', 'catalog')
-    this.snapDir = join(this.catDir, 'snapshots')
-    this.txPending = join(this.catDir, 'tx', 'pending')
-    this.txApplied = join(this.catDir, 'tx', 'applied')
-    this.txQuarantine = join(this.catDir, 'tx', 'quarantine')
-    this.leaseDir = join(this.catDir, 'leases')
-    this.currentPath = join(this.catDir, 'current')
-    this.publishLock = join(this.catDir, 'publish.lock')
+    this.snapDir = join(dir, 'snapshots')
+    this.txPending = join(dir, 'tx', 'pending')
+    this.txApplied = join(dir, 'tx', 'applied')
+    this.txQuarantine = join(dir, 'tx', 'quarantine')
+    this.leaseDir = join(dir, 'leases')
+    this.currentPath = join(dir, 'current')
+    this.publishLock = join(dir, 'publish.lock')
 
     this.schema = opts.schema ?? ''
     this.schemaVersion = opts.schemaVersion ?? 1
     // A hash of the caller DDL catches divergent schemas at the SAME schema_version (an
     // integer bump is easy to forget); reconcile quarantines a mismatch.
     this.schemaHash = sha256(this.schema).slice(0, 16)
-    this.appId = opts.appId ?? 0x534e4c47 // "SNLG"
     this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
-    this.toolVersion = opts.toolVersion ?? 'fsqlite-0.0.1'
+    this.toolVersion = opts.toolVersion ?? DEFAULT_TOOL_VERSION
     this.maxEnvelopeBytes = opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES
     this._clock = 0
   }
@@ -195,33 +222,47 @@ export class SnapshotStore {
    * than racing the initial file and pointer. Validates the NON-NULL primary key contract.
    */
   init(): this {
-    for (const d of [
-      this.snapDir,
-      this.txPending,
-      this.txApplied,
-      this.txQuarantine,
-      this.leaseDir,
-    ]) {
-      mkdirSync(d, { recursive: true })
-    }
-    if (existsSync(this.currentPath)) {
-      this._verifyCompatible()
-      return this
-    }
+    mkdirSync(this.dir, { recursive: true })
     withLock(this.publishLock, () => {
-      if (existsSync(this.currentPath)) return // another initializer won while we waited
+      let marker: StoreMarker
+      if (hasStoreMarker(this.dir)) {
+        marker = readStoreMarker(this.dir)
+      } else {
+        const unrelated = readdirSync(this.dir).filter((entry) => entry !== 'publish.lock')
+        if (unrelated.length > 0) {
+          throw new Error(
+            `refusing to initialize an unmarked non-empty directory: ${unrelated.join(', ')}; ` +
+              `choose an empty directory or an existing store with ${STORE_MARKER_FILENAME}`,
+          )
+        }
+        marker = createStoreMarker(this.dir)
+      }
+
+      for (const d of [
+        this.snapDir,
+        this.txPending,
+        this.txApplied,
+        this.txQuarantine,
+        this.leaseDir,
+      ]) {
+        mkdirSync(d, { recursive: true })
+      }
+      if (existsSync(this.currentPath)) {
+        return
+      } // another initializer won while we waited
       const tmp = `${this.snapshotPath(0)}.${rand()}.tmp`
       try {
         const db = driver.open(tmp)
         try {
-          db.exec(`PRAGMA application_id = ${this.appId};`)
+          db.exec(`PRAGMA application_id = ${FSQLITE_APPLICATION_ID};`)
           db.exec(`PRAGMA user_version = ${this.schemaVersion};`)
           db.exec(LEDGER_DDL)
           db.exec(META_DDL)
           const stamp = db.prepare('INSERT INTO fsqlite_meta (key, value) VALUES (?, ?)')
           stamp.run('schema_hash', this.schemaHash)
           stamp.run('tool_version', this.toolVersion)
-          stamp.run('format_version', FORMAT_VERSION)
+          stamp.run('format_version', STORE_FORMAT_VERSION)
+          stamp.run('store_id', marker.store_id)
           db.exec(this.schema)
           validatePrimaryKeys(db)
         } finally {
@@ -230,7 +271,7 @@ export class SnapshotStore {
         fsyncPath(tmp)
         renameSync(tmp, this.snapshotPath(0))
         fsyncDir(this.snapDir)
-        this._publishPointer(0)
+        publishPointer(this.dir, this.currentPath, 0)
       } catch (e) {
         rmSync(tmp, { force: true })
         throw e
@@ -247,18 +288,20 @@ export class SnapshotStore {
    * catches a divergent caller DDL at the SAME schema_version — an integer bump is easy to forget.
    */
   private _verifyCompatible(): void {
+    const marker = readStoreMarker(this.dir)
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
-      const appId = Number((db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id)
-      const ver = Number((db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version)
+      this._verifySnapshotIdentity(db, marker)
+      const ver = Number(
+        (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
+      )
       if (ver !== this.schemaVersion) {
-        throw new Error(`store schema version ${ver} is incompatible with the requested ${this.schemaVersion}`)
-      }
-      if (appId !== this.appId) {
-        throw new Error(`store application_id ${appId} is incompatible with the requested ${this.appId}`)
+        throw new Error(
+          `store schema version ${ver} is incompatible with the requested ${this.schemaVersion}`,
+        )
       }
       const storedHash = this._metaValue(db, 'schema_hash')
-      if (storedHash !== undefined && storedHash !== this.schemaHash) {
+      if (storedHash !== this.schemaHash) {
         throw new Error(
           `store schema is incompatible: stamped schema_hash ${storedHash} does not match this schema's ${this.schemaHash} ` +
             `(the DDL changed without bumping schemaVersion ${this.schemaVersion})`,
@@ -269,15 +312,51 @@ export class SnapshotStore {
     }
   }
 
-  /** Read one fsqlite_meta value, or undefined if the table or row is absent (legacy stores). */
+  private _verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
+    const applicationId = Number(
+      (db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id,
+    )
+    if (applicationId !== FSQLITE_APPLICATION_ID) {
+      throw new Error(
+        `snapshot application_id ${applicationId} does not match fsqlite application_id ${FSQLITE_APPLICATION_ID}`,
+      )
+    }
+    const storedFormatVersion = this._metaValue(db, 'format_version')
+    if (storedFormatVersion !== marker.format_version) {
+      throw new Error(
+        `snapshot format version ${String(storedFormatVersion)} does not match ${STORE_MARKER_FILENAME} ` +
+          marker.format_version,
+      )
+    }
+    const storedStoreId = this._metaValue(db, 'store_id')
+    if (storedStoreId !== marker.store_id) {
+      throw new Error(
+        `snapshot store_id ${String(storedStoreId)} does not match ${STORE_MARKER_FILENAME} ${marker.store_id}`,
+      )
+    }
+  }
+
+  /** Refuse store operations if the marker and published snapshot do not identify the same store. */
+  private assertStoreIdentity(): void {
+    const marker = readStoreMarker(this.dir)
+    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    try {
+      this._verifySnapshotIdentity(db, marker)
+    } finally {
+      db.close()
+    }
+  }
+
+  /** Read one fsqlite_meta value, or undefined if the table or row is absent. */
   private _metaValue(db: driver.DB, key: string): string | undefined {
     const hasMeta = db
       .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fsqlite_meta'")
       .get()
-    if (!hasMeta) return undefined
+    if (!hasMeta) {
+      return undefined
+    }
     const row = db.prepare('SELECT value FROM fsqlite_meta WHERE key = ?').get(key) as
-      | { value: string }
-      | undefined
+      { value: string } | undefined
     return row?.value
   }
 
@@ -291,8 +370,11 @@ export class SnapshotStore {
    * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer.
    */
   currentVersion(): number {
+    readStoreMarker(this.dir)
     const raw = readFileSync(this.currentPath, 'utf8').trim()
-    if (!/^\d+$/.test(raw)) throw new Error(`corrupt current pointer: ${JSON.stringify(raw)}`)
+    if (!/^\d+$/.test(raw)) {
+      throw new Error(`corrupt current pointer: ${JSON.stringify(raw)}`)
+    }
     return Number(raw)
   }
 
@@ -302,8 +384,10 @@ export class SnapshotStore {
    * session extension; any SQLite binding can read the same file.
    */
   read<T>(fn: ReadFn<T>): T {
+    const marker = readStoreMarker(this.dir)
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
+      this._verifySnapshotIdentity(db, marker)
       return fn(db)
     } finally {
       db.close()
@@ -314,7 +398,8 @@ export class SnapshotStore {
    * Pin the current version so reconcile's GC will not delete it while a
    * packager/uploader reads it. Returns { version, heartbeat, release }.
    */
-  readLease({ maxRetries = 8 }: { maxRetries?: number } = {}): ReadLease {
+  readLease({ maxRetries = DEFAULT_READ_LEASE_RETRIES }: { maxRetries?: number } = {}): ReadLease {
+    this.assertStoreIdentity()
     // Optimistic claim, then verify: publish the lease *before* committing to read the
     // version, then confirm the snapshot still exists. This closes the check-then-act race
     // with gc — gc re-reads leases immediately before each unlink (see `gc`), so either it
@@ -325,11 +410,28 @@ export class SnapshotStore {
       const version = this.currentVersion()
       const token = `${pad(Date.now())}-${rand()}`
       const path = join(this.leaseDir, `${token}.lease`)
-      writeFileSync(path, JSON.stringify({ version, pid: process.pid, host: hostname(), at: Date.now() }))
-      if (existsSync(this.snapshotPath(version))) return this._lease(version, path)
+      const tempPath = `${path}.${rand()}.tmp`
+      try {
+        writeFileSync(
+          tempPath,
+          JSON.stringify({ version, pid: process.pid, host: hostname(), at: Date.now() }),
+          { flag: 'wx' },
+        )
+        fsyncPath(tempPath)
+        renameSync(tempPath, path)
+        fsyncDir(this.leaseDir)
+      } catch (error) {
+        rmSync(tempPath, { force: true })
+        throw new Error('readLease: failed to publish lease', { cause: error })
+      }
+      if (existsSync(this.snapshotPath(version))) {
+        return this._lease(version, path)
+      }
       rmSync(path, { force: true }) // lost the race to gc; drop the stale lease and retry
       if (attempt >= maxRetries) {
-        throw new Error(`readLease: snapshot ${version} was collected under contention after ${attempt} retries`)
+        throw new Error(
+          `readLease: snapshot ${version} was collected under contention after ${attempt} retries`,
+        )
       }
     }
   }
@@ -338,12 +440,8 @@ export class SnapshotStore {
     return {
       version,
       heartbeat: () => {
-        try {
-          const n = new Date()
-          utimesSync(path, n, n)
-        } catch {
-          /* ignore */
-        }
+        const n = new Date()
+        utimesSync(path, n, n)
       },
       release: () => {
         try {
@@ -362,16 +460,24 @@ export class SnapshotStore {
    *
    * `seed` controls how the writer's working copy is built:
    *   'snapshot'    (default): copy the current immutable snapshot. Correct for any
-   *                 mutation; cost is O(catalog size) per write.
+   *                 mutation; cost is O(snapshot size) per write.
    *   'schema-only': build an empty DB with just the schema (NO copy). O(1) per write,
    *                 but ONLY valid for inserts of NEW keys (same-key clashes defer to reconcile).
    */
-  write(writerId: string, fn: WorkFn, { seed = 'snapshot' }: { seed?: 'snapshot' | 'schema-only' } = {}): string | null {
+  write(
+    writerId: string,
+    fn: WorkFn,
+    { seed = 'snapshot' }: { seed?: 'snapshot' | 'schema-only' } = {},
+  ): string | null {
     if (!SAFE_WRITER_ID.test(writerId)) {
-      throw new Error(`invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`)
+      throw new Error(
+        `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
+      )
     }
     driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
+    const marker = readStoreMarker(this.dir)
     const base = this.currentVersion()
+    this.assertStoreIdentity()
     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
     if (seed === 'schema-only') {
       const seedDb = driver.open(work)
@@ -391,20 +497,24 @@ export class SnapshotStore {
       db.close()
       rmSync(work, { force: true })
     }
-    if (!changeset) return null
+    if (!changeset) {
+      return null
+    }
 
     const txId = `${pad(Date.now())}-${pad(this._clock++)}-${writerId}-${rand()}`
     const txDir = join(this.txPending, `${txId}.txn`)
     mkdirSync(txDir, { recursive: true })
-    writeFileSync(join(txDir, 'catalog.changeset'), changeset)
+    writeFileSync(join(txDir, CHANGESET_FILENAME), changeset)
     const manifest: Manifest = {
       tx_id: txId,
+      format_version: marker.format_version,
+      store_id: marker.store_id,
       writer_id: writerId,
       base_version: base,
       schema_version: this.schemaVersion,
       schema_hash: this.schemaHash,
       created_at: nowIso(),
-      changeset: 'catalog.changeset',
+      changeset: CHANGESET_FILENAME,
       changeset_sha256: sha256(changeset),
       seed,
       tool_version: this.toolVersion,
@@ -424,23 +534,43 @@ export class SnapshotStore {
   writeWithRetry(
     writerId: string,
     fn: WorkFn,
-    { maxRetries = 5, seed = 'snapshot' }: { maxRetries?: number; seed?: 'snapshot' | 'schema-only' } = {},
+    {
+      maxRetries = DEFAULT_WRITE_RETRIES,
+      seed = 'snapshot',
+    }: { maxRetries?: number; seed?: 'snapshot' | 'schema-only' } = {},
   ): WriteWithRetryResult {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const txId = this.write(writerId, fn, { seed })
-      if (txId === null) return { txId: null, attempts: attempt + 1, conflicted: false }
+      if (txId === null) {
+        return { txId: null, attempts: attempt + 1, conflicted: false }
+      }
       this.reconcile() // idempotent + OCC-safe; folds ours (and any peers')
-      if (!existsSync(join(this.txQuarantine, `${txId}.txn`))) {
+      const applied = this.read((db) =>
+        Boolean(db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId)),
+      )
+      if (applied) {
         return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
       }
-      // Our tx was quarantined (a strict same-row conflict): re-seed and re-run fn.
+      const quarantinePath = join(this.txQuarantine, `${txId}.txn`, 'QUARANTINE')
+      if (!existsSync(quarantinePath)) {
+        throw new Error(
+          `writeWithRetry: transaction ${txId} has no published or quarantined outcome`,
+        )
+      }
+      const reason = readFileSync(quarantinePath, 'utf8')
+      if (!reason.startsWith('apply-failed: strict conflict')) {
+        throw new Error(`writeWithRetry: transaction ${txId} permanently quarantined: ${reason}`)
+      }
+      // A strict same-row conflict is retryable: re-seed and re-run fn.
     }
     throw new Error('writeWithRetry: exceeded retries (persistent conflict)')
   }
 
   /** Committed pending transaction dirs, in deterministic (txid) order. */
   pendingTxns(): string[] {
-    if (!existsSync(this.txPending)) return []
+    if (!existsSync(this.txPending)) {
+      return []
+    }
     return readdirSync(this.txPending)
       .filter((d) => d.endsWith('.txn') && existsSync(join(this.txPending, d, 'COMMITTED')))
       .sort()
@@ -451,14 +581,22 @@ export class SnapshotStore {
    * atomic pointer swap under the lease lock. Idempotent (skips tx already in the snapshot's
    * `applied_tx` ledger) and conflict-resolving per the merge policy (clashes are quarantined,
    * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
-   * builder retry. `crashAt` is a test-only fault injector.
+   * builder retry.
    */
-  reconcile({ crashAt = null, maxRetries = 8, lockOpts = {} }: { crashAt?: CrashAt; maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
+  reconcile({
+    maxRetries = DEFAULT_RECONCILE_RETRIES,
+    lockOpts = {},
+  }: { maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
+    const marker = readStoreMarker(this.dir)
     const policy = this.conflictPolicy
+    const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const base = this.currentVersion()
+      this.assertStoreIdentity()
       const pending = this.pendingTxns()
-      if (pending.length === 0) return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
+      if (pending.length === 0) {
+        return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
+      }
 
       const tmp = join(this.snapDir, `.build-${rand()}.sqlite`)
       copyFileSync(this.snapshotPath(base), tmp)
@@ -482,7 +620,7 @@ export class SnapshotStore {
           const txDir = join(this.txPending, txn)
           let csSize = 0
           try {
-            csSize = statSync(join(txDir, 'catalog.changeset')).size
+            csSize = statSync(join(txDir, CHANGESET_FILENAME)).size
           } catch {
             /* missing/unreadable is handled by the read below */
           }
@@ -493,7 +631,7 @@ export class SnapshotStore {
           let cs: Uint8Array
           let man: Manifest
           try {
-            cs = readFileSync(join(txDir, 'catalog.changeset'))
+            cs = readFileSync(join(txDir, CHANGESET_FILENAME))
             man = JSON.parse(readFileSync(join(txDir, 'manifest.json'), 'utf8')) as Manifest
           } catch {
             quarantined.push([txn, 'unreadable-envelope'])
@@ -503,21 +641,34 @@ export class SnapshotStore {
             quarantined.push([txn, 'digest-mismatch'])
             continue
           }
+          if (man.format_version !== marker.format_version) {
+            quarantined.push([txn, 'format-version-mismatch'])
+            continue
+          }
+          if (man.tx_id !== txId) {
+            quarantined.push([txn, 'tx-id-mismatch'])
+            continue
+          }
+          if (man.store_id !== marker.store_id) {
+            quarantined.push([txn, 'store-id-mismatch'])
+            continue
+          }
+          if (man.changeset !== CHANGESET_FILENAME) {
+            quarantined.push([txn, 'changeset-filename-mismatch'])
+            continue
+          }
           if (man.schema_version !== this.schemaVersion) {
             quarantined.push([txn, 'schema-version-mismatch'])
             continue
           }
-          // schema_hash is absent on envelopes written before this field existed; only
-          // enforce when present, so it is forward-compatible.
-          if (man.schema_hash && man.schema_hash !== this.schemaHash) {
+          if (man.schema_hash !== this.schemaHash) {
             quarantined.push([txn, 'schema-hash-mismatch'])
             continue
           }
           try {
-            applyWithPolicy(db, cs, policy)
-            db.exec('BEGIN')
-            mark.run(man.tx_id, nowIso())
-            db.exec('COMMIT')
+            applyWithPolicy(db, cs, policy, () => {
+              mark.run(man.tx_id, nowIso())
+            })
             applied.push(txn)
             seen.add(txId)
           } catch (e) {
@@ -535,21 +686,34 @@ export class SnapshotStore {
         rmSync(tmp, { force: true })
         this._archive(archivable)
         this._quarantine(quarantined)
-        return { published: base, applied: 0, quarantined: quarantined.length, attempts: attempt + 1 }
+        return {
+          published: base,
+          applied: 0,
+          quarantined: quarantined.length,
+          attempts: attempt + 1,
+        }
       }
-      if (crashAt === 'after-build') throw new Error('CRASH after-build') // tmp orphaned; current unchanged
+      if (crashAt === 'after-build') {
+        throw new Error('CRASH after-build')
+      } // tmp orphaned; current unchanged
 
       const next = base + 1
       const result = withLock(
         this.publishLock,
         (token): 'retry' | 'published' => {
-          if (this.currentVersion() !== base) return 'retry' // someone published while we built
-          if (ownerOf(this.publishLock) !== token) return 'retry' // lost ownership (stale break): fencing
+          if (this.currentVersion() !== base) {
+            return 'retry'
+          } // someone published while we built
+          if (ownerOf(this.publishLock) !== token) {
+            return 'retry'
+          } // lost ownership (stale break): fencing
           fsyncPath(tmp) // make the new snapshot durable before it can be named by current
           renameSync(tmp, this.snapshotPath(next)) // overwrites any orphan from a crashed publish
           fsyncDir(this.snapDir)
-          if (crashAt === 'after-snapshot') throw new Error('CRASH after-snapshot')
-          this._publishPointer(next)
+          if (crashAt === 'after-snapshot') {
+            throw new Error('CRASH after-snapshot')
+          }
+          publishPointer(this.dir, this.currentPath, next)
           return 'published'
         },
         lockOpts,
@@ -558,11 +722,18 @@ export class SnapshotStore {
         rmSync(tmp, { force: true })
         continue
       }
-      if (crashAt === 'after-pointer') throw new Error('CRASH after-pointer') // published; tx not yet archived
+      if (crashAt === 'after-pointer') {
+        throw new Error('CRASH after-pointer')
+      } // published; tx not yet archived
 
       this._archive([...applied, ...archivable])
       this._quarantine(quarantined)
-      return { published: next, applied: applied.length, quarantined: quarantined.length, attempts: attempt + 1 }
+      return {
+        published: next,
+        applied: applied.length,
+        quarantined: quarantined.length,
+        attempts: attempt + 1,
+      }
     }
     throw new Error('reconcile exceeded retries (excessive publish contention)')
   }
@@ -575,38 +746,49 @@ export class SnapshotStore {
    * another process (spec G3); `transientStaleMs` gates that.
    */
   gc({
-    retain = 3,
-    leaseStaleMs = 60_000,
-    transientStaleMs = 60_000,
+    retain = DEFAULT_RETAINED_SNAPSHOTS,
+    leaseStaleMs = DEFAULT_LEASE_STALE_MS,
+    transientStaleMs = DEFAULT_TRANSIENT_STALE_MS,
   }: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number } = {}): GcResult {
+    this.assertStoreIdentity()
     const cur = this.currentVersion()
     const leased = this._activeLeasedVersions(leaseStaleMs)
-    const versions = this._snapshotVersions()
+    const versions = this.snapshotVersions()
     const keepFloor = cur - retain
     let removed = 0
     for (const v of versions) {
-      if (v === cur || v >= keepFloor || leased.has(v)) continue
+      if (v === cur || v >= keepFloor || leased.has(v)) {
+        continue
+      }
       // Re-scan leases right before unlinking: a reader may have claimed v after we computed
       // `leased` (readLease publishes the lease before reading), so this is the second half of
       // the lease/gc race fix.
-      if (this._activeLeasedVersions(leaseStaleMs).has(v)) continue
+      if (this._activeLeasedVersions(leaseStaleMs).has(v)) {
+        continue
+      }
       try {
         rmSync(this.snapshotPath(v), { force: true })
         removed++
-      } catch {
-        /* ignore */
+      } catch (error) {
+        throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
       }
     }
     // Sweep STALE transients only (crash debris): a fresh .build-/.direct-/.work- file may be
     // a live build in another process — deleting it would not corrupt anything (the publish
     // would fail loudly and retry) but would waste its work. mtime age gates the sweep.
     const sweepStaleTransients = (dir: string): void => {
-      if (!existsSync(dir)) return
+      if (!existsSync(dir)) {
+        return
+      }
       for (const f of readdirSync(dir)) {
-        if (!isTransientFile(f)) continue
+        if (!isTransientFile(f)) {
+          continue
+        }
         const p = join(dir, f)
         try {
-          if (Date.now() - statSync(p).mtimeMs > transientStaleMs) rmSync(p, { force: true })
+          if (Date.now() - statSync(p).mtimeMs > transientStaleMs) {
+            rmSync(p, { force: true })
+          }
         } catch {
           /* ignore */
         }
@@ -619,18 +801,33 @@ export class SnapshotStore {
 
   private _activeLeasedVersions(staleMs: number): Set<number> {
     const out = new Set<number>()
-    if (!existsSync(this.leaseDir)) return out
+    if (!existsSync(this.leaseDir)) {
+      return out
+    }
     for (const f of readdirSync(this.leaseDir)) {
-      if (!f.endsWith('.lease')) continue
+      if (!f.endsWith('.lease')) {
+        continue
+      }
       const p = join(this.leaseDir, f)
       try {
         if (Date.now() - statSync(p).mtimeMs > staleMs) {
           rmSync(p, { force: true })
           continue
         }
-        out.add((JSON.parse(readFileSync(p, 'utf8')) as { version: number }).version)
-      } catch {
-        /* ignore */
+        const value: unknown = JSON.parse(readFileSync(p, 'utf8'))
+        const version =
+          typeof value === 'object' && value !== null && 'version' in value
+            ? value.version
+            : undefined
+        if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
+          throw new Error('lease version must be a non-negative safe integer')
+        }
+        out.add(version)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          continue
+        }
+        throw new Error(`gc refused: fresh lease ${f} is unreadable`, { cause: error })
       }
     }
     return out
@@ -644,11 +841,20 @@ export class SnapshotStore {
    */
   validate(): ValidateResult {
     const issues: string[] = []
-    if (!existsSync(this.currentPath)) return { state: 'corrupt', issues: ['missing current pointer'] }
+    const recognition = recognizeStore(this.dir)
+    if (recognition.state !== 'supported') {
+      return { state: recognition.state, issues: [recognition.issue] }
+    }
+    const marker = recognition.marker
+    if (!existsSync(this.currentPath)) {
+      return { state: 'corrupt', issues: ['missing current pointer'] }
+    }
     let cur: number
     try {
       cur = this.currentVersion()
-      if (!Number.isInteger(cur)) throw new Error('nan')
+      if (!Number.isInteger(cur)) {
+        throw new Error('nan')
+      }
     } catch {
       return { state: 'corrupt', issues: ['torn current pointer'] }
     }
@@ -663,26 +869,46 @@ export class SnapshotStore {
       ...snapFiles.filter(isTransientFile),
       ...pendingFiles.filter(isTransientFile), // .work-* writer copies
     ]
-    if (transients.length) issues.push(`transient build files present: ${transients.join(', ')}`)
+    if (transients.length) {
+      issues.push(`transient build files present: ${transients.join(', ')}`)
+    }
     const orphanAhead = snapFiles
       .map((f) => /^(\d+)\.fsqlite\.sqlite$/.exec(f)?.[1])
       .filter((x): x is string => Boolean(x))
       .map(Number)
       .filter((v) => v > cur)
-    if (orphanAhead.length) issues.push(`orphan snapshot(s) ahead of pointer: ${orphanAhead.join(', ')}`)
+    if (orphanAhead.length) {
+      issues.push(`orphan snapshot(s) ahead of pointer: ${orphanAhead.join(', ')}`)
+    }
     const lockHeld = existsSync(this.publishLock)
-    if (lockHeld) issues.push('publish.lock present (reconcile in progress or crashed)')
+    if (lockHeld) {
+      issues.push('publish.lock present (reconcile in progress or crashed)')
+    }
     const uncommitted = existsSync(this.txPending)
-      ? readdirSync(this.txPending).filter((d) => d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED')))
+      ? readdirSync(this.txPending).filter(
+          (d) => d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED')),
+        )
       : []
-    if (uncommitted.length) issues.push(`uncommitted tx envelope(s): ${uncommitted.length}`)
+    if (uncommitted.length) {
+      issues.push(`uncommitted tx envelope(s): ${uncommitted.length}`)
+    }
     const sideFiles = snapFiles.filter((f) => f.endsWith('-wal') || f.endsWith('-shm'))
-    if (sideFiles.length) issues.push(`live SQLite side files present: ${sideFiles.join(', ')}`)
+    if (sideFiles.length) {
+      issues.push(`live SQLite side files present: ${sideFiles.join(', ')}`)
+    }
 
     // Integrity of the current head.
     const db = driver.openReadonly(this.snapshotPath(cur))
     let problems: string[]
     try {
+      try {
+        this._verifySnapshotIdentity(db, marker)
+      } catch (error) {
+        return {
+          state: 'corrupt',
+          issues: [...issues, error instanceof Error ? error.message : String(error)],
+        }
+      }
       problems = driver.integrityProblems(db)
     } finally {
       db.close()
@@ -695,10 +921,18 @@ export class SnapshotStore {
     }
 
     const pendingCommitted = this.pendingTxns().length
-    if (transients.length || orphanAhead.length || lockHeld || sideFiles.length || uncommitted.length) {
+    if (
+      transients.length ||
+      orphanAhead.length ||
+      lockHeld ||
+      sideFiles.length ||
+      uncommitted.length
+    ) {
       return { state: 'in-flight-capture', current: cur, pending: pendingCommitted, issues }
     }
-    if (pendingCommitted > 0) return { state: 'live', current: cur, pending: pendingCommitted, issues }
+    if (pendingCommitted > 0) {
+      return { state: 'live', current: cur, pending: pendingCommitted, issues }
+    }
     return { state: 'sealed', current: cur, pending: 0, issues }
   }
 
@@ -707,7 +941,10 @@ export class SnapshotStore {
    * (no -wal/-shm, integrity-checked). Requires an empty pending tail.
    */
   seal(destPath: string): string {
-    if (this.pendingTxns().length > 0) throw new Error('cannot seal: pending tx must be reconciled first')
+    this.assertStoreIdentity()
+    if (this.pendingTxns().length > 0) {
+      throw new Error('cannot seal: pending tx must be reconciled first')
+    }
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
       driver.vacuumInto(db, destPath)
@@ -717,7 +954,9 @@ export class SnapshotStore {
     const out = driver.openReadonly(destPath)
     try {
       const problems = driver.integrityProblems(out)
-      if (problems.length) throw new Error(`sealed snapshot failed integrity_check: ${problems.join('; ')}`)
+      if (problems.length) {
+        throw new Error(`sealed snapshot failed integrity_check: ${problems.join('; ')}`)
+      }
     } finally {
       out.close()
     }
@@ -728,13 +967,59 @@ export class SnapshotStore {
    * doctor/repair: restore the last consistent point. Principled because every published
    * snapshot is immutable and was quick_check-validated at publish (R1).
    */
-  repair({ lockStaleMs = 30_000 }: { lockStaleMs?: number } = {}): RepairResult {
+  repair({ lockOpts = {} }: { lockOpts?: LockOptions } = {}): RepairResult {
+    const marker = readStoreMarker(this.dir)
+    if (existsSync(this.publishLock)) {
+      throw new Error(
+        'repair refused: publish.lock is present; wait for the publisher or clear it through normal lock recovery',
+      )
+    }
+    const actions = withLock(
+      this.publishLock,
+      (token) => {
+        if (ownerOf(this.publishLock) !== token) {
+          throw new Error('repair lost ownership of publish.lock before mutation')
+        }
+        return this._repairLocked(marker, token)
+      },
+      lockOpts,
+    )
+    const state = this.validate().state
+    if (state === 'not-a-store' || state === 'invalid' || state === 'unsupported') {
+      throw new Error(`repair ended with an unrecognized store: ${state}`)
+    }
+    return { actions, state }
+  }
+
+  private _repairLocked(marker: StoreMarker, token: string): string[] {
     const actions: string[] = []
-    const versions = this._snapshotVersions()
+    const assertOwnership = (): void => {
+      if (ownerOf(this.publishLock) !== token) {
+        throw new Error('repair lost ownership of publish.lock before mutation')
+      }
+    }
+    const versions = this.snapshotVersions()
+    const identityMatches = (v: number): boolean => {
+      try {
+        const db = driver.openReadonly(this.snapshotPath(v))
+        try {
+          this._verifySnapshotIdentity(db, marker)
+          return true
+        } finally {
+          db.close()
+        }
+      } catch {
+        return false
+      }
+    }
+    if (!versions.some(identityMatches)) {
+      throw new Error(`repair: no snapshot matches the store identity in ${STORE_MARKER_FILENAME}`)
+    }
     const integrityOk = (v: number): boolean => {
       try {
         const db = driver.openReadonly(this.snapshotPath(v))
         try {
+          this._verifySnapshotIdentity(db, marker)
           return driver.integrityCheck(db)
         } finally {
           db.close()
@@ -748,7 +1033,9 @@ export class SnapshotStore {
     let cur: number | null = null
     try {
       cur = this.currentVersion()
-      if (!Number.isInteger(cur)) cur = null
+      if (!Number.isInteger(cur)) {
+        cur = null
+      }
     } catch {
       /* ignore */
     }
@@ -761,25 +1048,31 @@ export class SnapshotStore {
           good = v
           break
         }
-        rmSync(this.snapshotPath(v), { force: true })
-        actions.push(`removed corrupt snapshot ${v}`)
       }
-      if (good === null) throw new Error('repair: no integrity-clean snapshot exists')
-      this._publishPointer(good)
+      if (good === null) {
+        throw new Error('repair: no integrity-clean snapshot exists')
+      }
+      assertOwnership()
+      publishPointer(this.dir, this.currentPath, good)
       actions.push(`re-published current -> ${good}`)
     }
 
     // Delete snapshots ahead of the restored pointer (rolled-back orphans) and transients.
-    for (const v of this._snapshotVersions()) {
+    for (const v of this.snapshotVersions()) {
       if (v > good) {
+        const wasIntegrityClean = integrityOk(v)
+        assertOwnership()
         rmSync(this.snapshotPath(v), { force: true })
-        actions.push(`removed orphan snapshot ${v}`)
+        actions.push(`removed ${wasIntegrityClean ? 'orphan' : 'corrupt'} snapshot ${v}`)
       }
     }
     for (const dir of [this.snapDir, this.txPending]) {
-      if (!existsSync(dir)) continue
+      if (!existsSync(dir)) {
+        continue
+      }
       for (const f of readdirSync(dir)) {
         if (isTransientFile(f)) {
+          assertOwnership()
           rmSync(join(dir, f), { force: true })
           actions.push(`removed transient ${f}`)
         }
@@ -790,33 +1083,23 @@ export class SnapshotStore {
     if (existsSync(this.txPending)) {
       for (const d of readdirSync(this.txPending)) {
         if (d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED'))) {
-          try {
-            writeFileSync(join(this.txPending, d, 'QUARANTINE'), 'uncommitted-at-repair')
-          } catch {
-            /* ignore */
-          }
+          assertOwnership()
+          writeFileSync(join(this.txPending, d, 'QUARANTINE'), 'uncommitted-at-repair')
+          assertOwnership()
           this._move([d], this.txQuarantine)
           actions.push(`quarantined uncommitted ${d}`)
         }
       }
     }
 
-    // Remove a stale publish.lock (a crashed reconcile left it behind).
-    if (existsSync(this.publishLock)) {
-      try {
-        if (Date.now() - statSync(this.publishLock).mtimeMs > lockStaleMs) {
-          rmSync(this.publishLock, { recursive: true, force: true })
-          actions.push('removed stale publish.lock')
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return { actions, state: this.validate().state }
+    return actions
   }
 
-  _snapshotVersions(): number[] {
-    if (!existsSync(this.snapDir)) return []
+  /** Published snapshot versions in ascending order. */
+  snapshotVersions(): number[] {
+    if (!existsSync(this.snapDir)) {
+      return []
+    }
     return readdirSync(this.snapDir)
       .map((f) => /^(\d+)\.fsqlite\.sqlite$/.exec(f)?.[1])
       .filter((x): x is string => Boolean(x))
@@ -830,11 +1113,7 @@ export class SnapshotStore {
 
   private _quarantine(pairs: [string, string][]): void {
     for (const [txn, reason] of pairs) {
-      try {
-        writeFileSync(join(this.txPending, txn, 'QUARANTINE'), reason)
-      } catch {
-        /* ignore */
-      }
+      writeFileSync(join(this.txPending, txn, 'QUARANTINE'), reason)
     }
     this._move(
       pairs.map((p) => p[0]),
@@ -847,16 +1126,10 @@ export class SnapshotStore {
       try {
         renameSync(join(this.txPending, txn), join(destDir, txn))
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw e
+        }
       }
     }
-  }
-
-  _publishPointer(v: number): void {
-    const tmp = `${this.currentPath}.${rand()}.tmp`
-    writeFileSync(tmp, String(v))
-    fsyncPath(tmp) // durably persist the pointer contents before the swap
-    renameSync(tmp, this.currentPath) // atomic pointer swap
-    fsyncDir(this.catDir) // durably persist the rename (power-loss safety)
   }
 }

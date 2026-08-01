@@ -16,7 +16,9 @@ const artifactCount = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
 
 const seedWriters = (dir: string, writers: number, per: number): void => {
-  for (let i = 0; i < writers; i++) runSync<{ written: number }>('writer.ts', [dir, `w${i}`, String(per)])
+  for (let i = 0; i < writers; i++) {
+    runSync<{ written: number }>('writer.ts', [dir, `w${i}`, String(per)])
+  }
 }
 
 test('a process SIGKILLed while holding publish.lock does not wedge the store', async () => {
@@ -28,7 +30,9 @@ test('a process SIGKILLed while holding publish.lock does not wedge the store', 
 
     // Child grabs the publish lock and hangs.
     const child = spawnWorker('lock-holder.ts', [dir, marker, '3000'])
-    for (let i = 0; i < 200 && !existsSync(marker); i++) await sleep(10) // wait until it provably holds
+    for (let i = 0; i < 200 && !existsSync(marker); i++) {
+      await sleep(10)
+    } // wait until it provably holds
     assert.ok(existsSync(marker), 'child acquired the publish lock')
     assert.ok(existsSync(store.publishLock), 'publish.lock dir is held')
 
@@ -55,19 +59,29 @@ test('a reconciler SIGKILLed mid-build orphans only a temp; recovery is exactly-
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     seedWriters(dir, 4, 6) // 24 pending
 
-    // Start a reconciler child and kill it almost immediately (mid-build, lock-free phase).
+    // Start a reconciler child and wait until its build snapshot is observable before killing it.
     const child = spawnWorker('reconciler.ts', [dir, '100'])
-    await sleep(15)
+    let observedBuild = false
+    for (let i = 0; i < 1000; i++) {
+      observedBuild = readdirSync(store.snapDir).some((file) => file.startsWith('.build-'))
+      if (observedBuild) {
+        break
+      }
+      await sleep(1)
+    }
+    assert.equal(observedBuild, true, 'the child reached the mid-build state before SIGKILL')
     child.kill('SIGKILL')
     await sleep(50)
 
     assert.ok(store.currentVersion() >= 0, 'current never regressed below its base')
     let guard = 0
-    while (store.pendingTxns().length > 0 && guard++ < 40) store.reconcile()
+    while (store.pendingTxns().length > 0 && guard++ < 40) {
+      store.reconcile()
+    }
     assert.equal(artifactCount(store), 24, 'exactly-once after a mid-build kill')
 
     // gc sweeps any orphan .build- temp the kill left behind.
-    store.gc({ retain: 0 })
+    store.gc({ retain: 0, transientStaleMs: 0 })
     const orphans = existsSync(store.snapDir)
       ? readdirSync(store.snapDir).filter((f) => f.startsWith('.build-') || f.endsWith('.tmp'))
       : []

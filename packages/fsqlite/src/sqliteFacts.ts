@@ -11,7 +11,9 @@ const SQLITE_MAGIC = 'SQLite format 3\0'
 export function isSqliteFile(path: string): boolean {
   let fd: number
   try {
-    if (!statSync(path).isFile()) return false
+    if (!statSync(path).isFile()) {
+      return false
+    }
     fd = openSync(path, 'r')
   } catch {
     return false
@@ -50,11 +52,11 @@ export function sqliteFacts(path: string): SqliteFacts {
         .all() as { name: string }[]
     ).map((r) => {
       const quoted = `"${r.name.replace(/"/g, '""')}"`
-      const rows = Number((db.prepare(`SELECT COUNT(*) c FROM ${quoted}`).get() as { c: number }).c)
+      const rows = (db.prepare(`SELECT COUNT(*) c FROM ${quoted}`).get() as { c: number }).c
       return { name: r.name, rows }
     })
     return {
-      sqliteVersion: String((db.prepare('SELECT sqlite_version() v').get() as { v: string }).v),
+      sqliteVersion: (db.prepare('SELECT sqlite_version() v').get() as { v: string }).v,
       pageSize: Number(pragmaValue(db, 'page_size')),
       pageCount: Number(pragmaValue(db, 'page_count')),
       fileBytes: statSync(path).size,

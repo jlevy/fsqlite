@@ -18,8 +18,11 @@ const OPTS: StoreOptions = {
 
 const increment = (db: DatabaseSync): void => {
   const cur = db.prepare('SELECT n FROM counters WHERE k=?').get('c') as { n: number } | undefined
-  if (cur) db.prepare('UPDATE counters SET n=? WHERE k=?').run(cur.n + 1, 'c')
-  else db.prepare('INSERT INTO counters VALUES (?,?)').run('c', 1)
+  if (cur) {
+    db.prepare('UPDATE counters SET n=? WHERE k=?').run(cur.n + 1, 'c')
+  } else {
+    db.prepare('INSERT INTO counters VALUES (?,?)').run('c', 1)
+  }
 }
 
 const counter = (s: SnapshotStore): number =>
@@ -63,6 +66,25 @@ test('writeWithRetry re-seeds after a genuine concurrent conflict (forced interl
     assert.equal(counter(w2), 3)
     assert.equal(r2.conflicted, true, 'the retry path was exercised')
     assert.ok(r2.attempts >= 2)
+  } finally {
+    cleanup()
+  }
+})
+
+test('writeWithRetry reports a permanent quarantine without retrying it', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, { ...OPTS, maxEnvelopeBytes: 1 }).init()
+    let calls = 0
+    assert.throws(
+      () =>
+        store.writeWithRetry('too-large', (db) => {
+          calls++
+          db.prepare('INSERT INTO counters VALUES (?,?)').run('c', 1)
+        }),
+      /permanently quarantined: envelope-too-large/,
+    )
+    assert.equal(calls, 1, 'permanent failures must not be retried')
   } finally {
     cleanup()
   }

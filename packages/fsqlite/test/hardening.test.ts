@@ -14,10 +14,20 @@ function freshStore() {
   return { store: new SnapshotStore(dir, STORE_OPTS).init(), dir, cleanup }
 }
 
+test('the writer guard fails loudly when the binding lacks session support', () => {
+  assert.throws(() => {
+    driver.requireWriterCapabilities(() => ({
+      session: false,
+      applyChangeset: true,
+      backup: true,
+      loadExtension: false,
+      rebaser: false,
+    }))
+  }, /require the SQLite session extension/)
+})
+
 test('the session capability is present and the writer guard is a no-op happy path', () => {
-  // In CI node:sqlite has sessions, so we assert the positive: the guard does not throw and
-  // repeated writes still succeed (the memoized check never breaks the happy path). The loud
-  // failure on a session-less binding is exercised by the clear throw in requireWriterCapabilities.
+  // The real binding exercises the positive and memoized path after the injected negative case.
   assert.equal(driver.capabilities().session, true, 'node:sqlite must report session support here')
   assert.doesNotThrow(() => {
     driver.requireWriterCapabilities()
@@ -39,13 +49,19 @@ test('integrityProblems returns [] for a clean snapshot and validate surfaces di
     // populate enough rows that the DB spans several pages
     store.write('w', (db) => {
       const ins = db.prepare('INSERT INTO artifacts VALUES (?,?,?)')
-      for (let i = 0; i < 400; i++) ins.run(`a${i}`, `title-${i}`.repeat(8), 't')
+      for (let i = 0; i < 400; i++) {
+        ins.run(`a${i}`, `title-${i}`.repeat(8), 't')
+      }
     })
     store.reconcile()
     const cur = store.currentVersion()
     const cleanDb = driver.openReadonly(store.snapshotPath(cur))
     try {
-      assert.deepEqual(driver.integrityProblems(cleanDb), [], 'a healthy snapshot reports no problems')
+      assert.deepEqual(
+        driver.integrityProblems(cleanDb),
+        [],
+        'a healthy snapshot reports no problems',
+      )
     } finally {
       cleanDb.close()
     }
@@ -62,7 +78,11 @@ test('integrityProblems returns [] for a clean snapshot and validate surfaces di
     assert.equal(res.state, 'corrupt', 'a scribbled page is detected as corrupt')
     const detail = res.issues.find((i) => i.includes('integrity_check'))
     assert.ok(detail, 'the corrupt verdict carries an integrity_check issue')
-    assert.notEqual(detail, `snapshot ${cur} failed integrity_check: `, 'and the issue carries specific diagnostics, not an empty list')
+    assert.notEqual(
+      detail,
+      `snapshot ${cur} failed integrity_check: `,
+      'and the issue carries specific diagnostics, not an empty list',
+    )
   } finally {
     cleanup()
   }
@@ -73,7 +93,9 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
   try {
     // advance to version 3 so there are old snapshots to collect
     for (let i = 0; i < 3; i++) {
-      store.write('w', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`a${i}`, 'x', 't'))
+      store.write('w', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`a${i}`, 'x', 't'),
+      )
       store.reconcile()
     }
     const lease = store.readLease()
@@ -81,7 +103,9 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
     const leasedVersion = lease.version
     // advance further so the leased version falls below the retain floor
     for (let i = 0; i < 3; i++) {
-      store.write('w', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`b${i}`, 'y', 't'))
+      store.write('w', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`b${i}`, 'y', 't'),
+      )
       store.reconcile()
     }
     const held = store.gc({ retain: 1 })
@@ -89,7 +113,9 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
     // the leased snapshot is still present and readable through the lease
     const title = new SnapshotStore(store.dir, STORE_OPTS)
     assert.equal(
-      title.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c) >= 0,
+      title.read(
+        (db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c,
+      ) >= 0,
       true,
     )
     assert.doesNotThrow(() => {
@@ -98,7 +124,11 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
     // once released, gc may collect it
     lease.release()
     store.gc({ retain: 1 })
-    assert.equal(store.validate().state === 'corrupt', false, 'store stays healthy after collection')
+    assert.equal(
+      store.validate().state === 'corrupt',
+      false,
+      'store stays healthy after collection',
+    )
   } finally {
     cleanup()
   }

@@ -15,7 +15,11 @@ let written = 0
 for (let i = 0; i < count; i++) {
   const id = `art-${writerId}-${i}`
   const txId = store.write(writerId, (db) => {
-    db.prepare('INSERT INTO artifacts VALUES (?, ?, ?)').run(id, `${writerId}#${i}`, new Date().toISOString())
+    db.prepare('INSERT INTO artifacts VALUES (?, ?, ?)').run(
+      id,
+      `${writerId}#${i}`,
+      new Date().toISOString(),
+    )
     db.prepare('INSERT INTO url_index VALUES (?, ?, ?, ?)').run(
       `u-${writerId}-${i}`,
       `https://x/${writerId}/${i}`,
@@ -23,6 +27,8 @@ for (let i = 0; i < count; i++) {
       new Date().toISOString(),
     )
   })
-  if (txId) written++
+  if (txId) {
+    written++
+  }
 }
 process.stdout.write(JSON.stringify({ writerId, written }) + '\n')

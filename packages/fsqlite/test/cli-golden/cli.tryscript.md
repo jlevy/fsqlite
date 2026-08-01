@@ -7,6 +7,7 @@ env:
   NODE_NO_WARNINGS: '1'
 timeout: 60000
 ---
+
 # fsqlite CLI: schema-agnostic operator surface
 
 The maintenance commands (`info`, `validate`, `gc`, `seal`, `repair`, `doctor`) operate
@@ -16,7 +17,7 @@ the self-describing-format property.
 real CLI (`src/cli/index.ts`). Runs in a sandbox temp dir, so all `store*` paths are
 isolated and auto-cleaned.
 
-* * *
+---
 
 ## Help
 
@@ -36,7 +37,7 @@ usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [arg
 ? 0
 ```
 
-* * *
+---
 
 ## Inspect a sealed store
 
@@ -82,7 +83,7 @@ fsqlite doctor: store
 ? 0
 ```
 
-* * *
+---
 
 ## Validate exit codes on a damaged store
 
@@ -128,7 +129,7 @@ $ fsqlite validate bad
 ? 3
 ```
 
-* * *
+---
 
 ## Maintenance: gc and seal
 
@@ -154,7 +155,7 @@ SQLite format 3
 ? 0
 ```
 
-* * *
+---
 
 ## stats and doctor over any SQLite path
 
@@ -164,14 +165,14 @@ labeling which they are looking at and degrading gracefully on either.
 # Test: stats on an fsqlite store reports the fsqlite layer + current-snapshot facts
 
 ```console
-$ fsqlite-seed statroom
-seeded statroom (sealed v1)
+$ fsqlite-seed metrics-store
+seeded metrics-store (sealed v1)
 ? 0
 ```
 
 ```console
-$ fsqlite stats statroom
-fsqlite stats: statroom
+$ fsqlite stats metrics-store
+fsqlite stats: metrics-store
   kind: fsqlite-store
   current: 1
   snapshots: 2
@@ -183,10 +184,10 @@ fsqlite stats: statroom
     page_size: 4096
     page_count: [..]
     file_bytes: [..]
-    application_id: 1413829460
+    application_id: 1179865420
     user_version: 1
     journal_mode: [..]
-    tables: applied_tx=1 artifacts=1 fsqlite_meta=3 relationships=0 url_index=0
+    tables: applied_tx=1 artifacts=1 fsqlite_meta=4 relationships=0 url_index=0
 ? 0
 ```
 

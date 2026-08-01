@@ -2,7 +2,8 @@
 // ordering; fsync gives power-loss durability. Process-crash safety needs neither, so these
 // are cheap belt-and-suspenders for the hosted-on-real-disk case.
 
-import { openSync, fsyncSync, closeSync } from 'node:fs'
+import { openSync, fsyncSync, closeSync, renameSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 
 /** fsync a file's contents to disk so a following rename is crash-durable. */
 export function fsyncPath(p: string): void {
@@ -29,4 +30,13 @@ export function fsyncDir(p: string): void {
   } finally {
     closeSync(fd)
   }
+}
+
+/** Durably replace a store's numeric current pointer. */
+export function publishPointer(storeDir: string, currentPath: string, version: number): void {
+  const tempPath = `${currentPath}.${randomBytes(5).toString('hex')}.tmp`
+  writeFileSync(tempPath, String(version))
+  fsyncPath(tempPath)
+  renameSync(tempPath, currentPath)
+  fsyncDir(storeDir)
 }

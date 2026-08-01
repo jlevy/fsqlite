@@ -15,24 +15,16 @@ The two correctness invariants everything ladders up to:
 Run the whole automated gate with:
 
 ```bash
-cd packages/fsqlite
-npm run test:all      # node:test + CLI goldens + build + clean-room package smoke
-npm run lint:check    # zero-warning eslint
-npm run typecheck     # tsc --noEmit
+pnpm test:all      # node:test + CLI goldens + build + clean-room package smoke
+pnpm lint:check    # zero-warning eslint
+pnpm typecheck     # tsc --noEmit
 ```
 
-> **Run from a full repo checkout after `pnpm install`.** `packages/fsqlite` is
-> deliberately outside the pnpm workspace and has **no package-local install yet**
-> (blocked by a supply-chain cool-off on a `tsdown`→`rolldown` transitive; see Part C
-> item 1). So the `test` and `test:golden` stages run standalone (`node:test`;
-> `tryscript` via `npx`), but the **`build` and `test:package` stages resolve `tsdown`
-> and `tsc`/`@types/node` from the repo’s installed toolchain** (`../../node_modules`).
-> From a bare `packages/fsqlite` dir with nothing installed, `npm run build` fails with
-> `tsdown: command not found` — that is the known gap, not a regression.
-> CI runs the same stages individually via the root toolchain
-> (`.github/workflows/ci.yml`, `test-fsqlite`).
+Run from the repository root after `pnpm install --frozen-lockfile`. Every command
+resolves tools from this workspace’s lockfile; the gate performs no network-time tool
+download.
 
-Current status: **75 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **95 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -41,27 +33,28 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 
 ### `node:test` suites (`test/*.test.ts`)
 
-| Suite | Cases | Guarantee it protects |
-| --- | --- | --- |
-| `unit.test.ts` | 14 | Core round-trip (write → reconcile → read); snapshot byte-immutability; the three merge policies (`lww`/`union`/`strict`) and deny-by-default `*`; idempotent reconcile; digest-mismatch and schema-hash-divergence quarantine (R2); NOTFOUND→OMIT; `validate` state machine; `maxEnvelopeBytes` guard |
-| `init.test.ts` | 5 | NON-NULL primary-key contract enforced at `init`; schema-version compatibility on reopen; **same-version divergent-DDL rejection** via the stamped `fsqlite_meta` schema hash (single-handle and racing mismatched first-opens); **fenced first-open** — 8 concurrent processes converge on one clean snapshot 0 |
-| `hardening.test.ts` | 3 | Writer fails loudly without the session extension; `integrity_check` diagnostics surfaced (R2); read-lease protects its snapshot from concurrent `gc` |
-| `concurrent.test.ts` | 4 | Real multi-process writers: zero-loss under contention; exactly-once publish across racing reconcilers; torn-read-free readers |
-| `crash.test.ts` | 2 | `crashAt` fault injection mid-publish → recovery to a consistent point (R1) |
-| `kill.test.ts` | 2 | Hard `SIGKILL` mid-publish → recovery, no lost published snapshot (R1) |
-| `fuzz.test.ts` | 1 | Randomized chaos run (interleaved writers/reconcilers/faults) holds both invariants |
-| `fencing.test.ts` | 4 | `mkdir` lease acquisition, stale-lock break, fencing token — a superseded builder cannot publish |
-| `gc-lease.test.ts` | 4 | GC retains N and leased snapshots; read-lease heartbeat/expiry; no live snapshot collected; stale-transient sweep spares fresh (possibly live) builds |
-| `repair.test.ts` | 4 | `repair` restores the last consistent point from in-flight/orphan states (R1); orphan `.direct-`/`.work-` transients surfaced by `validate` and removed by `repair` |
-| `retry.test.ts` | 2 | `writeWithRetry` optimistic compare-and-retry for cross-row invariants on `strict` tables |
-| `nfs-sim.test.ts` | 4 | Close-to-open visibility and rename/mkdir semantics fsqlite relies on (NFS-shaped) |
-| `portability.test.ts` | 3 | Zip-and-go: a published snapshot opens as a plain SQLite file across bindings |
-| `direct.test.ts` | 3 | `DirectStore` single-writer copy→mutate→publish; identical on-disk format |
-| `driver-capabilities.test.ts` | 2 | `capabilities()` truthfully probes session/backup support |
-| `adoption.test.ts` | 3 | The document-catalog adoption example stays green (a realistic consumer shape) |
-| `seed.test.ts` | 3 | Schema-only seeding (build a store from DDL, no data copy) |
-| `sqlite-facts.test.ts` | 3 | `isSqliteFile` / `sqliteFacts` / `integrityReport` over any plain SQLite file (backs `stats`/`doctor`) |
-| `fsinspect.test.ts` | 7 | Filesystem capability probes (mkdir exclusive-create, atomic rename, O_EXCL, close-to-open, mtime, WAL negative control) |
+| Suite | Guarantee it protects |
+| --- | --- |
+| `unit.test.ts` | Core round-trip (write → reconcile → read); snapshot byte-immutability; the three merge policies (`lww`/`union`/`strict`) and deny-by-default `*`; idempotent reconcile; atomic data-plus-ledger commit; digest, transaction-identity, schema, and quarantine-write failure handling (R2); NOTFOUND→OMIT; `validate` state machine; `maxEnvelopeBytes` guard |
+| `init.test.ts` | NON-NULL primary-key contract enforced at `init`; schema-version compatibility on reopen; **same-version divergent-DDL rejection** via the stamped `fsqlite_meta` schema hash (single-handle and racing mismatched first-opens); **fenced first-open** — concurrent processes converge on one clean snapshot 0 |
+| `hardening.test.ts` | Writer fails loudly without the session extension; `integrity_check` diagnostics surfaced (R2); read-lease protects its snapshot from concurrent `gc` |
+| `concurrent.test.ts` | Real multi-process writers: zero-loss under contention; exactly-once publish across racing reconcilers; torn-read-free readers |
+| `crash.test.ts` | `crashAt` fault injection mid-publish → recovery to a consistent point (R1) |
+| `kill.test.ts` | Hard `SIGKILL` mid-publish → recovery, no lost published snapshot (R1) |
+| `fuzz.test.ts` | Randomized chaos run (interleaved writers/reconcilers/faults) holds both invariants |
+| `fencing.test.ts` | `mkdir` lease acquisition, stale-lock break, fencing token, heartbeat loss, and owner-write cleanup — a superseded builder cannot publish |
+| `gc-lease.test.ts` | GC retains current, recent, and leased snapshots; read-lease heartbeat/expiry/loss; malformed fresh leases fail closed; stale-transient sweep spares fresh builds |
+| `repair.test.ts` | `repair` restores the last consistent point from in-flight/orphan states (R1), preserves all snapshots when none is clean, refuses a publisher race, revalidates fencing before each mutation, and removes orphan transients |
+| `retry.test.ts` | `writeWithRetry` optimistic compare-and-retry for cross-row invariants on `strict` tables, without retrying permanent quarantine reasons |
+| `nfs-sim.test.ts` | Close-to-open visibility and rename/mkdir semantics fsqlite relies on (NFS-shaped) |
+| `portability.test.ts` | Zip-and-go: a published snapshot opens as a plain SQLite file across bindings |
+| `direct.test.ts` | `DirectStore` single-writer copy→mutate→publish; identical on-disk format |
+| `driver-capabilities.test.ts` | `capabilities()` truthfully probes session/backup support and online backup remains integrity-clean during writes |
+| `adoption.test.ts` | A realistic multi-table consumer schema and policy stay green |
+| `seed.test.ts` | Schema-only seeding (build a store from DDL, no data copy) |
+| `sqlite-facts.test.ts` | `isSqliteFile` / `sqliteFacts` / `integrityReport` over any plain SQLite file (backs `stats`/`doctor`) |
+| `store-format.test.ts` | Flat self-identifying store root; `f1.0` marker/snapshot/envelope/application-ID identity; unmarked-directory refusal; invalid versus unsupported recognition; feature/version gating; replaced-marker fencing; mixed-store quarantine |
+| `fsinspect.test.ts` | Filesystem capability probes (mkdir exclusive-create, atomic rename, O_EXCL, close-to-open, mtime, WAL negative control) |
 
 ### Multi-process worker harness (`workers/`)
 
@@ -88,16 +81,17 @@ checkout.
 
 ## Part B — Manual review runbook
 
-Run from `packages/fsqlite/`. Each step lists the command, the expected result, and the
-**PASS** criterion. Use a scratch dir: `export QA=$(mktemp -d)`.
+Run from the repository root.
+Each step lists the command, the expected result, and the **PASS** criterion.
+Use a scratch dir: `export QA=$(mktemp -d)`.
 
 ### B1. Full automated gate
 
 ```bash
-npm run test:all && npm run lint:check && npm run typecheck
+pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 75` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 95` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -106,7 +100,7 @@ npm run test:all && npm run lint:check && npm run typecheck
 
 ```bash
 node --input-type=module -e '
-import { SnapshotStore } from "./src/index.ts";
+import { SnapshotStore } from "./packages/fsqlite/src/index.ts";
 const s = new SnapshotStore(process.env.QA + "/store", {
   schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)",
   conflictPolicy: { kv: "lww", "*": "strict" },
@@ -123,19 +117,21 @@ console.log("read", s.read(db => db.prepare("SELECT v FROM kv WHERE k=?").get("a
 ### B3. CLI walkthrough on a real store
 
 ```bash
-node test/cli-golden/seed.ts "$QA/cli"          # build a known store
-node src/cli/index.ts info     "$QA/cli"
-node src/cli/index.ts validate "$QA/cli"; echo "exit=$?"
-node src/cli/index.ts stats    "$QA/cli"
-node src/cli/index.ts gc       "$QA/cli" --retain 1
-node src/cli/index.ts seal     "$QA/cli" "$QA/export.sqlite"
-node src/cli/index.ts doctor   "$QA/cli"
+node packages/fsqlite/test/cli-golden/seed.ts "$QA/cli"          # build a known store
+node packages/fsqlite/src/cli/index.ts info     "$QA/cli"
+node packages/fsqlite/src/cli/index.ts validate "$QA/cli"; echo "exit=$?"
+node packages/fsqlite/src/cli/index.ts stats    "$QA/cli"
+node packages/fsqlite/src/cli/index.ts gc       "$QA/cli" --retain 1
+node packages/fsqlite/src/cli/index.ts seal     "$QA/cli" "$QA/export.sqlite"
+node packages/fsqlite/src/cli/index.ts doctor   "$QA/cli"
 ```
 
-- **Expect:** `info` prints JSON with `"state": "sealed"`, `current: 1`; `validate`
-  prints `sealed` and `exit=0`; `stats` reports `kind: fsqlite-store` with deterministic
-  `application_id`/`user_version`/table counts; `gc` prints a JSON result; `seal` writes
-  the export; `doctor` prints binding capabilities and `store: sealed`.
+- **Expect:** `$QA/cli/fsqlite.json` contains `format: "fsqlite"`,
+  `format_version: "f1.0"`, and a UUID `store_id`; `info` prints JSON with
+  `"state": "sealed"`, `current: 1`; `validate` prints `sealed` and `exit=0`; `stats`
+  reports `kind: fsqlite-store` with deterministic `application_id`/`user_version`/table
+  counts; `gc` prints a JSON result; `seal` writes the export; `doctor` prints binding
+  capabilities and `store: sealed`.
 - **PASS:** no errors; exit codes and states as above.
 
 ### B4. Cross-tool readback with stock `sqlite3`
@@ -153,11 +149,11 @@ sqlite3 "$QA/export.sqlite" ".tables" "SELECT count(*) FROM artifacts;"   # if s
 ### B5. `stats`/`doctor` over a plain SQLite file
 
 ```bash
-node test/cli-golden/seed.ts "$QA/plain.db" plainfile
-node src/cli/index.ts stats  "$QA/plain.db"
-node src/cli/index.ts doctor "$QA/plain.db"; echo "exit=$?"
-node test/cli-golden/seed.ts "$QA/bad.db" corrupt-sqlite
-node src/cli/index.ts doctor "$QA/bad.db"; echo "exit=$?"
+node packages/fsqlite/test/cli-golden/seed.ts "$QA/plain.db" plainfile
+node packages/fsqlite/src/cli/index.ts stats  "$QA/plain.db"
+node packages/fsqlite/src/cli/index.ts doctor "$QA/plain.db"; echo "exit=$?"
+node packages/fsqlite/test/cli-golden/seed.ts "$QA/bad.db" corrupt-sqlite
+node packages/fsqlite/src/cli/index.ts doctor "$QA/bad.db"; echo "exit=$?"
 ```
 
 - **Expect:** `stats` labels `kind: plain-sqlite (no fsqlite layer)` and reports
@@ -168,12 +164,12 @@ node src/cli/index.ts doctor "$QA/bad.db"; echo "exit=$?"
 ### B6. Damage → detect → repair (R1/R2)
 
 ```bash
-node test/cli-golden/seed.ts "$QA/inflight" orphan
-node src/cli/index.ts validate "$QA/inflight"; echo "exit=$?"      # in-flight
-node src/cli/index.ts doctor "$QA/inflight" --fix
-node src/cli/index.ts validate "$QA/inflight"; echo "exit=$?"      # repaired
-node test/cli-golden/seed.ts "$QA/corrupt" corrupt
-node src/cli/index.ts validate "$QA/corrupt"; echo "exit=$?"       # corrupt pointer
+node packages/fsqlite/test/cli-golden/seed.ts "$QA/inflight" orphan
+node packages/fsqlite/src/cli/index.ts validate "$QA/inflight"; echo "exit=$?" # in-flight
+node packages/fsqlite/src/cli/index.ts doctor "$QA/inflight" --fix
+node packages/fsqlite/src/cli/index.ts validate "$QA/inflight"; echo "exit=$?" # repaired
+node packages/fsqlite/test/cli-golden/seed.ts "$QA/corrupt" corrupt
+node packages/fsqlite/src/cli/index.ts validate "$QA/corrupt"; echo "exit=$?" # corrupt pointer
 ```
 
 - **Expect:** the in-flight store validates with `exit=2`, `doctor --fix` restores it,
@@ -185,7 +181,7 @@ node src/cli/index.ts validate "$QA/corrupt"; echo "exit=$?"       # corrupt poi
 
 ```bash
 node --input-type=module -e '
-import { SnapshotStore } from "./src/index.ts";
+import { SnapshotStore } from "./packages/fsqlite/src/index.ts";
 const dir = process.env.QA + "/crash";
 const s = new SnapshotStore(dir, { schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} }).init();
 s.write("w", db => db.prepare("INSERT INTO kv VALUES (?,?)").run("a","1"));
@@ -204,7 +200,7 @@ console.log("repair:", s2.repair().state, "-> applied", s2.reconcile().applied);
 ### B8. Concurrency demo
 
 ```bash
-npm run demo
+pnpm --filter fsqlite demo
 ```
 
 - **Expect:** the walkthrough runs concurrent writers, a reconcile, and a seal with no
@@ -214,9 +210,9 @@ npm run demo
 ### B9. Filesystem capability check (this environment, and any target)
 
 ```bash
-node src/cli/index.ts fsinspect "$QA"; echo "exit=$?"
+node packages/fsqlite/src/cli/index.ts fsinspect "$QA"; echo "exit=$?"
 # If you have a network/cloud-sync mount, point fsinspect at it too:
-# node src/cli/index.ts fsinspect /path/to/nfs-or-sync-dir
+# node packages/fsqlite/src/cli/index.ts fsinspect /path/to/nfs-or-sync-dir
 ```
 
 - **Expect:** a capability report; `fsqlite-safe` verdict on a normal local FS
@@ -233,21 +229,15 @@ node src/cli/index.ts fsinspect "$QA"; echo "exit=$?"
 Decide during manual review whether each residual risk is acceptable for the intended
 use.
 
-1. **Package-local frozen install.** CI builds and smoke-tests the tarball using the
-   **root** toolchain. A package-local `pnpm install --frozen-lockfile` is **blocked** by
-   a 14-day supply-chain cool-off on a `rolldown` transitive of `tsdown`. Until fsqlite
-   moves to its own repo, the clean-room `package-smoke.mjs` is the standalone
-   guarantee. **Manual check:** run `npm run test:package` and confirm it installs and
-   runs from the packed tarball.
-2. **Real-NFS / cross-host gate.** Concurrency is proven cross-*process* on a local FS;
+1. **Real-NFS / cross-host gate.** Concurrency is proven cross-*process* on a local FS;
    `fsinspect` probes filesystem semantics in one process but is a heuristic, not a true
    cross-host race. A real NFS/SMB/EFS multi-host soak is **deferred**. **Manual check:**
    run B9 against the actual target filesystem and confirm `fsqlite-safe`.
-3. **Power-loss durability.** Publishing `fsync`s the snapshot, the pointer, and their
+2. **Power-loss durability.** Publishing `fsync`s the snapshot, the pointer, and their
    directories, so the design is power-loss-safe by construction, but there is **no
    fault-injected block-device test** simulating real power loss in CI. **Manual
    check:** reason about B7 (process-crash) as the closest reproducible proxy.
-4. **Cross-language writers.** Readers are validated as binding-agnostic; non-Node
+3. **Cross-language writers.** Readers are validated as binding-agnostic; non-Node
    *writers* (Python/APSW, Rust/rusqlite) against the format are **future work**
    **Manual check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.
 

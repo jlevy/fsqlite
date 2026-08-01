@@ -21,11 +21,20 @@ test('direct write → read round-trips and increments the version synchronously
     assert.equal(store.currentVersion(), 1)
     assert.equal(
       store.read(
-        (db) => (db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('a') as { title: string }).title,
+        (db) =>
+          (
+            db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('a') as {
+              title: string
+            }
+          ).title,
       ),
       'A',
     )
-    assert.equal(store.validate().state, 'sealed', 'no pending tail in direct mode → always sealed between writes')
+    assert.equal(
+      store.validate().state,
+      'sealed',
+      'no pending tail in direct mode → always sealed between writes',
+    )
   } finally {
     cleanup()
   }
@@ -42,7 +51,12 @@ test('format interop: a store written directly is read by SnapshotStore (and vic
     const engine = new SnapshotStore(dir, STORE_OPTS)
     assert.equal(
       engine.read(
-        (db) => (db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('d') as { title: string }).title,
+        (db) =>
+          (
+            db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('d') as {
+              title: string
+            }
+          ).title,
       ),
       'from-direct',
     )
@@ -52,7 +66,9 @@ test('format interop: a store written directly is read by SnapshotStore (and vic
     })
     engine.reconcile()
     assert.equal(
-      direct.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c),
+      direct.read(
+        (db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c,
+      ),
       2,
     )
   } finally {
@@ -65,7 +81,11 @@ test('direct mode never records a session (so it runs on session-less bindings)'
   try {
     const store = new DirectStore(dir, STORE_OPTS).init()
     const v = store.write((db) => {
-      assert.equal(typeof db.createSession, 'function', 'the binding has session, but direct mode must not use it')
+      assert.equal(
+        typeof db.createSession,
+        'function',
+        'the binding has session, but direct mode must not use it',
+      )
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
     })
     assert.equal(v, 1)

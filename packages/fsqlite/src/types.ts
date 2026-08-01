@@ -26,8 +26,6 @@ export interface StoreOptions {
   schema?: string
   /** Bumped when `schema` changes incompatibly; stamped as `user_version` and on envelopes. */
   schemaVersion?: number
-  /** PRAGMA application_id stamped on snapshots, for foreign capability checks. */
-  appId?: number
   /** Per-table merge policy (table to action, `'*'` the default); see {@link ConflictPolicyInput}. */
   conflictPolicy?: ConflictPolicyInput
   /** Free-form writer/tool version recorded on each envelope for provenance. */
@@ -47,9 +45,14 @@ export interface StoreOptions {
  */
 export type StoreState = 'sealed' | 'live' | 'in-flight-capture' | 'corrupt'
 
-/** Result of `validate()`: the classified {@link StoreState} plus any human-readable issues. */
+/** Recognition failures precede health validation and are never repairable corruption. */
+export type StoreRecognitionState = 'not-a-store' | 'invalid' | 'unsupported'
+
+export type StoreValidationState = StoreState | StoreRecognitionState
+
+/** Recognition plus health classification and any human-readable issues. */
 export interface ValidateResult {
-  state: StoreState
+  state: StoreValidationState
   current?: number
   pending?: number
   issues: string[]

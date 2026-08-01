@@ -3,16 +3,27 @@
   "private": true,
   "packageManager": "pnpm@11.14.0",
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.18.0 <23 || >=24.0.0"
   },
   "scripts": {
     "build": "pnpm --filter fsqlite build",
+    "format": "pnpm format:code && pnpm format:markdown",
+    "format:check": "pnpm format:code:check && pnpm format:markdown:check",
+    "format:code": "prettier --write .",
+    "format:code:check": "prettier --check .",
+    "format:markdown": "uvx --from flowmark-rs==0.3.1 flowmark --auto --inplace --nobackup .",
+    "format:markdown:check": "uvx --from flowmark-rs==0.3.1 flowmark --auto --check .",
     "typecheck": "pnpm --filter fsqlite typecheck",
     "lint": "pnpm --filter fsqlite lint",
     "lint:check": "pnpm --filter fsqlite lint:check",
     "test": "pnpm --filter fsqlite test",
     "test:golden": "pnpm --filter fsqlite test:golden",
     "test:package": "pnpm --filter fsqlite test:package",
-    "test:all": "pnpm --filter fsqlite test:all"
+    "test:all": "pnpm --filter fsqlite test:all",
+    "verify": "pnpm format:check && pnpm lint:check && pnpm typecheck && pnpm test:all"
+  },
+  "devDependencies": {
+    "lefthook": "2.1.10",
+    "prettier": "3.9.5"
   }
 }

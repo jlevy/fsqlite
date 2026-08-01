@@ -29,7 +29,7 @@ test('repair clears an in-flight capture (orphan snapshot + transient + uncommit
     writeFileSync(join(store.snapDir, '.build-xyz.sqlite'), 'x')
     const txn = join(store.txPending, '999-uncommitted.txn')
     mkdirSync(txn, { recursive: true })
-    writeFileSync(join(txn, 'catalog.changeset'), 'partial') // no COMMITTED marker
+    writeFileSync(join(txn, 'changeset.bin'), 'partial') // no COMMITTED marker
 
     assert.equal(store.validate().state, 'in-flight-capture')
     const res = store.repair()
@@ -38,7 +38,10 @@ test('repair clears an in-flight capture (orphan snapshot + transient + uncommit
     assert.equal(store.currentVersion(), 3, 'restored to the last published head, not the orphan')
     assert.ok(!existsSync(store.snapshotPath(4)), 'orphan removed')
     assert.equal(count(store), 3, 'no published data lost (R1)')
-    assert.ok(existsSync(join(store.txQuarantine, '999-uncommitted.txn')), 'uncommitted tx quarantined')
+    assert.ok(
+      existsSync(join(store.txQuarantine, '999-uncommitted.txn')),
+      'uncommitted tx quarantined',
+    )
   } finally {
     cleanup()
   }
@@ -73,6 +76,63 @@ test('repair removes a corrupt head snapshot and falls back to the prior good on
   }
 })
 
+test('repair preserves every snapshot when no clean recovery point exists', () => {
+  const { store, cleanup } = storeAt(2)
+  try {
+    const paths = store.snapshotVersions().map((version) => store.snapshotPath(version))
+    for (const path of paths) {
+      writeFileSync(path, 'damaged-but-still-forensically-valuable')
+    }
+
+    assert.throws(() => store.repair(), /no snapshot (?:matches|integrity-clean)/)
+    for (const path of paths) {
+      assert.equal(existsSync(path), true, `repair must preserve ${path}`)
+    }
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair refuses to mutate while a publisher lock is present', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const transient = join(store.snapDir, '.build-live.sqlite')
+    writeFileSync(transient, 'live work')
+    mkdirSync(store.publishLock)
+    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+
+    assert.throws(() => store.repair(), /repair refused: publish\.lock is present/)
+    assert.equal(existsSync(transient), true)
+    assert.equal(existsSync(store.snapshotPath(1)), true)
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair revalidates its fence before every destructive step', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    copyFileSync(store.snapshotPath(1), store.snapshotPath(2))
+    const snapshotVersions = store.snapshotVersions.bind(store)
+    let calls = 0
+    store.snapshotVersions = (): number[] => {
+      calls += 1
+      if (calls === 2) {
+        writeFileSync(
+          join(store.publishLock, 'owner.json'),
+          JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
+        )
+      }
+      return snapshotVersions()
+    }
+
+    assert.throws(() => store.repair(), /repair lost ownership of publish\.lock before mutation/)
+    assert.equal(existsSync(store.snapshotPath(2)), true, 'the orphan remains for a fenced retry')
+  } finally {
+    cleanup()
+  }
+})
+
 test('orphan .direct-/.work- transients are surfaced by validate and removed by repair (spec §2)', () => {
   const { store, cleanup } = storeAt(1)
   try {
@@ -82,12 +142,21 @@ test('orphan .direct-/.work- transients are surfaced by validate and removed by 
     const v = store.validate()
     assert.equal(v.state, 'in-flight-capture', 'transient debris is an in-flight tell, not sealed')
     assert.ok(
-      v.issues.some((i) => i.includes('.direct-deadbeef')) && v.issues.some((i) => i.includes('.work-A-deadbeef')),
+      v.issues.some((i) => i.includes('.direct-deadbeef')) &&
+        v.issues.some((i) => i.includes('.work-A-deadbeef')),
       `both transient kinds named in issues: ${JSON.stringify(v.issues)}`,
     )
     store.repair()
-    assert.equal(existsSync(join(store.snapDir, '.direct-deadbeef.sqlite')), false, 'repair removed the .direct- orphan')
-    assert.equal(existsSync(join(store.txPending, '.work-A-deadbeef.sqlite')), false, 'repair removed the .work- orphan')
+    assert.equal(
+      existsSync(join(store.snapDir, '.direct-deadbeef.sqlite')),
+      false,
+      'repair removed the .direct- orphan',
+    )
+    assert.equal(
+      existsSync(join(store.txPending, '.work-A-deadbeef.sqlite')),
+      false,
+      'repair removed the .work- orphan',
+    )
     assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()

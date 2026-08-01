@@ -9,11 +9,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { SnapshotStore } from '../src/index.ts'
+import { FSQLITE_APPLICATION_ID, SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const SQLITE_MAGIC = 'SQLite format 3\0'
-const head = (store: SnapshotStore): Buffer => readFileSync(store.snapshotPath(store.currentVersion()))
+const head = (store: SnapshotStore): Buffer =>
+  readFileSync(store.snapshotPath(store.currentVersion()))
 
 test('a published snapshot is a standard SQLite file (magic header)', () => {
   const { dir, cleanup } = tmpStore()
@@ -30,15 +31,28 @@ test('a published snapshot is a standard SQLite file (magic header)', () => {
 test('a published snapshot carries application_id and user_version for foreign capability checks', () => {
   const { dir, cleanup } = tmpStore()
   try {
-    const store = new SnapshotStore(dir, { ...STORE_OPTS, appId: 0x54455354, schemaVersion: 1 }).init()
+    const store = new SnapshotStore(dir, { ...STORE_OPTS, schemaVersion: 1 }).init()
     store.write('A', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
     store.reconcile()
     // Open the head as a plain reader (no session API used at all).
     const db = new DatabaseSync(store.snapshotPath(store.currentVersion()), { readOnly: true })
     try {
-      assert.equal((db.prepare('PRAGMA application_id').get() as { application_id: number }).application_id, 0x54455354)
-      assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 1)
-      assert.equal((db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('a') as { title: string }).title, 'A')
+      assert.equal(
+        (db.prepare('PRAGMA application_id').get() as { application_id: number }).application_id,
+        FSQLITE_APPLICATION_ID,
+      )
+      assert.equal(
+        (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+        1,
+      )
+      assert.equal(
+        (
+          db.prepare('SELECT title FROM artifacts WHERE artifact_id=?').get('a') as {
+            title: string
+          }
+        ).title,
+        'A',
+      )
     } finally {
       db.close()
     }

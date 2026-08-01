@@ -5,23 +5,24 @@ description: A domain-agnostic reference on building a locally-friendly, portabl
   SQLite — covering the locking/journaling/filesystem background, the session/changeset
   extension, source-grounded node:sqlite findings, the prior-art landscape, and a
   validated snapshot-publish and transaction-envelope design with a working prototype.
-author: Claude Code agent, with prior survey work by Joshua Levy and LLM agents
+author: Joshua Levy, with LLM assistance
 related:
   - ../fsqlite-design.md
   - ../fsql-format-spec.md
 ---
 # Research: Portable, Server-Free, Concurrent SQLite for Local Applications
 
-**Date:** 2026-06-06 (last updated 2026-06-06)
+**Date:** 2026-06-06 (last updated 2026-07-31)
 
-**Author:** Claude Code agent, building on a prior embeddable-databases survey and a
-validated standalone spike
+**Author:** Joshua Levy, with LLM assistance
 
-**Status:** Complete — full survey, recommended design, validated prototype,
-related-work catalogue, and a tracked forward agenda.
-Build plan: [`fsqlite` design](../fsqlite-design.md); the normative format lives in
-[`fsql-format-spec.md`](../fsql-format-spec.md).
-Cross-checked against a parallel independent report on the same problem.
+**Status:** Complete as background research.
+The current implementation and `f1.0` decisions are governed by the
+[`fsqlite` design](../fsqlite-design.md), the normative
+[`fsql-format-spec.md`](../fsql-format-spec.md), and the
+[`QA runbook`](../qa-runbook.md).
+This report preserves the evidence and alternatives; it does not override those current
+documents.
 
 ## Overview
 
@@ -64,10 +65,10 @@ artifacts, “zip-and-go” datasets.
 it; the design takes a caller-supplied schema and merge policy and knows nothing about
 the domain.)
 
-This builds directly on a prior survey, *Modern Embeddable / File-Based Databases*
-(§G–§J there), and on a from-scratch standalone spike with **55 passing tests** and
-source-grounded checkouts of SQLite and Node.
-It restates the relevant parts so it stands alone.
+The design was validated with a dependency-free `node:sqlite` implementation and
+source-level review of SQLite, Node, alternative bindings, and filesystem-locking prior
+art. Current test counts and validation status live in the QA runbook so they have one
+maintained source.
 
 ## What Kind of Artifact This Is
 
@@ -114,9 +115,10 @@ format later. So: a language-agnostic format and reader story, with writer libra
 wherever a session-capable binding exists, Node first.
 
 The practical consequence for the rest of this document: the **format/protocol is the
-primary artifact** (its layout, manifest schema, `application_id`/`user_version`
-stamping, and reconcile/conflict rules are what must be precise, stable, and versioned),
-and any package — in any language — is a reference implementation of it.
+primary artifact**. Its root `fsqlite.json`, `f1.0` version, fixed fsqlite
+`application_id`, caller-owned `user_version`, manifest schema, and reconcile/conflict
+rules are what must be precise, stable, and versioned.
+Any package in any language is a reference implementation of it.
 
 ## SQLite Sessions: A Mature but Underused Primitive
 
@@ -209,26 +211,23 @@ The target properties (the “contours”), restated as testable requirements:
   each hold their own connection.
   (Finding G2; review B1.)
 
-> **Requirement review (refinements and one addition).** These are sound and mutually
-> achievable, with three notes:
->
-> 1. **R-CONCURRENCY “optimistic, per-session” and R-NOSERVER together force a
->    commit-log/MVCC-style design, not a lock-wrapper.** A pure wrapper-lock (even a
->    good one) is still one-writer-at-a-time; true per-session optimism on a single file
->    with no server is achieved by **logical row-level changesets merged
->    optimistically**, not by finer file locks (see Findings B). So “wrapper-based
->    locking” is best read as “wrapper-managed *concurrency*,” whose best form is a
->    changeset commit-log.
-> 2. **R-FS and R-CONCURRENCY mean the live multi-writer working directory is a
->    *directory of files*, even though the archival artifact is a *single* SQLite
->    file.** These are not in tension: the live form has a tail of pending change-files
->    that a finalize/seal step folds into one clean file.
->    Worth stating explicitly as part of R-FORMAT.
-> 3. **Add R-DETECT — no silent corruption.** Implied by R-DURABLE but worth elevating:
->    every inconsistency (torn copy, partial write, bit-rot, dangling reference) must be
->    *detectable and surfaced loudly*, not silently accepted.
->    Content hashing, integrity checks, and structural “in-flight tells” make this
->    cheap.
+**Requirement review.** These are sound and mutually achievable, with three notes:
+
+1. **R-CONCURRENCY “optimistic, per-session” and R-NOSERVER together force a
+   commit-log/MVCC-style design, not a lock-wrapper.** A pure wrapper-lock (even a good
+   one) is still one-writer-at-a-time; true per-session optimism on a single file with
+   no server is achieved by **logical row-level changesets merged optimistically**, not
+   by finer file locks (see Findings B). So “wrapper-based locking” is best read as
+   “wrapper-managed *concurrency*,” whose best form is a changeset commit-log.
+2. **R-FS and R-CONCURRENCY mean the live multi-writer working directory is a *directory
+   of files*, even though the archival artifact is a *single* SQLite file.** These are
+   not in tension: the live form has a tail of pending change-files that a finalize/seal
+   step folds into one clean file.
+   Worth stating explicitly as part of R-FORMAT.
+3. **Add R-DETECT: no silent corruption.** Implied by R-DURABLE but worth elevating:
+   every inconsistency (torn copy, partial write, bit-rot, dangling reference) must be
+   *detectable and surfaced loudly*, not silently accepted.
+   Content hashing, integrity checks, and structural “in-flight tells” make this cheap.
 
 ## Questions to Answer
 
@@ -251,9 +250,8 @@ extension; the snapshot/commit-log pattern; crash/durability/hot-copy safety;
 cross-language reader portability; a generic wrapper design and prototype.
 
 **Out of scope:** analytical/columnar engines (DuckDB/Parquet) and full-text/vector
-search (covered in the prior survey); choosing a specific application schema; remote
-sync/replication and object-storage transport (a separable layer); and any single
-application’s domain model.
+search; choosing a specific application schema; remote sync/replication and
+object-storage transport (a separable layer); and any single application’s domain model.
 
 ## Findings
 
@@ -282,8 +280,9 @@ Portability is mostly a discipline, not luck:
   loading — probe it.
 - A **packaged/sealed** file must be finalized (no `-wal`/`-shm` side files) via
   checkpoint, the backup API, or `VACUUM INTO`, and pass `PRAGMA integrity_check`.
-- Stamp `PRAGMA application_id` and `PRAGMA user_version` so foreign readers can
-  recognize and version-gate the file.
+- Stamp the fixed fsqlite `PRAGMA application_id = 0x4653514C` and the caller-owned
+  `PRAGMA user_version` so foreign readers can recognize the file and version-gate the
+  caller schema.
 
 **Conclusion:** keep the *content/bytes* and the *interchange artifact* as standard
 SQLite (plus plain files for large blobs); never hand an outside consumer an
@@ -329,28 +328,25 @@ The honest consequence for our requirements: **don’t look for a cleverer file 
 the serialization point in the right place** — a millisecond commit/election, made
 correct by idempotency, not by lock perfection.
 
-> **The coordination triangle (a useful companion to the cross-host theorem).** Where
-> the theorem says *fine-grained cross-host locking needs a server*, the triangle frames
-> the design choice that follows.
-> You can have at most **two** of:
->
-> 1. **Direct file access** — clients open the SQLite file(s) directly, no server or
->    broker;
-> 2. **Strong coordinated writes on weak/shared filesystems** — concurrent participants
->    cannot double-write, skip the commit protocol, or depend on WAL/`-shm`/`fcntl` the
->    filesystem does not provide;
-> 3. **Arbitrary, unmodified writers** — any SQLite-capable process can write the live
->    file without knowing the protocol.
->
-> A server-free design keeps (1) and (2) and **gives up (3)** — which is exactly the
-> cooperative-writer boundary stated in the Overview: all *writers* must use the
-> protocol (readers need nothing).
-> This is not the CAP theorem and makes no consensus claim; it is a statement about
-> **where enforcement lives**. The one nuance versus a plain cooperative *lock* (which
-> also surrenders vertex 3): the changeset commit-log buys *more* of vertex 2 — many
-> lock-free **row-level** writers rather than one-writer-at-a-time — for the same
-> concession. (Framing adapted from the upstream SFC report’s “coordination triangle”;
-> comparative review A1.)
+**The coordination triangle.** Where the cross-host theorem says fine-grained cross-host
+locking needs a server, the triangle frames the design choice that follows.
+You can have at most **two** of:
+
+1. **Direct file access:** clients open the SQLite files directly, with no server or
+   broker.
+2. **Strong coordinated writes on weak/shared filesystems:** concurrent participants
+   cannot double-write, skip the commit protocol, or depend on WAL/`-shm`/`fcntl` the
+   filesystem does not provide.
+3. **Arbitrary, unmodified writers:** any SQLite-capable process can write the live file
+   without knowing the protocol.
+
+A server-free design keeps (1) and (2) and **gives up (3)**, which is exactly the
+cooperative-writer boundary stated in the Overview: all writers must use the protocol;
+readers need nothing.
+This is not the CAP theorem and makes no consensus claim; it is a statement about
+**where enforcement lives**. The one nuance versus a plain cooperative lock, which also
+surrenders vertex 3, is that the changeset commit-log buys more of vertex 2: many
+lock-free row-level writers rather than one writer at a time.
 
 ### C. SQLite’s own locking and journaling, precisely
 
@@ -423,17 +419,6 @@ The one-line authority for the *fix*: NFSv4 specifies an atomic exclusive create
 `mkdir`/`rename` and not on byte-range locks (and treats lease *staleness* as
 [Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
 warns — a heuristic, not a true fencing token; see G2).
-
-This is **not hypothetical**. The `beads` issue tracker (`bd`) shipped a SQLite backend
-that was *effectively unusable on Claude Code Cloud agent workspaces because they run on
-network drives*; the project **removed SQLite entirely**, moved its working store to
-Dolt (still “single-writer only, file locking enforced”) with an optional server for
-sharing, and kept a plain git-committed `.jsonl` as the portable interchange surface.
-Its successor (`tbd`) went fully file/git-native.
-The lesson: **a live, network-mounted SQLite file as a shared multi-writer store is the
-specific thing to avoid.** The safe patterns are (a) a plain file-native interchange
-layer as the portable truth and (b) confining any live single-writer DB to local disk or
-a coordinator — never a shared network-drive DB file.
 
 The one primitive that *is* reliable across local disk and NFS is **atomic directory
 create** (`mkdir(2)`) and **atomic rename** — which is why the git/npm world uses
@@ -533,15 +518,16 @@ The cross-language **writer-parity matrix** is in the next sub-section.
 
 #### F1. Cross-language session writer-parity matrix
 
-Source-verified (the relevant repos are checked out in `attic/`). Columns: does the
-build compile SESSION in by default; does it expose a changeset/patchset API; does its
-apply **conflict handler expose the table name** (via the changeset iterator — the
-capability `node:sqlite` lacks); does it expose the **rebaser**.
+Source-verified at the commits recorded in [Source Map](#source-map).
+Columns: does the build compile SESSION in by default; does it expose a
+changeset/patchset API; does its apply **conflict handler expose the table name** (via
+the changeset iterator — the capability `node:sqlite` lacks); does it expose the
+**rebaser**.
 
 | Binding / runtime | SESSION by default | Changeset API | Table name in conflict handler | Rebaser | Notes |
 | --- | --- | --- | --- | --- | --- |
 | **`node:sqlite`** (Node ≥ 22.5) | ✓ | ✓ | ✗ (only the integer type) | ✗ | The first-class zero-native-dep host; constraints are the binding’s, not SQLite’s (Finding G). |
-| **Bun** (`node:sqlite`) | ✓ | ✓ | ✗ | ✗ | Now ships the Session API — *corrects* the earlier “Bun lacks it” (R1/R8). |
+| **Bun 1.3.13** (`node:sqlite`) | ✗ | ✗ | — | — | Cannot resolve `node:sqlite`; not a writer runtime for this release. |
 | **Deno** (`node:sqlite`, ≥ 2.2) | ✓ | ✓ | ✗ | ✗ | Same surface and limits as Node. |
 | **`better-sqlite3`** | ✗ | ✗ | — | — | SESSION `#if`-compiled-out; usable only as a **reader** / `DirectStore` writer. |
 | **APSW** (Python) | ✓ | ✓ | **✓** | **✓** | Fullest surface: table name *and* a `Rebaser` class. |
@@ -552,11 +538,12 @@ capability `node:sqlite` lacks); does it expose the **rebaser**.
 
 So a **richer** writer (in-handler per-table policy) is achievable in Python/Rust/Go
 today, and a **rebaser-capable** writer is APSW/wasm-only.
-`node:sqlite`/Bun/Deno give the zero-dependency convenience but neither the table name
-nor the rebaser — which shapes the v1 design (filter-pass-per-policy; constrained
-writable surface so no rebaser is needed).
-The full ecosystem context — who uses sessions at all versus the WAL/Raft/CRDT/MVCC
-workarounds — is in [Related Work](#related-work).
+`node:sqlite` on Node and Deno gives the zero-dependency convenience but neither the
+table name nor the rebaser.
+Node is the reference and test runtime; the package does not claim Bun compatibility.
+These limits shape `f1.0` (filter-pass-per-policy; constrained writable surface so no
+rebaser is needed). The full ecosystem context — who uses sessions at all versus the
+WAL/Raft/CRDT/MVCC workarounds — is in [Related Work](#related-work).
 
 ### G. Source-grounded `node:sqlite` findings (the binding, not SQLite, is the limit)
 
@@ -593,19 +580,27 @@ Verified empirically and confirmed against checkouts of `sqlite/sqlite` (`002d33
    prints an `ExperimentalWarning`). A *conservative* public release should still gate
    on it reaching Stable, but it is not behind a flag.
 
+The package has a higher load-time floor than the session API alone: Node’s static
+`backup` named export was added in v22.16.0 and v23.8.0. Because fsqlite imports it at
+ESM link time, older releases cannot load the package and no runtime capability guard
+can intercept the failure.
+The alpha declares `>=22.18.0 <23 || >=24.0.0`; 22.18 is also the unflagged TypeScript
+type-stripping floor used by the source test loop.
+
 > **Re-verified against current Node.** All five constraints above hold on `nodejs/node`
 > `main` (v27-pre): the conflict handler drops the iterator, ABORT is `false`, `REPLACE`
 > is DATA/CONFLICT-only, and there is no rebaser.
-> From the wider survey (R1/R8): **Bun and Deno (≥ 2.2) ship `node:sqlite` *with* the
-> Session API** (same limits), so the zero-native-dep writer is not Node-only — Bun and
-> Deno host it too. One caveat to track: Node issue **#63180** (a segfault when
-> `db.close()` is called from inside a user-defined-function callback) reproduces on our
-> v22.22.2 baseline; `fsqlite`’s hot path uses no UDFs, but confirm before adding any.
+> Deno (≥ 2.2) exposes the same `node:sqlite` surface; Bun 1.3.13 cannot resolve the
+> module and is not a supported runtime.
+> One caveat to track: Node issue **#63180** (a segfault when `db.close()` is called
+> from inside a user-defined-function callback) reproduces on our v22.22.2 baseline;
+> `fsqlite`’s hot path uses no UDFs, but confirm before adding any.
 > The two clean upstream fixes — forward the changeset iterator/table name into the
 > conflict handler, and expose the rebaser — remain **un-filed** and are tracked as
 > research follow-ups.
 
-All five are pinned to C source in the prototype’s `SOURCES.md` (SQLite
+All five are pinned to C source in
+[`upstream-source-confirmations.md`](../upstream-source-confirmations.md) (SQLite
 `ext/session/sqlite3session.c:4952-4978` for the conflict dispatch and MISUSE rules;
 `sqlite3session.h:192-202` for the PK/NULL-PK rules and `:1592-1622` for the rebaser;
 `src/wal.c:129-133` for “WAL is not supported on a network filesystem”;
@@ -628,8 +623,8 @@ It compiles the standard amalgamation, so its **on-disk file is the identical
 native rebuild (re-introducing the prebuild burden `node:sqlite` avoids), but fully
 usable as a **reader** and as the **direct-mode** writer (which needs no session), and a
 good reference for the driver API shape.
-A `CatalogDriver` abstraction should require `node:sqlite` only for the changeset path
-and allow either binding elsewhere.
+A store-driver abstraction should require `node:sqlite` only for the changeset path and
+allow either binding elsewhere.
 **One URI gotcha:** `better-sqlite3` compiles `SQLITE_USE_URI=0`
 (`deps/defines.gypi:40`), so per-database URI options (`immutable=1`, `nolock=1`,
 `vfs=…`) are **not** honored unless URI parsing is force-enabled *globally* — whereas
@@ -660,22 +655,19 @@ and a fencing check has something to revalidate against:
 
 ```json
 // publish.lock/owner.json
-{ "protocol": "fsqlite.lock.v1", "ownerId": "host:pid:random", "target": "current",
-  "mode": "write", "createdAt": "…", "updatedAt": "…",
-  "process": { "pid": 12345, "hostname": "host.example" } }
+{ "token": "random-owner-token", "pid": 12345, "host": "host.example", "at": 1785552000000 }
 ```
 
-with **realpath canonicalization** of the locked path (so two spellings of the same path
-don’t both “win”). **One honest caveat:** proper-lockfile’s staleness/compromise check
-is **mtime equality**, which is *not* a true monotonic fencing token — per
+**One honest caveat:** proper-lockfile’s staleness/compromise check is **mtime
+equality**, which is *not* a true monotonic fencing token — per
 [Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
 it is necessary but not sufficient under arbitrary process pauses.
 `fsqlite` does not rely on it for correctness: the `applied_tx` ledger and
 OCC-on-`current` make folding exactly-once *regardless* of whether the lock is perfect
 (Finding H), so the owner token is belt-and-suspenders for *liveness/attribution*, not
 the safety argument.
-Whether a real monotonic fence (or single-host proxy-lock gating) is ever needed is a
-tracked open question.
+The real shared-filesystem gate determines whether a monotonic fence or single-host
+proxy-lock gate is warranted.
 
 ### H. The design pattern that satisfies the requirements: snapshot-publish and envelopes
 
@@ -685,15 +677,16 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
 
 ```text
 <dir>/
+  fsqlite.json                    # format="fsqlite", format_version="f1.0", store_id
   current                         # tiny text pointer → the published snapshot version
   snapshots/
-    000000000000.sqlite           # immutable, versioned published heads (standard SQLite)
-    000000000001.sqlite
+    000000000000.fsqlite.sqlite   # immutable published heads (standard SQLite)
+    000000000001.fsqlite.sqlite
   tx/
     pending/<txid>.txn/           # one transaction envelope per writer commit
-      manifest.json               #   tx_id, writer_id, base_version, schema_version+hash,
-                                  #   changeset_sha256, logical_clock
-      changeset                   #   the SQLite changeset blob
+      manifest.json               #   format/store identity, writer/base/schema metadata,
+                                  #   changeset digest and provenance
+      changeset.bin               #   the SQLite changeset blob
       COMMITTED                   #   marker written LAST → the tx becomes visible atomically
     applied/<txid>.txn/           # archived after folding into a published snapshot
     quarantine/<txid>.txn/        # corrupt / schema-mismatch / strict-conflict (evidence kept)
@@ -703,6 +696,10 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
 
 **Protocol:**
 
+- **Identify.** Require a valid root `fsqlite.json`; never infer store identity from
+  generic layout names.
+  Match its `f1.0` format and UUID `store_id` against snapshots and envelopes before
+  accepting them.
 - **Write (lock-free).** Seed a session from the *current immutable snapshot* (safe — it
   is never mutated), run the caller’s work, extract a changeset, and write an envelope
   with the `COMMITTED` marker **last**. Unique paths ⇒ conflict-free concurrent writes
@@ -758,11 +755,11 @@ held across the short write), but still immutable-snapshot-safe (R-DURABLE) and 
 (`mkdir` and atomic rename).
 Because it writes the identical on-disk shape, a store can be written directly when
 alone and read/operated by the concurrent engine later — **two write strategies, one
-format.** This is the “legacy/simple, easier-locking-locally” option alongside the full
+format.** This is the simpler, easier-locking-locally option alongside the full
 concurrent engine.
 
-Its single-writer transaction uses the conservative, WAL-free recipe (matching the
-upstream SFC report, and the portable default the whole document argues for):
+Its single-writer transaction uses the conservative, WAL-free recipe that the whole
+document argues for:
 
 ```sql
 PRAGMA journal_mode=DELETE;   -- rollback journal, no -wal/-shm (portable, NFS-safe at rest)
@@ -774,18 +771,19 @@ BEGIN IMMEDIATE;              -- take write intent up front; contention surfaces
 COMMIT;
 ```
 
-`DirectStore` also exposes the sanctioned backup helper `copyUnderLock()` alongside
-`seal()`/`vacuumInto()`. One open question to settle by measurement: the
-rollback-journal *variant* (`DELETE` vs `TRUNCATE` vs `PERSIST`) — `DELETE` is the
-simplest and most compatible default; the others trade compatibility for fewer metadata
-operations. (This is a `DirectStore`-only concern; `SnapshotStore`’s `reconcile` builds
-each snapshot in a fresh temp file and never runs WAL.)
+`DirectStore` delegates the sanctioned `seal()` export to the shared immutable-snapshot
+path; the public `backupDatabase()` helper covers online copies of ordinary SQLite
+files. A post-alpha measurement covers the rollback-journal *variant* (`DELETE` vs
+`TRUNCATE` vs `PERSIST`) — `DELETE` is the simplest and most compatible default; the
+others trade compatibility for fewer metadata operations.
+(This is a `DirectStore`-only concern; `SnapshotStore`’s `reconcile` builds each
+snapshot in a fresh temp file and never runs WAL.)
 
 ### J. Experiments run, and results
 
 A from-scratch, dependency-free spike (`node:sqlite`, Node v22.22.2) implements the
 design as a generic package (caller supplies schema and per-table policy) and is
-exercised by **55 passing tests**, including real multi-process (`child_process`)
+exercised by the current QA suite, including real multi-process (`child_process`)
 concurrency:
 
 - **Concurrency:** N lock-free writer processes lose **zero** committed tx after
@@ -806,7 +804,8 @@ concurrency:
   lease self-clears; a packager reads a byte-stable pinned snapshot while `current`
   advances.
 - **Portability:** a published/sealed head begins with `SQLite format 3\0` and carries
-  `application_id`/`user_version`; opens read-only with no session API.
+  the fixed fsqlite `application_id` and caller `user_version`; opens read-only with no
+  session API.
 - **doctor/repair:** restores the last consistent point from a torn store (re-publish to
   the highest integrity-clean snapshot, roll back orphans, quarantine uncommitted
   envelopes, clear transients and the stale lock).
@@ -919,7 +918,7 @@ Granular retry is available in three escalating forms:
    optimistic retry loop (the classic compare-and-retry).
    This is straightforward to add and is the right answer for “I need this write to see
    the latest state.” 2b. **Declared-precondition commit (`commitIf`) — the read-set
-   escape hatch.** Adapted from the upstream SFC report:
+   escape hatch:**
    `optimisticWrite(ctx => ctx.commitIf({ reads: [{table, pk, version}], write }))` lets
    the application **declare its read set** (version columns / PK compare-and-swap
    predicates) and revalidate it at merge.
@@ -1050,7 +1049,10 @@ auto- releases on death.
 **Cons:** there *is* a process (transient, but a process); cross-platform
 socket/lifecycle management is exactly the daemon-seamlessness liability R-NOSERVER
 warns about; more moving parts.
-Best reserved as a future optimization for hot, strongly-consistent cross-host work.
+This mode is not on the current roadmap: requiring a coordinator would contradict the
+standalone, no-server operating model.
+It should be reconsidered only if a future use case explicitly changes that product
+boundary.
 
 ### Option C — Snapshot-publish and transaction-envelope changesets (recommended)
 
@@ -1060,9 +1062,9 @@ for the simple local case.
 
 **Pros:** satisfies every requirement (per-session optimism; no server; NFS-safe;
 hot-copy and crash safe; standard-SQLite readers; cross-platform via `node:sqlite`);
-validated by 55 multi-process tests; correctness independent of lock perfection.
+validated by the QA suite; correctness independent of lock perfection.
 **Cons:** writers/reconcile need the session extension (Node `node:sqlite` / Python APSW
-/ Rust `rusqlite` / Go `zombiezen-go` / Bun / Deno), which on Node is now a **Release
+/ Rust `rusqlite` / Go `zombiezen-go` / Deno), which on Node is now a **Release
 candidate** (no longer `--experimental`-flagged, but a conservative release should still
 gate on Stable); reader latency lags the pending tail until reconcile; per-write
 snapshot-seed cost grows with catalog size (mitigated by schema-only seed / compaction);
@@ -1106,7 +1108,7 @@ no auto-rebase merge in v1 (constrained writable surface instead).
 A wider survey of how real projects achieve our goals — server-free access, multi-writer
 concurrency, and/or sync over SQLite — classified by **mechanism**, whether they use the
 **session/changeset** extension, and whether they are **server-free**. The repos behind
-the session-based entries are checked out in `attic/` (see [Source Map](#source-map)).
+the session-based entries were reviewed at the commits in [Source Map](#source-map).
 
 | Project | Mechanism | Session-based? | Server-free? | Relation to `fsqlite` |
 | --- | --- | --- | --- | --- |
@@ -1163,33 +1165,44 @@ provide.
 
 ## Recommendations
 
-**Build a small, dependency-free, cross-platform package** that implements Option C,
-with this surface:
+**Use the standalone, dependency-free package** that implements Option C with this
+surface:
 
 ```ts
 const store = new SnapshotStore(dir, {
-  schema: SCHEMA_SQL,            // caller DDL applied to snapshot 0; every table NON-NULL PK
+  schema: SCHEMA_SQL, // caller DDL applied to snapshot 0; every table NON-NULL PK
   schemaVersion: 1,
-  appId: 0x........,             // PRAGMA application_id
-  conflictPolicy: {              // per-table merge semantics
-    cache_table: 'lww',          //   last-writer-wins (REPLACE on DATA/CONFLICT, OMIT else)
-    edges: 'union',              //   set-union (OMIT duplicates)
-    '*': 'strict',               //   deny-by-default: a conflict quarantines the tx
+  conflictPolicy: {
+    // per-table merge semantics
+    cache_table: 'lww', //   last-writer-wins (REPLACE on DATA/CONFLICT, OMIT else)
+    edges: 'union', //   set-union (OMIT duplicates)
+    '*': 'strict', //   deny-by-default: a conflict quarantines the tx
   },
 }).init()
 
-const txId = store.write(writerId, (db) => { /* INSERT/UPDATE/DELETE */ })  // lock-free envelope
-const rows = store.read((db) => db.prepare('…').all())                       // immutable snapshot
-const res  = store.reconcile()      // build → quick_check → atomic publish; exactly-once
-const lease = store.readLease()     // pin current for a packager; lease.release() after
-store.gc({ retain: 3 }); store.validate(); store.repair(); store.seal('out.sqlite')
+const txId = store.write(writerId, (db) => {
+  /* INSERT/UPDATE/DELETE */
+}) // lock-free envelope
+const rows = store.read((db) => db.prepare('…').all()) // immutable snapshot
+const res = store.reconcile() // build → quick_check → atomic publish; exactly-once
+const lease = store.readLease() // pin current for a packager; lease.release() after
+store.gc({ retain: 3 })
+store.validate()
+store.repair()
+store.seal('out.sqlite')
 
 // Easy-local alternative over the same format (no session extension, any binding):
-const v = new DirectStore(dir, opts).write((db) => { /* … */ })
+const v = new DirectStore(dir, opts).write((db) => {
+  /* … */
+})
 ```
 
 **Module/code outline (what a reproducer needs to build):**
 
+- **`storeFormat`** — durable creation and strict validation of the visible
+  `fsqlite.json` root marker.
+  It gates `f1.0`, required features, and the UUID `store_id`; the same identity is
+  repeated in snapshots and transaction manifests.
 - **`lock`** — `withLock(lockPath, fn(token), {timeoutMs>staleMs, staleMs, pollMs})` +
   `ownerOf(lockPath)` + `heartbeat`: the NFS-safe **`mkdir` lease lock with an owner
   token**, held only around publish; supports revalidate-before-publish (fencing).
@@ -1203,58 +1216,58 @@ const v = new DirectStore(dir, opts).write((db) => { /* … */ })
   `applyChangeset` pass per action** (the binding gives the table name only to
   `filter`), conflict-type-aware `'replace'`, and `'strict'` detected via the **`false`
   return** of an ABORT pass → roll back the whole tx → quarantine.
-- **`snapshotStore`** — the engine: `init` (snapshot 0 with schema + `application_id`/
-  `user_version` + an `applied_tx` ledger table), `read`, `write` (seed-from-snapshot or
-  `seed:'schema-only'`; envelope with `COMMITTED` last; manifest carries
-  `schema_version`+`schema_hash`+`changeset_sha256`), `reconcile` (build-temp → apply
-  non- ledgered committed tx with the policy → `quick_check` → atomic publish under the
-  lease, with OCC re-check + exactly-once via `applied_tx`), `gc` (retain N + leased),
-  `readLease`, `validate` (classify `sealed`/`live`/`in-flight-capture`/`corrupt` from
-  the structural tells), `repair` (restore last consistent point), `seal` (`VACUUM INTO`
-  finalize).
+- **`snapshotStore`** — the engine: `init` (root marker and snapshot 0 with schema,
+  fixed `application_id`, caller `user_version`, store identity, and an `applied_tx`
+  ledger table), `read`, `write` (seed-from-snapshot or `seed:'schema-only'`; envelope
+  with `COMMITTED` last; manifest carries
+  `format_version`+`store_id`+`schema_version`+`schema_hash`+`changeset_sha256`),
+  `reconcile` (build-temp → apply non- ledgered committed tx with the policy →
+  `quick_check` → atomic publish under the lease, with OCC re-check + exactly-once via
+  `applied_tx`), `gc` (retain N + leased), `readLease`, `validate` (distinguish
+  not-a-store, invalid, unsupported, sealed, live, in-flight, and corrupt states),
+  `repair` (restore the last consistent point without deleting evidence until a clean
+  snapshot is known), and `seal` (`VACUUM INTO` finalize).
 - **`directStore`** — the easy-local strategy: `write(fn)` = lock + copy current →
   mutate → `quick_check` → atomic publish, with OCC; reuses the same layout/read.
 - **CLI** — schema-agnostic `info`/`validate`/`gc`/`seal`/`repair` (these operate on the
   snapshot/pointer/envelope layer, so they need no schema or policy — an operator can
   maintain a store they did not create).
-  `validate` exits 0/2/3 for sealed-or-live / in-flight / corrupt.
+  `validate` exits 0/2/3/4 for sealed-or-live / in-flight / invalid-or-corrupt /
+  unsupported.
 - **Tests** — port the spike’s multi-process harness (writer/reconciler/reader/direct-
   writer/lock-holder child processes): zero-loss concurrency, racing reconcilers
   exactly- once, readers-never-torn, crash-at-every-publish-step, true SIGKILL,
   randomized chaos, fencing/lease, GC+lease, portability (magic header + pragmas),
   repair, direct-mode interop.
 
-**Prototype is done.** A complete reference implementation of all of the above was
-spiked and then productized into the `fsqlite` TypeScript package with full `node:test`
-and CLI golden suites (counts in the QA runbook), a runnable `demo`, a worked
-generic-consumer example, and `upstream-source-confirmations.md` recording the exact
-upstream source lines.
-It is intentionally domain-agnostic — the prototype’s tests inject a toy schema, and a
-separate example injects an unrelated one — so it transfers directly to a standalone
-package.
+The TypeScript reference implementation includes the `node:test` and CLI golden suites
+(counts in the QA runbook), a runnable demo, a generic-consumer example, and
+`upstream-source-confirmations.md` recording exact upstream source lines.
+It remains domain-agnostic: callers provide their schema and merge policy.
 
-**Recommended sequencing for productionizing:**
+**Recommended post-alpha sequencing:**
 
-1. **TypeScript port** of the prototype (types; lazy `node:sqlite`; the same tests).
-2. **Cross-platform install/runtime matrix** (macOS arm64/x64, Linux glibc/musl
-   x64/arm64, Windows x64) installing the *packed tarball*, plus a **real
+1. **Cross-platform install/runtime matrix** (macOS arm64/x64, Linux glibc/musl
+   x64/arm64, Windows x64) installing the packed tarball, plus a **real
    NFSv4.1/EFS/Filestore gate** (the one thing a local spike cannot settle —
    `mkdir`/rename atomicity under contention, `actimeo`/close-to-open, lease-break under
-   partition, `fsync` durability).
-3. **Schema migration** across snapshot versions (deterministic DDL step; reconcile
-   quarantines schema-mismatch via `schema_hash`).
+   partition, `fsync` durability, Windows replacement, and path portability).
+2. **Conformance fixtures and explicit side-by-side format upgrades** so independent
+   implementations can prove `f1.x` interoperability and future formats can migrate
+   without in-place risk.
+3. **Caller-schema migration** across snapshot versions (deterministic DDL step;
+   reconcile quarantines schema-mismatch via `schema_hash`).
 4. **Cheaper seeding** for large catalogs (schema-only default for insert-heavy writers,
-   or a shared read-only base and overlay) and snapshot compaction/retention.
+   or a shared read-only base and overlay) and snapshot compaction/retention without
+   weakening immutable publication.
 5. **Optional later:** Python (APSW) / Rust (`rusqlite`) writer parity against the same
-   envelope format; an ephemeral-coordinator mode for hot strongly-consistent cross-host
-   work; upstream `node:sqlite` asks (forward the conflict iterator/table name; expose
-   the rebaser).
+   envelope format; upstream `node:sqlite` asks (forward the conflict iterator/table
+   name and expose the rebaser).
 
-**Open design questions to settle with maintainers:** changeset vs patchset (recommend
-changeset); rebaser-gap handling (recommend constrained writable surface for v1);
-direct-mode strictly opt-in (never inferred from filesystem detection — the dangerous
-cases look local); and whether bit-rot repair should *replay* `tx/applied/` onto the
-prior snapshot rather than fall back to it.
+The alpha decisions are settled: use changesets, constrain the writable surface instead
+of requiring a rebaser, keep DirectStore strictly opt-in, identify stores only through
+`fsqlite.json`, and never upgrade during open.
+Replay-based bit-rot recovery is a bounded research task, not a capability claim.
 
 ## What `fsqlite` Can and Cannot Promise
 
@@ -1270,8 +1283,8 @@ as the boundary it draws.
   uncommitted tail — never a previously-published snapshot (R-DURABLE);
 - **no silent corruption**: every anomaly is detectable and surfaced by
   `validate`/`doctor` (R-DETECT);
-- **package-created backups are consistent snapshots** (backup API / `VACUUM INTO` /
-  `sqlite3_rsync` / `copyUnderLock`), each `integrity_check`-verified in tests.
+- **package-created backups are consistent snapshots** (backup API / `VACUUM INTO` / a
+  fenced copy), each `integrity_check`-verified in tests.
 
 **Cannot honestly promise:**
 
@@ -1285,27 +1298,27 @@ as the boundary it draws.
 - **thread safety if a single connection is shared across Worker Threads** (R-THREAD:
   one connection per thread);
 - **full serializability** — the model is row-level OCC with write-set validation,
-  weaker than serializable (Finding K), with `commitIf` as the bounded escape hatch.
+  weaker than serializable (Finding K); declared read-set validation is future work.
 
 ## Validation Matrix
 
-The prototype already exercises several rows; the gaps (Worker Threads, compromised
-locks, path handling, Windows, real network filesystems) are what a production hardening
-pass must add. This is the checklist of *what must be tested where*:
+The implementation already exercises several rows.
+Every remaining row below names the evidence still needed; this is the checklist of
+*what must be tested where*:
 
 | Area | What to test |
 | --- | --- |
 | Local contention | many processes, one effective writer at the merge, no double-ownership *(prototype ✓)* |
-| Worker Threads | a process-local mutex prevents shared-connection interleaving *(gap)* |
+| Worker Threads | a process-local mutex prevents shared-connection interleaving |
 | Crash safety | kill mid-write/at-every-publish-step, reopen, `integrity_check` *(prototype ✓)* |
 | Stale locks | a stale lease is reclaimed without two breakers owning it *(prototype ✓)* |
-| Compromised locks | lock deletion/replacement while held aborts the current op *(gap)* |
-| Backup | backup during writes; `integrity_check`; restore-and-read *(partial)* |
-| URI modes | normal, `immutable=1`, `nolock=1` where supported *(gap)* |
-| Filesystems | APFS, ext4, NTFS, **NFSv4.1/EFS/Filestore**, SMB, cloud-sync caveats *(gap — the gating unknown)* |
-| Cross-language | Node/Bun/Deno writer + Python/Rust/Go read; later multi-language writers *(gap)* |
-| Path handling | symlinks, spaces, Unicode, Windows drive paths *(gap)* |
-| Dependency policy | frozen lockfile, install-script policy, package cool-off *(gap)* |
+| Compromised locks | lock deletion/replacement while held aborts the current operation *(prototype ✓)* |
+| Backup | backup during writes; `integrity_check`; restore-and-read *(prototype ✓)* |
+| URI modes | normal, `immutable=1`, `nolock=1` where supported |
+| Filesystems | APFS, ext4, NTFS, **NFSv4.1/EFS/Filestore**, SMB, cloud-sync caveats |
+| Cross-language | Node writer + Python/Rust/Go read; later multi-language writers |
+| Path handling | symlinks, spaces, Unicode, Windows drive paths |
+| Dependency policy | frozen lockfile, install-script policy, package cool-off *(alpha ✓)* |
 
 **The `fsinspect` filesystem-capability diagnostic.** Because the filesystem row is the
 single biggest unknown and is hard to introspect, a small dependency-light probe
@@ -1318,65 +1331,61 @@ drive, a laptop, real NFS/EFS, etc.
 
 ## Areas of Further Research
 
-Eight source-grounded areas remain open before the design is locked; each is a tracked
-bead (full detail and citations in the comparative review).
-The cross-cutting theme is **where the session extension is supported and used versus
-the workarounds** ([Related Work](#related-work)).
+The `f1.0` design is settled for alpha.
+Remaining work is tracked under the post-alpha roadmap epic and its governing future
+plan:
 
-1. **`node:sqlite` / Bun / Deno binding constraints** — Finding G re-verified; file the
-   two upstream asks (iterator/table name; rebaser).
-2. **Session semantics and cross-language writer parity** — prove changeset-blob
-   portability with a cross-version/cross-binding round-trip spike.
-3. **Commit-log / atomic-pointer prior art** — confirm SQLiteChangesetSync never
-   resolves a `DATA` conflict; document the filesystem-only vs catalog-service choice.
-4. **Filesystem coordination + `fsinspect`** — monotonic fence vs single-host gating;
-   cloud-sync detection.
-5. **Isolation model** — enumerate which catalog invariants are point-key
-   (`commitIf`-safe) vs cross-row/predicate (strict-guard-row or `DirectStore`).
-6. **Threading / backup / VFS / Windows** — Windows `rename`-replace atomicity under two
-   racing reconcilers is the priority unknown.
-7. **Sessions vs. workarounds** — the ecosystem survey that validates the niche.
-8. **Bun (and Deno) as a runtime target** — now that they ship sessions, decide
-   Node-only vs Bun-first.
+1. **Format conformance and evolution:** golden fixtures, an independent verifier, and
+   explicit side-by-side whole-format upgrades.
+2. **Real shared-filesystem behavior:** multi-host NFS/SMB tests, clock skew, attribute
+   caching, lease breaks, monotonic-fence evidence, and expanded `fsinspect` diagnostics
+   and expanded `fsinspect` diagnostics.
+3. **Windows publication and path portability:** atomic rename-replace under racing
+   publishers, URI modes, path edge cases, and a packed package matrix on supported
+   architectures.
+4. **Power-loss durability and recovery:** block-device fault injection, an optional
+   durable-envelope receipt mode, and bounded research into replay-based bit-rot
+   recovery.
+5. **Cross-binding changesets and writers:** cross-version blob conformance before
+   Python, Rust, or Go writer implementations claim parity.
+6. **Caller-schema migration:** deterministic schema transitions distinct from the
+   fsqlite directory-format upgrade.
+7. **Stronger isolation:** declared read-set validation for point-key invariants, with
+   guard rows or DirectStore for predicate and aggregate invariants.
+8. **Threading and process-local coordination:** Worker Thread tests and an explicit
+   in-process serialization contract.
+9. **Binding improvements:** table-name conflict context, rebaser exposure, and a
+   decision on whether `base_version` should acquire staleness semantics.
+10. **DirectStore journal policy:** measure rollback-journal variants without changing
+    the compatibility-first `DELETE` default prematurely.
+11. **Large-store efficiency:** measure writer seeding and explicit snapshot
+    compaction/retention without weakening immutable publication.
 
 ## Next Steps
 
-- [ ] Decide whether to extract the prototype into a standalone open-source package and
-  under what name/scope.
-- [ ] TypeScript port, plus the cross-platform and **real-NFS** test matrices.
-- [ ] Schema migration, cheaper seeding, and compaction.
-- [ ] File the upstream `node:sqlite` enhancement requests (conflict iterator/table
-  name; rebaser).
-- [ ] Evaluate Python/Rust writer parity if multi-language *writing* (not just reading)
-  is needed.
+The standalone alpha work is tracked by `plan-2026-07-31-fsqlite-alpha-release.md`.
+Post-alpha research and implementation are tracked by
+`plan-2026-07-31-fsqlite-post-alpha-roadmap.md`.
 
 ## Methodology
 
 Empirical probes were run against `node:sqlite` (Node v22.22.2) and cross-checked
-against upstream source checked out per the repo’s third-party-checkout workflow.
-Four repos were read at the source level (commits in the prototype’s `SOURCES.md`):
-`sqlite/sqlite` (`002d33d`) for the session/locking/WAL semantics
-(`ext/session/sqlite3session.{h,c}`, `src/wal.c`, `src/os_unix.c`); `nodejs/node`
-(`v22.22.2`, SQLite 3.51.2) for the binding (`src/node_sqlite.cc`,
+against upstream source at pinned commits.
+The source-level review covered `sqlite/sqlite` (`002d33d`) for the session/locking/WAL
+semantics (`ext/session/sqlite3session.{h,c}`, `src/wal.c`, `src/os_unix.c`);
+`nodejs/node` (`v22.22.2`, SQLite 3.51.2) for the binding (`src/node_sqlite.cc`,
 `deps/sqlite/sqlite.gyp`); `WiseLibs/better-sqlite3` (`f93f490`, v12.10.0, SQLite
 3.53.2) for binding/format/session-availability (`deps/defines.gypi`, `lib/`); and
 `moxystudio/node-proper-lockfile` (`9f8c303`, v4.1.2) for the `mkdir`-lease prior art
-(`lib/lockfile.js`, `README.md`). Each technical claim in this doc carries a file:line
-reference verifiable against those checkouts.
-A complete prototype with 55 multi-process tests was built and run end-to-end (zero-loss
-concurrency, racing reconcilers, crash-at-every-publish-step, SIGKILL, chaos, fencing,
-GC/lease, portability, repair, direct-mode interop) plus performance/seeding/patchset
-benchmarks.
-The prior-art landscape and the locking/journaling/filesystem background also
-draw on the prior embeddable-databases survey (2026-06-04, §G–§J); point-in-time
-version/maturity facts should be re-verified before relying on them.
-
-The survey also draws on a parallel upstream report (comparative review) and on **eight
-source-grounded research sub-agents** that verified claims against source and extended
-the survey, checking out three more repos into `attic/` (`apsw`, `rusqlite`, `sqlsync`)
-alongside the original four (`sqlite`, `node`, `better-sqlite3`,
-`node-proper-lockfile`); current `nodejs/node` is re-read to confirm the binding
-constraints. The full citation set is in the [Source Map](#source-map).
+(`lib/lockfile.js`, `README.md`). Each technical claim in this document carries a
+file:line reference verifiable after cloning those commits.
+A complete implementation was run end-to-end (zero-loss concurrency, racing reconcilers,
+crash-at-every-publish-step, SIGKILL, chaos, fencing, GC/lease, portability, repair,
+direct-mode interop) plus performance/seeding/patchset benchmarks.
+APSW, `rusqlite`, and SQLSync were also reviewed for cross-language session support and
+mechanism comparison.
+The full citation set is in the [Source Map](#source-map).
+Point-in-time version and maturity facts should be re-verified before relying on them.
 
 ## References
 
@@ -1404,10 +1413,10 @@ constraints. The full citation set is in the [Source Map](#source-map).
 
 - [Node `node:sqlite`](https://nodejs.org/download/release/latest-v24.x/docs/api/sqlite.html)
   · [session support commit](https://github.com/nodejs/node/commit/457e73f4c9) (source
-  pass: `attic/node` `src/node_sqlite.cc`, `deps/sqlite/sqlite.gyp:24,27` —
+  pass: `nodejs/node` `src/node_sqlite.cc`, `deps/sqlite/sqlite.gyp:24,27` —
   SESSION/PREUPDATE on)
 - [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) (source pass:
-  `attic/better-sqlite3` `deps/defines.gypi` — SESSION **off**; `lib/` — no changeset
+  `WiseLibs/better-sqlite3` `deps/defines.gypi` — SESSION **off**; `lib/` — no changeset
   API; standard on-disk format) ·
   [APSW session (Python)](https://rogerbinns.github.io/apsw/session.html) ·
   [`rusqlite` `session` feature](https://docs.rs/rusqlite/latest/rusqlite/session/index.html)
@@ -1425,7 +1434,7 @@ constraints. The full citation set is in the [Source Map](#source-map).
 - [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
   (leader election analogue) ·
   [`proper-lockfile`](https://github.com/moxystudio/node-proper-lockfile) (source pass:
-  `attic/node-proper-lockfile` `lib/lockfile.js` — `mkdir` lease + mtime heartbeat;
+  `moxystudio/node-proper-lockfile` `lib/lockfile.js` — `mkdir` lease + mtime heartbeat;
   `README` — “`O_EXCL` is broken on NFS, `mkdir` is not”)
 
 **Prior art — distributed/concurrent/replicated SQLite:**
@@ -1493,36 +1502,30 @@ constraints. The full citation set is in the [Source Map](#source-map).
   [ElectricSQL](https://electric-sql.com/) ·
   [Tencent WCDB](https://github.com/Tencent/wcdb)
 
-**Background (motivation and deeper survey):**
+**Implementation evidence:**
 
-- Modern Embeddable / File-Based Databases survey (§G concurrency theorem, §H the
-  network-drive pitfall, §I write-lock wrapper, §J session/changeset) — the parent
-  survey this generalizes
-- The productized package (full `node:test` and CLI golden suites; its
+- The package’s full `node:test` and CLI golden suites; its
   `upstream-source-confirmations.md` records the exact SQLite/`node:sqlite` source
-  lines), preceded by standalone snapshot-catalog and changeset-catalog spikes
+  lines.
 
 ## Source Map
 
 Every load-bearing claim in this document is grounded in source read at a pinned commit.
-The checkouts live under `attic/` (a local reference area; re-clone with the commits
-below). The first four were the original pass; the last three were added by the
-cross-language survey.
+Clone each repository at the recorded commit into any scratch directory, then resolve
+the repo-relative source paths below.
 
-| Repo | `attic/` path | Commit | Read for |
-| --- | --- | --- | --- |
-| `sqlite/sqlite` | `attic/sqlite` | `002d33d` | session semantics (`ext/session/sqlite3session.{h,c}`), WAL/network-FS (`src/wal.c:129-133`), locking (`src/os_unix.c:1191`, `:7298-7312`), backup (`src/backup.c`), `tool/sqlite3_rsync.c`, VFS modes, `os_win.c` `LockFileEx` |
-| `nodejs/node` | `attic/node` | `v22.22.2` (+ current `main` re-read) | the binding (`src/node_sqlite.cc` `conflictCallback`; ABORT-as-`false`; MISUSE rules), `deps/sqlite/sqlite.gyp:24,27` (SESSION/PREUPDATE on), open flags |
-| `WiseLibs/better-sqlite3` | `attic/better-sqlite3` | `f93f490` | `deps/defines.gypi` (`THREADSAFE=2`; `USE_URI=0`; SESSION **off**; `OMIT_SHARED_CACHE`); no changeset API; standard on-disk format |
-| `moxystudio/node-proper-lockfile` | `attic/node-proper-lockfile` | `9f8c303` | `mkdir` lease + mtime heartbeat + precision probe + realpath + compromised-lock check (`lib/lockfile.js`, `lib/mtime-precision.js`, `README`) |
-| `rogerbinns/apsw` | `attic/apsw` | `e5f9feb` | full Python session surface incl. table-name-in-conflict-handler and a `Rebaser` (`src/session.c`) |
-| `rusqlite/rusqlite` | `attic/rusqlite` | `61d66c0` | `Operation::table_name` in the conflict handler; rebaser only as raw `libsqlite3-sys` FFI (`src/session.rs`) |
-| `orbitinghail/sqlsync` | `attic/sqlsync` | `7dc1af6` | confirmation that SQLSync is **page-VFS + reducer + rebase**, not changeset-based |
+| Repo | Commit | Read for |
+| --- | --- | --- |
+| `sqlite/sqlite` | `002d33d` | session semantics (`ext/session/sqlite3session.{h,c}`), WAL/network-FS (`src/wal.c:129-133`), locking (`src/os_unix.c:1191`, `:7298-7312`), backup (`src/backup.c`), `tool/sqlite3_rsync.c`, VFS modes, `os_win.c` `LockFileEx` |
+| `nodejs/node` | `v22.22.2` (+ current `main` re-read) | the binding (`src/node_sqlite.cc` `conflictCallback`; ABORT-as-`false`; MISUSE rules), `deps/sqlite/sqlite.gyp:24,27` (SESSION/PREUPDATE on), open flags |
+| `WiseLibs/better-sqlite3` | `f93f490` | `deps/defines.gypi` (`THREADSAFE=2`; `USE_URI=0`; SESSION **off**; `OMIT_SHARED_CACHE`); no changeset API; standard on-disk format |
+| `moxystudio/node-proper-lockfile` | `9f8c303` | `mkdir` lease + mtime heartbeat + precision probe + realpath + compromised-lock check (`lib/lockfile.js`, `lib/mtime-precision.js`, `README`) |
+| `rogerbinns/apsw` | `e5f9feb` | full Python session surface incl. table-name-in-conflict-handler and a `Rebaser` (`src/session.c`) |
+| `rusqlite/rusqlite` | `61d66c0` | `Operation::table_name` in the conflict handler; rebaser only as raw `libsqlite3-sys` FFI (`src/session.rs`) |
+| `orbitinghail/sqlsync` | `7dc1af6` | confirmation that SQLSync is **page-VFS + reducer + rebase**, not changeset-based |
 
-The original four commits are also recorded in the package’s
-`packages/fsqlite/upstream-source-confirmations.md`, with per-claim file:line
-references. (`attic/` is gitignored, so these checkouts are local reference, not
-committed.)
+The first four commits are also recorded in `upstream-source-confirmations.md`, with
+per-claim file:line references.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

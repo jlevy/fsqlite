@@ -18,30 +18,49 @@
 //     NOTFOUND/CONSTRAINT/FOREIGN_KEY is SQLITE_MISUSE and throws. So last-writer-wins must
 //     be conflict-type-aware: REPLACE on DATA/CONFLICT, OMIT otherwise.
 
-
 import type { DatabaseSync } from 'node:sqlite'
 import { constants } from './driver.ts'
 import type { ConflictAction, ConflictPolicyInput, NormalizedPolicy } from './types.ts'
 
 const C = constants as unknown as Record<string, number>
 
+function sqliteConstant(name: string): number {
+  const value = C[name]
+  if (value === undefined) {
+    throw new Error(`node:sqlite is missing required constant ${name}`)
+  }
+  return value
+}
+
+const CHANGESET_DATA = sqliteConstant('SQLITE_CHANGESET_DATA')
+const CHANGESET_NOTFOUND = sqliteConstant('SQLITE_CHANGESET_NOTFOUND')
+const CHANGESET_CONFLICT = sqliteConstant('SQLITE_CHANGESET_CONFLICT')
+const CHANGESET_CONSTRAINT = sqliteConstant('SQLITE_CHANGESET_CONSTRAINT')
+const CHANGESET_FOREIGN_KEY = sqliteConstant('SQLITE_CHANGESET_FOREIGN_KEY')
+const CHANGESET_REPLACE = sqliteConstant('SQLITE_CHANGESET_REPLACE')
+const CHANGESET_OMIT = sqliteConstant('SQLITE_CHANGESET_OMIT')
+const CHANGESET_ABORT = sqliteConstant('SQLITE_CHANGESET_ABORT')
+
 const replaceable = (type: number): boolean =>
-  type === C.SQLITE_CHANGESET_DATA || type === C.SQLITE_CHANGESET_CONFLICT
+  type === CHANGESET_DATA || type === CHANGESET_CONFLICT
 
 /** Action vocabulary (the only values node:sqlite actually honors as returns). */
 export const ACTIONS = ['replace', 'omit', 'strict'] as const
 
-const NAME: Record<number, string> = Object.fromEntries(
-  ['DATA', 'NOTFOUND', 'CONFLICT', 'CONSTRAINT', 'FOREIGN_KEY'].map((n) => [
-    C[`SQLITE_CHANGESET_${n}`],
-    n,
-  ]),
-)
+const NAME: Record<number, string> = {
+  [CHANGESET_DATA]: 'DATA',
+  [CHANGESET_NOTFOUND]: 'NOTFOUND',
+  [CHANGESET_CONFLICT]: 'CONFLICT',
+  [CHANGESET_CONSTRAINT]: 'CONSTRAINT',
+  [CHANGESET_FOREIGN_KEY]: 'FOREIGN_KEY',
+}
 export const conflictName = (t: number): string => NAME[t] ?? `UNKNOWN(${t})`
 
 export class StrictConflictError extends Error {
   constructor(types: (number | string)[]) {
-    super(`strict conflict (${types.map((t) => (typeof t === 'number' ? conflictName(t) : t)).join(',')})`)
+    super(
+      `strict conflict (${types.map((t) => (typeof t === 'number' ? conflictName(t) : t)).join(',')})`,
+    )
     this.name = 'StrictConflictError'
   }
 }
@@ -62,25 +81,27 @@ export function normalize(policy: ConflictPolicyInput = {}): NormalizedPolicy {
     strict: 'strict',
   }
   const out: NormalizedPolicy = {}
-  for (const [k, v] of Object.entries(policy)) {
-    const a = alias[v]
-    if (!a) throw new Error(`unknown conflict action '${v}' for table '${k}'`)
+  for (const [k, value] of Object.entries(policy as Record<string, unknown>)) {
+    if (typeof value !== 'string' || !(value in alias)) {
+      throw new Error(`unknown conflict action '${String(value)}' for table '${k}'`)
+    }
+    const a = alias[value as ConflictAction]
     out[k] = a
   }
-  if (!out['*']) out['*'] = 'strict' // deny-by-default: never silently pick a winner
+  out['*'] ??= 'strict' // deny-by-default: never silently pick a winner
   return out
 }
 
 export function actionFor(policy: NormalizedPolicy, table: string): 'replace' | 'omit' | 'strict' {
-  return policy[table] ?? policy['*']
+  return policy[table] ?? policy['*'] ?? 'strict'
 }
 
 // Conflict-type-aware handler returns. REPLACE only where SQLite permits it
 // (DATA/CONFLICT); OMIT elsewhere; ABORT for strict (detected via the false return).
 const HANDLER_RETURN: Record<'replace' | 'omit' | 'strict', (type: number) => number> = {
-  replace: (type) => (replaceable(type) ? C.SQLITE_CHANGESET_REPLACE : C.SQLITE_CHANGESET_OMIT),
-  omit: () => C.SQLITE_CHANGESET_OMIT,
-  strict: () => C.SQLITE_CHANGESET_ABORT,
+  replace: (type) => (replaceable(type) ? CHANGESET_REPLACE : CHANGESET_OMIT),
+  omit: () => CHANGESET_OMIT,
+  strict: () => CHANGESET_ABORT,
 }
 
 /**
@@ -91,7 +112,12 @@ const HANDLER_RETURN: Record<'replace' | 'omit' | 'strict', (type: number) => nu
  * pass back); we then roll back the WHOLE tx and raise StrictConflictError so the caller
  * quarantines the envelope (atomic, since all passes share one tx).
  */
-export function applyWithPolicy(db: DatabaseSync, changeset: Uint8Array, policy: NormalizedPolicy): void {
+export function applyWithPolicy(
+  db: DatabaseSync,
+  changeset: Uint8Array,
+  policy: NormalizedPolicy,
+  beforeCommit: () => void = () => undefined,
+): void {
   const used = new Set(Object.values(policy))
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -102,10 +128,15 @@ export function applyWithPolicy(db: DatabaseSync, changeset: Uint8Array, policy:
       // signal of a same-row conflict. For 'replace'/'omit' the handler never returns ABORT,
       // so a `false` here is an unexpected internal abort: surface it (don't silently drop
       // the pass) so the envelope is quarantined rather than lost.
-      if (ok === false) {
-        throw new StrictConflictError([action === 'strict' ? 'aborted-by-strict-table-conflict' : `unexpected-abort-on-${action}-pass`])
+      if (!ok) {
+        throw new StrictConflictError([
+          action === 'strict'
+            ? 'aborted-by-strict-table-conflict'
+            : `unexpected-abort-on-${action}-pass`,
+        ])
       }
     }
+    beforeCommit()
     db.exec('COMMIT')
   } catch (e) {
     try {

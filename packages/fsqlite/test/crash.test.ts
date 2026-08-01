@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync } from 'node:fs'
 import { SnapshotStore } from '../src/index.ts'
+import { setReconcileCrashForTest } from '../src/snapshotStore.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
@@ -27,17 +28,23 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
     const { store, cleanup } = storeWith(3)
     try {
       const before = store.currentVersion()
-      assert.throws(() => store.reconcile({ crashAt }), /CRASH/)
+      setReconcileCrashForTest(crashAt)
+      assert.throws(() => store.reconcile(), /CRASH/)
+      setReconcileCrashForTest(null)
 
       const afterCrash = store.currentVersion()
-      if (crashAt === 'after-pointer') assert.equal(afterCrash, before + 1)
-      else assert.equal(afterCrash, before, 'a crash before the pointer swap leaves current intact')
+      if (crashAt === 'after-pointer') {
+        assert.equal(afterCrash, before + 1)
+      } else {
+        assert.equal(afterCrash, before, 'a crash before the pointer swap leaves current intact')
+      }
 
       store.reconcile()
       assert.equal(count(store), 3, 'all 3 tx present exactly once after recovery')
       assert.ok(store.pendingTxns().length === 0, 'pending tail drained')
       assert.notEqual(store.validate().state, 'corrupt')
     } finally {
+      setReconcileCrashForTest(null)
       cleanup()
     }
   })
@@ -47,12 +54,18 @@ test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', ()
   const { store, cleanup } = storeWith(2)
   try {
     try {
-      store.reconcile({ crashAt: 'after-snapshot' })
+      setReconcileCrashForTest('after-snapshot')
+      store.reconcile()
     } catch {
       /* expected */
+    } finally {
+      setReconcileCrashForTest(null)
     }
     const cur = store.currentVersion()
-    assert.ok(existsSync(store.snapshotPath(cur + 1)), 'orphan snapshot ahead of pointer exists after the crash')
+    assert.ok(
+      existsSync(store.snapshotPath(cur + 1)),
+      'orphan snapshot ahead of pointer exists after the crash',
+    )
     assert.equal(store.validate().state, 'in-flight-capture')
     store.reconcile()
     store.gc({ retain: 0 })

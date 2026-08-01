@@ -1,31 +1,26 @@
-# Feature: fsqlite Alpha Release
+# Feature: fsqlite Standalone Alpha Release
 
 **Date:** 2026-07-31
 
 **Author:** Joshua Levy (with LLM assistance)
 
-**Status:** Draft
+**Status:** In progress
+
+**Tracking epic:** `fsq-mh41`
 
 ## Overview
 
-Bring the existing `fsqlite` package into this standalone repo
-(`github.com/jlevy/fsqlite`) and publish an alpha to npm.
+Establish `github.com/jlevy/fsqlite` as the standalone home of `fsqlite` and publish an
+alpha to npm.
 
 The package is filesystem-friendly concurrent SQLite: immutable snapshot-publish plus
 transaction-envelope changesets behind an NFS-safe `mkdir` lease, with an easy-local
 `DirectStore` mode, over plain SQLite files, server-free, on any filesystem.
 
-The source arrives in unusually good shape.
-A review of all 57 files found **zero** imports escaping the package, zero absolute
-paths, zero `process.env` reads, and zero sibling-package references in `src/`,
-`workers/`, or `test/`. The suite passes 75/75 in under seven seconds, and copying the
-package verbatim outside the monorepo with no installs still passes both the unit suite
-and the 24 CLI goldens.
-
-The work is therefore not disentanglement.
-It is three things: rebuild a toolchain that currently borrows from the monorepo root,
-fix a set of genuine data-loss defects the review surfaced, and raise the docs and
-public API to the bar of a package other people are expected to depend on.
+The runtime code is already self-contained: no source, worker, or test import escapes
+the package. The work is to establish an independent toolchain, fix the recovery-path
+defects found during review, define the standalone `f1.0` store format, and raise the
+documentation and public API to the standard expected of a published package.
 
 ## Goals
 
@@ -33,7 +28,7 @@ public API to the bar of a package other people are expected to depend on.
   reference to any other repository.
 - The full lint, format, type, and supply-chain floor from the tbd guidelines, enforced
   in CI and in pre-push hooks rather than by convention.
-- The three high-severity correctness defects fixed, each with a regression test.
+- The four P0 correctness and compatibility defects fixed, each with a regression test.
 - An honest `engines` range, so no consumer can install a version that cannot load.
 - Docs fit for a public repo: no monorepo residue, no internal tracker IDs, no
   references to unpublished internal documents.
@@ -58,19 +53,16 @@ public API to the bar of a package other people are expected to depend on.
   `packages/fsqlite` is built in this cycle.
 - **Consumer integration.** Wiring any downstream application onto `fsqlite` is out of
   scope and stays in that application’s own repo.
+- **Compatibility with unpublished layouts or APIs.** This is a new project.
+  The alpha defines its first public API and on-disk format without compatibility shims
+  for development-only predecessors.
 
 ## Background
 
-`fsqlite` was built as an isolated package inside a larger workspace and deliberately
-excluded from that workspace's dependency resolution so its devDeps stayed out of the
-root lockfile. It was always intended to stand alone; this spec completes that work.
-
-Because of that exclusion, the package has **never had a lockfile** and its seven
-devDependencies have never been resolved.
-Every tool it declares is currently resolved from the monorepo root, including through a
-hardcoded path into the pnpm virtual store.
-The first `pnpm install` in this repo is therefore a genuinely new resolution, not a
-re-hydration, and is the single riskiest step in the plan.
+The imported code snapshot did not include a lockfile and its declared development
+dependencies had not been resolved together.
+The first workspace install is therefore a new dependency resolution, not a lockfile
+rehydration, and remains the riskiest foundation step.
 
 The npm name `fsqlite` is unclaimed (the registry returns 404).
 
@@ -97,7 +89,7 @@ fails.
 | Lint and format | ESLint flat config plus Prettier, per lint-format Profile A |
 | Markdown | flowmark |
 | Hooks | lefthook, auto-fix at commit, full verify at push |
-| Release | Tag-triggered publish with npm provenance, no Changesets |
+| Release | Owner-authenticated bootstrap, then tag-triggered npm trusted publishing; no Changesets |
 
 One deviation from the guidelines is deliberate: `moduleResolution` is `NodeNext`, not
 `Bundler`, because this package’s `.ts` import specifiers are resolved by Node at
@@ -132,6 +124,8 @@ The package README links to it with absolute URLs, which is required in any case
 ```
 README.md                    short repo overview, links to the package
 LICENSE
+CHANGELOG.md                 repository and package release history
+CONTRIBUTING.md
 package.json                 private root, workspace scripts
 pnpm-workspace.yaml
 docs/
@@ -144,13 +138,22 @@ docs/
 packages/
   fsqlite/
     README.md                canonical, npm landing page
-    CHANGELOG.md
     package.json
     src/ test/ workers/ examples/ scripts/
 ```
 
 The repo keeps a `pnpm-workspace.yaml` for the workspace globs, which is also where pnpm
 11 reads `minimumReleaseAge`; its default is only one day.
+
+### Project identity and provenance
+
+This is a new standalone open-source project.
+The source arrived as a squashed code snapshot; prior repository history is not
+imported. Copyright is solely Joshua Levy under the MIT License.
+Public source, documentation, metadata, tests, and tracker records refer only to fsqlite
+and this repository.
+The only remaining identity decision is whether the npm release is unscoped or published
+under an organization scope.
 
 ### Supply-chain posture
 
@@ -181,19 +184,25 @@ This is not a lazy runtime failure that a capability check can absorb, and in fa
 `typeof backup === 'function'` probe at `driver.ts:122` is unreachable on exactly the
 versions it was written to defend.
 
-Three independent floors are in play, and the currently declared range satisfies only
-the weakest:
+Three independent floors were in play; the imported `>=22.13.0` range satisfied only the
+weakest:
 
 | Requirement | Introduced | Status |
 | --- | --- | --- |
 | `node:sqlite` unflagged | 22.13.0 / 23.4.0 | matches declared `engines` |
-| `backup` export | later than 22.13 | **not satisfied**, hard load failure |
+| `backup` export | 22.16.0 / 23.8.0 | satisfied by the declared floor |
 | Unflagged `.ts` type-stripping | 22.18.0 | required to run from source |
 
-The exact release that added `backup` must be confirmed against the Node changelog
-before the floor is set.
-CI must then pin an explicit job at the declared floor, because `node-version: 22`
-resolves to latest 22.x and hides precisely this class of bug.
+Node’s API history records `backup` in 22.16.0 and 23.8.0. The published range is
+therefore `>=22.18.0 <23 || >=24.0.0`: 22.18 is the higher source-development floor, the
+non-LTS Node 23 line is excluded rather than expressing a misleading partial range, and
+Node 24 is fully supported.
+CI pins an explicit 22.18.0 job because `node-version: 22` resolves to latest 22.x and
+hides precisely this class of bug.
+
+ESLint 9 reaches end of support on 2026-08-06, and ESLint 10 removes eslintrc support.
+The standalone scaffold therefore starts on ESLint 10 with a flat configuration rather
+than creating configuration debt days before the release.
 
 ### Correctness defects to fix
 
@@ -259,23 +268,36 @@ Four rough edges are worth settling while breaking changes are still free:
   but are public and cross-module, so they land in the published `.d.mts` as API the
   package implicitly promises to keep.
 
-Format open issue **O1** (the `<storeDir>/data/catalog/` nesting, described in the spec
-as “first-consumer heritage”) is format-breaking and the format spec says to decide it
-before publish. Alpha is the cheapest moment to resolve it.
+### Standalone store identity
+
+The caller-provided directory is the store root.
+A visible `fsqlite.json` marker makes it self-identifying without relying on generic
+path names. The marker carries `format: "fsqlite"`, `format_version: "f1.0"`,
+`required_features`, and a UUID `store_id`. The version grammar is `f<major>.<minor>`:
+major revisions are incompatible, while minor revisions are additive and require an
+explicit compatibility declaration before an older implementation accepts them.
+Snapshots repeat the format version and store identity so copied or mixed store contents
+fail validation. Transaction manifests repeat both values as well.
+Snapshot files use the fixed SQLite `application_id` `0x4653514C` (`FSQL`); callers own
+`PRAGMA user_version` and `schema_hash`, not the fsqlite file identity.
+
+The marker is visible JSON rather than hidden YAML because it is machine-owned format
+identity, not user configuration: Node parses it without another dependency, its types
+are unambiguous, and directory recognition remains obvious to both people and tools.
+
+Normal opens never upgrade a store.
+Optional marker fields may be added without a format bump, mandatory capabilities use
+`required_features`, and incompatible layout or protocol changes increment the major
+component. A future explicit upgrade command will write and validate a side-by-side
+destination, preserve `store_id`, and leave the source untouched until operator cutover.
 
 ### Docs
 
-The design doc ships as-is.
-The format spec needs about four lines touched.
-Everything else needs work, and the QA runbook needs the most: eleven monorepo
-references, including a Part C entry describing a constraint that ceases to exist on
-extraction.
-
-The research doc carries `attic/` paths, citations to an unpublished internal survey,
-references to a `SOURCES.md` that does not exist, and stale test counts in four places.
-The earlier monorepo plan spec is **not ported**: it is an internal build plan that
-carries 24 obsolete tracker IDs and references to sibling packages.
-Its open items are mined into this repo’s beads, then it is left behind.
+The design, format specification, QA runbook, source confirmations, and research report
+now describe the standalone project and the `f1.0` layout consistently.
+The remaining documentation work is packaging and navigation: move
+implementation-independent docs to the root `docs/`, rewrite the package landing page,
+add repository-level contributor and release documents, and publish a concise roadmap.
 
 The README needs a rewrite as an npm landing page.
 It currently has no install instructions anywhere in 176 lines, no badges, no license
@@ -291,85 +313,104 @@ unchanged from the source.
 Keeping the lift faithful keeps the port diff reviewable and lets each later fix land
 with its own test.
 
-- [x] Import the package tree into `packages/fsqlite` as a single faithful snapshot
-- [x] Scaffold the workspace: private root `package.json`, `pnpm-workspace.yaml` with
-  globs plus hardening keys, `packageManager`, `.npmrc`, `.nvmrc`
-- [ ] First dependency resolution and committed lockfile, honoring the cool-off; expect
-  friction from the tsdown/rolldown transitive
-- [ ] Delete the `typeRoots` escape into the monorepo pnpm store and its rationale
-  comment
-- [ ] Restore `tsdown.config.ts` to `defineConfig`
-- [ ] tsconfig floor: `noUncheckedIndexedAccess`, `noImplicitOverride`,
+- [x] (`fsq-6jy5`) Import the package tree into `packages/fsqlite` as a single faithful
+  snapshot
+- [x] (`fsq-1pjs`) Scaffold the workspace: private root `package.json`,
+  `pnpm-workspace.yaml` with globs plus hardening keys, `packageManager`, `.npmrc`,
+  `.nvmrc`
+- [ ] (`fsq-iakz`) First dependency resolution and committed lockfile, honoring the
+  cool-off; expect friction from the tsdown/rolldown transitive
+- [x] (`fsq-sih0`) Delete the hardcoded `typeRoots` escape and its rationale comment
+- [x] (`fsq-sih0`) Restore `tsdown.config.ts` to `defineConfig`
+- [x] (`fsq-sywj`) tsconfig floor: `noUncheckedIndexedAccess`, `noImplicitOverride`,
   `noImplicitReturns`, `noFallthroughCasesInSwitch`, `forceConsistentCasingInFileNames`,
   plus `erasableSyntaxOnly` and `NodeNext`
-- [ ] ESLint to the floor: strict type-checked preset, `curly: ['error', 'all']`, drop
-  the deprecated `brace-style`, keep the existing stricter additions
-- [ ] Add Prettier and `eslint-config-prettier`, ordered so the floor rules survive it
-- [ ] Add flowmark for Markdown
-- [ ] Add lefthook: auto-fix at pre-commit, full verify at pre-push
-- [ ] Bring `scripts/` into lint and typecheck scope
-- [ ] Package metadata: `repository` with `directory`, `homepage`, `bugs`, `author`;
-  publint will demand them
-- [ ] LICENSE attribution corrected for this repo
-- [ ] Move the format, design, runbook, and research docs to the repo-root `docs/`,
-  fixing cross-links
-- [ ] CI workflow: ubuntu and macos, Node matrix including an explicit job at the
-  declared floor, `--test-timeout`, `--test-concurrency=2`, verify-only commands
+- [x] (`fsq-4ns2`) ESLint to the floor: strict type-checked preset,
+  `curly: ['error', 'all']`, drop the deprecated `brace-style`, keep the existing
+  stricter additions
+- [x] (`fsq-4ns2`) Add Prettier and `eslint-config-prettier`, ordered so the floor rules
+  survive it
+- [x] (`fsq-6tbg`) Add flowmark for Markdown
+- [x] (`fsq-6tbg`) Add lefthook: auto-fix at pre-commit, full verify at pre-push
+- [x] (`fsq-5qu5`) Bring `scripts/` into lint and typecheck scope
+- [x] (`fsq-9kc3`) Package metadata: `repository` with `directory`, `homepage`, `bugs`,
+  `author`; publint will demand them
+- [x] (`fsq-9kc3`) LICENSE attribution corrected for this repo
+- [x] (`fsq-tu9u`) Move the format, design, runbook, and research docs to the repo-root
+  `docs/`, fixing cross-links
+- [x] (`fsq-vryt`) CI workflow: ubuntu and macos, Node matrix including an explicit job
+  at the declared floor, `--test-timeout`, `--test-concurrency=2`, verify-only commands
   throughout
-- [ ] Resolve tryscript from devDeps rather than a network runner
-- [ ] Confirm a clean-room `pnpm install --frozen-lockfile` reproduces green from
-  scratch
+- [x] (`fsq-u390`) Resolve tryscript from devDeps rather than a network runner
+- [ ] (`fsq-x211`) Confirm a clean-room `pnpm install --frozen-lockfile` reproduces
+  green from scratch
 
 ### Phase 2: Correctness and hardening
 
 Goal: the recovery paths behave as the docs claim.
 Every item lands with a regression test that fails before the fix.
 
-- [ ] Confirm the Node release that added `backup`, then set an honest `engines` floor
-  and pin a CI job to it
-- [ ] Make `repair()` non-destructive until a clean snapshot is identified
-- [ ] Fence `repair()`, or make it refuse to run against a store with a live lock
-- [ ] Commit changeset data and its `applied_tx` ledger row in one transaction
-- [ ] Make lease reads fail safe: an unparseable but fresh lease must block collection
-- [ ] Make `heartbeat()` report loss of the lease instead of silently no-opping
-- [ ] Remove the orphaned lock directory when the `owner.json` write fails
-- [ ] Classify permanent versus retryable failures in `writeWithRetry` and carry the
-  real reason into the error
-- [ ] Cover the session-capability failure branch, currently asserted only in its happy
-  case
-- [ ] Move the wall-clock benchmark out of the correctness gate
-- [ ] Gate the `kill.test.ts` mid-build kill on an observable rather than a fixed sleep
-- [ ] Accept a legitimately null mtime resolution in `fsinspect.test.ts`
-- [ ] Log or seed the fuzz parameters so a failure is reproducible
-- [ ] Extract the magic numbers that carry the correctness argument into named
-  constants, starting with the lease and retry tunables
+- [x] (`fsq-fiba`) Confirm the Node release that added `backup`, then set an honest
+  `engines` floor and pin a CI job to it
+- [x] (`fsq-s9w6`) Make `repair()` non-destructive until a clean snapshot is identified
+- [x] (`fsq-vi82`) Fence `repair()`, or make it refuse to run against a store with a
+  live lock
+- [x] (`fsq-8f1t`) Commit changeset data and its `applied_tx` ledger row in one
+  transaction
+- [x] (`fsq-jor0`) Make lease reads fail safe: an unparseable but fresh lease must block
+  collection
+- [x] (`fsq-h6lw`) Make `heartbeat()` report loss of the lease instead of silently
+  no-opping
+- [x] (`fsq-v3ma`) Remove the orphaned lock directory when the `owner.json` write fails
+- [x] (`fsq-ty0i`) Classify permanent versus retryable failures in `writeWithRetry` and
+  carry the real reason into the error
+- [x] (`fsq-sjyj`) Cover the session-capability failure branch, currently asserted only
+  in its happy case
+- [x] (`fsq-0kvh`) Move the wall-clock benchmark out of the correctness gate
+- [x] (`fsq-0kvh`) Gate the `kill.test.ts` mid-build kill on an observable rather than a
+  fixed sleep
+- [x] (`fsq-0kvh`) Accept a legitimately null mtime resolution in `fsinspect.test.ts`
+- [x] (`fsq-pbse`) Log or seed the fuzz parameters so a failure is reproducible
+- [x] (`fsq-soz0`) Extract the magic numbers that carry the correctness argument into
+  named constants, starting with the lease and retry tunables
 
 ### Phase 3: Usability, docs, and alpha publish
 
 Goal: a stranger can find, understand, install, and use this.
 
-- [ ] Decide format open issue O1 while breaking changes are still free
-- [ ] Settle the four public-API rough edges
-- [ ] Rewrite the package README as a landing page: pitch, badges, install, quickstart,
-  condensed comparison table, consolidated limitations, links out
-- [ ] Write the short root README pointing at the package
-- [ ] Split out CONTRIBUTING.md and start CHANGELOG.md
-- [ ] Scrub the QA runbook of monorepo assumptions and delete the Part C entry that the
-  extraction resolves
-- [ ] Scrub the research doc: `attic/` paths, the unpublished-survey citations, the
-  `SOURCES.md` references, the stale test counts, the already-answered next step
-- [ ] Light scrub of the format spec, including the broken internal link
-- [ ] Reframe `attic/` in `upstream-source-confirmations.md` as a reproducible local
-  checkout convention
-- [ ] Write `docs/roadmap.md` from the mined open items, with no inherited tracker IDs
-- [ ] Wire a doc-claim drift guard so test counts in prose cannot rot again
-- [ ] Tag-triggered publish workflow with npm provenance
-- [ ] Publish `0.1.0-alpha.1` under the `alpha` dist-tag
-- [ ] Verify a clean install from the registry in an empty project
+- [x] (`fsq-hhve`) Complete the flat, self-identifying `f1.0` store root and marker,
+  including distinct not-a-store, invalid, unsupported, and corrupt classifications
+- [x] (`fsq-fnh1`) Verify that the fixed `FSQL` SQLite `application_id` is
+  collision-free and record it with SQLite’s application-id registry process
+- [x] (`fsq-rkix`) Settle the four public-API rough edges
+- [x] (`fsq-7qhj`) Complete concurrent backup-and-restore validation against the settled
+  public backup surface
+- [x] (`fsq-c03w`) Rewrite the package README as a landing page: pitch, badges, install,
+  quickstart, condensed comparison table, consolidated limitations, links out
+- [x] (`fsq-jyul`) Write the short root README pointing at the package
+- [x] (`fsq-jyul`) Split out CONTRIBUTING.md and start CHANGELOG.md
+- [x] (`fsq-wb94`) Align the QA runbook with standalone workspace commands, current
+  counts, and the self-identifying store checks
+- [x] (`fsq-45ej`) Publish the research report as dated background aligned with the
+  current runtime, format, source map, and tracked forward agenda
+- [x] (`fsq-j8gz`) Align the format spec with `f1.0` identity, recognition states, fixed
+  application id, and explicit upgrade rules
+- [x] (`fsq-j8gz`) Make upstream source confirmations reproducible from repository URLs,
+  commits, and repo-relative source paths
+- [x] (`fsq-t218`) Remove external product references from source, docs, metadata,
+  tests, and tbd records
+- [x] (`fsq-xkb7`) Write `docs/roadmap.md` from the mined open items, with no inherited
+  tracker IDs
+- [x] (`fsq-5jcy`) Wire a doc-claim drift guard so test counts in prose cannot rot again
+- [x] (`fsq-97v8`) Tag-triggered publish workflow with npm provenance
+- [x] (`fsq-6vfa`) Document the owner-authenticated first-publish bootstrap and
+  transition to npm trusted publishing in `docs/releasing.md`
+- [ ] (`fsq-cggp`) Publish `0.1.0-alpha.1` under the `alpha` dist-tag
+- [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 
 ## Testing Strategy
 
-The existing suite is the baseline and must stay green throughout: 75 `node:test` cases
+The current suite is the baseline and must stay green throughout: 95 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 24 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and
@@ -382,8 +423,9 @@ Each Phase 2 fix lands with a regression test that fails before it.
 CI runs the full gate on every push: format check, Markdown check, zero-warning lint,
 `tsc --noEmit`, the test suite, the goldens, the build with publint, and the smoke test.
 
-Deferred and disclosed rather than silently missing: the real cross-host NFS/EFS gate,
-power-loss fault injection, and Windows.
+Deferred and disclosed rather than silently missing: the real cross-host NFS/EFS gate
+(`fsq-at6m`), power-loss fault injection (`fsq-hm6r`), and Windows publication
+validation (`fsq-kkdi`).
 
 ## Rollout Plan
 
@@ -392,28 +434,23 @@ not resolve to it by default.
 The README states plainly that the format is draft, the API may move, and the cross-host
 concurrency gate is pending.
 
-Alpha feedback and the O1 decision inform a beta.
+Alpha feedback informs a beta.
 The 1.0 bar is the real NFS gate, conformance fixtures with a verifier, and a settled
 public API.
 
 ## Open Questions
 
-- **O1, the catalog-root nesting**: flatten to `<storeDir>/` or keep `data/catalog/` and
-  document it as intentional rather than inherited?
-- **`node:sqlite` stability language**: it is now Release Candidate rather than
-  experimental, and the warning is gone on recent Node.
-  Decide how prominently the README should carry that caveat.
 - **Publishing identity**: is there an npm org or scope preference, or does this publish
   unscoped as `fsqlite`?
 
 ## References
 
-- `docs/fsqlite-design.md`, `docs/fsql-format-spec.md` (ported with the package)
+- `docs/fsqlite-design.md`, `docs/fsql-format-spec.md`
 - tbd guidelines: `typescript-lint-format-rules`, `supply-chain-hardening`,
   `typescript-rules`, `error-handling-rules`, `general-testing-rules`,
   `common-doc-guidelines`
-- The monorepo plan spec `plan-2026-06-06-fsqlite-standalone-sqlite-package.md`, mined
-  for open items and deliberately not ported
+- Future work is governed by
+  `docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md`.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

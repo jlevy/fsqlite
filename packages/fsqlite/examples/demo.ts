@@ -17,16 +17,21 @@ CREATE TABLE url_index (url_hash TEXT PRIMARY KEY NOT NULL, normalized_url TEXT 
 const POLICY = { url_index: 'lww', artifacts: 'lww', '*': 'strict' } as const
 
 const dir = mkdtempSync(join(tmpdir(), 'fsqlite-demo-'))
-const store = new SnapshotStore(dir, { schema: SCHEMA, schemaVersion: 1, conflictPolicy: { ...POLICY } }).init()
+const store = new SnapshotStore(dir, {
+  schema: SCHEMA,
+  schemaVersion: 1,
+  conflictPolicy: { ...POLICY },
+}).init()
 
 const tree = (label: string): void => {
   console.log(`\n# ${label}`)
-  const cat = join(dir, 'data', 'catalog')
   for (const sub of ['', 'snapshots', 'tx/pending', 'tx/applied']) {
-    const p = join(cat, sub)
-    if (!existsSync(p)) continue
+    const p = join(dir, sub)
+    if (!existsSync(p)) {
+      continue
+    }
     const entries = readdirSync(p).filter((e) => !e.startsWith('.'))
-    console.log(`  data/catalog/${sub || ''}:`, entries.join('  ') || '(empty)')
+    console.log(`  ${sub || '.'}:`, entries.join('  ') || '(empty)')
   }
   console.log('  current →', store.currentVersion())
 }
@@ -48,15 +53,23 @@ tree('after reconcile — folded into an immutable snapshot, envelopes archived'
 
 console.log(
   '\nartifacts now:',
-  JSON.stringify(store.read((db) => db.prepare('SELECT artifact_id, title FROM artifacts ORDER BY artifact_id').all())),
+  JSON.stringify(
+    store.read((db) =>
+      db.prepare('SELECT artifact_id, title FROM artifacts ORDER BY artifact_id').all(),
+    ),
+  ),
 )
 
 const res2 = store.reconcile()
 console.log('\nreplay reconcile (nothing pending):', JSON.stringify(res2))
 
 console.log('\nvalidate:', JSON.stringify(store.validate()))
-const sealed = join(dir, 'catalog.sqlite')
+const sealed = join(dir, 'sealed.sqlite')
 store.seal(sealed)
-console.log('sealed single-file export →', sealed, existsSync(sealed) ? '(openable by any sqlite3)' : '(MISSING)')
+console.log(
+  'sealed single-file export →',
+  sealed,
+  existsSync(sealed) ? '(openable by any sqlite3)' : '(MISSING)',
+)
 
 rmSync(dir, { recursive: true, force: true })

@@ -28,10 +28,11 @@ fsqlite is **two things, and the order matters**:
 
 1. **A language-agnostic format and coordination protocol** (the durable deliverable,
    normatively specified in [`fsql-format-spec.md`](fsql-format-spec.md)): immutable
-   versioned snapshots, a tiny atomic `current` pointer, changeset transaction
-   envelopes, an `applied_tx` ledger, an `fsqlite_meta` identity stamp, and an NFS-safe
-   `mkdir` lease. Any language or tool can *read* it today (it is just SQLite); other
-   languages can implement *writers* against the spec.
+   versioned snapshots, a visible `fsqlite.json` identity marker, a tiny atomic
+   `current` pointer, changeset transaction envelopes, an `applied_tx` ledger, an
+   `fsqlite_meta` identity stamp, and an NFS-safe `mkdir` lease.
+   Any language or tool can *read* it today (it is just SQLite); other languages can
+   implement *writers* against the spec.
 2. **A Node reference implementation** (`node:sqlite`, zero runtime dependencies) and
    its `fsqlite` CLI — the first implementation of the format and its proving ground.
 
@@ -64,6 +65,10 @@ while live loses at most the unpublished tail, never a previously published snap
 - **Published heads are immutable** versioned snapshots, selected by a tiny atomic
   `current` pointer. An out-of-band `reconcile()` folds committed envelopes into the next
   snapshot and publishes it atomically.
+- **The store root identifies itself** with `fsqlite.json`, carrying
+  `format: "fsqlite"`, `format_version: "f1.0"`, required features, and a UUID
+  `store_id`. The same version and identity are stamped into snapshots and envelopes so
+  mixed-store contents fail validation.
 - **Readers open only an immutable snapshot** — any SQLite binding, any language, no
   session extension.
 - **The one mutual-exclusion point** is an NFS-safe `mkdir` lease held only for the
@@ -171,25 +176,34 @@ format.
 import { SnapshotStore } from 'fsqlite'
 
 const store = new SnapshotStore(dir, {
-  schema: SCHEMA_SQL,          // caller DDL applied to snapshot 0 (every table NON-NULL PK)
+  schema: SCHEMA_SQL, // caller DDL applied to snapshot 0 (every table NON-NULL PK)
   schemaVersion: 1,
-  appId: 0x43544c47,           // PRAGMA application_id (caller-chosen store magic)
-  conflictPolicy: {            // per-table merge semantics
-    url_index: 'lww',          //   last-writer-wins
-    relationships: 'union',    //   set-union
-    '*': 'strict',             //   deny-by-default: conflict ⇒ quarantine the envelope
+  conflictPolicy: {
+    // per-table merge semantics
+    url_index: 'lww', //   last-writer-wins
+    relationships: 'union', //   set-union
+    '*': 'strict', //   deny-by-default: conflict ⇒ quarantine the envelope
   },
 }).init()
 
-const txId  = store.write('writer-a', (db) => { /* INSERT/UPDATE/DELETE */ })
-const rows  = store.read((db) => db.prepare('SELECT …').all())
-const res   = store.reconcile()          // build → quick_check → atomic publish; exactly-once
-store.writeWithRetry('writer-a', (db) => { /* read-modify-write on strict rows */ })
-const lease = store.readLease()          // pin current against gc; lease.release() after
-store.gc({ retain: 3 }); store.validate(); store.repair(); store.seal('out.sqlite')
+const txId = store.write('writer-a', (db) => {
+  /* INSERT/UPDATE/DELETE */
+})
+const rows = store.read((db) => db.prepare('SELECT …').all())
+const res = store.reconcile() // build → quick_check → atomic publish; exactly-once
+store.writeWithRetry('writer-a', (db) => {
+  /* read-modify-write on strict rows */
+})
+const lease = store.readLease() // pin current against gc; lease.release() after
+store.gc({ retain: 3 })
+store.validate()
+store.repair()
+store.seal('out.sqlite')
 
 // Easy-local alternative over the same format:
-const v = new DirectStore(dir, opts).write((db) => { /* … */ })
+const v = new DirectStore(dir, opts).write((db) => {
+  /* … */
+})
 ```
 
 ## Modules
@@ -197,6 +211,7 @@ const v = new DirectStore(dir, opts).write((db) => { /* … */ })
 | Module | Responsibility |
 | --- | --- |
 | `src/lock` | NFS-safe `mkdir` lease with an owner token for revalidate-before-publish; invariant `timeoutMs > staleMs` |
+| `src/storeFormat` | Root marker creation and validation; format/store identity and required-feature gating |
 | `src/driver` | Thin `node:sqlite` wrapper — the session/changeset chokepoint; capability probing |
 | `src/conflictPolicy` | Per-table policy via one filtered apply pass per action; conflict-type-aware `replace`; `strict` detected via the ABORT pass |
 | `src/snapshotStore` | The concurrent engine: `init/read/write/writeWithRetry/reconcile/gc/validate/repair/seal/readLease` |
@@ -223,6 +238,26 @@ live `-wal`/`-shm` next to snapshots (the cloud-sync hazard).
 Windows needs rename-replace semantics (`MOVEFILE_REPLACE_EXISTING`); see format spec
 §14, Open Issue O2.
 
+## Format Identity and Evolution
+
+Directory recognition is explicit: only a valid root `fsqlite.json` identifies a store.
+Generic names such as `current` and `snapshots/` never do.
+Snapshot files also carry the fixed SQLite `application_id` `0x4653514C` (`FSQL`), while
+`PRAGMA user_version` and `schema_hash` remain caller-owned schema metadata.
+
+The format version is a self-identifying string, `f<major>.<minor>`, beginning with
+`f1.0`. Major revisions are incompatible.
+Minor revisions are additive but are accepted by an older implementation only when
+compatibility is explicit; unknown mandatory capabilities in `required_features` always
+block operation. Unsupported stores are not corrupt and must never be repaired by an
+implementation that cannot read them.
+
+Opening a store never migrates it.
+Future whole-format upgrades are explicit and side-by-side by default: validate and pin
+the source, build a new destination while preserving `store_id`, validate it completely,
+leave the source untouched, and let the operator cut over.
+Caller schema migrations are a separate concern.
+
 ## A Worked Consumer
 
 [`examples/document-catalog.ts`](../examples/document-catalog.ts) is the concrete shape
@@ -236,11 +271,14 @@ quarantine), so the example can never drift.
 ## Validation Posture and Known Gaps
 
 The full test-to-guarantee map and the manual pre-publish review live in the
-[QA runbook](qa-runbook.md); the open format questions live in the format spec’s §14.
+[QA runbook](qa-runbook.md); remaining format questions live in the format spec’s §14.
 The two most important honesty points: the real cross-host NFS/SMB gate is still pending
 (today’s validation is single-host plus simulated network-filesystem semantics), and the
 store’s commit point is publication — an accepted `write()` is not power-loss durable
-until a reconcile publishes it (format spec §10).
+until a reconcile publishes it (format spec §10). All deferred validation and evolution
+work is mapped in the
+[post-alpha roadmap](../../../docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md)
+and its dedicated post-alpha plan.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

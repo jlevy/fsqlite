@@ -17,6 +17,8 @@ for (let p = 0; p < maxPasses; p++) {
   passes++
   const res = store.reconcile({ lockOpts: { timeoutMs: 10_000, staleMs: 5_000, pollMs: 10 } })
   totalApplied += res.applied
-  if (store.pendingTxns().length === 0) break
+  if (store.pendingTxns().length === 0) {
+    break
+  }
 }
 process.stdout.write(JSON.stringify({ pid: process.pid, totalApplied, passes }) + '\n')

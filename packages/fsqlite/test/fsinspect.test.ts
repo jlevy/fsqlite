@@ -10,9 +10,13 @@ import { inspect, formatReport, detectFsType } from '../src/fsinspect.ts'
 
 function withTmp(fn: (dir: string) => unknown): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'fsinspect-test-'))
-  const done = (): void => { rmSync(dir, { recursive: true, force: true }); }
+  const done = (): void => {
+    rmSync(dir, { recursive: true, force: true })
+  }
   return Promise.resolve(fn(dir)).then(
-    () => { done(); },
+    () => {
+      done()
+    },
     (e: unknown) => {
       done()
       throw e
@@ -34,7 +38,7 @@ test('inspect returns a structured report with all probes', async () => {
       'hardlink',
       'fsyncDir',
       'walViable',
-    ]) {
+    ] as const) {
       assert.ok(k in r.probes, `missing probe ${k}`)
       assert.equal(typeof r.probes[k].ok, 'boolean', `${k}.ok not boolean`)
     }
@@ -46,7 +50,7 @@ test('inspect returns a structured report with all probes', async () => {
 test('local temp disk passes every required coordination probe', async () => {
   await withTmp((dir) => {
     const r = inspect(dir)
-    for (const k of ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen']) {
+    for (const k of ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen'] as const) {
       assert.ok(r.probes[k].ok, `expected ${k} ok on local disk: ${r.probes[k].error ?? ''}`)
     }
     assert.equal(r.verdict.fsqliteSafe, true)
@@ -63,11 +67,12 @@ test('mkdirAtomic elects exactly one winner under contention', async () => {
   })
 })
 
-test('mtimeResolution reports a numeric resolution on a modern fs', async () => {
+test('mtimeResolution reports a numeric resolution or null on a coarse filesystem', async () => {
   await withTmp((dir) => {
     const r = inspect(dir)
     assert.equal(r.probes.mtimeResolution.ok, true)
-    assert.equal(typeof r.probes.mtimeResolution.resolutionMs, 'number')
+    const resolution = r.probes.mtimeResolution.resolutionMs
+    assert.ok(resolution === null || typeof resolution === 'number')
   })
 })
 

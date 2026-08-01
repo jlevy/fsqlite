@@ -19,13 +19,14 @@ import { copyFileSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath, fsyncDir } from './fsutil.ts'
+import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
 import { withLock, ownerOf } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore } from './snapshotStore.ts'
 import type { StoreOptions, WorkFn, ReadFn, ValidateResult, GcResult, ReadLease } from './types.ts'
 
 const rand = (): string => randomBytes(5).toString('hex')
+const DEFAULT_DIRECT_WRITE_RETRIES = 8
 
 /**
  * The easy-local single-writer strategy: each `write` synchronously copies the current
@@ -72,7 +73,14 @@ export class DirectStore {
    * `current` pointer (so it also composes safely with a SnapshotStore reconcile
    * publishing into the same store). Retries internally on a lost race.
    */
-  write(fn: WorkFn, { lockOpts = {}, maxRetries = 8 }: { lockOpts?: LockOptions; maxRetries?: number } = {}): number {
+  write(
+    fn: WorkFn,
+    {
+      lockOpts = {},
+      maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
+    }: { lockOpts?: LockOptions; maxRetries?: number } = {},
+  ): number {
+    this.base.read(() => true)
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const out = withLock(
         this.base.publishLock,
@@ -110,12 +118,14 @@ export class DirectStore {
           fsyncPath(tmp) // durable snapshot before it can be named by current
           renameSync(tmp, this.base.snapshotPath(next))
           fsyncDir(this.base.snapDir)
-          this.base._publishPointer(next)
+          publishPointer(this.base.dir, this.base.currentPath, next)
           return next
         },
         lockOpts,
       )
-      if (out !== 'retry') return out
+      if (out !== 'retry') {
+        return out
+      }
     }
     throw new Error('DirectStore.write exceeded retries (excessive publish contention)')
   }

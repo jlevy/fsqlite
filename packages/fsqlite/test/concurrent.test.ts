@@ -36,14 +36,18 @@ test('N concurrent writer processes lose zero committed tx after reconcile', asy
     const WRITERS = 6
     const PER = 10
     const results = await Promise.all(
-      Array.from({ length: WRITERS }, (_, i) => runAsync<WriterResult>('writer.ts', [dir, `w${i}`, String(PER)])),
+      Array.from({ length: WRITERS }, (_, i) =>
+        runAsync<WriterResult>('writer.ts', [dir, `w${i}`, String(PER)]),
+      ),
     )
     const totalWritten = results.reduce((s, r) => s + r.written, 0)
     assert.equal(totalWritten, WRITERS * PER, 'every writer committed all its envelopes')
 
     const store = new SnapshotStore(dir, STORE_OPTS)
     let guard = 0
-    while (store.pendingTxns().length > 0 && guard++ < 50) store.reconcile()
+    while (store.pendingTxns().length > 0 && guard++ < 50) {
+      store.reconcile()
+    }
     assert.equal(count(store), WRITERS * PER, 'reconcile folded in every committed tx — zero loss')
     assert.notEqual(store.validate().state, 'corrupt')
   } finally {
@@ -57,15 +61,21 @@ test('racing reconciler processes publish exactly-once with an integrity-clean h
     new SnapshotStore(dir, STORE_OPTS).init()
     const WRITERS = 5
     const PER = 8
-    for (let i = 0; i < WRITERS; i++) runSync<WriterResult>('writer.ts', [dir, `w${i}`, String(PER)])
+    for (let i = 0; i < WRITERS; i++) {
+      runSync<WriterResult>('writer.ts', [dir, `w${i}`, String(PER)])
+    }
 
     const RECONCILERS = 4
     const results = await Promise.all(
-      Array.from({ length: RECONCILERS }, () => runAsync<ReconcilerResult>('reconciler.ts', [dir, '100'])),
+      Array.from({ length: RECONCILERS }, () =>
+        runAsync<ReconcilerResult>('reconciler.ts', [dir, '100']),
+      ),
     )
     const store = new SnapshotStore(dir, STORE_OPTS)
     let guard = 0
-    while (store.pendingTxns().length > 0 && guard++ < 50) store.reconcile()
+    while (store.pendingTxns().length > 0 && guard++ < 50) {
+      store.reconcile()
+    }
 
     assert.equal(count(store), WRITERS * PER, 'exactly-once: no tx lost, none double-applied')
     assert.equal(count(store, 'applied_tx'), WRITERS * PER, 'ledger has exactly one row per tx')
@@ -81,9 +91,13 @@ test('readers during concurrent publishes never see a torn or regressing snapsho
   const { dir, cleanup } = tmpStore()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
-    for (let i = 0; i < 5; i++) runSync<WriterResult>('writer.ts', [dir, `w${i}`, '8'])
+    for (let i = 0; i < 5; i++) {
+      runSync<WriterResult>('writer.ts', [dir, `w${i}`, '8'])
+    }
 
-    const readers = Array.from({ length: 3 }, () => runAsync<ReaderResult>('reader.ts', [dir, '300']))
+    const readers = Array.from({ length: 3 }, () =>
+      runAsync<ReaderResult>('reader.ts', [dir, '300']),
+    )
     let guard = 0
     while (store.pendingTxns().length > 0 && guard++ < 200) {
       store.reconcile()
@@ -106,12 +120,18 @@ test('N concurrent direct-writer processes serialize via the lock with zero loss
     const WRITERS = 5
     const PER = 6
     const results = await Promise.all(
-      Array.from({ length: WRITERS }, (_, i) => runAsync<WriterResult>('direct-writer.ts', [dir, `d${i}`, String(PER)])),
+      Array.from({ length: WRITERS }, (_, i) =>
+        runAsync<WriterResult>('direct-writer.ts', [dir, `d${i}`, String(PER)]),
+      ),
     )
     const total = results.reduce((s, r) => s + r.written, 0)
     assert.equal(total, WRITERS * PER)
     const store = new SnapshotStore(dir, STORE_OPTS)
-    assert.equal(count(store), WRITERS * PER, 'every direct write published exactly once — serialized, zero loss')
+    assert.equal(
+      count(store),
+      WRITERS * PER,
+      'every direct write published exactly once — serialized, zero loss',
+    )
     assert.equal(store.currentVersion(), WRITERS * PER, 'one published version per direct write')
     assert.notEqual(store.validate().state, 'corrupt')
   } finally {

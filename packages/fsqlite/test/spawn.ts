@@ -15,7 +15,9 @@ function lastJsonLine<T>(out: string): T {
 
 export function runSync<T>(name: string, args: string[]): T {
   const r = spawnSync(process.execPath, [worker(name), ...args], { encoding: 'utf8' })
-  if (r.status !== 0) throw new Error(`${name} failed: ${r.stderr}`)
+  if (r.status !== 0) {
+    throw new Error(`${name} failed: ${r.stderr}`)
+  }
   return lastJsonLine<T>(r.stdout)
 }
 
@@ -37,8 +39,11 @@ export function runAsync<T>(name: string, args: string[]): Promise<T> {
       err += d
     })
     p.on('close', (code: number | null) => {
-      if (code === 0) resolve(lastJsonLine<T>(out))
-      else reject(new Error(`${name} exited ${String(code)}: ${err}`))
+      if (code === 0) {
+        resolve(lastJsonLine<T>(out))
+      } else {
+        reject(new Error(`${name} exited ${String(code)}: ${err}`))
+      }
     })
   })
 }

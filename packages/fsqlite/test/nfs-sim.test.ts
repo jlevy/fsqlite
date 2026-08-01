@@ -65,7 +65,9 @@ test('conflict-free writes: a burst of concurrent envelopes never collides on a 
     const dirs = readdirSync(store.txPending).filter((d) => d.endsWith('.txn'))
     assert.equal(dirs.length, 200, 'all 200 envelopes coexist with distinct paths')
     let guard = 0
-    while (store.pendingTxns().length > 0 && guard++ < 20) store.reconcile()
+    while (store.pendingTxns().length > 0 && guard++ < 20) {
+      store.reconcile()
+    }
     assert.equal(artifactCount(store), 200)
   } finally {
     cleanup()

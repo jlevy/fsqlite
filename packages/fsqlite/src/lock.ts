@@ -40,10 +40,22 @@ export class LockTimeoutError extends Error {
   }
 }
 
+const DEFAULT_LOCK_TIMEOUT_MS = 30_000
+const DEFAULT_LOCK_POLL_MS = 25
+const DEFAULT_LOCK_STALE_MS = 20_000
+
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.
 const sleepSync = (ms: number): void => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+type OwnerWriter = (path: string, data: string) => void
+let writeOwner: OwnerWriter = writeFileSync
+
+/** Internal fault-injection seam; pass null to restore the filesystem writer. */
+export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
+  writeOwner = writer ?? writeFileSync
 }
 
 /**
@@ -55,8 +67,15 @@ const sleepSync = (ms: number): void => {
  * window, or you would break a lock you could otherwise have waited for).
  */
 export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: LockOptions = {}): T {
-  const { timeoutMs = 30_000, pollMs = 25, staleMs = 20_000, onStaleBreak = null } = opts
-  if (timeoutMs <= staleMs) throw new Error('withLock requires timeoutMs > staleMs')
+  const {
+    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+    pollMs = DEFAULT_LOCK_POLL_MS,
+    staleMs = DEFAULT_LOCK_STALE_MS,
+    onStaleBreak = null,
+  } = opts
+  if (timeoutMs <= staleMs) {
+    throw new Error('withLock requires timeoutMs > staleMs')
+  }
   const token = randomBytes(8).toString('hex')
   const meta = JSON.stringify({ token, pid: process.pid, host: hostname(), at: Date.now() })
   const deadline = Date.now() + timeoutMs
@@ -64,11 +83,18 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
   while (Date.now() < deadline) {
     try {
       mkdirSync(lockPath)
-      writeFileSync(join(lockPath, 'owner.json'), meta) // record owner INSIDE the lock dir
+      try {
+        writeOwner(join(lockPath, 'owner.json'), meta) // record owner INSIDE the lock dir
+      } catch (error) {
+        rmSync(lockPath, { recursive: true, force: true })
+        throw error
+      }
       held = true
       break
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw e
+      }
       // Lock exists. Break it only if it is older than the stale window. This is the
       // irreducible NFS hazard: a holder paused past the lease can be stolen out from
       // under. The defense is `ownerOf()` revalidation in `fn` + a generous staleMs >>
@@ -92,7 +118,9 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
       sleepSync(pollMs)
     }
   }
-  if (!held) throw new LockTimeoutError(lockPath, timeoutMs)
+  if (!held) {
+    throw new LockTimeoutError(lockPath, timeoutMs)
+  }
   try {
     return fn(token)
   } finally {
@@ -100,18 +128,16 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
     // still own it. A holder that stalled past staleMs and was stale-broken must not delete
     // a successor's live lock (which would let a third holder acquire concurrently). If we
     // lost ownership, leave the successor's lock alone; staleMs reclaims any true orphan.
-    if (ownerOf(lockPath) === token) rmSync(lockPath, { recursive: true, force: true })
+    if (ownerOf(lockPath) === token) {
+      rmSync(lockPath, { recursive: true, force: true })
+    }
   }
 }
 
 /** Touch the lock dir mtime so a slow-but-alive holder is not considered stale. */
 export function heartbeat(lockPath: string): void {
-  try {
-    const now = new Date()
-    utimesSync(lockPath, now, now)
-  } catch {
-    /* ignore */
-  }
+  const now = new Date()
+  utimesSync(lockPath, now, now)
 }
 
 function readOwner(lockPath: string): OwnerMeta | null {

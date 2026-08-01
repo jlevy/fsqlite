@@ -25,7 +25,9 @@ function makePlainDb(path: string, rows = 3): void {
   db.exec('PRAGMA user_version = 7;')
   db.exec('CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT);')
   const ins = db.prepare('INSERT INTO widgets VALUES (?,?)')
-  for (let i = 0; i < rows; i++) ins.run(i, `w${i}`.padEnd(40, 'x'))
+  for (let i = 0; i < rows; i++) {
+    ins.run(i, `w${i}`.padEnd(40, 'x'))
+  }
   db.close()
 }
 
@@ -53,7 +55,10 @@ test('sqliteFacts reports header/page/schema facts for a plain SQLite file', () 
     const f = sqliteFacts(db)
     assert.equal(f.applicationId, 305419896)
     assert.equal(f.userVersion, 7)
-    assert.ok(f.pageSize >= 512 && (f.pageSize & (f.pageSize - 1)) === 0, 'page size is a power of two')
+    assert.ok(
+      f.pageSize >= 512 && (f.pageSize & (f.pageSize - 1)) === 0,
+      'page size is a power of two',
+    )
     assert.ok(f.pageCount >= 1)
     assert.ok(f.fileBytes >= f.pageSize)
     assert.ok(/^\d+\.\d+/.test(f.sqliteVersion), 'sqlite version looks like a version')

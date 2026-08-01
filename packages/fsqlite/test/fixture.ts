@@ -39,10 +39,14 @@ export const STORE_OPTS: StoreOptions = {
   schema: SCHEMA,
   schemaVersion: 1,
   conflictPolicy: { ...POLICY },
-  appId: 0x54455354,
 }
 
 export function tmpStore(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'fsqlite-'))
-  return { dir, cleanup: () => { rmSync(dir, { recursive: true, force: true }); } }
+  return {
+    dir,
+    cleanup: () => {
+      rmSync(dir, { recursive: true, force: true })
+    },
+  }
 }
