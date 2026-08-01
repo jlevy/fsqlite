@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { SnapshotStore } from '../src/index.ts'
@@ -181,6 +181,33 @@ test('reconcile preserves an envelope when its quarantine reason cannot be writt
     if (txDir && existsSync(txDir)) {
       chmodSync(txDir, 0o700)
     }
+    cleanup()
+  }
+})
+
+test('quarantine tolerates another reconciler consuming the envelope first', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const txId = store.write('A', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    assert.ok(txId)
+    const txn = `${txId}.txn`
+    const pendingDir = join(store.txPending, txn)
+    writeFileSync(join(pendingDir, 'QUARANTINE'), 'digest-mismatch')
+    renameSync(pendingDir, join(store.txQuarantine, txn))
+
+    const internal = store as unknown as {
+      _quarantine(pairs: [string, string][]): void
+    }
+    assert.doesNotThrow(() => {
+      internal._quarantine([[txn, 'unreadable-envelope']])
+    })
+    assert.equal(
+      readFileSync(join(store.txQuarantine, txn, 'QUARANTINE'), 'utf8'),
+      'digest-mismatch',
+    )
+  } finally {
     cleanup()
   }
 })

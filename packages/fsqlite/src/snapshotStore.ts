@@ -1113,7 +1113,17 @@ export class SnapshotStore {
 
   private _quarantine(pairs: [string, string][]): void {
     for (const [txn, reason] of pairs) {
-      writeFileSync(join(this.txPending, txn, 'QUARANTINE'), reason)
+      const txDir = join(this.txPending, txn)
+      try {
+        writeFileSync(join(txDir, 'QUARANTINE'), reason)
+      } catch (error) {
+        // Another reconciler may have archived or quarantined the same envelope after
+        // this builder classified it. That is a successful concurrent resolution, not
+        // a reason-write failure. Existing pending envelopes still fail closed.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || existsSync(txDir)) {
+          throw error
+        }
+      }
     }
     this._move(
       pairs.map((p) => p[0]),

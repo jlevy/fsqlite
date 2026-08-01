@@ -24,7 +24,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **95 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **96 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -91,7 +91,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 95` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 96` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.

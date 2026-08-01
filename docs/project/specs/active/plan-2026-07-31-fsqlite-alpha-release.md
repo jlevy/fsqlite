@@ -373,6 +373,12 @@ Every item lands with a regression test that fails before the fix.
 - [x] (`fsq-pbse`) Log or seed the fuzz parameters so a failure is reproducible
 - [x] (`fsq-soz0`) Extract the magic numbers that carry the correctness argument into
   named constants, starting with the lease and retry tunables
+- [x] (`fsq-eyak`) Validate each envelope manifest transaction ID against its directory
+  name before apply
+- [x] (`fsq-v99d`) Preserve a pending envelope when its quarantine reason cannot be
+  written
+- [x] (`fsq-xc8i`) Treat an envelope already consumed by another reconciler as a benign
+  quarantine race without weakening fail-closed reason writes
 
 ### Phase 3: Usability, docs, and alpha publish
 
@@ -412,7 +418,7 @@ Goal: a stranger can find, understand, install, and use this.
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 95 `node:test` cases
+The current suite is the baseline and must stay green throughout: 96 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 24 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and
