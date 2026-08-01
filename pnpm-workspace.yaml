@@ -1,0 +1,11 @@
+packages:
+  - packages/*
+
+minimumReleaseAge: 20160
+minimumReleaseAgeExclude:
+  - brace-expansion@5.0.8
+overrides:
+  brace-expansion: 5.0.8
+blockExoticSubdeps: true
+allowBuilds:
+  lefthook: false

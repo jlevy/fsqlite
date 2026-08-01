@@ -1,0 +1,88 @@
+{
+  "name": "fsqlite",
+  "version": "0.1.0",
+  "description": "Filesystem-friendly concurrent SQLite with immutable snapshot publication, transaction-envelope changesets, a fenced mkdir lease, and a local single-writer DirectStore over plain SQLite files",
+  "type": "module",
+  "license": "MIT",
+  "author": "Joshua Levy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jlevy/fsqlite.git",
+    "directory": "packages/fsqlite"
+  },
+  "homepage": "https://github.com/jlevy/fsqlite#readme",
+  "bugs": {
+    "url": "https://github.com/jlevy/fsqlite/issues"
+  },
+  "engines": {
+    "node": ">=22.18.0 <23 || >=24.0.0"
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.mts",
+      "import": "./dist/cli/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "bin": {
+    "fsqlite": "./dist/cli/index.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm build",
+    "cli": "node src/cli/index.ts",
+    "demo": "node examples/demo.ts",
+    "benchmark:seed": "node benchmarks/seed.ts",
+    "benchmark:workload-fit": "node benchmarks/workload-fit.ts",
+    "example:catalog": "node examples/document-catalog.ts",
+    "test": "node scripts/run-tests.mjs",
+    "test:golden": "tryscript run 'test/cli-golden/*.tryscript.md'",
+    "test:golden:update": "tryscript run --update 'test/cli-golden/*.tryscript.md'",
+    "test:package": "node scripts/package-smoke.mjs",
+    "test:all": "pnpm test && pnpm test:golden && pnpm build && pnpm test:package",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --fix --max-warnings 0",
+    "lint:check": "eslint . --max-warnings 0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.1",
+    "eslint": "10.7.0",
+    "eslint-config-prettier": "10.1.5",
+    "prettier": "3.9.5",
+    "publint": "0.3.21",
+    "tryscript": "0.1.7",
+    "tsdown": "0.22.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.64.0"
+  },
+  "keywords": [
+    "sqlite",
+    "node:sqlite",
+    "concurrency",
+    "nfs",
+    "changeset",
+    "session",
+    "snapshot",
+    "multi-writer",
+    "server-free"
+  ]
+}

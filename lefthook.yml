@@ -1,0 +1,21 @@
+pre-commit:
+  parallel: false
+  commands:
+    format-code:
+      glob: '*.{js,mjs,ts,json,yaml,yml}'
+      run: pnpm format:code
+      stage_fixed: true
+    format-markdown:
+      glob: '*.md'
+      run: pnpm format:markdown
+      stage_fixed: true
+    lint:
+      glob: '*.{js,mjs,ts}'
+      run: pnpm lint
+      stage_fixed: true
+
+pre-push:
+  parallel: false
+  commands:
+    verify:
+      run: pnpm verify

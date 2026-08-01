@@ -1,0 +1,58 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: false
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm verify
+      - name: Verify tag matches package version
+        working-directory: packages/fsqlite
+        run: test "${GITHUB_REF_NAME}" = "v$(node --print "require('./package.json').version")"
+      - name: Choose npm dist-tag
+        if: github.ref_name != 'v0.1.0'
+        id: npm-dist-tag
+        working-directory: packages/fsqlite
+        run: |
+          version="$(node --print "require('./package.json').version")"
+          major="${version%%.*}"
+          if [[ "$version" == *-* || "$major" == "0" ]]; then
+            echo 'tag=alpha' >> "$GITHUB_OUTPUT"
+          else
+            echo 'tag=latest' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify owner-authenticated bootstrap publication
+        if: github.ref_name == 'v0.1.0'
+        working-directory: packages/fsqlite
+        env:
+          FSQLITE_SMOKE_PACKAGE: fsqlite@0.1.0
+        run: |
+          test "$(npm view fsqlite@0.1.0 version)" = "0.1.0"
+          test "$(npm view fsqlite dist-tags.alpha)" = "0.1.0"
+          node scripts/package-smoke.mjs
+      - name: Publish to npm with trusted publishing
+        if: github.ref_name != 'v0.1.0'
+        working-directory: packages/fsqlite
+        run: npm publish --access public --tag "${{ steps.npm-dist-tag.outputs.tag }}"

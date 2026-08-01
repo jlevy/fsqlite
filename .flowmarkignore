@@ -1,0 +1,6 @@
+packages/fsqlite/test/cli-golden/
+.agents/
+.claude/
+.codex/
+.tbd/
+node_modules/

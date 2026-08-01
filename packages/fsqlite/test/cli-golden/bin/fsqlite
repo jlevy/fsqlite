@@ -1,0 +1,5 @@
+#!/bin/sh
+# Wrapper: run the fsqlite CLI from source via Node type-stripping. Resolves the package
+# root from this script's location (test/cli-golden/bin → ../../..).
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+exec node "$root/src/cli/index.ts" "$@"

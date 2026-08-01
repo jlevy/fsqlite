@@ -1,0 +1,31 @@
+#!/bin/bash
+# Ensure the tbd CLI is available and run `tbd prime`.
+# Installed by: tbd setup --auto. Runs on SessionStart and PreCompact.
+#
+# Local-first, then a VERSION-PINNED zero-install fallback. Pinning is both a
+# supply-chain control (an unpinned runner re-resolves to latest on every run
+# and bypasses any cool-off) and a consistency control (every teammate and agent
+# runs the same tbd version).
+
+# Use the same caller override as the closing hook. An explicit empty value keeps PATH
+# unchanged for hermetic environments.
+tbd_hook_path_prefix=${TBD_HOOK_PATH_PREFIX-"$HOME/.local/bin:$HOME/bin:/usr/local/bin"}
+if [ -n "$tbd_hook_path_prefix" ]; then
+    export PATH="$tbd_hook_path_prefix:$PATH"
+fi
+
+# Local-first: use tbd if it is already on PATH.
+if command -v tbd &> /dev/null; then
+    tbd prime "$@"
+    exit $?
+fi
+
+# Pinned zero-install fallback. Never use an unpinned runner here.
+if command -v npx &> /dev/null; then
+    npx --yes get-tbd@0.4.2 prime "$@"
+    exit $?
+fi
+
+echo "[tbd] tbd CLI not found and npx is unavailable."
+echo "[tbd] Install it with: npm install -g get-tbd@0.4.2"
+exit 1
