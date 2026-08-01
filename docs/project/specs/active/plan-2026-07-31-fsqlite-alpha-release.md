@@ -67,7 +67,8 @@ dependencies had not been resolved together.
 The first workspace install is therefore a new dependency resolution and remains the
 riskiest foundation step.
 
-The npm name `fsqlite` is unclaimed (the registry returns 404).
+The release runbook requires a current registry availability check immediately before
+the first publish.
 
 ## Design
 
@@ -289,7 +290,8 @@ The hash covers the exact UTF-8 schema string rather than canonical SQL.
 
 The marker is visible JSON rather than hidden YAML because it is machine-owned format
 identity, not user configuration: Node parses it without another dependency, its types
-are unambiguous, and directory recognition remains obvious to both people and tools.
+are unambiguous, and its filename and contents identify the directory to both people and
+tools.
 
 Normal opens never upgrade a store.
 Optional marker fields may be added without a format bump, mandatory capabilities use
@@ -512,6 +514,26 @@ Goal: a stranger can find, understand, install, and use this.
   - [x] (`fsq-jgnl`) Recognize literal, unquoted `eval git push` without interpreting
     quoted or dynamically constructed programs
   - [x] (`fsq-vfb2`) Keep closing-hook tests independent of machine-local CLI installs
+- [x] (`fsq-4uy4`) Complete the final common-documentation-guideline audit
+  - [x] (`fsq-newp`) Audit `AGENTS.md`
+  - [x] (`fsq-bvy5`) Audit `CHANGELOG.md`
+  - [x] (`fsq-j78e`) Audit `CONTRIBUTING.md`
+  - [x] (`fsq-za8d`) Audit `README.md`
+  - [x] (`fsq-9h1s`) Audit `SUPPLY-CHAIN-SECURITY.md`
+  - [x] (`fsq-52ct`) Audit `docs/README.md`
+  - [x] (`fsq-f2m1`) Audit `docs/application-id.md`
+  - [x] (`fsq-zvos`) Audit `docs/fsql-format-spec.md`
+  - [x] (`fsq-5v1r`) Audit `docs/fsqlite-design.md`
+  - [x] (`fsq-e7de`) Audit this release plan
+  - [x] (`fsq-wns7`) Audit the post-alpha roadmap plan
+  - [x] (`fsq-p48f`) Audit `docs/qa-runbook.md`
+  - [x] (`fsq-htlg`) Audit `docs/releasing.md`
+  - [x] (`fsq-vwx1`) Audit `docs/research/README.md`
+  - [x] (`fsq-qfm3`) Audit the dated portable SQLite research
+  - [x] (`fsq-oi1i`) Audit the schema evolution and workload assessment
+  - [x] (`fsq-2037`) Audit `docs/roadmap.md`
+  - [x] (`fsq-pewb`) Audit `docs/upstream-source-confirmations.md`
+  - [x] (`fsq-8wwm`) Audit `packages/fsqlite/README.md`
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 

@@ -16,10 +16,10 @@ This plan collects the work deliberately deferred from the alpha release so each
 commitment has an owner, dependency path, and validation bar.
 
 The alpha release remains governed by `plan-2026-07-31-fsqlite-alpha-release.md`.
-Deferring the work here does not weaken the alpha contract: unsupported capabilities
-must fail closed, normal opens never migrate a store, and claims not yet validated
-remain disclosed. The system constraints and operating boundaries are in
-`docs/fsqlite-design.md`; this plan tracks work and does not redefine them.
+Unsupported capabilities must fail closed, normal opens never migrate a store, and
+claims not yet validated remain disclosed.
+The system constraints and operating boundaries are in `docs/fsqlite-design.md`; this
+plan tracks work and does not redefine them.
 
 ## Fixed Starting Point
 
