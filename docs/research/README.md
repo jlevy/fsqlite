@@ -3,6 +3,25 @@
 The
 [Portable Concurrent SQLite Research](research-2026-06-06-portable-concurrent-sqlite.md)
 is the primary technical report behind fsqlite.
+Its central observation is that “local” no longer implies one database client or low
+write contention. A single workspace can have many independent agents updating one
+compact knowledge base, while a database server remains operationally inconvenient and
+the resulting artifact still needs to be easy to inspect, archive, and hand to another
+environment.
+
+The report’s
+[landscape review](research-2026-06-06-portable-concurrent-sqlite.md#e-the-prior-art-landscape-and-the-gap)
+finds that surveyed alternatives usually retain one live SQLite writer, add a daemon or
+consensus service, replace the engine or storage layer, require reader extensions, or
+solve replication rather than cooperative file-native write coordination.
+Its
+[coordination triangle](research-2026-06-06-portable-concurrent-sqlite.md#b-locking-covers-three-layers-fine-grained-state-needs-a-coordinator)
+explains the unavoidable trade: a server-free design can combine direct file access with
+protocol-coordinated writes only by requiring cooperative writers.
+The [key insights](research-2026-06-06-portable-concurrent-sqlite.md#key-insights) show
+how SQLite changesets, immutable snapshots, and atomic pointer publication occupy that
+gap while preserving standard SQLite readers.
+
 It is self-contained and covers:
 
 - SQLite session and changeset semantics, conflict handling, and cross-language support

@@ -25,15 +25,33 @@ FUSE, and synchronized folders.
 A service can centralize the writer, but that changes the deployment model.
 fsqlite is for applications that need a plain SQLite artifact, direct in-process access,
 no required server, and multiple independent writers that may share a filesystem.
+The motivating case does not require several hosts.
+One computer may run an interactive application, coding agents, indexers, research
+agents, and automation processes against one compact knowledge base.
 
-## Start With Ordinary SQLite
+## Choose by Coordination Model
 
-Ordinary SQLite is the default choice when processes can safely open one live database
-on a reliable local filesystem.
-It already provides serializable transactions by making writers take turns.
-WAL mode lets readers continue during the one active write.
+The number of computers is not the first distinction.
+A single machine can have many independent writer clients, while several callers can
+sometimes share one serialized writer lane.
+The relevant questions are whether callbacks may queue, whether publication must be
+immediate, which isolation model the application needs, and whether immutable portable
+generations justify copying the complete head.
+
+Ordinary SQLite is the default for one embedded application on a reliable local
+filesystem and remains a strong choice for several processes whose writers can queue on
+one live database.
+It provides immediate serializable transactions by making writers take
+turns. WAL mode lets readers continue during the one active write.
 A small transaction normally updates only the affected database, journal, WAL, and index
 pages.
+
+SnapshotStore addresses a different common local workload: several independent agents
+need to capture compact changes without sharing one writable SQLite file, can accept
+reconcile-based visibility, and do not have a convenient database service.
+DirectStore is the serialized fsqlite lane for callers that need immediate publication
+and immutable generations.
+It is not the default wrapper for an otherwise ordinary single-client SQLite database.
 
 fsqlite does not make one SQLite file accept several simultaneous writers.
 It moves the work to private copies.
@@ -55,7 +73,7 @@ It is the wrong trade when ordinary local SQLite already meets the need.
 | Successful call | SQLite commit is the visibility and durability boundary, subject to its durability settings | `write()` has published the new snapshot | `write()` has accepted an envelope; reconcile either quarantines it or applies and publishes it durably |
 | Multi-writer isolation | Serializable because writes take turns | Serializable for a DirectStore-only writer stream | Deterministic write-set merge; not serializable and no general read-set validation |
 | Schema changes | Run as ordinary SQLite DDL under application coordination | Fixed schema per `f1.0` store epoch | The same fixed epoch; envelopes contain row changes, not DDL |
-| Best fit | Local data with writers that can queue | One application writer that needs immutable publication | Cooperative independent writers with compact state and delayed visibility |
+| Best fit | Embedded applications and processes that can queue on one live database | Cooperative callers that can serialize through one fsqlite publication lane | Independent agent processes with compact state and reconcile-based visibility |
 
 Every fsqlite snapshot remains an ordinary SQLite database and each build uses SQLite
 transactions and constraints.
@@ -160,6 +178,9 @@ conflicts:
 `NOTFOUND`, `CONSTRAINT`, and `FOREIGN_KEY` are never replaceable; any of them
 quarantines the complete envelope under every policy.
 The format specification defines the exact apply order and transaction boundaries.
+The `lww` alias means that the incoming row wins as byte-sorted envelopes are applied.
+Envelope IDs use timestamps for approximately chronological ordering, but `f1.0` does
+not promise causal or globally clock-ordered last-write semantics across hosts.
 
 SQLite constraints can connect rows that do not share a primary key.
 Therefore fsqlite does not claim that different rows or tables can never conflict.
@@ -228,6 +249,51 @@ outside the concurrent envelope path.
 ## Two Write Strategies
 
 Both strategies produce the same `f1.0` snapshots and pointer.
+The first-principles distinction is whether the caller’s complete transaction callback
+may run inside one serialized publication lane:
+
+| Question | `DirectStore` | `SnapshotStore` |
+| --- | --- | --- |
+| When does the callback run? | After acquiring the publish lease, against the latest head | Without the publish lease, against the head selected at capture time |
+| Can independent callbacks overlap? | No. Cooperative callers queue across the complete copy, callback, validation, and publication. | Yes. Each caller works on a private copy and emits a unique envelope. |
+| When is a successful write visible and power-loss durable? | Before `write()` returns | After reconciliation accepts and publishes the envelope |
+| Isolation across writers | Serializable for a DirectStore-only stream | Deterministic write-set merge without general read-set validation |
+| Main cost | One full-head copy and fsync per write while holding the lease | One full-head copy per capture, plus a full-head reconciliation build |
+| Natural agent use | Agents can queue and each transaction must observe the latest published state | Agents should capture independently and can accept batched publication |
+
+On a normal local filesystem, ordinary SQLite is more efficient than DirectStore when
+immutable publication is not needed.
+On a capability-validated shared path, either fsqlite strategy avoids writing one live
+SQLite head, but the trade remains the same: DirectStore serializes callback execution;
+SnapshotStore moves that coordination to later reconciliation.
+Real cross-host behavior is still a pre-1.0 evidence gate.
+
+### Shared Paths and Cloud Agents
+
+A network drive does not select a strategy by itself and its product name does not prove
+that either strategy is safe.
+Both require correct exclusive directory creation, atomic rename-replace, close-to-open
+visibility, and file and directory fsync behavior from the exact mount.
+
+After those capabilities have real multi-host evidence:
+
+- Prefer SnapshotStore when agents are independent, callbacks may be slow or bursty, and
+  it is valuable for each agent to capture work without holding the publication lease.
+  Account for one head-sized working copy per in-flight capture and for delayed
+  visibility until reconciliation.
+- Prefer DirectStore when all agents can queue, each callback should observe the latest
+  published head, and every successful return must be immediately visible and durable.
+  Account for holding the lease across the complete copy, callback, validation, fsync,
+  and publication path.
+- Prefer a database service or coordinator when immediate shared visibility, sustained
+  write throughput, rolling schemas, or stronger cross-row transactions dominate.
+  Cloud deployment may make that service easier to operate than it is in a local
+  workspace.
+
+The current alpha has automated local multiprocess evidence and one-host filesystem
+diagnostics, not the required two-host NFS/SMB proof.
+Until that gate exists, shared-path use is an architectural target rather than a blanket
+deployment recommendation.
 
 ### SnapshotStore
 
@@ -252,7 +318,11 @@ row.
 
 ### DirectStore
 
-Use `DirectStore` only for a local store with one application writer.
+Use `DirectStore` when every cooperative caller can queue while its complete operation
+runs under one publication lease and each successful return must expose a durable new
+generation. Several processes may call it; the local multiprocess suite verifies that
+their writes serialize without loss.
+“Serialized writer” means one active write lane, not one configured client.
 
 - It needs no session extension.
 - It copies, mutates, validates, and publishes synchronously under the publish lease.
@@ -262,7 +332,7 @@ Use `DirectStore` only for a local store with one application writer.
 - It remains interoperable with SnapshotStore because both use OCC on `current` and the
   same publication protocol.
 
-DirectStore deliberately trades concurrency for simpler semantics.
+DirectStore deliberately trades overlapping capture for simpler semantics.
 It must never be selected automatically from filesystem detection because a dangerous
 shared path can look local.
 
@@ -475,7 +545,7 @@ store.repair()
 store.seal('out.sqlite')
 
 new DirectStore(dir, options).write((db) => {
-  // Local single-writer transaction. The callback may be retried.
+  // Serialized publication transaction. The callback may be retried.
 })
 ```
 

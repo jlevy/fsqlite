@@ -1,6 +1,8 @@
 # fsqlite Documentation
 
-For installation and API usage, start with the
+For the project thesis, agent use case, strategy choice, and quick start, begin with the
+[root README](../README.md).
+For the complete npm installation and API guide, use the
 [package README](../packages/fsqlite/README.md).
 The documents here define the store format, explain the design, preserve its technical
 basis, and track validation and future work.
@@ -9,6 +11,8 @@ basis, and track validation and future work.
 
 | Need | Document | Role |
 | --- | --- | --- |
+| Understand the project, its agent use case, and its main tradeoffs | [Project README](../README.md) | Primary project landing page, conceptual guide, quick start, and documentation entry point |
+| Install and operate the Node package | [Package README](../packages/fsqlite/README.md) | Self-contained npm consumer guide, API contract, CLI reference, and limitations |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
 | Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | First-principles comparison with ordinary SQLite, system constraints, strategy choice, trust boundary, and tradeoffs |
 | Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Official SQLite evidence, current measurements, mitigation guidance, severity, and adoption boundaries |
@@ -23,7 +27,8 @@ basis, and track validation and future work.
 The format specification is the only normative protocol authority.
 The design owns the stable `C1` through `C12` system-constraint registry and explains
 how the implementation fits it.
-The package README is a consumer guide.
+The root README owns the public project thesis and documentation entry point.
+The package README is the self-contained npm consumer guide.
 The QA runbook is an evidence index.
 The dated research and source confirmations support claims but do not define current
 behavior.

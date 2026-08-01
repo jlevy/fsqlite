@@ -1,8 +1,8 @@
-// DirectStore provides local single-writer operation and format interoperability with the
+// DirectStore provides serialized-writer operation and format interoperability with the
 // envelope engine. The two write strategies share one immutable-snapshot format, so a
 // store written by one reads identically via the other and via plain sqlite3. These cover
-// the in-process behavior and format interop; multi-process direct-writer concurrency runs
-// in the concurrent suite.
+// the in-process behavior and format interop; multi-process direct-writer serialization
+// runs in the concurrent suite.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

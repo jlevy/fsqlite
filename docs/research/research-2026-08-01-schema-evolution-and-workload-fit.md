@@ -6,16 +6,20 @@
 
 ## Executive Assessment
 
-fsqlite still fits its intended use: cooperative local processes and agents that record
-modest metadata transactions, can accept reconciliation-based visibility, and value
-portable SQLite snapshots without a required service.
+fsqlite still fits its intended use: several cooperative local processes and agents that
+record modest metadata transactions, can accept reconciliation-based visibility, and
+value portable SQLite snapshots without a required service.
 
-This is a narrower goal than “make SQLite concurrent.”
-Ordinary SQLite should remain the first choice when processes on one computer can safely
-share a live database and writers can take turns.
-fsqlite is justified when immutable published generations and independent file-native
-capture matter enough to pay for full-head copying, delayed visibility, and weaker
+This is a narrower goal than “make SQLite concurrent,” but it is not distinguished by
+host count. One computer may run many independent agent clients against a shared
+knowledge base.
+Ordinary SQLite should remain the first choice for one embedded owner and
+for writers that can queue on one live database with immediate serializable commits.
+SnapshotStore is justified when independent file-native capture and immutable published
+generations matter enough to pay for full-head copying, delayed visibility, and weaker
 multi-writer isolation.
+DirectStore is the serialized fsqlite lane when immediate immutable publication matters;
+it is not the default wrapper for an otherwise ordinary single-client SQLite database.
 
 The review does not justify a format redesign or reduce the core value of the approach.
 It does narrow the useful operating envelope:
@@ -28,6 +32,8 @@ It does narrow the useful operating envelope:
 - Capture without the publish lease removes fsqlite’s writer-serialization step, but
   concurrent agents still share disk bandwidth and create one working copy per in-flight
   write.
+- Conflict policy is deployment configuration in `f1.0`; every reconciler must receive
+  the same effective policy because the store does not verify its identity.
 - Reconciliation adds costs that grow with pending envelope count, envelope bytes, and
   the lifetime `applied_tx` ledger.
 - Multi-host shared-filesystem behavior remains a design target, not a validated alpha
@@ -85,6 +91,9 @@ Separate connections see only committed transactions.
 SQLite allows many readers but only one active writer, so writers queue and commit in a
 serial order. WAL mode lets readers continue during that one active write, provided all
 participants are on the same host.
+A same-host application may still have many independent agent processes and substantial
+writer contention. Whether that queue is acceptable is a workload decision, not a
+consequence of being local.
 
 This ordinary model is strong and efficient for local data.
 A small transaction usually writes only changed pages and index entries.
@@ -104,8 +113,9 @@ fsqlite replaces one live mutable database with a directory of immutable SQLite
 generations. Readers select the published generation through `current`. Writers never
 change that file in place.
 
-`DirectStore` copies the current generation, makes and validates an ordinary SQLite
-transaction, then atomically publishes the copy.
+`DirectStore` admits one cooperative writer at a time, copies the current generation,
+makes and validates an ordinary SQLite transaction, then atomically publishes the copy.
+Several callers may queue through that lane.
 It preserves serial writer semantics, but it copies and fsyncs the whole head for every
 write.
 
@@ -147,6 +157,7 @@ The alpha has not yet proved those assumptions across two hosts.
 | --- | --- | --- | --- |
 | Merge closure over primary key, `NOT NULL`, `UNIQUE`, `CHECK`, and foreign keys | High if absent | Addressed | General range, predicate, aggregate, and cross-row invariants are not inferred. |
 | Deterministic merge order and exactly-once ledgering | High if absent | Addressed | Conflict policy is deployment configuration and must be consistent across reconcilers. |
+| Conflict-policy identity and admission | Medium for coordinated agents; high for independently configured reconcilers | Open | `f1.0` does not stamp the normalized policy, so deployment must keep every reconciler consistent. |
 | Caller-schema compatibility | Medium for coordinated releases; high for rolling deployments | Addressed for detection and admission | `f1.0` rejects change. It has no migration protocol. |
 | Invalid `schemaVersion` values and wrong-schema write handles | Medium | Addressed | Application code should still call `init()` before normal use. |
 | Snapshot copy cost | Medium in the intended range; high for large or frequent writes | Disclosed and measured | Safe overlays, shared bases, and compaction are open. |
@@ -446,15 +457,15 @@ These ranges are inferred starting points, not conformance limits:
 
 | Workload shape | Assessment |
 | --- | --- |
-| A few to a few dozen processes on one computer, short callbacks, a single-digit-MiB head, occasional writes, and one reconcile after a group of captures | Natural fit; measure the actual schema and disk. |
+| A few to a few dozen independent local agent processes, short callbacks, a single-digit-MiB head, occasional writes, and one reconcile after a group of captures | Natural SnapshotStore fit; measure the actual schema and disk. |
 | A handful of local agents, head in the low tens of MiB, and background-latency tolerance | Plausible, but the 21.7 MiB burst result makes workload-specific measurement mandatory. |
 | A few dozen agents bursting concurrently against a low-tens-of-MiB head | Poor interactive fit; shard or reduce snapshot bytes even if eventual background completion is acceptable. |
 | Head from 50 to 100 MiB, frequent writes, or strict reconcile-after-write behavior | Conditional to poor fit; copy cost, free space, visibility needs, and ledger growth require explicit capacity testing. |
-| Hundreds of MiB to GiB heads with frequent small writes | Poor default fit. Shard, use DirectStore for a true single writer, use ordinary local SQLite, or use a service. |
+| Hundreds of MiB to GiB heads with frequent small writes | Poor default fit. Shard, serialize only if the full-copy cost is acceptable, use ordinary local SQLite, or use a service. |
 | Immediate global visibility, serializable multi-row transactions, or high sustained write throughput | Outside the design target. |
 
-DirectStore removes envelope and reconciliation costs but still copies and fsyncs the
-full snapshot for every write while holding the publish lease.
+DirectStore removes envelope and reconciliation costs but queues every cooperative
+caller while it copies and fsyncs the full snapshot under the publish lease.
 Its stale window must exceed the measured worst-case copy, callback, validation, and
 fsync duration. It is a semantic simplification, not a large-database performance escape
 hatch.
@@ -516,8 +527,9 @@ receipt. Power loss may therefore remove accepted work that has not reached a pu
 snapshot.
 
 Applications that need immediate power-loss durability can reconcile immediately, at the
-cost of another full-head build; use DirectStore for a true single writer; or use
-ordinary SQLite. An optional durable-envelope receipt is roadmap work.
+cost of another full-head build; use DirectStore for a serialized synchronous lane; or
+use ordinary SQLite.
+An optional durable-envelope receipt is roadmap work.
 This boundary is not silent data corruption: the last published snapshot remains the
 store commit point.
 
@@ -562,7 +574,9 @@ any of these is central rather than exceptional:
 - consumer synchronization folders;
 - multi-host NFS or SMB before the target mount passes the real conformance gate.
 
-For one local application writer, compare DirectStore with ordinary SQLite.
+For a serialized writer workload, compare DirectStore with ordinary SQLite.
+Choose DirectStore only when immutable fsqlite publication, recovery, or format
+interoperability justifies its complete-head copy.
 For many high-throughput writers or strong transactional invariants, a database service
 is usually the clearer design.
 For independent local agents recording compact events, indexes, leases, task state, or
@@ -587,10 +601,11 @@ exceptions.
 Prioritize post-alpha work in this order:
 
 1. independent conformance fixtures and the real two-host filesystem gate;
-2. deterministic caller-schema migration;
-3. `applied_tx` checkpointing and capacity/backlog observability;
-4. safe shared-base or overlay seeding for large stores;
-5. long-lease liveness and Worker Thread validation.
+2. conflict-policy identity and reconciler admission;
+3. deterministic caller-schema migration;
+4. `applied_tx` checkpointing and capacity/backlog observability;
+5. safe shared-base or overlay seeding for large stores;
+6. long-lease liveness and Worker Thread validation.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

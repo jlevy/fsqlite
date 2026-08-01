@@ -1,4 +1,4 @@
-// directStore.ts provides the local single-writer strategy over the same immutable
+// directStore.ts provides the serialized-writer strategy over the same immutable
 // snapshot format as SnapshotStore.
 //
 // A writer holds the publish lock while it copies, mutates, and publishes the next
@@ -33,9 +33,9 @@ const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
 
 /**
- * The local single-writer strategy. Each `write` copies the current snapshot, mutates
- * the copy, and publishes it under the lease. It produces the same on-disk format as
- * {@link SnapshotStore}.
+ * The serialized-writer strategy. Cooperative callers may contend for `write`, but the
+ * publish lease admits one complete copy, callback, validation, and publication path at
+ * a time. It produces the same on-disk format as {@link SnapshotStore}.
  */
 export class DirectStore {
   private base: SnapshotStore
