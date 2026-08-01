@@ -7,8 +7,8 @@ registry verification.
 
 ## First Publish
 
-The unscoped npm name is `fsqlite`, published from the `jlevy` owner account.
-The name is unclaimed as of the alpha release preparation.
+The unscoped npm name is `fsqlite`, to be published from the `jlevy` owner account.
+Before the first publish, confirm that the name remains unclaimed.
 npm requires an owner-authenticated first publish before trusted publishing can be
 configured for a new package.
 Confirm that this project will use the unscoped name, authenticate the owner account
