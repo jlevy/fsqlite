@@ -260,13 +260,13 @@ Caller schema migrations are a separate concern.
 
 ## A Worked Consumer
 
-[`examples/document-catalog.ts`](../examples/document-catalog.ts) is the concrete shape
-of a realistic adopter: a catalog of documents, content-addressed blobs, a URL index,
-and typed relationships, written by many agents at once — the consumer supplies only its
-schema and merge policy.
-[`test/adoption.test.ts`](../test/adoption.test.ts) runs the same schema and policy
-through the engine (last-writer-wins refetch, deduplicated union edge, strict-default
-quarantine), so the example can never drift.
+[`document-catalog.ts`](../packages/fsqlite/examples/document-catalog.ts) is the
+concrete shape of a realistic adopter: a catalog of documents, content-addressed blobs,
+a URL index, and typed relationships, written by many agents at once — the consumer
+supplies only its schema and merge policy.
+[`adoption.test.ts`](../packages/fsqlite/test/adoption.test.ts) runs the same schema and
+policy through the engine (last-writer-wins refetch, deduplicated union edge,
+strict-default quarantine), so the example can never drift.
 
 ## Validation Posture and Known Gaps
 
@@ -277,7 +277,7 @@ The two most important honesty points: the real cross-host NFS/SMB gate is still
 store’s commit point is publication — an accepted `write()` is not power-loss durable
 until a reconcile publishes it (format spec §10). All deferred validation and evolution
 work is mapped in the
-[post-alpha roadmap](../../../docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md)
+[post-alpha roadmap](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md)
 and its dedicated post-alpha plan.
 
 <!-- This document follows common-doc-guidelines.md.

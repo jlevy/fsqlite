@@ -5,9 +5,8 @@ transaction-envelope writers, and atomic filesystem publication with no database
 
 The published package and canonical usage guide live in
 [`packages/fsqlite`](packages/fsqlite/README.md).
-The repository also contains the [format specification](docs/fsql-format-spec.md),
-[design](docs/fsqlite-design.md), [QA runbook](docs/qa-runbook.md), and
-[roadmap](docs/roadmap.md).
+The [documentation map](docs/README.md) links the format specification, design,
+technical research, QA runbook, roadmap, and project plans.
 Release maintainers should follow the [release runbook](docs/releasing.md).
 
 ```bash

@@ -410,6 +410,8 @@ Goal: a stranger can find, understand, install, and use this.
 - [x] (`fsq-xkb7`) Write `docs/roadmap.md` from the mined open items, with no inherited
   tracker IDs
 - [x] (`fsq-5jcy`) Wire a doc-claim drift guard so test counts in prose cannot rot again
+- [x] (`fsq-s3sf`) Audit the complete design and research documentation set, publish a
+  standalone documentation map, and guard local links and machine-local paths
 - [x] (`fsq-97v8`) Tag-triggered publish workflow with npm provenance
 - [x] (`fsq-6vfa`) Document the owner-authenticated first-publish bootstrap and
   transition to npm trusted publishing in `docs/releasing.md`

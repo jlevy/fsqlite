@@ -1,9 +1,10 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { dirname, extname, join, resolve } from 'node:path'
+import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(packageDir, '../..')
+const realRepoDir = realpathSync(repoDir)
 
 /** @param {string} dir @param {(path: string) => boolean} accept @returns {string[]} */
 function filesBelow(dir, accept) {
@@ -25,6 +26,85 @@ function filesBelow(dir, accept) {
 const goldenPath = join(packageDir, 'test/cli-golden/cli.tryscript.md')
 const goldenCases = readFileSync(goldenPath, 'utf8').match(/^\$ /gm)?.length ?? 0
 
+/** @param {string} source */
+function withoutMarkdownCode(source) {
+  let fence
+  const prose = []
+  for (const line of source.split('\n')) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1]
+    if (fence === undefined && marker !== undefined) {
+      fence = marker
+      continue
+    }
+    if (
+      fence !== undefined &&
+      marker !== undefined &&
+      marker.startsWith(fence.slice(0, 1)) &&
+      marker.length >= fence.length
+    ) {
+      fence = undefined
+      continue
+    }
+    if (fence === undefined) {
+      prose.push(line)
+    }
+  }
+  return prose.join('\n').replace(/`+[^`\n]*`+/gu, '')
+}
+
+/** @param {string} path */
+function isInsideRepo(path) {
+  const repoRelative = relative(realRepoDir, path)
+  return (
+    repoRelative === '' ||
+    (repoRelative !== '..' && !repoRelative.startsWith(`..${sep}`) && !isAbsolute(repoRelative))
+  )
+}
+
+/** @param {string} path @param {string} source */
+function checkMarkdownSafety(path, source) {
+  if (/file:\/\//iu.test(source) || /\/(?:Users|home)\/[\w.-]+\//u.test(source)) {
+    throw new Error(`${path}: documentation contains a machine-local path`)
+  }
+
+  const prose = withoutMarkdownCode(source)
+  for (const match of prose.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/gu)) {
+    let target = match[1]?.trim()
+    if (target === undefined || target === '' || target.startsWith('#')) {
+      continue
+    }
+    if (target.startsWith('<') && target.endsWith('>')) {
+      target = target.slice(1, -1)
+    }
+    if (/^[a-z][a-z\d+.-]*:/iu.test(target)) {
+      continue
+    }
+
+    const relativePath = target.split('#', 1)[0]?.split('?', 1)[0]
+    if (relativePath === undefined || relativePath === '') {
+      continue
+    }
+    if (relativePath.startsWith('/')) {
+      throw new Error(`${path}: documentation link uses an absolute local path: ${target}`)
+    }
+
+    const resolved = resolve(dirname(path), decodeURIComponent(relativePath))
+    if (!isInsideRepo(resolved)) {
+      throw new Error(`${path}: documentation link escapes the repository: ${target}`)
+    }
+    let realTarget
+    try {
+      statSync(resolved)
+      realTarget = realpathSync(resolved)
+    } catch {
+      throw new Error(`${path}: broken local documentation link: ${target}`)
+    }
+    if (!isInsideRepo(realTarget)) {
+      throw new Error(`${path}: documentation link resolves outside the repository: ${target}`)
+    }
+  }
+}
+
 /** @param {number} nodeTests */
 export function checkDocClaims(nodeTests) {
   const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
@@ -44,6 +124,7 @@ export function checkDocClaims(nodeTests) {
   let checked = 0
   for (const path of markdown) {
     const source = readFileSync(path, 'utf8')
+    checkMarkdownSafety(path, source)
     for (const claim of claimPatterns) {
       for (const pattern of claim.patterns) {
         for (const match of source.matchAll(pattern)) {
