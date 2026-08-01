@@ -34,8 +34,8 @@ switch( res ){
 }
 ```
 
-Confirms: **ABORT produces `SQLITE_ABORT`** (then node maps it to a `false` return:
-A-node1); a **REPLACE where SQLite does not allow it produces `SQLITE_MISUSE`**; and an
+Confirms: **ABORT produces `SQLITE_ABORT`** (then node maps it to a `false` return; see
+B2); a **REPLACE where SQLite does not allow it produces `SQLITE_MISUSE`**; and an
 **invalid or `undefined` return produces `SQLITE_MISUSE`**. The latter explains the
 empirical result that returning `undefined` throws.
 Header prose: `ext/session/sqlite3session.h:1454-1481`.
@@ -66,7 +66,7 @@ does not expose it (see B3).
 > memory, **SQLite does not support journal_mode=WAL on a network filesystem.** All
 > users of the database must be able to [share memory].”
 
-This is the source confirmation that WAL is local-disk-only.
+This confirms that WAL does not support network filesystems.
 It supports the design rule that writers and reconciliation never rely on WAL on shared
 storage.
 
@@ -158,7 +158,7 @@ finds no results. The JavaScript surface includes `prepare`, `transaction`, `pra
 
 better-sqlite3 compiles the standard SQLite amalgamation (`deps/sqlite3/sqlite3.c`,
 3.53.2). Its compile flags are feature toggles that do not alter the page format.
-A file written by better-sqlite3 is an **identical `SQLite format 3` file** readable by
+A file written by better-sqlite3 is a standard **`SQLite format 3` file** readable by
 `node:sqlite`, the `sqlite3` CLI, Python, Rust, and other SQLite bindings.
 `SQLITE_USE_URI=0` means `nolock` and `immutable` URI options are off by default there,
 unlike in `node:sqlite`.

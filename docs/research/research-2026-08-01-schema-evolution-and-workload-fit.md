@@ -25,8 +25,9 @@ It does narrow the useful operating envelope:
 - Snapshot capture and publication have a full-copy floor in snapshot bytes.
   The separate effect of table count was not isolated, and changed-row count does not
   remove that floor.
-- Lock-free capture removes writer serialization, but concurrent agents still share disk
-  bandwidth and create one working copy per in-flight write.
+- Capture without the publish lease removes fsqlite’s writer-serialization step, but
+  concurrent agents still share disk bandwidth and create one working copy per in-flight
+  write.
 - Reconciliation adds costs that grow with pending envelope count, envelope bytes, and
   the lifetime `applied_tx` ledger.
 - Multi-host shared-filesystem behavior remains a design target, not a validated alpha
@@ -333,7 +334,7 @@ not remove the per-capture copy.
 Reconciling after every small write pays both full-copy paths and should be reserved for
 workloads that need that visibility or durability boundary.
 
-Concurrent capture is lock-free, but it is not free.
+Concurrent capture does not take the publish lease, but it is not free.
 Peak transient storage can approach `W * B`, plus a reconcile build and retained
 snapshots. Concurrent writers also compete for the same storage bandwidth.
 A low-contention lock is not the limiting resource in that case; copy bandwidth and free
