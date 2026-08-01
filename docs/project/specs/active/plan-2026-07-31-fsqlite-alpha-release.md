@@ -508,6 +508,10 @@ Goal: a stranger can find, understand, install, and use this.
     plan boundary
   - [x] (`fsq-er9w`) Align the dated background research with the current bounded
     capture, durability, and adoption language
+- [x] (`fsq-g34y`) Address the late closing-hook review follow-ups
+  - [x] (`fsq-jgnl`) Recognize literal, unquoted `eval git push` without interpreting
+    quoted or dynamically constructed programs
+  - [x] (`fsq-vfb2`) Keep closing-hook tests independent of machine-local CLI installs
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 

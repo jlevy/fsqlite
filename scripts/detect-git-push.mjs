@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 const SINGLE_QUOTE = String.fromCharCode(39)
 const COMMAND_SEPARATORS = new Set(['\n', ';', '&', '(', ')', '{', '|', '}'])
-const COMMAND_DECORATORS = new Set(['command', 'env', 'exec', 'nohup', 'sudo', 'time'])
+const COMMAND_DECORATORS = new Set(['command', 'env', 'eval', 'exec', 'nohup', 'sudo', 'time'])
 const COMMAND_PREFIX_KEYWORDS = new Set([
   '!',
   'coproc',

@@ -101,6 +101,7 @@ const closingHookCommands = [
 const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-closing-hook-'))
 const closingMarker = join(hookTestDir, 'closing-ran')
 const npxMarker = join(hookTestDir, 'npx-ran')
+const shadowMarker = join(hookTestDir, 'shadow-closing-ran')
 try {
   writeFileSync(join(hookTestDir, 'jq'), '#!/bin/bash\nexit 1\n', { mode: EXECUTABLE_MODE })
   writeFileSync(
@@ -113,13 +114,22 @@ try {
     '#!/bin/bash\nprintf "" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
     { mode: EXECUTABLE_MODE },
   )
+  const shadowBin = join(hookTestDir, '.local', 'bin')
+  mkdirSync(shadowBin, { recursive: true })
+  writeFileSync(
+    join(shadowBin, 'tbd'),
+    '#!/bin/bash\nprintf "" > "$TBD_HOOK_TEST_SHADOW_MARKER"\nexit 0\n',
+    { mode: EXECUTABLE_MODE },
+  )
   const hookEnv = {
     ...process.env,
     CLAUDE_PROJECT_DIR: repoRoot,
     HOME: hookTestDir,
     PATH: `${hookTestDir}:${process.env.PATH ?? ''}`,
+    TBD_HOOK_PATH_PREFIX: '',
     TBD_HOOK_TEST_MARKER: closingMarker,
     TBD_HOOK_TEST_NPX_MARKER: npxMarker,
+    TBD_HOOK_TEST_SHADOW_MARKER: shadowMarker,
   }
   const noCliBin = join(hookTestDir, 'no-cli-bin')
   mkdirSync(noCliBin)
@@ -178,6 +188,7 @@ try {
 
   for (const hook of closingHookCommands) {
     rmSync(closingMarker, { force: true })
+    rmSync(shadowMarker, { force: true })
     const withoutJq = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
       encoding: 'utf8',
@@ -194,6 +205,11 @@ try {
       existsSync(closingMarker),
       true,
       `${hook.name} closing hook skipped tbd closing when jq was unavailable`,
+    )
+    assert.equal(
+      existsSync(shadowMarker),
+      false,
+      `${hook.name} closing hook selected a machine-local tbd ahead of the test shim`,
     )
 
     const malformed = spawnSync(hook.command, {
@@ -286,6 +302,7 @@ try {
       "GIT_SSH_COMMAND='ssh -i /tmp/key' git push origin HEAD",
       'env GIT_CONFIG_COUNT=1 git push origin HEAD',
       'command git push origin HEAD',
+      'eval git push origin HEAD',
       'if git commit -m test; then git push origin HEAD; fi',
       'for i in 1; do git push origin HEAD; done',
       '(git push origin HEAD)',
@@ -320,6 +337,8 @@ try {
       'git -h push',
       'if echo git push; then :; fi',
       'for git in push; do :; done',
+      'eval echo git push',
+      'eval "git push origin HEAD"',
       'printf "git push\\n"',
     ]
     for (const command of nonPushForms) {
