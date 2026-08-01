@@ -405,6 +405,8 @@ Goal: a stranger can find, understand, install, and use this.
 - [x] (`fsq-97v8`) Tag-triggered publish workflow with npm provenance
 - [x] (`fsq-6vfa`) Document the owner-authenticated first-publish bootstrap and
   transition to npm trusted publishing in `docs/releasing.md`
+- [x] (`fsq-h8wt`) Make the tag workflow verify the manually published bootstrap version
+  rather than attempting to publish the immutable version twice
 - [ ] (`fsq-cggp`) Publish `0.1.0-alpha.1` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 

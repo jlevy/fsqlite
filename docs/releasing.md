@@ -22,8 +22,9 @@ with npm, and then:
    `0.1.0-alpha.1` has the `alpha` dist-tag, and that a fresh consumer install succeeds.
 5. Create and push the matching `v0.1.0-alpha.1` tag only after the initial package is
    known to be correct.
-   Disable or skip the tag workflow for this bootstrap publish so it cannot attempt to
-   publish the same version twice.
+   The tag workflow recognizes this one bootstrap version and verifies its registry
+   version, `alpha` dist-tag, library import, and CLI instead of attempting to publish
+   the immutable version twice.
 
 Do not create the release tag until npm identity, package name, and the reviewed commit
 are final. A tag is an immutable release assertion, not a staging mechanism.
@@ -40,7 +41,8 @@ After the package exists, configure its npm trusted publisher for:
 Later releases use the tag-triggered `.github/workflows/publish.yml` workflow.
 It installs from the committed lockfile, runs the complete verification gate, confirms
 the tag matches the package version, and publishes with npm’s GitHub Actions OIDC
-trusted publishing. No long-lived npm token is stored in GitHub.
+trusted publishing. The explicit `v0.1.0-alpha.1` branch is the only manual bootstrap
+exception. No long-lived npm token is stored in GitHub.
 
 For a later alpha release:
 

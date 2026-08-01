@@ -1,7 +1,8 @@
 // Clean-project package smoke test: pack the built tarball, install it into a throwaway
 // project with no dev tooling, and exercise the published contract -- the library import
 // (`fsqlite`) and the CLI bin (`fsqlite`). This is the only test that proves what npm
-// consumers actually get, independent of the source checkout. Requires `dist/` to be built.
+// consumers actually get, independent of the source checkout. It normally requires
+// `dist/`; the release workflow can instead verify an exact registry package spec.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -10,10 +11,13 @@ import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 
 const pkgDir = fileURLToPath(new URL('..', import.meta.url))
-assert.ok(
-  existsSync(join(pkgDir, 'dist', 'index.mjs')),
-  'dist/ is missing -- run `npm run build` first',
-)
+const registryPackage = process.env.FSQLITE_SMOKE_PACKAGE
+if (registryPackage === undefined) {
+  assert.ok(
+    existsSync(join(pkgDir, 'dist', 'index.mjs')),
+    'dist/ is missing -- run `npm run build` first',
+  )
+}
 
 /** @param {string} cmd @param {string[]} args @param {{ cwd?: string, env?: NodeJS.ProcessEnv }} [opts] */
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', ...opts })
@@ -61,9 +65,14 @@ function publishedVersion(output) {
   return value.current
 }
 
-// Pack the package exactly as it would publish (only the `files` allowlist ships).
-const tarball = packedFilename(run('npm', ['pack', '--json'], { cwd: pkgDir, env: npmEnv }))
-const tarballPath = join(pkgDir, tarball)
+// By default, pack exactly what would publish. The release workflow can instead pass
+// an exact registry spec to verify the first owner-authenticated publication.
+const tarball =
+  registryPackage === undefined
+    ? packedFilename(run('npm', ['pack', '--json'], { cwd: pkgDir, env: npmEnv }))
+    : undefined
+const packageSpec = tarball === undefined ? registryPackage : join(pkgDir, tarball)
+assert.ok(packageSpec, 'package smoke test requires a tarball or registry package spec')
 try {
   const proj = mkdtempSync(join(tmpdir(), 'fsqlite-smoke-'))
   try {
@@ -72,7 +81,7 @@ try {
       join(proj, 'package.json'),
       JSON.stringify({ name: 'smoke', private: true, type: 'module' }),
     )
-    run('npm', ['install', '--no-audit', '--no-fund', '--no-save', tarballPath], {
+    run('npm', ['install', '--no-audit', '--no-fund', '--no-save', packageSpec], {
       cwd: proj,
       env: npmEnv,
     })
@@ -115,5 +124,7 @@ try {
     rmSync(proj, { recursive: true, force: true })
   }
 } finally {
-  rmSync(tarballPath, { force: true })
+  if (tarball !== undefined) {
+    rmSync(join(pkgDir, tarball), { force: true })
+  }
 }

@@ -29,6 +29,16 @@ jobs:
       - name: Verify tag matches package version
         working-directory: packages/fsqlite
         run: test "${GITHUB_REF_NAME}" = "v$(node --print "require('./package.json').version")"
+      - name: Verify owner-authenticated bootstrap publication
+        if: github.ref_name == 'v0.1.0-alpha.1'
+        working-directory: packages/fsqlite
+        env:
+          FSQLITE_SMOKE_PACKAGE: fsqlite@0.1.0-alpha.1
+        run: |
+          test "$(npm view fsqlite@0.1.0-alpha.1 version)" = "0.1.0-alpha.1"
+          test "$(npm view fsqlite dist-tags.alpha)" = "0.1.0-alpha.1"
+          node scripts/package-smoke.mjs
       - name: Publish alpha to npm with trusted publishing
+        if: github.ref_name != 'v0.1.0-alpha.1'
         working-directory: packages/fsqlite
         run: npm publish --access public --tag alpha
