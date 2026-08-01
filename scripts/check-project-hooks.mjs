@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -73,11 +81,17 @@ const closingHookCommands = [
 ]
 const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-closing-hook-'))
 const closingMarker = join(hookTestDir, 'closing-ran')
+const npxMarker = join(hookTestDir, 'npx-ran')
 try {
   writeFileSync(join(hookTestDir, 'jq'), '#!/bin/bash\nexit 1\n', { mode: EXECUTABLE_MODE })
   writeFileSync(
     join(hookTestDir, 'tbd'),
-    '#!/bin/bash\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit 0\nfi\nexit 1\n',
+    '#!/bin/bash\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit "${TBD_HOOK_TEST_TBD_STATUS:-0}"\nfi\nexit 1\n',
+    { mode: EXECUTABLE_MODE },
+  )
+  writeFileSync(
+    join(hookTestDir, 'npx'),
+    '#!/bin/bash\nprintf "" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
     { mode: EXECUTABLE_MODE },
   )
   const hookEnv = {
@@ -86,6 +100,44 @@ try {
     HOME: hookTestDir,
     PATH: `${hookTestDir}:${process.env.PATH ?? ''}`,
     TBD_HOOK_TEST_MARKER: closingMarker,
+    TBD_HOOK_TEST_NPX_MARKER: npxMarker,
+  }
+  const noCliBin = join(hookTestDir, 'no-cli-bin')
+  mkdirSync(noCliBin)
+  writeFileSync(join(noCliBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
+    mode: EXECUTABLE_MODE,
+  })
+  writeFileSync(
+    join(noCliBin, 'git'),
+    '#!/bin/bash\nif [[ "$1" == "rev-parse" && "$2" == "--show-toplevel" ]]; then\n  printf "%s\\n" "$TBD_HOOK_TEST_REPO_ROOT"\n  exit 0\nfi\nexit 1\n',
+    { mode: EXECUTABLE_MODE },
+  )
+  symlinkSync(process.execPath, join(noCliBin, 'node'))
+  const noCliEnv = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: repoRoot,
+    HOME: hookTestDir,
+    PATH: noCliBin,
+    TBD_HOOK_PATH_PREFIX: '',
+    TBD_HOOK_TEST_REPO_ROOT: repoRoot,
+  }
+  const npxOnlyBin = join(hookTestDir, 'npx-only-bin')
+  mkdirSync(npxOnlyBin)
+  writeFileSync(join(npxOnlyBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
+    mode: EXECUTABLE_MODE,
+  })
+  writeFileSync(
+    join(npxOnlyBin, 'git'),
+    '#!/bin/bash\nif [[ "$1" == "rev-parse" && "$2" == "--show-toplevel" ]]; then\n  printf "%s\\n" "$TBD_HOOK_TEST_REPO_ROOT"\n  exit 0\nfi\nexit 1\n',
+    { mode: EXECUTABLE_MODE },
+  )
+  symlinkSync(process.execPath, join(npxOnlyBin, 'node'))
+  symlinkSync(join(hookTestDir, 'npx'), join(npxOnlyBin, 'npx'))
+  const npxOnlyEnv = {
+    ...noCliEnv,
+    PATH: npxOnlyBin,
+    TBD_HOOK_TEST_NPX_MARKER: npxMarker,
+    TBD_HOOK_TEST_NPX_STATUS: '37',
   }
 
   for (const hook of closingHookCommands) {
@@ -120,6 +172,56 @@ try {
       malformed.stderr,
       /invalid hook JSON/i,
       `${hook.name} closing hook did not explain its malformed input`,
+    )
+
+    rmSync(npxMarker, { force: true })
+    const failingTbd = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: { ...hookEnv, TBD_HOOK_TEST_TBD_STATUS: '23' },
+      input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+      shell: true,
+    })
+    assert.equal(failingTbd.status, 23, `${hook.name} closing hook hid a tbd failure`)
+    assert.equal(
+      existsSync(npxMarker),
+      false,
+      `${hook.name} closing hook fell through to npx after a tbd failure`,
+    )
+
+    rmSync(npxMarker, { force: true })
+    const failingNpx = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: npxOnlyEnv,
+      input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+      shell: true,
+    })
+    assert.equal(failingNpx.status, 37, `${hook.name} closing hook hid an npx failure`)
+    assert.equal(
+      existsSync(npxMarker),
+      true,
+      `${hook.name} closing hook did not invoke its npx fallback`,
+    )
+
+    const withoutCli = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: noCliEnv,
+      input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+      shell: true,
+    })
+    assert.notEqual(withoutCli.status, 0, `${hook.name} closing hook accepted a missing tbd CLI`)
+    const withoutCliOutput = `${withoutCli.stdout}\n${withoutCli.stderr}`
+    assert.match(
+      withoutCliOutput,
+      /tbd CLI not found.*npx is unavailable/is,
+      `${hook.name} closing hook did not explain the missing CLI`,
+    )
+    assert.match(
+      withoutCliOutput,
+      /npm install -g get-tbd@0\.4\.2/,
+      `${hook.name} closing hook did not explain how to install the missing CLI`,
     )
   }
 } finally {
