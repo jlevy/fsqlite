@@ -12,7 +12,7 @@ related:
 ---
 # Research: Portable, Server-Free, Concurrent SQLite for Local Applications
 
-**Date:** 2026-06-06 (last updated 2026-07-31)
+**Date:** 2026-06-06 (last updated 2026-08-01)
 
 **Author:** Joshua Levy, with LLM assistance
 
@@ -22,7 +22,10 @@ The current implementation and `f1.0` decisions are governed by the
 [`fsql-format-spec.md`](../fsql-format-spec.md), and the
 [`QA runbook`](../qa-runbook.md).
 This report preserves the evidence and alternatives; it does not override those current
-documents.
+documents. The focused
+[schema and workload assessment](research-2026-08-01-schema-evolution-and-workload-fit.md)
+contains the current ordinary-SQLite comparison, schema-maintenance procedure,
+measurements, severity, and adoption boundary.
 
 ## Overview
 
@@ -31,7 +34,8 @@ A domain-agnostic reference that asks:
 > How can a **SQLite database** support safe, convenient **concurrent** use from **local
 > applications**, with **no database server**, on local storage and capability-validated
 > shared filesystems, while keeping the file a **portable, durable, tool-compatible
-> artifact** and never losing more than the current transaction?
+> artifact**, never damaging a previously published state, and making any unpublished
+> loss boundary explicit?
 
 NFS and SMB are targets that require mount-specific evidence.
 Consumer synchronization folders have a different replication model and are not assumed
@@ -50,12 +54,18 @@ It ends with a concrete, test-validated design for closing it: **`fsqlite`**
 artifact), and a **Node reference implementation** (library and CLI) that serves as its
 first proving ground.
 
-`fsqlite` supports **many concurrent writers without letting two of them touch one
-*live* SQLite file.** Each writer records its change as its own uniquely-named changeset
-*file*; published snapshots are **immutable**; the only serialized step is an
-out-of-band merge.
-So the familiar maxim *“one SQLite file means one writer”* is true and
-**left untouched** here: the protocol never shares a live file.
+Ordinary local SQLite remains the simpler and more efficient default when writers can
+take turns on one reliable local filesystem.
+The design below is justified only when independent file-native capture and immutable
+publication solve a requirement that ordinary SQLite does not.
+
+`fsqlite` supports **many concurrent writer captures without letting two of them touch
+one *live* SQLite file.** Each writer records its change as its own uniquely-named
+changeset *file*; published snapshots are **immutable**; the only serialized step is an
+out-of-band merge. Capture remains bounded by snapshot-copy bandwidth, transient disk
+capacity, write rate, and the serialized publication step.
+So the familiar maxim *“one SQLite file means one writer”* is true and **left
+untouched** here: the protocol never shares a live file.
 The flip side, equally important and stated up front: those guarantees hold **only for
 cooperative writers** that go through the protocol; a rogue process writing directly
 into the store can still corrupt it, as it could corrupt any SQLite file.
@@ -688,7 +698,7 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
       manifest.json               #   format/store identity, writer/base/schema metadata,
                                   #   changeset digest and provenance
       changeset.bin               #   the SQLite changeset blob
-      COMMITTED                   #   marker written LAST → the tx becomes visible atomically
+      COMMITTED                   #   written LAST: envelope becomes eligible for reconcile
     applied/<txid>.txn/           # archived after folding into a published snapshot
     quarantine/<txid>.txn/        # corrupt / schema-mismatch / strict-conflict (evidence kept)
   leases/<token>.lease            # read-leases pinning a version against GC
@@ -853,18 +863,20 @@ WAL provides serializable isolation with one writer and local-disk portability.
 **The snapshot-publish design, stated precisely.** A “write” has two phases with very
 different concurrency:
 
-- **Reads: unlimited and never blocked.** Every reader opens an immutable published
-  snapshot (optionally `immutable=1`), so any number of readers across any
-  processes/hosts proceed in parallel and are never blocked by writers, by reconcile, or
-  by each other. Isolation is **snapshot isolation at the granularity of a published
-  version**: a reader sees a single consistent committed snapshot N. (Same guarantee
-  class as WAL readers, and strictly safer because readers never touch a live/mutating
-  file.) Unlike WAL, a committed write is **not visible until `reconcile` publishes** it
-  (a visibility lag, not an isolation violation).
-- **Write *capture*: unlimited and lock-free.** Any number of writers, in any processes,
-  on any hosts, record their changes and drop envelopes **simultaneously with no write
-  lock**. This is *more* write concurrency than WAL, not less: there is **no global
-  write lock on the application path.**
+- **Reads use independent immutable snapshots.** A reader opens one published snapshot
+  (optionally `immutable=1`), so fsqlite writers and reconciliation do not take a live
+  database lock that blocks it.
+  Isolation is **snapshot isolation at the granularity of a published version**: a
+  reader sees one consistent snapshot N. This resembles a WAL reader’s stable
+  transaction view, but it depends on different filesystem primitives and is not
+  categorically safer.
+  Resource limits still bound reader count, and cross-host operation remains an unproven
+  alpha target.
+- **Write capture can overlap without the publish lease.** Independent processes record
+  envelopes simultaneously, subject to snapshot-copy bandwidth, free space, and process
+  limits. A successful capture is not yet visible.
+  Reconcile may quarantine it or apply it and publish a new snapshot.
+  Publication remains serialized.
 - **The only serialized step is the out-of-band merge** (`reconcile`), fenced by the
   `mkdir` lease and OCC on the pointer.
   It is brief, runs on its own cadence, and **writers and readers never block on it.**
@@ -947,17 +959,21 @@ Granular retry is available in three escalating forms:
    enhancement that would let even `strict` conflicts auto-merge without re-running
    `fn`.
 
-**Could writes be even more parallel: independent “sections”?** The merge is already not
-the write bottleneck (writes are lock-free; the merge is a small, out-of-band pointer
-swap). If it ever were, the store can be **sharded into independent stores** (e.g. one
-per table-group), each with its own `current` pointer and reconcile: giving fully
-independent publish lanes: at the cost of no cross-shard atomic snapshot.
-This is a real option but unnecessary unless profiling shows merge contention; it is
-listed as a possible extension, not a v1 need.
+**Could writes be even more parallel: independent “sections”?** SnapshotStore processes
+can capture envelopes without queuing on one SQLite writer lock, but reconciliation is
+still a serialized full-head build, validation, sync, and pointer publication.
+If that publication lane becomes a measured bottleneck, the application can shard truly
+independent data into separate stores, such as one per table group.
+Each store then has its own `current` pointer and reconcile lane, at the cost of having
+no atomic snapshot across shards.
+Sharding is an application tradeoff, not a default requirement or proof that every
+workload benefits.
 
 **Summary of the trade.** Compared with WAL, immutable snapshots let readers proceed
-without touching a live file, and transaction envelopes accept many concurrent writers
-instead of one global writer.
+without touching a live file, and transaction envelopes let several processes capture
+independently instead of queuing on one live SQLite writer lock.
+Publication remains serialized and pays the full-copy costs described in the current
+workload assessment.
 The design targets capability-validated shared filesystems and supports pinned immutable
 snapshot copies. Real multi-host NFS and SMB proof is still pending.
 In exchange, it provides weaker isolation: row-level merge with write-set conflict
@@ -999,14 +1015,14 @@ the **isolation** each provides (see Finding K for the precise definitions and c
 
 | Approach | Read concurrency | Write concurrency | Conflict / lock granularity | Isolation | Server-free | Shared-filesystem fit | Immutable snapshot export |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Single connection, rollback journal (default) | readers exclude the writer | **1 writer** | whole-DB | serializable | ✓ | ✗ (locks) | ✗ |
+| Rollback journal (default) | many readers; a writer briefly excludes readers while writing the database | **1 writer** | whole-DB | serializable | ✓ | conditional on reliable SQLite locks and sync | ✗ |
 | **WAL** with `busy_timeout` | **many, lock-free** (snapshot) | **1 writer** (global) | **whole-DB write lock** | writer serializable; readers snapshot | ✓ | ✗ (`-shm`) | ✗ |
 | libSQL `BEGIN CONCURRENT` | many | **many** (commit-time check) | **page-level** | snapshot isolation and OCC | ✓ | ✗ (`-shm`) | ✗ |
 | Turso/limbo (`journal_mode=mvcc`) | many (MVCC snapshot) | **many** (commit-time check) | **row-level** | snapshot isolation and row OCC | ✓ (embedded) | ✗ (in-process/local; in-memory versions) | ✗ |
-| Wrapper `mkdir`-lock with rollback (≈ **DirectStore**) | **many** (immutable snapshots) | **1 writer** (lease) | whole-DB | each publish atomic | ✓ | conditional on validated primitives | ✓ |
+| Wrapper `mkdir`-lock with rollback (≈ **DirectStore**) | **many** (immutable snapshots) | **1 writer** (lease) | whole-DB | serializable for a DirectStore-only stream | ✓ | local recommended; conditional on validated primitives | ✓ |
 | Elected coordinator (LiteFS) | many | **1 primary** (replicas read-only) | engine-level | serializable | ✗ (FUSE daemon and lease) | n/a: own FUSE FS and replication | n/a (replicated) |
 | Raft server (rqlite/dqlite) | many | many | engine-level | serializable | ✗ (cluster) | n/a: replicates over the network | n/a (replicated) |
-| **Snapshot-publish and changeset log** (this doc) | **unlimited, lock-free** (snapshot per version) | **unlimited at capture** and one out-of-band merge | **per-row (per-PK)**, per-table policy | row-level write-set merge and DATA-conflict detection (not serializable) | **✓** | conditional; real multi-host gate pending | **✓** (pinned snapshot) |
+| **Snapshot-publish and changeset log** (this doc) | independent immutable snapshots, capacity-bounded | independent capture, capacity-bounded; one out-of-band merge | **per-row (per-PK)**, per-table policy | row-level write-set merge and DATA-conflict detection (not serializable) | **✓** | conditional; real multi-host gate pending | **✓** (pinned snapshot) |
 
 A fairness note on the “Shared-filesystem fit” column: LiteFS and rqlite/dqlite are not
 “unsafe on NFS”; they **do not use a shared filesystem at all.** LiteFS gives each node
@@ -1198,8 +1214,9 @@ The boundary is explicit:
 **Validated guarantees:**
 
 - the at-rest artifact stays an **ordinary SQLite file** any tool/language can read;
-- **writers are serialized at the merge**, and a committed write becomes visible after
-  `reconcile` (snapshot isolation at published-version granularity for readers);
+- **publication is serialized at the merge**, and an envelope that reconcile
+  successfully applies becomes visible and power-loss durable when the new snapshot is
+  published (snapshot isolation at published-version granularity for readers);
 - **bounded loss**: a crash or interrupted protocol operation loses at most the
   unpublished tail, never a previously published snapshot; a pinned immutable snapshot
   is safe to copy (R-DURABLE);

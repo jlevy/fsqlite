@@ -43,6 +43,10 @@ remain disclosed. The system constraints and operating boundaries are in
   They preserve `store_id`, validate the destination, and leave the source untouched
   until cutover.
 - Caller-schema migration and fsqlite directory-format migration are separate protocols.
+- Until a caller-schema migration protocol exists, the safe procedure is to quiesce and
+  drain the old store, validate and seal it, build a separate replacement under the new
+  schema, validate it, and move every process in one application-managed cutover.
+  The replacement is a new logical store with a new `store_id`.
 - SnapshotStore callbacks run against a full copy of the published head.
   The unsafe schema-only shortcut is not part of `f1.0`.
 - Write callbacks cannot mutate persistent or temporary schema, identity, schema
@@ -123,11 +127,14 @@ remain disclosed. The system constraints and operating boundaries are in
 
 ### Schema, Isolation, and Scale Evolution
 
-- Specify deterministic caller-schema migration across immutable snapshot generations,
-  with writer admission and quarantine rules for participants on the wrong schema.
+- Specify and implement deterministic caller-schema migration across immutable snapshot
+  generations, with writer admission and quarantine rules for participants on the wrong
+  schema. The supported maintenance workflow must improve on, or intentionally retain,
+  the application-managed replacement fallback.
 - Define quiescence or fencing, handling of old committed envelopes, deterministic DDL
-  and data transformation, constraint validation, conflict-policy transition, atomic
-  cutover, interruption recovery, rollback, and old-writer behavior.
+  and data transformation using SQLite’s documented schema-change procedures, constraint
+  validation, conflict-policy transition, atomic cutover, interruption recovery,
+  rollback, and old-writer behavior.
 - Design declared read-set validation for point-key invariants.
 - Require version-stamped guard rows or DirectStore for range, predicate, and aggregate
   invariants that cannot be made safe by a declared point-key read set.
@@ -179,6 +186,14 @@ remain disclosed. The system constraints and operating boundaries are in
   boundary.
 - Performance work records snapshot bytes, pending count and bytes, ledger count,
   retained bytes, writer concurrency, and reconcile cadence with every result.
+
+## Stable-Release Outcomes
+
+Before 1.0, the project must have a settled public API, independent conformance fixtures
+and verifier, real cross-host filesystem evidence, explicit whole-format upgrade
+semantics, a supported caller-schema maintenance protocol, bounded or explicitly
+rollover-managed ledger growth, and validated publication on every claimed operating
+system.
 
 ## Non-Goals
 

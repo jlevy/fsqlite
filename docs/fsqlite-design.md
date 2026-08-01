@@ -11,19 +11,67 @@ The dated [research report](research/research-2026-06-06-portable-concurrent-sql
 records prior art, source analysis, and experiments, but does not define current
 behavior. The focused
 [schema evolution and workload assessment](research/research-2026-08-01-schema-evolution-and-workload-fit.md)
-calibrates the alpha against the complete PR review and current measurements.
+calibrates the alpha against the current implementation and measurements.
 
 ## The Problem
 
 SQLite is an excellent portable file format, but its live concurrency mechanisms assume
 one local filesystem.
-WAL mode uses a shared-memory file and does not support network filesystems.
+WAL mode allows readers alongside one active writer, but it uses shared memory and
+requires every participant to be on the same host.
 Rollback journaling relies on filesystem locks whose behavior varies across NFS, SMB,
 FUSE, and synchronized folders.
 
 A service can centralize the writer, but that changes the deployment model.
 fsqlite is for applications that need a plain SQLite artifact, direct in-process access,
 no required server, and multiple independent writers that may share a filesystem.
+
+## Start With Ordinary SQLite
+
+Ordinary SQLite is the default choice when processes can safely open one live database
+on a reliable local filesystem.
+It already provides serializable transactions by making writers take turns.
+WAL mode lets readers continue during the one active write.
+A small transaction normally updates only the affected database, journal, WAL, and index
+pages.
+
+fsqlite does not make one SQLite file accept several simultaneous writers.
+It moves the work to private copies.
+A `SnapshotStore` writer copies the published database, makes a normal SQLite
+transaction on that copy, and saves the resulting row changes in an envelope.
+Reconciliation later applies accepted envelopes to another private copy and atomically
+names that copy as the next published version.
+
+This different boundary is valuable when independent processes should not write one live
+database file, when immutable generations are useful recovery artifacts, or when a
+database service is unacceptable.
+It is the wrong trade when ordinary local SQLite already meets the need.
+
+| Property | Ordinary SQLite | `DirectStore` | `SnapshotStore` |
+| --- | --- | --- | --- |
+| Stored state | One mutable database plus journal or WAL files | Immutable SQLite generations plus an atomic pointer | The same generations and pointer, plus transaction envelopes |
+| Small-write cost | Usually proportional to changed pages and indexes | Copies, validates, and fsyncs the complete head | Copies the complete head for capture; reconcile copies and validates it again |
+| Writers | SQLite serializes them | fsqlite serializes the complete write and publication | Captures may overlap; reconciliation serializes publication |
+| Successful call | SQLite commit is the visibility and durability boundary, subject to its durability settings | `write()` has published the new snapshot | `write()` has accepted an envelope; reconcile either quarantines it or applies and publishes it durably |
+| Multi-writer isolation | Serializable because writes take turns | Serializable for a DirectStore-only writer stream | Deterministic write-set merge; not serializable and no general read-set validation |
+| Schema changes | Run as ordinary SQLite DDL under application coordination | Fixed schema per `f1.0` store epoch | The same fixed epoch; envelopes contain row changes, not DDL |
+| Best fit | Local data with writers that can queue | One application writer that needs immutable publication | Cooperative independent writers with compact state and delayed visibility |
+
+Every fsqlite snapshot remains an ordinary SQLite database and each build uses SQLite
+transactions and constraints.
+The store-level guarantee is nevertheless different.
+fsqlite adds immutable predecessors, fail-closed validation, and an atomic publication
+pointer, but it also adds a directory protocol and a later reconciliation boundary.
+It is not categorically safer or less safe than SQLite; it protects a different failure
+surface. On reliable local storage, ordinary SQLite has less protocol surface.
+On a shared filesystem, fsqlite avoids SQLite’s live-file lock protocol but is safe only
+when its own required filesystem primitives are correct and validated.
+
+SQLite’s official [isolation](https://sqlite.org/isolation.html),
+[WAL](https://sqlite.org/wal.html),
+[network filesystem](https://sqlite.org/useovernet.html), and
+[appropriate-use](https://sqlite.org/whentouse.html) documentation defines the ordinary
+SQLite baseline behind this comparison.
 
 ## Goals and Non-Goals
 
@@ -135,6 +183,39 @@ they capture, move, or publish work, even if a caller skipped `init()`. Change
 application schemas through a future explicit schema-migration protocol, not a version
 bump or write callback.
 
+### Schema Changes in Practice
+
+Ordinary SQLite supports several direct `ALTER TABLE` operations and documents a
+transactional create-copy-drop-rename procedure for more general changes.
+Those database-local steps remain useful, but they are not enough for SnapshotStore.
+SQLite session changesets describe row inserts, updates, and deletes against a
+compatible schema; they do not carry DDL or decide how old and new writers should
+overlap.
+
+The safe `f1.0` operating rule is therefore one exact schema for one store epoch.
+For a schema change today:
+
+1. Stop every writer and reconciler for the old store.
+2. Reconcile acceptable pending envelopes and deliberately resolve any quarantine.
+3. Validate and seal the final source snapshot.
+4. Build a separate replacement store with the new schema and copy or transform the
+   source data using ordinary SQLite migration practices.
+5. Validate the replacement, switch all processes to it, and retain the source for the
+   rollback window.
+
+That is an application-managed replacement with a new `store_id`, not a built-in fsqlite
+migration. The application owns cutover and must prevent old writers from continuing
+against the old path.
+Even an additive DDL change starts a new epoch because `f1.0` requires exact schema
+identity. Frequent rolling migrations with old and new writers active together are
+therefore outside the alpha’s useful envelope.
+
+The format specification’s
+[versioning and evolution section](fsql-format-spec.md#12-versioning-and-evolution) owns
+the requirements for a future migration protocol.
+SQLite’s [ALTER TABLE guidance](https://sqlite.org/lang_altertable.html) owns the
+underlying single-database DDL procedure.
+
 Conflict policy is deployment configuration rather than stamped store metadata.
 Every reconciler for one schema epoch must therefore use the same policy.
 A future schema migration must define how policy changes with tables and constraints.
@@ -150,12 +231,16 @@ Both strategies produce the same `f1.0` snapshots and pointer.
 
 ### SnapshotStore
 
-Use `SnapshotStore` for independent writers or a shared filesystem.
+Use `SnapshotStore` for independent writers sharing a store directory only after the
+filesystem meets the required capability checks.
+The alpha is validated for local POSIX multi-process use; real cross-host NFS/SMB
+validation remains pending.
 
 - Writer capture is lock-free.
 - Readers never block.
 - Writers need SQLite session support.
-- Writes become visible and power-loss durable when reconciled.
+- Reconcile either quarantines an envelope or applies it; applied envelopes become
+  visible and power-loss durable when the new snapshot is published.
 - Merge policy and nonserializable semantics are explicit.
 - Each write copies the published snapshot before recording its changeset.
 
@@ -193,20 +278,25 @@ Periodic heartbeat support for long synchronous critical sections remains tracke
 
 ### Snapshot size
 
-SnapshotStore writer capture is O(snapshot size) because it copies the current head.
+Ordinary SQLite usually writes changed pages for a small transaction.
+Both fsqlite write strategies instead copy the complete published head before changing
+it, so even a one-row fsqlite write has an O(snapshot size) I/O floor.
+SnapshotStore then pays another head-sized build during reconciliation.
+This is the main performance price of immutable publication in `f1.0`.
+
 Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2 ms
 for a 2.0 MiB head and 163.8 to 164.6 ms for a 21.7 MiB head.
-A separate reviewer run measured 11.8 ms at 2.0 MiB and 183.6 ms at 78.8 MiB. The
-algorithm has a linear copy floor, but the measurements do not establish a portable rate
-or justify a GiB extrapolation.
+The algorithm has a linear copy floor, but the measurements do not establish a portable
+rate or justify a GiB extrapolation.
 
-Table count is a secondary input, not the main scaling law.
 Session setup and callback-boundary checks visit schema objects, and every table
 consumes some SQLite pages, but data and indexes usually dominate snapshot bytes.
 Two local calibration runs from 1 to 250 empty caller tables increased median capture
 from about 2.5 ms to about 16.3 ms while the snapshot itself grew from 28 KiB to 2.0
-MiB. Intermediate and tail timings were noisy, so this does not establish an independent
-linear table-count law.
+MiB. Because the calibration changed table count and file bytes together, it does not
+isolate table count as the primary variable or establish an independent linear
+table-count law. Table count adds real schema work, but the severity must be measured
+with the target schema rather than inferred from a table total.
 
 Measure the target workload before adopting SnapshotStore for a large database.
 Safe copy-on-write, overlay, shared-base, and compaction designs remain on the roadmap.
@@ -226,6 +316,13 @@ Lock-free capture permits concurrent agents, but `W` in-flight writers can requi
 A reconcile build, retained predecessors, active read leases, envelopes, and quarantine
 evidence add to peak disk use.
 
+For example, one capture each from 12 agents against a 5 MiB head implies about 60 MiB
+of source-copy traffic and can transiently create about 60 MiB of writer copies before
+reconciliation and retention overhead.
+Repeating that round once a minute is a very different workload from repeating it once a
+second. Agent count is useful only together with head bytes, write frequency, and burst
+shape.
+
 Batching several envelopes into one reconcile amortizes the build copy, integrity gate,
 fsync, and pointer publication.
 It does not amortize each writer’s seed copy.
@@ -234,7 +331,9 @@ boundary is worth both full-copy paths.
 
 ### Workload Fit
 
-The natural alpha workload is a few to a few dozen cooperative local agents, short data
+Here, a local agent means an independently running process on one computer, not a thread
+inside one shared SQLite connection and not an unvalidated remote host.
+The natural alpha workload is a few to a few dozen such cooperative agents, short data
 callbacks, a single-digit-MiB head, occasional writes, and batched reconciliation.
 A handful of agents against a head in the low tens of MiB can fit when background
 latency is acceptable, but it requires workload-specific measurement.
@@ -248,6 +347,8 @@ high sustained transaction rates are poor default fits.
 This boundary does not make the architecture less useful in its intended lane.
 It makes fsqlite a coordination format for compact local state, not a replacement for a
 general database service.
+SnapshotStore removes the need to wait for a live SQLite writer lock during capture; it
+does not remove storage-bandwidth, capacity, or serialized-publication limits.
 
 ### Filesystems
 
@@ -317,8 +418,10 @@ Whole-format upgrades are explicit and side by side: pin and validate the source
 and validate a destination, preserve `store_id`, keep the source untouched, then let the
 operator cut over.
 Caller-schema migration is a separate protocol that must define writer
-admission, old pending-envelope handling, deterministic DDL and data transformation,
-constraint and policy validation, crash recovery, rollback, and cutover.
+admission, old pending-envelope handling, deterministic transformation, validation,
+recovery, rollback, and cutover.
+Section 12 of the format specification is the authoritative requirement list.
+Until that protocol exists, use the application-managed replacement workflow above.
 
 ## Trust Boundary
 

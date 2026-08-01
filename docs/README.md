@@ -10,8 +10,8 @@ basis, and track validation and future work.
 | Need | Document | Role |
 | --- | --- | --- |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
-| Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | System constraints, rationale, strategy choice, trust boundary, operating envelope, and tradeoffs |
-| Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Current design-review dispositions, measurements, severity, and adoption boundaries |
+| Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | First-principles comparison with ordinary SQLite, system constraints, strategy choice, trust boundary, and tradeoffs |
+| Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Official SQLite evidence, current measurements, mitigation guidance, severity, and adoption boundaries |
 | Review the evidence and alternatives | [Portable Concurrent SQLite Research](research/README.md) | Technical research on SQLite sessions, coordination, filesystems, bindings, prior art, and validation gaps |
 | Reproduce source-level SQLite and Node claims | [Upstream Source Confirmations](upstream-source-confirmations.md) | Pinned public sources and file-level evidence |
 | Verify the SQLite file identifier | [Application ID](application-id.md) | Selection and registry status of the fixed `FSQL` application ID |
@@ -31,7 +31,8 @@ The roadmap and project plans track work rather than define shipped guarantees.
 
 ## Project Records
 
-These standalone plans preserve decisions, acceptance criteria, and sequencing.
+These standalone public plans preserve fsqlite decisions, acceptance criteria, release
+gates, and sequencing.
 They are maintainer records, not additional design authorities.
 
 - [0.1.0 release plan](project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md)
@@ -41,8 +42,9 @@ They are maintainer records, not additional design authorities.
 
 This repository contains the reusable technical material needed to understand,
 implement, validate, and evolve fsqlite as a standalone project.
-It excludes consumer-specific schemas, deployment details, operational data, private
-links and paths, and internal planning that does not define fsqlite itself.
+It includes standalone project plans because they record public fsqlite decisions and
+release evidence. It excludes consumer-specific schemas, deployment details, operational
+data, private links and paths, and planning that depends on a private consumer context.
 
 Preliminary surveys and comparisons are retained only when they contribute technical
 evidence or rationale.

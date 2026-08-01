@@ -8,6 +8,11 @@ protocol is language-independent; the Node library and CLI are its first impleme
 A conforming implementation in any language can read, write, reconcile, or operate a
 store interoperably with every other conforming implementation.
 
+Any SQLite binding can open a published snapshot read-only.
+Participating as a SnapshotStore Writer or Reconciler additionally requires SQLite
+session and changeset support.
+A DirectStore Writer instead follows the serialized strategy in section 9.
+
 The key words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are to be interpreted as
 in RFC 2119. Requirements are stated against four conformance roles defined in §13:
 **Reader**, **Writer**, **Reconciler**, and **Operator tool**.
@@ -20,6 +25,11 @@ normative; protocol *invariants* are.
 * * *
 
 ## 1. Design Invariants
+
+In plain terms, a **snapshot** is one complete published SQLite database, an
+**envelope** is one captured proposal to change rows, and **reconciliation** folds
+committed envelopes into the next snapshot.
+The `current` file names the snapshot that readers should open.
 
 Everything in this format serves two correctness invariants:
 
@@ -41,13 +51,16 @@ Three structural properties deliver them:
    rename.
 2. **The pointer swap is the only commit.** A snapshot exists but is not *the store*
    until `current` names it, and `current` is replaced atomically.
-3. **The lock is not load-bearing for correctness.** The publish lock (§7) only reduces
-   wasted work. Exactly-once application is guaranteed by the `applied_tx` ledger plus
-   optimistic concurrency on `current` (§6). Lock holders can overlap after a stale-lock
-   break, but they cannot double-apply or corrupt.
+3. **Safety does not depend on exclusive lease ownership.** The publish lock (§7) only
+   reduces wasted work.
+   Exactly-once application is guaranteed by recording each applied transaction ID
+   inside its snapshot and by publishing only from the still-current base (§6). Lock
+   holders can overlap after a stale-lock break, but they cannot double-apply or corrupt
+   a conforming store.
 
-The on-disk artifact remains an ordinary SQLite file: any SQLite binding in any language
-can open a published snapshot with no fsqlite code at all.
+Each published snapshot remains an ordinary SQLite file: any SQLite binding in any
+language can open it with no fsqlite code at all.
+The store root is a directory and is not itself a SQLite database.
 
 ## 2. Store Layout
 
@@ -598,10 +611,17 @@ unpublished work. Repair also MUST NOT modify any snapshot in place.
   A future caller-schema migration protocol must define writer admission, treatment of
   old pending envelopes, deterministic DDL and data transformation, conflict-policy
   transition, validation, crash recovery, rollback, and cutover.
+  This exact-identity rule applies even when SQLite could structurally apply a changeset
+  after an additive schema change.
+  A session changeset contains row operations rather than DDL, so `f1.0` does not infer
+  a safe mixed-schema transition from structural compatibility.
 - **Unknown manifest fields and unknown `fsqlite_meta` keys MUST be ignored.** They are
   the forward-compatibility channel.
-- The changeset payload format is owned by SQLite’s session extension and versioned by
-  SQLite itself; fsqlite inherits its compatibility guarantees.
+- The changeset payload is produced and consumed by SQLite’s session extension.
+  `f1.0` does not separately version or reinterpret that binary representation.
+  Compatibility across SQLite releases and bindings is a conformance claim that an
+  implementation MUST validate for every combination it supports; database-file
+  compatibility alone does not prove changeset compatibility.
 
 Normal open, read, write, reconcile, validation, GC, and repair operations MUST NOT
 upgrade a store. A whole-format upgrade is an explicit operator action and is

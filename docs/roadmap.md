@@ -12,9 +12,6 @@ stable release, not a promise that unsupported environments work today.
 - Build a verifier independent of the Node implementation.
 - Specify explicit side-by-side whole-format upgrades that preserve `store_id`, validate
   the destination, and leave the source untouched until cutover.
-- Specify caller-schema migration separately from fsqlite directory-format migration.
-  Cover writer admission, old pending envelopes, deterministic DDL and data transforms,
-  conflict-policy transition, validation, interruption recovery, rollback, and cutover.
 - Settle whether envelope `base_version` remains provenance or gains staleness rules.
 
 ### Shared Filesystems and Durability
@@ -46,21 +43,26 @@ stable release, not a promise that unsupported environments work today.
 - Cover SQLite URI modes plus paths containing symlinks, spaces, Unicode, drive letters,
   and UNC forms.
 
-### Schema, Isolation, and Performance
+### Schema, Isolation, and Long-Lived Stores
 
-- Specify deterministic caller-schema migration and quarantine writers using the wrong
-  schema.
+- Specify deterministic caller-schema migration and implement a supported maintenance
+  workflow. Cover quiescence, writer admission, old pending envelopes, ordinary SQLite
+  DDL and data transformation, policy transition, validation, rollback, and cutover.
+  Keep the application-managed replacement procedure as the documented fallback.
 - Design declared read-set validation for point-key invariants; document stronger
   patterns for range, predicate, aggregate, and cross-row invariants.
+- Design a crash-safe checkpoint for the lifetime `applied_tx` ledger so reconcile time,
+  memory, and snapshot bytes do not grow without bound.
+- Expose snapshot, retention, lease, pending-envelope, quarantine, and ledger capacity
+  metrics so operators can measure the variables that drive cost.
+
+### Performance and Recovery Improvements
+
 - Evaluate SQLite rebaser support without making it a base-format dependency.
 - Design and measure a safe overlay, shared read-only base, or equivalent writer seed
   that preserves the callback’s observed data and constraints for large stores.
 - Measure explicit snapshot compaction and retention without weakening immutable
   publication.
-- Design a crash-safe checkpoint for the lifetime `applied_tx` ledger so reconcile time,
-  memory, and snapshot bytes do not grow without bound.
-- Expose snapshot, retention, lease, pending-envelope, quarantine, and ledger capacity
-  metrics so operators can measure the variables that drive cost.
 - Research replay-based bit-rot recovery while keeping repair non-destructive and
   fail-closed.
 
@@ -68,7 +70,8 @@ stable release, not a promise that unsupported environments work today.
 
 The minimum 1.0 bar is a settled public API, independent conformance fixtures and
 verifier, real cross-host shared-filesystem evidence, explicit format-upgrade semantics,
-and validated publication behavior on every claimed operating system.
+a supported caller-schema maintenance protocol, bounded or explicitly rollover-managed
+ledger growth, and validated publication behavior on every claimed operating system.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

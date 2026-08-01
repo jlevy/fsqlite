@@ -16,6 +16,42 @@ scripts.
 > format. Both may change before 1.0. The multi-process suite is extensive, but the real
 > cross-host NFS/SMB validation gate is still pending.
 
+## Should You Use fsqlite?
+
+Start with ordinary SQLite.
+On a reliable local filesystem, SQLite already lets many connections read one database,
+serializes writers safely, and provides serializable transactions.
+WAL mode lets readers continue while the one active writer commits.
+A small update normally writes changed database and index pages, not another complete
+copy of the database.
+
+Choose fsqlite only when its different publication boundary solves a real problem:
+
+| Need | Simplest choice | Why |
+| --- | --- | --- |
+| One computer, ordinary transactions, low write contention | Ordinary SQLite, often with WAL | Native transaction commits and less I/O for small updates |
+| One application writer, plus immutable published generations and file-level recovery | `DirectStore` | Serializes the writer and atomically publishes a validated SQLite copy |
+| Independent processes that must capture work without writing one live database file | `SnapshotStore` | Captures row changes in parallel and merges them during reconciliation |
+| Many low-latency writers, rolling schemas, or serializable cross-row business transactions | A client/server database | A service can coordinate writers and schema deployment directly |
+
+In this documentation, an “agent” is simply an independently running local process.
+Agent count alone does not determine fit.
+Snapshot bytes multiplied by write rate and burst size determine most of the cost.
+
+fsqlite buys immutable published states, explicit recovery points, and file-native
+coordination without a required service.
+It pays for those properties with a full-head copy for every write, delayed cross-writer
+visibility, more transient disk use, and a multi-writer merge model that is not
+serializable. If those properties are not needed, ordinary SQLite is both simpler and
+more efficient.
+
+SQLite’s own guidance is consistent with this boundary: use SQLite for device-local
+storage with writers that can take turns, and use a client/server engine when many
+writers cannot queue or when clients directly access data over a network.
+See [Appropriate Uses For SQLite](https://sqlite.org/whentouse.html),
+[Isolation In SQLite](https://sqlite.org/isolation.html), and
+[Write-Ahead Logging](https://sqlite.org/wal.html).
+
 ## Install
 
 ```bash
@@ -80,8 +116,46 @@ until a future explicit migration protocol exists.
 Both strategies can open the same store.
 `DirectStore` keeps the immutable publication and recovery model while removing the
 envelope/reconcile step.
+It still copies and fsyncs the complete published snapshot for each write, so it is a
+semantic simplification rather than a large-database performance optimization.
 Its callback may run more than once after a fencing or publication race, so keep
 external side effects outside the callback or make them idempotent.
+
+## Changing an Application Schema
+
+An `f1.0` store has one fixed caller-schema epoch.
+The schema string and `schemaVersion` identify that epoch; changing either value rejects
+the handle.
+This is stricter than ordinary SQLite, where an application can run supported
+`ALTER TABLE` operations in a normal write transaction.
+
+The restriction exists because a SnapshotStore envelope contains row changes, not DDL.
+SQLite’s session extension expects a compatible target schema.
+Mixing envelopes from old and new schemas could otherwise reinterpret columns, defaults,
+constraints, primary keys, or conflict policy without a safe ordering rule.
+
+Until fsqlite has an explicit migration command, use an application-managed replacement:
+
+1. Stop every writer and reconciler for the old store.
+2. Reconcile acceptable pending envelopes and resolve any quarantine so the source has
+   one deliberate final state.
+3. Validate and seal that state for backup and rollback.
+4. Create a separate store with the new schema.
+   Copy or transform data through a working SQLite database that follows SQLite’s
+   documented schema-change procedure when needed; never alter a published fsqlite
+   snapshot in place.
+5. Validate the destination, switch every process to it, and keep the old store until
+   the rollback window closes.
+
+This creates a replacement store with a new `store_id`; it is not an in-place fsqlite
+migration or an atomic cross-process cutover supplied by this package.
+The application must prevent old writers from continuing on the old path.
+Even a normally compatible change such as adding a column starts a new epoch in `f1.0`.
+
+SQLite documents its directly supported alterations and its general create-copy-drop-
+rename procedure in [ALTER TABLE](https://sqlite.org/lang_altertable.html).
+A future fsqlite migration protocol must add writer admission, pending-envelope
+treatment, validation, rollback, and cutover around those ordinary SQLite steps.
 
 ## A Store Identifies Itself
 
@@ -201,8 +275,9 @@ is the normative protocol authority.
   Any faster seed must preserve the data and constraints the callback observes; safe
   large-store overlays, compaction, and shared-base alternatives remain on the
   [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md).
-  Table count adds schema setup work and some SQLite pages, but snapshot bytes are the
-  main scaling variable.
+  Snapshot bytes create the unavoidable full-copy floor.
+  Table count adds schema setup work and SQLite pages, but the calibration did not
+  isolate an independent table-count slope.
   Batching reconciliation amortizes the build and publication, not the per-writer seed
   copy.
 - Concurrent writers can transiently require one head-sized working copy each, in

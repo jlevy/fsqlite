@@ -62,10 +62,10 @@ documentation and public API to the standard expected of a published package.
 
 ## Background
 
-The imported code snapshot did not include a lockfile and its declared development
+The initial standalone package did not have a lockfile, and its declared development
 dependencies had not been resolved together.
-The first workspace install is therefore a new dependency resolution, not a lockfile
-rehydration, and remains the riskiest foundation step.
+The first workspace install is therefore a new dependency resolution and remains the
+riskiest foundation step.
 
 The npm name `fsqlite` is unclaimed (the registry returns 404).
 
@@ -147,11 +147,10 @@ packages/
 The repo keeps a `pnpm-workspace.yaml` for the workspace globs, which is also where pnpm
 11 reads `minimumReleaseAge`; its default is only one day.
 
-### Project Identity and Provenance
+### Project Identity
 
 This is a new standalone open-source project.
-The source arrived as a squashed code snapshot; prior repository history is not
-imported. Copyright is solely Joshua Levy under the MIT License.
+Copyright is solely Joshua Levy under the MIT License.
 Public source, documentation, metadata, tests, and tracker records refer only to fsqlite
 and this repository.
 The npm package is published unscoped as `fsqlite` from Joshua Levy’s `jlevy` account.
@@ -188,7 +187,7 @@ This is not a lazy runtime failure that a capability check can absorb, and in fa
 `typeof backup === 'function'` probe at `driver.ts:122` is unreachable on exactly the
 versions it was written to defend.
 
-Three independent floors were in play; the imported `>=22.13.0` range satisfied only the
+Three independent floors were in play; the earlier `>=22.13.0` range satisfied only the
 weakest:
 
 | Requirement | Introduced | Status |
@@ -306,7 +305,7 @@ runbook maps constraints to tests.
 Package prose, research, and plans link to those authorities rather than restating a
 competing contract.
 
-The PR review identified two unsafe edges that are resolved before publication:
+The design review identified two unsafe edges that are resolved before publication:
 
 - The schema-only writer seed is removed from `f1.0`. A callback now always observes a
   full copy of the published head, so updates, deletes, and existing-key inserts cannot
@@ -337,6 +336,14 @@ The final schema and workload review adds four calibrated boundaries:
 The detailed evidence and reconsideration triggers are in
 `docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md`.
 
+The comprehensive architecture revision adds one first-principles decision boundary.
+Ordinary local SQLite remains the default when writers can take turns.
+DirectStore adds immutable publication for one application writer.
+SnapshotStore adds independent capture and deterministic reconciliation, with full-head
+copying, delayed visibility, and nonserializable merge semantics as explicit costs.
+Schema maintenance is quiescent and application-managed in `f1.0`; future migration must
+coordinate old envelopes and writers around SQLite’s ordinary DDL steps.
+
 ### Documentation
 
 The design, format specification, QA runbook, source confirmations, and research report
@@ -351,15 +358,15 @@ repository-level operations without duplicating the technical references.
 
 ## Implementation Plan
 
-### Phase 1: Foundation and Faithful Lift
+### Phase 1: Foundation and Reproducible Baseline
 
-Goal: this repo builds, typechecks, lints, tests, and packs green, with behavior
-unchanged from the source.
-Keeping the lift faithful keeps the port diff reviewable and lets each later fix land
-with its own test.
+Goal: this repo builds, typechecks, lints, tests, and packs green from an explicit
+standalone baseline.
+Keeping that baseline stable makes each later correctness fix reviewable with its own
+regression test.
 
-- [x] (`fsq-6jy5`) Import the package tree into `packages/fsqlite` as a single faithful
-  snapshot
+- [x] (`fsq-6jy5`) Establish `packages/fsqlite` as the initial standalone package
+  baseline
 - [x] (`fsq-1pjs`) Scaffold the workspace: private root `package.json`,
   `pnpm-workspace.yaml` with globs plus hardening keys, `packageManager`, `.npmrc`,
   `.nvmrc`
@@ -480,6 +487,27 @@ Goal: a stranger can find, understand, install, and use this.
   all design-facing documents, and publish the standalone assessment
 - [x] (`fsq-bd76`) Make the snapshot-size, table-count, and independent-agent workload
   calibrations reproducible with maintained JSON-emitting benchmarks
+- [x] (`fsq-qvw1`) Complete the first-principles architecture revision, tracked one
+  maintained document per child bead
+  - [x] (`fsq-xmcx`) Orient the root README around ordinary SQLite and immutable
+    publication
+  - [x] (`fsq-kiov`) Add the consumer decision guide, schema procedure, and mitigation
+    boundaries to the package README
+  - [x] (`fsq-6kya`) Consolidate the three-way architecture, integrity, isolation, and
+    performance comparison in the design
+  - [x] (`fsq-epa1`) Consolidate official SQLite evidence, migration guidance, workload
+    math, and severity in the focused research assessment
+  - [x] (`fsq-wtv3`) Clarify format roles, terminology, schema epochs, and changeset
+    compatibility evidence in the normative specification
+  - [x] (`fsq-etm3`) Separate stable-release adoption blockers from performance and
+    recovery improvements in the roadmap
+  - [x] (`fsq-fmpm`) Align this release plan and remove accidental import-history detail
+  - [x] (`fsq-ovpq`) Align the future plan with the schema-maintenance fallback and
+    stable-release outcomes
+  - [x] (`fsq-g3er`) Clarify the public documentation hierarchy and standalone project
+    plan boundary
+  - [x] (`fsq-er9w`) Align the dated background research with the current bounded
+    capture, durability, and adoption language
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 
@@ -512,8 +540,9 @@ The README states plainly that the format is draft, the API may move, and the cr
 concurrency gate is pending.
 
 Alpha feedback informs a beta.
-The 1.0 bar is the real NFS gate, conformance fixtures with a verifier, and a settled
-public API.
+The 1.0 bar is the real NFS gate, conformance fixtures with a verifier, a settled public
+API, a supported caller-schema maintenance protocol, and bounded or explicitly
+rollover-managed ledger growth.
 
 ## Open Questions
 

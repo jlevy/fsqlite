@@ -3,6 +3,20 @@
 Filesystem-friendly concurrent SQLite for Node.js: immutable SQLite snapshots,
 transaction-envelope writers, and atomic filesystem publication with no database server.
 
+Ordinary SQLite coordinates processes around one mutable database file.
+That is the simplest and usually fastest choice when every process is on one computer,
+the filesystem locking is reliable, and writers can take turns.
+fsqlite uses a different boundary: each published version is an immutable SQLite file,
+independent writers can record proposed row changes without opening one shared file for
+writing, and a later reconcile publishes the next version.
+
+That trade is useful for compact local-agent state and file-native handoff.
+It is not a faster replacement for ordinary SQLite: snapshot writes copy the published
+database, visibility is delayed until reconcile, and concurrent merges are not
+serializable. Start with the
+[package decision guide](packages/fsqlite/README.md#should-you-use-fsqlite) before
+choosing a write strategy.
+
 The npm package source and primary usage guide live in
 [`packages/fsqlite`](packages/fsqlite/README.md).
 The [documentation map](docs/README.md) links the format specification, design,
