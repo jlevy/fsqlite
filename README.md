@@ -40,19 +40,19 @@ The usual choices leave a gap:
 
 fsqlite combines a different set of properties:
 
-- cooperative local processes capture row transactions independently in private SQLite
-  copies and commit uniquely named envelope files; capture does not wait for the
-  publication lease
-- immutable generations, an atomic `current` pointer, fencing, optimistic publication,
-  and an exactly-once ledger protect published state from process crashes and racing
-  publishers
-- deployment needs only cooperative processes and a store directory; no database server,
-  daemon, or background service is required
-- every published generation is a standard SQLite file that can be inspected, sealed,
-  archived, handed to another agent environment, or carried by an application-defined
-  replication transport
-- the format and commit protocol are language-independent; Node is the first reference
-  implementation, and applications continue to use SQLite’s engine and query language
+- **Independent transaction capture:** `SnapshotStore` lets each cooperative process
+  record a row transaction in a private SQLite copy and commit a uniquely named
+  envelope, so captures can overlap.
+- **Concurrency-safe publication:** Immutable generations, an atomic `current` pointer,
+  fencing, optimistic publication, and an exactly-once ledger protect published state
+  through process crashes and racing publishers.
+- **Server-free operation:** Deployment needs only cooperative processes and a store
+  directory; no database server, daemon, or background service is required.
+- **Portable SQLite files:** Every published generation uses the standard SQLite format.
+  Applications can inspect it with ordinary tools or seal it as a plain file for
+  archival, copying, and migration between environments.
+- **Language-independent protocol:** The on-disk format and commit protocol can be
+  implemented in any language; Node.js is the first reference implementation.
 
 The
 [portable concurrent SQLite research](docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
