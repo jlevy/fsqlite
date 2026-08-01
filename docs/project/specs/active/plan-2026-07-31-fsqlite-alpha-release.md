@@ -534,6 +534,9 @@ Goal: a stranger can find, understand, install, and use this.
   - [x] (`fsq-2037`) Audit `docs/roadmap.md`
   - [x] (`fsq-pewb`) Audit `docs/upstream-source-confirmations.md`
   - [x] (`fsq-8wwm`) Audit `packages/fsqlite/README.md`
+- [x] (`fsq-f7tg`) Address the late session-hook PATH review
+  - [x] (`fsq-ilul`) Keep startup and closing hooks on the same tbd PATH policy
+  - [x] (`fsq-nkqk`) Keep the PreCompact test hermetic and offline-safe
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 

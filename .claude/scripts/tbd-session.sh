@@ -7,8 +7,12 @@
 # and bypasses any cool-off) and a consistency control (every teammate and agent
 # runs the same tbd version).
 
-# Prefer common local bin locations.
-export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"
+# Use the same caller override as the closing hook. An explicit empty value keeps PATH
+# unchanged for hermetic environments.
+tbd_hook_path_prefix=${TBD_HOOK_PATH_PREFIX-"$HOME/.local/bin:$HOME/bin:/usr/local/bin"}
+if [ -n "$tbd_hook_path_prefix" ]; then
+    export PATH="$tbd_hook_path_prefix:$PATH"
+fi
 
 # Local-first: use tbd if it is already on PATH.
 if command -v tbd &> /dev/null; then

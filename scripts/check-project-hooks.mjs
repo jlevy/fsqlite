@@ -74,20 +74,6 @@ assert.equal(
   `Codex PostToolUse hook failed from a package directory:\n${codexResult.stderr}`,
 )
 
-const claudePreCompactCommand = claudeHooksConfig.hooks.PreCompact[0].hooks[0].command
-const claudeResult = spawnSync(claudePreCompactCommand, {
-  cwd: join(repoRoot, 'packages', 'fsqlite'),
-  encoding: 'utf8',
-  env: { ...process.env, CLAUDE_PROJECT_DIR: repoRoot },
-  shell: true,
-})
-
-assert.equal(
-  claudeResult.status,
-  0,
-  `Claude PreCompact hook failed from a package directory:\n${claudeResult.stderr}`,
-)
-
 const closingHookCommands = [
   {
     name: 'Codex',
@@ -98,15 +84,34 @@ const closingHookCommands = [
     command: claudeHooksConfig.hooks.PostToolUse[0].hooks[0].command,
   },
 ]
-const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-closing-hook-'))
+const sessionHookCommands = [
+  {
+    name: 'Codex SessionStart',
+    command: codexHooksConfig.hooks.SessionStart[0].hooks[0].command,
+  },
+  {
+    name: 'Codex PreCompact',
+    command: codexHooksConfig.hooks.PreCompact[0].hooks[0].command,
+  },
+  {
+    name: 'Claude SessionStart',
+    command: claudeHooksConfig.hooks.SessionStart[0].hooks[0].command,
+  },
+  {
+    name: 'Claude PreCompact',
+    command: claudeHooksConfig.hooks.PreCompact[0].hooks[0].command,
+  },
+]
+const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-project-hooks-'))
 const closingMarker = join(hookTestDir, 'closing-ran')
+const primeMarker = join(hookTestDir, 'prime-ran')
 const npxMarker = join(hookTestDir, 'npx-ran')
-const shadowMarker = join(hookTestDir, 'shadow-closing-ran')
+const shadowMarker = join(hookTestDir, 'shadow-ran')
 try {
   writeFileSync(join(hookTestDir, 'jq'), '#!/bin/bash\nexit 1\n', { mode: EXECUTABLE_MODE })
   writeFileSync(
     join(hookTestDir, 'tbd'),
-    '#!/bin/bash\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit "${TBD_HOOK_TEST_TBD_STATUS:-0}"\nfi\nexit 1\n',
+    '#!/bin/bash\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit "${TBD_HOOK_TEST_TBD_STATUS:-0}"\nfi\nif [[ "$1" == "prime" ]]; then\n  printf "" > "$TBD_HOOK_TEST_PRIME_MARKER"\n  exit 0\nfi\nexit 1\n',
     { mode: EXECUTABLE_MODE },
   )
   writeFileSync(
@@ -128,9 +133,35 @@ try {
     PATH: `${hookTestDir}:${process.env.PATH ?? ''}`,
     TBD_HOOK_PATH_PREFIX: '',
     TBD_HOOK_TEST_MARKER: closingMarker,
+    TBD_HOOK_TEST_PRIME_MARKER: primeMarker,
     TBD_HOOK_TEST_NPX_MARKER: npxMarker,
     TBD_HOOK_TEST_SHADOW_MARKER: shadowMarker,
   }
+
+  for (const hook of sessionHookCommands) {
+    rmSync(primeMarker, { force: true })
+    rmSync(npxMarker, { force: true })
+    rmSync(shadowMarker, { force: true })
+    const session = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: hookEnv,
+      shell: true,
+    })
+    assert.equal(session.status, 0, `${hook.name} hook failed:\n${session.stderr}`)
+    assert.equal(existsSync(primeMarker), true, `${hook.name} hook ignored TBD_HOOK_PATH_PREFIX`)
+    assert.equal(
+      existsSync(shadowMarker),
+      false,
+      `${hook.name} hook selected a machine-local tbd despite TBD_HOOK_PATH_PREFIX`,
+    )
+    assert.equal(
+      existsSync(npxMarker),
+      false,
+      `${hook.name} hook contacted its npx fallback despite a hermetic tbd shim`,
+    )
+  }
+
   const noCliBin = join(hookTestDir, 'no-cli-bin')
   mkdirSync(noCliBin)
   writeFileSync(join(noCliBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
