@@ -1,0 +1,18 @@
+{
+  "name": "fsqlite-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.14.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter fsqlite build",
+    "typecheck": "pnpm --filter fsqlite typecheck",
+    "lint": "pnpm --filter fsqlite lint",
+    "lint:check": "pnpm --filter fsqlite lint:check",
+    "test": "pnpm --filter fsqlite test",
+    "test:golden": "pnpm --filter fsqlite test:golden",
+    "test:package": "pnpm --filter fsqlite test:package",
+    "test:all": "pnpm --filter fsqlite test:all"
+  }
+}

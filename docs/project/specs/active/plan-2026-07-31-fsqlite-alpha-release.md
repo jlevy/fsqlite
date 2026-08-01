@@ -292,7 +292,7 @@ Keeping the lift faithful keeps the port diff reviewable and lets each later fix
 with its own test.
 
 - [x] Import the package tree into `packages/fsqlite` as a single faithful snapshot
-- [ ] Scaffold the workspace: private root `package.json`, `pnpm-workspace.yaml` with
+- [x] Scaffold the workspace: private root `package.json`, `pnpm-workspace.yaml` with
   globs plus hardening keys, `packageManager`, `.npmrc`, `.nvmrc`
 - [ ] First dependency resolution and committed lockfile, honoring the cool-off; expect
   friction from the tsdown/rolldown transitive
