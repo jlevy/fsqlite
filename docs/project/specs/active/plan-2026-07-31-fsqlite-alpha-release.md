@@ -341,6 +341,8 @@ with its own test.
 - [x] (`fsq-vryt`) CI workflow: ubuntu and macos, Node matrix including an explicit job
   at the declared floor, `--test-timeout`, `--test-concurrency=2`, verify-only commands
   throughout
+- [x] (`fsq-34ry`) Disable setup-uv’s unused Python dependency cache so CI does not
+  report permanent cache-invalidation annotations
 - [x] (`fsq-u390`) Resolve tryscript from devDeps rather than a network runner
 - [x] (`fsq-x211`) Confirm a clean-room `pnpm install --frozen-lockfile` reproduces
   green from scratch
