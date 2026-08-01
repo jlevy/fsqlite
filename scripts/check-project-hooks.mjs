@@ -5,15 +5,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const hooksPath = join(repoRoot, '.codex', 'hooks.json')
-const hooksConfig = JSON.parse(readFileSync(hooksPath, 'utf8'))
-const commandHooks = Object.values(hooksConfig.hooks).flatMap((eventHooks) =>
+const codexHooksPath = join(repoRoot, '.codex', 'hooks.json')
+const codexHooksConfig = JSON.parse(readFileSync(codexHooksPath, 'utf8'))
+const codexCommandHooks = Object.values(codexHooksConfig.hooks).flatMap((eventHooks) =>
   eventHooks.flatMap((eventHook) => eventHook.hooks),
 )
 
-assert(commandHooks.length > 0, 'Expected Codex command hooks')
+assert(codexCommandHooks.length > 0, 'Expected Codex command hooks')
 
-for (const hook of commandHooks) {
+for (const hook of codexCommandHooks) {
   assert.match(
     hook.command,
     /^bash "\$\(git rev-parse --show-toplevel\)\/\.codex\/[^"]+"(?: |$)/,
@@ -21,8 +21,24 @@ for (const hook of commandHooks) {
   )
 }
 
-const postToolUseCommand = hooksConfig.hooks.PostToolUse[0].hooks[0].command
-const result = spawnSync(postToolUseCommand, {
+const claudeSettingsPath = join(repoRoot, '.claude', 'settings.json')
+const claudeHooksConfig = JSON.parse(readFileSync(claudeSettingsPath, 'utf8'))
+const claudeCommandHooks = Object.values(claudeHooksConfig.hooks).flatMap((eventHooks) =>
+  eventHooks.flatMap((eventHook) => eventHook.hooks),
+)
+
+assert(claudeCommandHooks.length > 0, 'Expected Claude command hooks')
+
+for (const hook of claudeCommandHooks) {
+  assert.match(
+    hook.command,
+    /^bash "\$CLAUDE_PROJECT_DIR"\/\.claude\/\S+(?: |$)/,
+    `Claude hook must resolve its script from the project root: ${hook.command}`,
+  )
+}
+
+const codexPostToolUseCommand = codexHooksConfig.hooks.PostToolUse[0].hooks[0].command
+const codexResult = spawnSync(codexPostToolUseCommand, {
   cwd: join(repoRoot, 'packages', 'fsqlite'),
   encoding: 'utf8',
   input: JSON.stringify({ tool_input: { command: 'pwd' } }),
@@ -30,7 +46,21 @@ const result = spawnSync(postToolUseCommand, {
 })
 
 assert.equal(
-  result.status,
+  codexResult.status,
   0,
-  `Codex PostToolUse hook failed from a package directory:\n${result.stderr}`,
+  `Codex PostToolUse hook failed from a package directory:\n${codexResult.stderr}`,
+)
+
+const claudePreCompactCommand = claudeHooksConfig.hooks.PreCompact[0].hooks[0].command
+const claudeResult = spawnSync(claudePreCompactCommand, {
+  cwd: join(repoRoot, 'packages', 'fsqlite'),
+  encoding: 'utf8',
+  env: { ...process.env, CLAUDE_PROJECT_DIR: repoRoot },
+  shell: true,
+})
+
+assert.equal(
+  claudeResult.status,
+  0,
+  `Claude PreCompact hook failed from a package directory:\n${claudeResult.stderr}`,
 )
