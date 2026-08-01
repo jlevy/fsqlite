@@ -318,7 +318,7 @@ with its own test.
 - [x] (`fsq-1pjs`) Scaffold the workspace: private root `package.json`,
   `pnpm-workspace.yaml` with globs plus hardening keys, `packageManager`, `.npmrc`,
   `.nvmrc`
-- [ ] (`fsq-iakz`) First dependency resolution and committed lockfile, honoring the
+- [x] (`fsq-iakz`) First dependency resolution and committed lockfile, honoring the
   cool-off; expect friction from the tsdown/rolldown transitive
 - [x] (`fsq-sih0`) Delete the hardcoded `typeRoots` escape and its rationale comment
 - [x] (`fsq-sih0`) Restore `tsdown.config.ts` to `defineConfig`
@@ -342,7 +342,7 @@ with its own test.
   at the declared floor, `--test-timeout`, `--test-concurrency=2`, verify-only commands
   throughout
 - [x] (`fsq-u390`) Resolve tryscript from devDeps rather than a network runner
-- [ ] (`fsq-x211`) Confirm a clean-room `pnpm install --frozen-lockfile` reproduces
+- [x] (`fsq-x211`) Confirm a clean-room `pnpm install --frozen-lockfile` reproduces
   green from scratch
 
 ### Phase 2: Correctness and hardening
