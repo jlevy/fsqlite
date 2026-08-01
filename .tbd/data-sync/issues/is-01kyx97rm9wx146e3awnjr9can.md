@@ -5,7 +5,7 @@ title: "fsqlite alpha release: extract from monorepo and publish 0.1.0-alpha.1"
 kind: epic
 status: open
 priority: 1
-version: 37
+version: 38
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels: []
 dependencies: []
@@ -46,6 +46,7 @@ child_order_hints:
   - is-01kyx9gp458wzc8e1v41htre2c
   - is-01kyx9gpb1y0gkwhw9ze32913r
   - is-01kyx9gpj0yvtab58tgxy5ezk1
+  - is-01kyxeprkr7tg2pakygc3ge1g1
 created_at: 2026-07-31T23:48:01.800Z
-updated_at: 2026-07-31T23:52:54.592Z
+updated_at: 2026-08-01T01:23:36.183Z
 ---
