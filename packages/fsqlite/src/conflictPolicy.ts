@@ -15,11 +15,12 @@
 //     return value from `applyChangeset`, not a throw, so a strict conflict is detected by
 //     `=== false`.
 //   - `REPLACE` is legal only for DATA and CONFLICT conflicts; returning it for
-//     NOTFOUND/CONSTRAINT/FOREIGN_KEY is SQLITE_MISUSE and throws. Those nonreplaceable
-//     conflicts abort and quarantine the envelope instead of silently dropping a change.
+//     NOTFOUND/CONSTRAINT/FOREIGN_KEY is SQLITE_MISUSE and throws. NOTFOUND and
+//     CONSTRAINT abort immediately. An intermediate FOREIGN_KEY report is ignored until
+//     the complete envelope is checked, because its parent may land in a later pass.
 
 import type { DatabaseSync } from 'node:sqlite'
-import { constants } from './driver.ts'
+import { constants, foreignKeyCheck } from './driver.ts'
 import type { ConflictAction, ConflictPolicyInput, NormalizedPolicy } from './types.ts'
 
 const C = constants as unknown as Record<string, number>
@@ -113,6 +114,9 @@ function conflictResult(
   strict: number[],
   permanent: number[],
 ): number {
+  if (type === CHANGESET_FOREIGN_KEY) {
+    return CHANGESET_OMIT
+  }
   if (!replaceable(type)) {
     permanent.push(type)
     return CHANGESET_ABORT
@@ -142,6 +146,9 @@ export function applyWithPolicy(
   const used = new Set(Object.values(policy))
   db.exec('BEGIN IMMEDIATE')
   try {
+    // A single envelope may span several filtered policy passes. Defer enforcement until
+    // every pass has landed so internally valid parent-and-child changes stay atomic.
+    db.exec('PRAGMA defer_foreign_keys = ON')
     for (const action of ACTIONS) {
       if (!used.has(action)) {
         continue
@@ -176,6 +183,7 @@ export function applyWithPolicy(
         throw new PermanentConflictError([`unexpected-abort-on-${action}-pass`])
       }
     }
+    foreignKeyCheck(db)
     beforeCommit()
     db.exec('COMMIT')
   } catch (e) {

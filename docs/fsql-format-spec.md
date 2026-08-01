@@ -275,11 +275,12 @@ Protocol:
      directory, `format_version` or `store_id` differs from the marker, or
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
-   - otherwise **apply** the changeset under the per-table merge policy (below), run
-     `PRAGMA foreign_key_check`, and record `tx_id` in `applied_tx`; all three
-     operations occur in one transaction in the build snapshot before publication; if
-     the apply or foreign key check aborts → **quarantine** with the reason; continue
-     with the next envelope.
+   - otherwise **apply** the changeset under the per-table merge policy (below), with
+     foreign-key enforcement deferred across filtered passes until the complete envelope
+     has landed; then run `PRAGMA foreign_key_check` and record `tx_id` in `applied_tx`;
+     all three operations occur in one transaction in the build snapshot before
+     publication; if the apply or foreign key check aborts → **quarantine** with the
+     reason; continue with the next envelope.
      Since the prior transaction boundary passed the same check, any reported foreign
      key violation belongs to the current envelope.
 4. **F4.** Run an integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`)
@@ -405,9 +406,11 @@ produced a snapshot.
 
 Protocol (per write): acquire the publish lock → read `current` → base → copy the base
 snapshot to a `.direct-*` transient → mutate it in one transaction → integrity-gate
-(`quick_check` and `foreign_key_check`) → re-check `current` == base (OCC) and lock
-token (fencing) → fsync, rename to `snapshots/<base+1>`, fsync dir, pointer swap (P2/P3)
-→ release. On an OCC or fencing failure, discard and retry.
+(`quick_check` and `foreign_key_check`) → fsync → re-check `current` == base (OCC) and
+lock token (fencing) → rename to `snapshots/<base+1>` → fsync the snapshot directory →
+re-check OCC and fencing → pointer swap (P2/P3) → release.
+On an OCC or fencing failure, discard or leave the unpublished snapshot as a recoverable
+orphan, then retry.
 
 There are no envelopes, reconcile step, or merge policy.
 The writer **does not require the session extension**, so the strategy runs on any

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { ACTIONS, SnapshotStore } from '../src/index.ts'
+import { ACTIONS, SnapshotStore, applyWithPolicy, normalize } from '../src/index.ts'
 import * as driver from '../src/driver.ts'
 import { tmpStore } from './fixture.ts'
 
@@ -118,8 +118,8 @@ test('reconcile quarantines the envelope that would introduce a dangling foreign
 
 test('policy key insertion order does not change filtered apply pass results', () => {
   const reconcileWithPolicy = (conflictPolicy: {
-    parent: 'lww'
-    child: 'strict'
+    parent: 'lww' | 'strict'
+    child: 'lww' | 'strict'
     '*': 'strict'
   }) => {
     const { dir, cleanup } = tmpStore()
@@ -152,8 +152,10 @@ test('policy key insertion order does not change filtered apply pass results', (
 
   const parentFirst = reconcileWithPolicy({ parent: 'lww', child: 'strict', '*': 'strict' })
   const childFirst = reconcileWithPolicy({ child: 'strict', parent: 'lww', '*': 'strict' })
+  const childActionFirst = reconcileWithPolicy({ parent: 'strict', child: 'lww', '*': 'strict' })
 
   assert.deepEqual(childFirst, parentFirst)
+  assert.deepEqual(childActionFirst, parentFirst)
   assert.deepEqual(parentFirst, { applied: 1, quarantined: 0, parents: 1, children: 1 })
 })
 
@@ -181,6 +183,35 @@ test('publication and validation reject a snapshot with dangling foreign keys', 
     assert.equal(validation.state, 'corrupt')
     assert.match(validation.issues.join('; '), /foreign_key_check/)
   } finally {
+    fixture.cleanup()
+  }
+})
+
+test('applyWithPolicy rejects a dangling foreign key without a caller-supplied callback', () => {
+  const fixture = tmpStore()
+  const writerPath = join(fixture.dir, 'writer.sqlite')
+  const targetPath = join(fixture.dir, 'target.sqlite')
+  const writer = driver.open(writerPath)
+  const target = driver.open(targetPath)
+  try {
+    writer.exec(FOREIGN_KEY_SCHEMA)
+    target.exec(FOREIGN_KEY_SCHEMA)
+    writer.prepare('INSERT INTO parent VALUES (?)').run('p')
+    const changeset = driver.recordChangeset(writer, (db) => {
+      db.prepare('INSERT INTO child VALUES (?,?)').run('c', 'p')
+    })
+    assert.ok(changeset)
+
+    assert.throws(() => {
+      applyWithPolicy(target, changeset, normalize({ child: 'lww', '*': 'strict' }))
+    }, /foreign_key_check/)
+    assert.equal(
+      (target.prepare('SELECT COUNT(*) count FROM child').get() as { count: number }).count,
+      0,
+    )
+  } finally {
+    writer.close()
+    target.close()
     fixture.cleanup()
   }
 })

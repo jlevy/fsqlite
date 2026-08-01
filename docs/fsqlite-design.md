@@ -101,7 +101,8 @@ Research Finding K gives the full statement and comparison with WAL.
   NOTFOUND, CONSTRAINT, and FOREIGN_KEY cases quarantine the whole envelope.
   Reconcile checks foreign keys after each envelope and before its ledger entry, then
   checks them again before publication and during validation.
-  Filtered policy passes always run in `replace`, `omit`, `strict` order.
+  Filtered policy passes always run in `replace`, `omit`, `strict` order, with
+  foreign-key enforcement deferred until the complete envelope has landed.
 - **Isolation is deliberately weaker than WAL:** row-level write-set merge and
   read-your-own-writes within a session, not serializable (no read-set tracking), and a
   committed write is visible to readers only after reconcile.

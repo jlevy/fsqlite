@@ -142,6 +142,8 @@ heuristic from one host, not a substitute for the pending multi-host gate.
   `validate` and `seal`.
 - Filtered merge passes have a fixed `replace`, `omit`, `strict` order, independent of
   policy key insertion order.
+  Foreign-key enforcement is deferred until every pass for the complete envelope has
+  landed.
 - Read leases prevent garbage collection of a snapshot in use.
 - Maintenance fails closed on malformed identity, leases, or unsupported capabilities.
 - Repair identifies a clean recovery point before deleting anything and will not race a

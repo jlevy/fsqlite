@@ -677,7 +677,6 @@ export class SnapshotStore {
           }
           try {
             applyWithPolicy(db, cs, policy, () => {
-              driver.foreignKeyCheck(db)
               mark.run(man.tx_id, nowIso())
             })
             applied.push(txn)
