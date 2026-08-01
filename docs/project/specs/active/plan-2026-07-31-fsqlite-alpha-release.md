@@ -8,7 +8,7 @@
 
 ## Overview
 
-Bring the `fsqlite` package out of the `finterm-main` monorepo into this standalone repo
+Bring the existing `fsqlite` package into this standalone repo
 (`github.com/jlevy/fsqlite`) and publish an alpha to npm.
 
 The package is filesystem-friendly concurrent SQLite: immutable snapshot-publish plus
@@ -61,9 +61,9 @@ public API to the bar of a package other people are expected to depend on.
 
 ## Background
 
-`fsqlite` was built inside `finterm-main` as `packages/fsqlite`, deliberately excluded
-from the pnpm workspace (`'!packages/fsqlite'`) so its devDeps stayed out of the
-monorepo lockfile. It was always intended to be extracted; this spec is that extraction.
+`fsqlite` was built as an isolated package inside a larger workspace and deliberately
+excluded from that workspace's dependency resolution so its devDeps stayed out of the
+root lockfile. It was always intended to stand alone; this spec completes that work.
 
 Because of that exclusion, the package has **never had a lockfile** and its seven
 devDependencies have never been resolved.
@@ -273,8 +273,8 @@ extraction.
 
 The research doc carries `attic/` paths, citations to an unpublished internal survey,
 references to a `SOURCES.md` that does not exist, and stale test counts in four places.
-The monorepo plan spec is **not ported**: it is explicitly the finterm-side build plan
-and carries 24 internal bead IDs and references to sibling packages.
+The earlier monorepo plan spec is **not ported**: it is an internal build plan that
+carries 24 obsolete tracker IDs and references to sibling packages.
 Its open items are mined into this repo’s beads, then it is left behind.
 
 The README needs a rewrite as an npm landing page.
@@ -291,8 +291,7 @@ unchanged from the source.
 Keeping the lift faithful keeps the port diff reviewable and lets each later fix land
 with its own test.
 
-- [ ] Import the package tree into `packages/fsqlite`, preserving git history where
-  practical so 26 commits of design rationale survive
+- [x] Import the package tree into `packages/fsqlite` as a single faithful snapshot
 - [ ] Scaffold the workspace: private root `package.json`, `pnpm-workspace.yaml` with
   globs plus hardening keys, `packageManager`, `.npmrc`, `.nvmrc`
 - [ ] First dependency resolution and committed lockfile, honoring the cool-off; expect
@@ -399,17 +398,8 @@ public API.
 
 ## Open Questions
 
-- **Git history**: preserve the 26 commits via `git filter-repo` onto a branch here, or
-  take a single squashed import?
-  History preservation is more useful than usual for a package whose design rationale is
-  this dense, at the cost of more setup.
-- **LICENSE attribution**: currently `Copyright (c) 2026 finterm` while this repo is
-  `jlevy/fsqlite`. Reassign, keep, or dual-attribute?
 - **O1, the catalog-root nesting**: flatten to `<storeDir>/` or keep `data/catalog/` and
   document it as intentional rather than inherited?
-- **ESLint major version**: ESLint 9 is reported to reach end of life on 2026-08-06,
-  days from now, and ESLint 10 removes `.eslintrc.*` entirely.
-  Confirm the date and scaffold directly on the version that will be supported.
 - **`node:sqlite` stability language**: it is now Release Candidate rather than
   experimental, and the warning is gone on recent Node.
   Decide how prominently the README should carry that caveat.
@@ -418,7 +408,6 @@ public API.
 
 ## References
 
-- Source: `finterm-ai/finterm-main` PR #27, branch `claude/vibrant-mendel-sfd27`
 - `docs/fsqlite-design.md`, `docs/fsql-format-spec.md` (ported with the package)
 - tbd guidelines: `typescript-lint-format-rules`, `supply-chain-hardening`,
   `typescript-rules`, `error-handling-rules`, `general-testing-rules`,

@@ -1,0 +1,862 @@
+// snapshotStore.ts: the core fsqlite engine. Snapshot-publish plus transaction envelopes
+// plus idempotent reconcile, over a caller-provided schema and merge policy.
+//
+//   - Published heads are immutable versioned snapshots (snapshots/<N>.fsqlite.sqlite),
+//     selected by a tiny `current` pointer file.
+//   - Writers are lock-free: seed a session from the current immutable snapshot (safe,
+//     never mutated), run their work, and drop a transaction envelope under
+//     tx/pending/<txid>.txn/ (manifest.json, catalog.changeset, and a COMMITTED marker
+//     written last). Unique paths make this conflict-free on local disk and NFS.
+//   - reconcile() builds the next snapshot in a temp file from current plus the committed
+//     pending tx (skipping any already in the snapshot's applied_tx ledger, quarantining
+//     corrupt or aborted ones), runs quick_check, then publishes by atomically swapping
+//     `current`. Building is lock-free; only the short publish (re-check pointer, rename)
+//     is fenced by the mkdir lease lock with optimistic concurrency.
+//   - Readers open only the immutable snapshot named by `current`: no session extension,
+//     any SQLite binding, any language.
+//
+// Crash-safety: each changeset's data and its applied_tx ledger row are both committed
+// into the throwaway build snapshot before it is published, and publish is a single atomic
+// pointer swap, so a published snapshot always carries the ledger for everything in it.
+// The next reconcile seeds from that snapshot and skips already-applied tx (the ledger),
+// making publish exactly-once across crashes and racing reconcilers.
+
+import {
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  renameSync,
+  existsSync,
+  rmSync,
+  statSync,
+  utimesSync,
+} from 'node:fs'
+import { join } from 'node:path'
+import { randomBytes, createHash } from 'node:crypto'
+import { hostname } from 'node:os'
+import * as driver from './driver.ts'
+import { normalize, applyWithPolicy } from './conflictPolicy.ts'
+import { fsyncPath, fsyncDir } from './fsutil.ts'
+import { withLock, ownerOf } from './lock.ts'
+import type { LockOptions } from './lock.ts'
+import type {
+  StoreOptions,
+  NormalizedPolicy,
+  WorkFn,
+  ReadFn,
+  ValidateResult,
+  ReconcileResult,
+  WriteWithRetryResult,
+  GcResult,
+  RepairResult,
+  ReadLease,
+} from './types.ts'
+
+const rand = (): string => randomBytes(5).toString('hex')
+const sha256 = (buf: Uint8Array | string): string => createHash('sha256').update(buf).digest('hex')
+const pad = (n: number): string => String(n).padStart(12, '0')
+const nowIso = (): string => new Date().toISOString()
+
+// Transient (never-store-state) files, per fsql-format-spec.md §2: reconcile builds,
+// DirectStore builds, init's snapshot-0 temp, and writer working copies. A fresh one is
+// work in flight; an old one is crash debris.
+const isTransientFile = (f: string): boolean =>
+  f.startsWith('.build-') || f.startsWith('.direct-') || f.startsWith('.work-') || f.endsWith('.tmp')
+
+// writerId is interpolated into filesystem paths (the working copy and the envelope dir),
+// so it must be a safe single path component: no separators, traversal, or oversize names.
+// The raw, unrestricted value is still recorded in the manifest for provenance.
+const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
+
+/** Default cap on a single changeset envelope before reconcile quarantines it (1 GiB). */
+const DEFAULT_MAX_ENVELOPE_BYTES = 1 << 30
+
+/**
+ * Every caller table needs a NON-NULL primary key: the per-table merge policy is keyed on it.
+ * An INTEGER PRIMARY KEY is a non-null rowid alias; any other primary key column must be NOT
+ * NULL (SQLite otherwise allows a NULL in a non-integer PRIMARY KEY).
+ */
+function validatePrimaryKeys(db: driver.DB): void {
+  const tables = (
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('applied_tx', 'fsqlite_meta')",
+      )
+      .all() as { name: string }[]
+  ).map((r) => r.name)
+  for (const t of tables) {
+    const quoted = `"${t.replace(/"/g, '""')}"`
+    const cols = db.prepare(`PRAGMA table_info(${quoted})`).all() as {
+      name: string
+      type: string
+      notnull: number
+      pk: number
+    }[]
+    const pk = cols.filter((c) => c.pk > 0)
+    if (pk.length === 0) {
+      throw new Error(`table "${t}" has no primary key; fsqlite requires a NON-NULL primary key`)
+    }
+    const isRowidAlias = pk.length === 1 && /^integer$/i.test(pk[0].type.trim())
+    const nullablePk = pk.find((c) => c.notnull === 0)
+    if (!isRowidAlias && nullablePk) {
+      throw new Error(`table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`)
+    }
+  }
+}
+
+// applied_tx is the per-snapshot idempotency ledger fsqlite manages on the caller's
+// behalf; fsqlite_meta stamps the store's own identity (schema hash, tool version) so a
+// reopen with a divergent schema is rejected loudly. These are the only two tables fsqlite
+// owns; everything else is the caller's. Both are copied forward with every snapshot.
+const LEDGER_DDL = `CREATE TABLE IF NOT EXISTS applied_tx (
+  tx_id TEXT PRIMARY KEY NOT NULL,
+  applied_at TEXT NOT NULL
+);`
+
+const META_DDL = `CREATE TABLE IF NOT EXISTS fsqlite_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);`
+
+// Bumped only if the on-disk store layout changes incompatibly.
+const FORMAT_VERSION = '1'
+
+type CrashAt = 'after-build' | 'after-snapshot' | 'after-pointer' | null
+
+interface Manifest {
+  tx_id: string
+  writer_id: string
+  base_version: number
+  schema_version: number
+  schema_hash?: string
+  created_at: string
+  changeset: string
+  changeset_sha256: string
+  seed: string
+  tool_version: string
+}
+
+/**
+ * The lock-free, NFS-safe concurrent multi-writer engine: writers drop changeset envelopes
+ * (`write`), an out-of-band `reconcile` folds them into the next immutable snapshot and
+ * publishes it with an atomic pointer swap, and readers (`read`) open only the published
+ * snapshot. Writers need the session extension; readers need none. Correctness rests on the
+ * immutable snapshots, the `applied_tx` ledger, and optimistic concurrency on `current`, not
+ * on the publish lock being perfect.
+ */
+export class SnapshotStore {
+  readonly dir: string
+  readonly catDir: string
+  readonly snapDir: string
+  readonly txPending: string
+  readonly txApplied: string
+  readonly txQuarantine: string
+  readonly leaseDir: string
+  readonly currentPath: string
+  readonly publishLock: string
+  readonly schema: string
+  readonly schemaVersion: number
+  readonly schemaHash: string
+  readonly appId: number
+  readonly conflictPolicy: NormalizedPolicy
+  readonly toolVersion: string
+  readonly maxEnvelopeBytes: number
+  private _clock: number
+
+  constructor(dir: string, opts: StoreOptions = {}) {
+    this.dir = dir
+    this.catDir = join(dir, 'data', 'catalog')
+    this.snapDir = join(this.catDir, 'snapshots')
+    this.txPending = join(this.catDir, 'tx', 'pending')
+    this.txApplied = join(this.catDir, 'tx', 'applied')
+    this.txQuarantine = join(this.catDir, 'tx', 'quarantine')
+    this.leaseDir = join(this.catDir, 'leases')
+    this.currentPath = join(this.catDir, 'current')
+    this.publishLock = join(this.catDir, 'publish.lock')
+
+    this.schema = opts.schema ?? ''
+    this.schemaVersion = opts.schemaVersion ?? 1
+    // A hash of the caller DDL catches divergent schemas at the SAME schema_version (an
+    // integer bump is easy to forget); reconcile quarantines a mismatch.
+    this.schemaHash = sha256(this.schema).slice(0, 16)
+    this.appId = opts.appId ?? 0x534e4c47 // "SNLG"
+    this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
+    this.toolVersion = opts.toolVersion ?? 'fsqlite-0.0.1'
+    this.maxEnvelopeBytes = opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES
+    this._clock = 0
+  }
+
+  /**
+   * Create the store if absent, otherwise verify it is schema-compatible (idempotent).
+   * Snapshot 0 holds the empty schema. First-open is fenced under the publish lock and built
+   * through a temp file, so concurrent initializers converge on one clean snapshot 0 rather
+   * than racing the initial file and pointer. Validates the NON-NULL primary key contract.
+   */
+  init(): this {
+    for (const d of [
+      this.snapDir,
+      this.txPending,
+      this.txApplied,
+      this.txQuarantine,
+      this.leaseDir,
+    ]) {
+      mkdirSync(d, { recursive: true })
+    }
+    if (existsSync(this.currentPath)) {
+      this._verifyCompatible()
+      return this
+    }
+    withLock(this.publishLock, () => {
+      if (existsSync(this.currentPath)) return // another initializer won while we waited
+      const tmp = `${this.snapshotPath(0)}.${rand()}.tmp`
+      try {
+        const db = driver.open(tmp)
+        try {
+          db.exec(`PRAGMA application_id = ${this.appId};`)
+          db.exec(`PRAGMA user_version = ${this.schemaVersion};`)
+          db.exec(LEDGER_DDL)
+          db.exec(META_DDL)
+          const stamp = db.prepare('INSERT INTO fsqlite_meta (key, value) VALUES (?, ?)')
+          stamp.run('schema_hash', this.schemaHash)
+          stamp.run('tool_version', this.toolVersion)
+          stamp.run('format_version', FORMAT_VERSION)
+          db.exec(this.schema)
+          validatePrimaryKeys(db)
+        } finally {
+          db.close()
+        }
+        fsyncPath(tmp)
+        renameSync(tmp, this.snapshotPath(0))
+        fsyncDir(this.snapDir)
+        this._publishPointer(0)
+      } catch (e) {
+        rmSync(tmp, { force: true })
+        throw e
+      }
+    })
+    this._verifyCompatible()
+    return this
+  }
+
+  /**
+   * Confirm an existing store's stamped identity matches this handle's configuration, so opening
+   * a store with the wrong schema fails loudly instead of silently. Checks application_id and
+   * user_version (the foreign-readable capability pragmas) and the stamped schema_hash, which
+   * catches a divergent caller DDL at the SAME schema_version — an integer bump is easy to forget.
+   */
+  private _verifyCompatible(): void {
+    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    try {
+      const appId = Number((db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id)
+      const ver = Number((db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version)
+      if (ver !== this.schemaVersion) {
+        throw new Error(`store schema version ${ver} is incompatible with the requested ${this.schemaVersion}`)
+      }
+      if (appId !== this.appId) {
+        throw new Error(`store application_id ${appId} is incompatible with the requested ${this.appId}`)
+      }
+      const storedHash = this._metaValue(db, 'schema_hash')
+      if (storedHash !== undefined && storedHash !== this.schemaHash) {
+        throw new Error(
+          `store schema is incompatible: stamped schema_hash ${storedHash} does not match this schema's ${this.schemaHash} ` +
+            `(the DDL changed without bumping schemaVersion ${this.schemaVersion})`,
+        )
+      }
+    } finally {
+      db.close()
+    }
+  }
+
+  /** Read one fsqlite_meta value, or undefined if the table or row is absent (legacy stores). */
+  private _metaValue(db: driver.DB, key: string): string | undefined {
+    const hasMeta = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fsqlite_meta'")
+      .get()
+    if (!hasMeta) return undefined
+    const row = db.prepare('SELECT value FROM fsqlite_meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value
+  }
+
+  snapshotPath(v: number): string {
+    return join(this.snapDir, `${pad(v)}.fsqlite.sqlite`)
+  }
+
+  /**
+   * The published version the `current` pointer names. Parsed strictly: an empty or
+   * non-numeric pointer is corruption (R2) and throws rather than silently reading as
+   * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer.
+   */
+  currentVersion(): number {
+    const raw = readFileSync(this.currentPath, 'utf8').trim()
+    if (!/^\d+$/.test(raw)) throw new Error(`corrupt current pointer: ${JSON.stringify(raw)}`)
+    return Number(raw)
+  }
+
+  /**
+   * Run `fn` against the immutable snapshot named by `current`, opened read-only on a fresh
+   * connection (close-to-open, so a concurrent publish is observed and never torn). Needs no
+   * session extension; any SQLite binding can read the same file.
+   */
+  read<T>(fn: ReadFn<T>): T {
+    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    try {
+      return fn(db)
+    } finally {
+      db.close()
+    }
+  }
+
+  /**
+   * Pin the current version so reconcile's GC will not delete it while a
+   * packager/uploader reads it. Returns { version, heartbeat, release }.
+   */
+  readLease({ maxRetries = 8 }: { maxRetries?: number } = {}): ReadLease {
+    // Optimistic claim, then verify: publish the lease *before* committing to read the
+    // version, then confirm the snapshot still exists. This closes the check-then-act race
+    // with gc — gc re-reads leases immediately before each unlink (see `gc`), so either it
+    // sees our lease and keeps the snapshot, or it deleted the snapshot before our lease was
+    // visible and our existence check fails, sending us to retry against the new head. The
+    // newest snapshots are inside gc's retain floor and never collected, so this terminates.
+    for (let attempt = 0; ; attempt++) {
+      const version = this.currentVersion()
+      const token = `${pad(Date.now())}-${rand()}`
+      const path = join(this.leaseDir, `${token}.lease`)
+      writeFileSync(path, JSON.stringify({ version, pid: process.pid, host: hostname(), at: Date.now() }))
+      if (existsSync(this.snapshotPath(version))) return this._lease(version, path)
+      rmSync(path, { force: true }) // lost the race to gc; drop the stale lease and retry
+      if (attempt >= maxRetries) {
+        throw new Error(`readLease: snapshot ${version} was collected under contention after ${attempt} retries`)
+      }
+    }
+  }
+
+  private _lease(version: number, path: string): ReadLease {
+    return {
+      version,
+      heartbeat: () => {
+        try {
+          const n = new Date()
+          utimesSync(path, n, n)
+        } catch {
+          /* ignore */
+        }
+      },
+      release: () => {
+        try {
+          rmSync(path, { force: true })
+        } catch {
+          /* ignore */
+        }
+      },
+    }
+  }
+
+  /**
+   * Lock-free write: capture `fn`'s mutations as a uniquely-named changeset envelope and
+   * commit it to the pending tail. Mutates no live state; the change becomes visible only
+   * when a later `reconcile()` folds it in. Returns the tx id, or null if `fn` changed nothing.
+   *
+   * `seed` controls how the writer's working copy is built:
+   *   'snapshot'    (default): copy the current immutable snapshot. Correct for any
+   *                 mutation; cost is O(catalog size) per write.
+   *   'schema-only': build an empty DB with just the schema (NO copy). O(1) per write,
+   *                 but ONLY valid for inserts of NEW keys (same-key clashes defer to reconcile).
+   */
+  write(writerId: string, fn: WorkFn, { seed = 'snapshot' }: { seed?: 'snapshot' | 'schema-only' } = {}): string | null {
+    if (!SAFE_WRITER_ID.test(writerId)) {
+      throw new Error(`invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`)
+    }
+    driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
+    const base = this.currentVersion()
+    const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
+    if (seed === 'schema-only') {
+      const seedDb = driver.open(work)
+      try {
+        seedDb.exec(this.schema) // tables only; no data copy
+      } finally {
+        seedDb.close()
+      }
+    } else {
+      copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
+    }
+    let changeset: Uint8Array | null
+    const db = driver.open(work)
+    try {
+      changeset = driver.recordChangeset(db, fn)
+    } finally {
+      db.close()
+      rmSync(work, { force: true })
+    }
+    if (!changeset) return null
+
+    const txId = `${pad(Date.now())}-${pad(this._clock++)}-${writerId}-${rand()}`
+    const txDir = join(this.txPending, `${txId}.txn`)
+    mkdirSync(txDir, { recursive: true })
+    writeFileSync(join(txDir, 'catalog.changeset'), changeset)
+    const manifest: Manifest = {
+      tx_id: txId,
+      writer_id: writerId,
+      base_version: base,
+      schema_version: this.schemaVersion,
+      schema_hash: this.schemaHash,
+      created_at: nowIso(),
+      changeset: 'catalog.changeset',
+      changeset_sha256: sha256(changeset),
+      seed,
+      tool_version: this.toolVersion,
+    }
+    writeFileSync(join(txDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
+    writeFileSync(join(txDir, 'COMMITTED'), '') // COMMITTED marker written last, so visibility is atomic
+    return txId
+  }
+
+  /**
+   * Per-transaction OPTIMISTIC RETRY (granular OCC): runs `fn` against a fresh seed
+   * from the current snapshot, reconciles, and, if `fn`'s changes conflicted with a
+   * concurrently-published row under a 'strict' table, re-seeds and re-runs `fn`, up
+   * to `maxRetries`. The classic read-modify-write compare-and-retry loop; prevents a
+   * lost update on a strict row without any global lock.
+   */
+  writeWithRetry(
+    writerId: string,
+    fn: WorkFn,
+    { maxRetries = 5, seed = 'snapshot' }: { maxRetries?: number; seed?: 'snapshot' | 'schema-only' } = {},
+  ): WriteWithRetryResult {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const txId = this.write(writerId, fn, { seed })
+      if (txId === null) return { txId: null, attempts: attempt + 1, conflicted: false }
+      this.reconcile() // idempotent + OCC-safe; folds ours (and any peers')
+      if (!existsSync(join(this.txQuarantine, `${txId}.txn`))) {
+        return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
+      }
+      // Our tx was quarantined (a strict same-row conflict): re-seed and re-run fn.
+    }
+    throw new Error('writeWithRetry: exceeded retries (persistent conflict)')
+  }
+
+  /** Committed pending transaction dirs, in deterministic (txid) order. */
+  pendingTxns(): string[] {
+    if (!existsSync(this.txPending)) return []
+    return readdirSync(this.txPending)
+      .filter((d) => d.endsWith('.txn') && existsSync(join(this.txPending, d, 'COMMITTED')))
+      .sort()
+  }
+
+  /**
+   * Fold the committed pending tail into the next immutable snapshot and publish it with an
+   * atomic pointer swap under the lease lock. Idempotent (skips tx already in the snapshot's
+   * `applied_tx` ledger) and conflict-resolving per the merge policy (clashes are quarantined,
+   * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
+   * builder retry. `crashAt` is a test-only fault injector.
+   */
+  reconcile({ crashAt = null, maxRetries = 8, lockOpts = {} }: { crashAt?: CrashAt; maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
+    const policy = this.conflictPolicy
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const base = this.currentVersion()
+      const pending = this.pendingTxns()
+      if (pending.length === 0) return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
+
+      const tmp = join(this.snapDir, `.build-${rand()}.sqlite`)
+      copyFileSync(this.snapshotPath(base), tmp)
+      const applied: string[] = []
+      const archivable: string[] = []
+      const quarantined: [string, string][] = []
+      const db = driver.open(tmp)
+      try {
+        const seen = new Set(
+          (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
+            String(r.tx_id),
+          ),
+        )
+        const mark = db.prepare('INSERT INTO applied_tx VALUES (?, ?)')
+        for (const txn of pending) {
+          const txId = txn.replace(/\.txn$/, '')
+          if (seen.has(txId)) {
+            archivable.push(txn)
+            continue
+          } // already in this lineage
+          const txDir = join(this.txPending, txn)
+          let csSize = 0
+          try {
+            csSize = statSync(join(txDir, 'catalog.changeset')).size
+          } catch {
+            /* missing/unreadable is handled by the read below */
+          }
+          if (csSize > this.maxEnvelopeBytes) {
+            quarantined.push([txn, `envelope-too-large: ${csSize} > ${this.maxEnvelopeBytes}`])
+            continue
+          }
+          let cs: Uint8Array
+          let man: Manifest
+          try {
+            cs = readFileSync(join(txDir, 'catalog.changeset'))
+            man = JSON.parse(readFileSync(join(txDir, 'manifest.json'), 'utf8')) as Manifest
+          } catch {
+            quarantined.push([txn, 'unreadable-envelope'])
+            continue
+          }
+          if (sha256(cs) !== man.changeset_sha256) {
+            quarantined.push([txn, 'digest-mismatch'])
+            continue
+          }
+          if (man.schema_version !== this.schemaVersion) {
+            quarantined.push([txn, 'schema-version-mismatch'])
+            continue
+          }
+          // schema_hash is absent on envelopes written before this field existed; only
+          // enforce when present, so it is forward-compatible.
+          if (man.schema_hash && man.schema_hash !== this.schemaHash) {
+            quarantined.push([txn, 'schema-hash-mismatch'])
+            continue
+          }
+          try {
+            applyWithPolicy(db, cs, policy)
+            db.exec('BEGIN')
+            mark.run(man.tx_id, nowIso())
+            db.exec('COMMIT')
+            applied.push(txn)
+            seen.add(txId)
+          } catch (e) {
+            // A genuine conflict aborted the apply (policy returned ABORT) or some other
+            // apply error. Quarantine the tx; do not poison the whole batch.
+            quarantined.push([txn, `apply-failed: ${(e as Error).message}`])
+          }
+        }
+        driver.quickCheck(db)
+      } finally {
+        db.close()
+      }
+
+      if (applied.length === 0) {
+        rmSync(tmp, { force: true })
+        this._archive(archivable)
+        this._quarantine(quarantined)
+        return { published: base, applied: 0, quarantined: quarantined.length, attempts: attempt + 1 }
+      }
+      if (crashAt === 'after-build') throw new Error('CRASH after-build') // tmp orphaned; current unchanged
+
+      const next = base + 1
+      const result = withLock(
+        this.publishLock,
+        (token): 'retry' | 'published' => {
+          if (this.currentVersion() !== base) return 'retry' // someone published while we built
+          if (ownerOf(this.publishLock) !== token) return 'retry' // lost ownership (stale break): fencing
+          fsyncPath(tmp) // make the new snapshot durable before it can be named by current
+          renameSync(tmp, this.snapshotPath(next)) // overwrites any orphan from a crashed publish
+          fsyncDir(this.snapDir)
+          if (crashAt === 'after-snapshot') throw new Error('CRASH after-snapshot')
+          this._publishPointer(next)
+          return 'published'
+        },
+        lockOpts,
+      )
+      if (result === 'retry') {
+        rmSync(tmp, { force: true })
+        continue
+      }
+      if (crashAt === 'after-pointer') throw new Error('CRASH after-pointer') // published; tx not yet archived
+
+      this._archive([...applied, ...archivable])
+      this._quarantine(quarantined)
+      return { published: next, applied: applied.length, quarantined: quarantined.length, attempts: attempt + 1 }
+    }
+    throw new Error('reconcile exceeded retries (excessive publish contention)')
+  }
+
+  /**
+   * Delete superseded snapshots, always keeping `current`, every version >= current - retain
+   * (current plus its `retain` predecessors — spec G1), and any version pinned by a live
+   * read-lease (leases past `leaseStaleMs` are treated as abandoned). Also sweeps *stale*
+   * transients — but never fresh ones, which may be a live reconcile/DirectStore build in
+   * another process (spec G3); `transientStaleMs` gates that.
+   */
+  gc({
+    retain = 3,
+    leaseStaleMs = 60_000,
+    transientStaleMs = 60_000,
+  }: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number } = {}): GcResult {
+    const cur = this.currentVersion()
+    const leased = this._activeLeasedVersions(leaseStaleMs)
+    const versions = this._snapshotVersions()
+    const keepFloor = cur - retain
+    let removed = 0
+    for (const v of versions) {
+      if (v === cur || v >= keepFloor || leased.has(v)) continue
+      // Re-scan leases right before unlinking: a reader may have claimed v after we computed
+      // `leased` (readLease publishes the lease before reading), so this is the second half of
+      // the lease/gc race fix.
+      if (this._activeLeasedVersions(leaseStaleMs).has(v)) continue
+      try {
+        rmSync(this.snapshotPath(v), { force: true })
+        removed++
+      } catch {
+        /* ignore */
+      }
+    }
+    // Sweep STALE transients only (crash debris): a fresh .build-/.direct-/.work- file may be
+    // a live build in another process — deleting it would not corrupt anything (the publish
+    // would fail loudly and retry) but would waste its work. mtime age gates the sweep.
+    const sweepStaleTransients = (dir: string): void => {
+      if (!existsSync(dir)) return
+      for (const f of readdirSync(dir)) {
+        if (!isTransientFile(f)) continue
+        const p = join(dir, f)
+        try {
+          if (Date.now() - statSync(p).mtimeMs > transientStaleMs) rmSync(p, { force: true })
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    sweepStaleTransients(this.snapDir)
+    sweepStaleTransients(this.txPending)
+    return { removed, kept: versions.length - removed, leased: [...leased] }
+  }
+
+  private _activeLeasedVersions(staleMs: number): Set<number> {
+    const out = new Set<number>()
+    if (!existsSync(this.leaseDir)) return out
+    for (const f of readdirSync(this.leaseDir)) {
+      if (!f.endsWith('.lease')) continue
+      const p = join(this.leaseDir, f)
+      try {
+        if (Date.now() - statSync(p).mtimeMs > staleMs) {
+          rmSync(p, { force: true })
+          continue
+        }
+        out.add((JSON.parse(readFileSync(p, 'utf8')) as { version: number }).version)
+      } catch {
+        /* ignore */
+      }
+    }
+    return out
+  }
+
+  /**
+   * Classify store health from on-disk layout without trusting any single file: detects a
+   * missing/torn pointer, an orphan snapshot ahead of `current`, transient build files, a held
+   * lock, and live `-wal`/`-shm` side files. Surfaces every inconsistency (R2) as a
+   * {@link StoreState} plus issues, rather than silently accepting it.
+   */
+  validate(): ValidateResult {
+    const issues: string[] = []
+    if (!existsSync(this.currentPath)) return { state: 'corrupt', issues: ['missing current pointer'] }
+    let cur: number
+    try {
+      cur = this.currentVersion()
+      if (!Number.isInteger(cur)) throw new Error('nan')
+    } catch {
+      return { state: 'corrupt', issues: ['torn current pointer'] }
+    }
+    if (!existsSync(this.snapshotPath(cur))) {
+      return { state: 'corrupt', issues: [`current points at missing snapshot ${cur}`] }
+    }
+
+    // In-flight tells.
+    const snapFiles = existsSync(this.snapDir) ? readdirSync(this.snapDir) : []
+    const pendingFiles = existsSync(this.txPending) ? readdirSync(this.txPending) : []
+    const transients = [
+      ...snapFiles.filter(isTransientFile),
+      ...pendingFiles.filter(isTransientFile), // .work-* writer copies
+    ]
+    if (transients.length) issues.push(`transient build files present: ${transients.join(', ')}`)
+    const orphanAhead = snapFiles
+      .map((f) => /^(\d+)\.fsqlite\.sqlite$/.exec(f)?.[1])
+      .filter((x): x is string => Boolean(x))
+      .map(Number)
+      .filter((v) => v > cur)
+    if (orphanAhead.length) issues.push(`orphan snapshot(s) ahead of pointer: ${orphanAhead.join(', ')}`)
+    const lockHeld = existsSync(this.publishLock)
+    if (lockHeld) issues.push('publish.lock present (reconcile in progress or crashed)')
+    const uncommitted = existsSync(this.txPending)
+      ? readdirSync(this.txPending).filter((d) => d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED')))
+      : []
+    if (uncommitted.length) issues.push(`uncommitted tx envelope(s): ${uncommitted.length}`)
+    const sideFiles = snapFiles.filter((f) => f.endsWith('-wal') || f.endsWith('-shm'))
+    if (sideFiles.length) issues.push(`live SQLite side files present: ${sideFiles.join(', ')}`)
+
+    // Integrity of the current head.
+    const db = driver.openReadonly(this.snapshotPath(cur))
+    let problems: string[]
+    try {
+      problems = driver.integrityProblems(db)
+    } finally {
+      db.close()
+    }
+    if (problems.length) {
+      return {
+        state: 'corrupt',
+        issues: [...issues, `snapshot ${cur} failed integrity_check: ${problems.join('; ')}`],
+      }
+    }
+
+    const pendingCommitted = this.pendingTxns().length
+    if (transients.length || orphanAhead.length || lockHeld || sideFiles.length || uncommitted.length) {
+      return { state: 'in-flight-capture', current: cur, pending: pendingCommitted, issues }
+    }
+    if (pendingCommitted > 0) return { state: 'live', current: cur, pending: pendingCommitted, issues }
+    return { state: 'sealed', current: cur, pending: 0, issues }
+  }
+
+  /**
+   * Finalize the current snapshot into a clean single-file at `destPath` via VACUUM INTO
+   * (no -wal/-shm, integrity-checked). Requires an empty pending tail.
+   */
+  seal(destPath: string): string {
+    if (this.pendingTxns().length > 0) throw new Error('cannot seal: pending tx must be reconciled first')
+    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    try {
+      driver.vacuumInto(db, destPath)
+    } finally {
+      db.close()
+    }
+    const out = driver.openReadonly(destPath)
+    try {
+      const problems = driver.integrityProblems(out)
+      if (problems.length) throw new Error(`sealed snapshot failed integrity_check: ${problems.join('; ')}`)
+    } finally {
+      out.close()
+    }
+    return destPath
+  }
+
+  /**
+   * doctor/repair: restore the last consistent point. Principled because every published
+   * snapshot is immutable and was quick_check-validated at publish (R1).
+   */
+  repair({ lockStaleMs = 30_000 }: { lockStaleMs?: number } = {}): RepairResult {
+    const actions: string[] = []
+    const versions = this._snapshotVersions()
+    const integrityOk = (v: number): boolean => {
+      try {
+        const db = driver.openReadonly(this.snapshotPath(v))
+        try {
+          return driver.integrityCheck(db)
+        } finally {
+          db.close()
+        }
+      } catch {
+        return false // a file that won't even open as SQLite is corrupt
+      }
+    }
+
+    // Determine the restored head, preferring the current pointer if its snapshot is valid.
+    let cur: number | null = null
+    try {
+      cur = this.currentVersion()
+      if (!Number.isInteger(cur)) cur = null
+    } catch {
+      /* ignore */
+    }
+    let good: number | null = null
+    if (cur !== null && versions.includes(cur) && integrityOk(cur)) {
+      good = cur
+    } else {
+      for (const v of [...versions].reverse()) {
+        if (integrityOk(v)) {
+          good = v
+          break
+        }
+        rmSync(this.snapshotPath(v), { force: true })
+        actions.push(`removed corrupt snapshot ${v}`)
+      }
+      if (good === null) throw new Error('repair: no integrity-clean snapshot exists')
+      this._publishPointer(good)
+      actions.push(`re-published current -> ${good}`)
+    }
+
+    // Delete snapshots ahead of the restored pointer (rolled-back orphans) and transients.
+    for (const v of this._snapshotVersions()) {
+      if (v > good) {
+        rmSync(this.snapshotPath(v), { force: true })
+        actions.push(`removed orphan snapshot ${v}`)
+      }
+    }
+    for (const dir of [this.snapDir, this.txPending]) {
+      if (!existsSync(dir)) continue
+      for (const f of readdirSync(dir)) {
+        if (isTransientFile(f)) {
+          rmSync(join(dir, f), { force: true })
+          actions.push(`removed transient ${f}`)
+        }
+      }
+    }
+
+    // Quarantine uncommitted pending envelopes (evidence kept).
+    if (existsSync(this.txPending)) {
+      for (const d of readdirSync(this.txPending)) {
+        if (d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED'))) {
+          try {
+            writeFileSync(join(this.txPending, d, 'QUARANTINE'), 'uncommitted-at-repair')
+          } catch {
+            /* ignore */
+          }
+          this._move([d], this.txQuarantine)
+          actions.push(`quarantined uncommitted ${d}`)
+        }
+      }
+    }
+
+    // Remove a stale publish.lock (a crashed reconcile left it behind).
+    if (existsSync(this.publishLock)) {
+      try {
+        if (Date.now() - statSync(this.publishLock).mtimeMs > lockStaleMs) {
+          rmSync(this.publishLock, { recursive: true, force: true })
+          actions.push('removed stale publish.lock')
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return { actions, state: this.validate().state }
+  }
+
+  _snapshotVersions(): number[] {
+    if (!existsSync(this.snapDir)) return []
+    return readdirSync(this.snapDir)
+      .map((f) => /^(\d+)\.fsqlite\.sqlite$/.exec(f)?.[1])
+      .filter((x): x is string => Boolean(x))
+      .map(Number)
+      .sort((a, b) => a - b)
+  }
+
+  private _archive(txns: string[]): void {
+    this._move(txns, this.txApplied)
+  }
+
+  private _quarantine(pairs: [string, string][]): void {
+    for (const [txn, reason] of pairs) {
+      try {
+        writeFileSync(join(this.txPending, txn, 'QUARANTINE'), reason)
+      } catch {
+        /* ignore */
+      }
+    }
+    this._move(
+      pairs.map((p) => p[0]),
+      this.txQuarantine,
+    )
+  }
+
+  private _move(txns: string[], destDir: string): void {
+    for (const txn of txns) {
+      try {
+        renameSync(join(this.txPending, txn), join(destDir, txn))
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      }
+    }
+  }
+
+  _publishPointer(v: number): void {
+    const tmp = `${this.currentPath}.${rand()}.tmp`
+    writeFileSync(tmp, String(v))
+    fsyncPath(tmp) // durably persist the pointer contents before the swap
+    renameSync(tmp, this.currentPath) // atomic pointer swap
+    fsyncDir(this.catDir) // durably persist the rename (power-loss safety)
+  }
+}

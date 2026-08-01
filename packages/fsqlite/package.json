@@ -1,0 +1,67 @@
+{
+  "name": "fsqlite",
+  "version": "0.0.1",
+  "description": "Filesystem-friendly concurrent SQLite: immutable snapshot-publish + transaction-envelope changesets behind an NFS-safe mkdir lease, plus an easy-local DirectStore — over plain SQLite files, server-free, on any filesystem",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0 <23 || >=23.4.0"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.mts",
+      "import": "./dist/cli/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "bin": {
+    "fsqlite": "./dist/cli/index.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "npm run build",
+    "cli": "node src/cli/index.ts",
+    "demo": "node examples/demo.ts",
+    "example:catalog": "node examples/document-catalog.ts",
+    "test": "node --test test/*.test.ts",
+    "test:golden": "tryscript run 'test/cli-golden/*.tryscript.md'",
+    "test:golden:update": "tryscript run --update 'test/cli-golden/*.tryscript.md'",
+    "test:package": "node scripts/package-smoke.mjs",
+    "test:all": "npm run test && npm run test:golden && npm run build && npm run test:package",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --fix --max-warnings 0",
+    "lint:check": "eslint . --max-warnings 0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.11",
+    "eslint": "^9.39.4",
+    "publint": "^0.3.21",
+    "tryscript": "^0.1.6",
+    "tsdown": "^0.20.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.60.1"
+  },
+  "keywords": [
+    "sqlite",
+    "node:sqlite",
+    "concurrency",
+    "nfs",
+    "changeset",
+    "session",
+    "snapshot",
+    "multi-writer",
+    "server-free"
+  ]
+}

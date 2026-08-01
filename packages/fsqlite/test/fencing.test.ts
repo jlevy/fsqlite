@@ -1,0 +1,97 @@
+// Fencing / lease semantics of the publish lock. The publish lock is the only
+// mutual-exclusion point, and correctness must NOT depend on it being perfect. These
+// tests pin the three properties that make that true:
+//   - revalidate-before-publish: a holder whose lease was stolen aborts (the
+//     ownerOf(lockPath) === token check) instead of writing under a new owner
+//   - stale-break: a lock older than staleMs is reclaimable (no permanent wedge)
+//   - the timeoutMs > staleMs invariant is enforced
+
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
+import { join } from 'node:path'
+import { SnapshotStore, withLock, ownerOf } from '../src/index.ts'
+import { STORE_OPTS, tmpStore } from './fixture.ts'
+
+const artifactCount = (s: SnapshotStore): number =>
+  s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
+
+test('withLock enforces timeoutMs > staleMs', () => {
+  assert.throws(
+    () => withLock('/tmp/x.lock', () => 0, { timeoutMs: 100, staleMs: 100 }),
+    /requires timeoutMs > staleMs/,
+  )
+})
+
+test('revalidate-before-publish: a holder whose lease was stolen aborts the destructive step', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    let published = false
+    const result = withLock(
+      lockPath,
+      (token) => {
+        // Simulate a stale-break + steal by a second reconciler while we were paused:
+        // the lock dir is reclaimed and re-owned by a different token.
+        rmSync(lockPath, { recursive: true, force: true })
+        mkdirSync(lockPath)
+        writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'someone-else' }))
+        // Our fencing check: only publish if we still own the lock.
+        if (ownerOf(lockPath) !== token) return 'aborted'
+        published = true
+        return 'published'
+      },
+      { timeoutMs: 5000, staleMs: 1000 },
+    )
+    assert.equal(result, 'aborted')
+    assert.equal(published, false, 'must not perform the destructive publish after losing the lease')
+  } finally {
+    cleanup()
+  }
+})
+
+test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    // A crashed holder left the lock dir behind with an old mtime, past the stale window.
+    mkdirSync(lockPath)
+    writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'dead-holder' }))
+    const oldTime = new Date(Date.now() - 10_000)
+    utimesSync(lockPath, oldTime, oldTime)
+    let ran = false
+    const out = withLock(
+      lockPath,
+      () => {
+        ran = true
+        return 'ok'
+      },
+      { timeoutMs: 3000, staleMs: 500, pollMs: 10 },
+    )
+    assert.equal(out, 'ok')
+    assert.equal(ran, true, 'a stale lock must be breakable so a live worker can proceed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('OCC on the pointer: a reconcile that builds against a superseded base converges to a no-op', () => {
+  // Two SnapshotStore handles on the same dir = two reconcilers. handle1 publishes v1;
+  // handle2, which read base=0, must detect current moved and converge (its view of the
+  // tail already in v1): never corrupt.
+  const { dir, cleanup } = tmpStore()
+  try {
+    const s1 = new SnapshotStore(dir, STORE_OPTS).init()
+    s1.write('A', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
+    const s2 = new SnapshotStore(dir, STORE_OPTS)
+
+    const r1 = s1.reconcile()
+    assert.equal(r1.published, 1)
+    const r2 = s2.reconcile()
+    assert.equal(r2.applied, 0)
+    assert.equal(s2.currentVersion(), 1)
+    assert.equal(artifactCount(s2), 1)
+  } finally {
+    cleanup()
+  }
+})

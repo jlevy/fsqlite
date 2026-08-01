@@ -1,0 +1,111 @@
+// Public types for fsqlite.
+
+import type { DatabaseSync } from 'node:sqlite'
+
+/** A unit of work run against a writable connection. */
+export type WorkFn = (db: DatabaseSync) => void
+
+/** A read-only view over the current published snapshot. */
+export type ReadFn<T> = (db: DatabaseSync) => T
+
+/**
+ * Per-table merge action. `lww` (last-writer-wins) aliases `replace`; `union`
+ * (set-union / first-writer-wins) aliases `omit`; `strict` quarantines any conflict.
+ */
+export type ConflictAction = 'replace' | 'omit' | 'strict' | 'lww' | 'union'
+
+/** Caller-supplied policy: table name to action, with `'*'` the default. */
+export type ConflictPolicyInput = Record<string, ConflictAction>
+
+/** Normalized policy: only the three actions node:sqlite honors, `'*'` always set. */
+export type NormalizedPolicy = Record<string, 'replace' | 'omit' | 'strict'>
+
+/** Caller-supplied configuration for a store: the schema and the per-table merge policy. */
+export interface StoreOptions {
+  /** Caller DDL applied to snapshot 0. Every table must have a NON-NULL primary key. */
+  schema?: string
+  /** Bumped when `schema` changes incompatibly; stamped as `user_version` and on envelopes. */
+  schemaVersion?: number
+  /** PRAGMA application_id stamped on snapshots, for foreign capability checks. */
+  appId?: number
+  /** Per-table merge policy (table to action, `'*'` the default); see {@link ConflictPolicyInput}. */
+  conflictPolicy?: ConflictPolicyInput
+  /** Free-form writer/tool version recorded on each envelope for provenance. */
+  toolVersion?: string
+  /**
+   * Reconcile refuses to load a changeset envelope larger than this many bytes, quarantining
+   * it instead of reading it fully into memory. Guards against a runaway writer OOMing the
+   * reconciler. Defaults to 1 GiB.
+   */
+  maxEnvelopeBytes?: number
+}
+
+/**
+ * Store health. `sealed`/`live` are healthy; `in-flight-capture` means a publish or
+ * hot copy is mid-flight (retryable); `corrupt` means an inconsistency `validate` surfaced
+ * rather than silently accepted (R2).
+ */
+export type StoreState = 'sealed' | 'live' | 'in-flight-capture' | 'corrupt'
+
+/** Result of `validate()`: the classified {@link StoreState} plus any human-readable issues. */
+export interface ValidateResult {
+  state: StoreState
+  current?: number
+  pending?: number
+  issues: string[]
+}
+
+/**
+ * Result of `reconcile()`: the head version after publishing, how many tx were folded in,
+ * how many were quarantined (policy conflicts / bad envelopes), and how many OCC attempts
+ * the publish took.
+ */
+export interface ReconcileResult {
+  published: number
+  applied: number
+  quarantined: number
+  attempts: number
+}
+
+/**
+ * Result of `writeWithRetry()`: the committed tx id (or null if `fn` made no change),
+ * the number of attempts, and whether a strict-row conflict forced a re-seed.
+ */
+export interface WriteWithRetryResult {
+  txId: string | null
+  attempts: number
+  conflicted: boolean
+}
+
+/** Result of `gc()`: snapshots removed, snapshots kept, and the versions a lease pinned. */
+export interface GcResult {
+  removed: number
+  kept: number
+  leased: number[]
+}
+
+/** Result of `repair()`: the actions taken and the resulting {@link StoreState}. */
+export interface RepairResult {
+  actions: string[]
+  state: StoreState
+}
+
+/**
+ * A pin on a published version so `gc` will not delete it while a packager reads it.
+ * `heartbeat()` refreshes the pin; `release()` drops it. A lease that stops heartbeating
+ * past `leaseStaleMs` self-clears so a dead packager cannot wedge `gc`.
+ */
+export interface ReadLease {
+  version: number
+  heartbeat: () => void
+  release: () => void
+}
+
+/** What the current SQLite binding can do (capability detection, research G2). */
+export interface Capabilities {
+  session: boolean
+  applyChangeset: boolean
+  backup: boolean
+  loadExtension: boolean
+  rebaser: boolean
+}

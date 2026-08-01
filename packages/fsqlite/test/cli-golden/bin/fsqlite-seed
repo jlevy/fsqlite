@@ -1,0 +1,3 @@
+#!/bin/sh
+# Wrapper: run the deterministic golden-test store seeder (sibling seed.ts).
+exec node "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/seed.ts" "$@"

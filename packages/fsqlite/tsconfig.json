@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    // Source uses explicit `.ts` import specifiers so Node's native type-stripping can
+    // resolve them at runtime (`node src/cli/index.ts`); tsc needs this to allow them.
+    "allowImportingTsExtensions": true,
+    "exactOptionalPropertyTypes": true,
+    "types": ["node"],
+    // The 14-day supply-chain cool-off blocks a full `pnpm install` (a transitive lmdb
+    // build dep), so fsqlite has no local node_modules yet. @types/node is already in the
+    // pnpm store from the root install; point typeRoots at it for standalone typecheck.
+    // Remove this once fsqlite is part of a clean workspace install (see spec D3/D5).
+    "typeRoots": ["../../node_modules/.pnpm/@types+node@22.19.19/node_modules/@types"]
+  },
+  "include": ["src", "test", "workers", "examples"]
+}
