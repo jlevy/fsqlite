@@ -5,7 +5,7 @@ title: Optimize writer seeding and snapshot compaction
 kind: task
 status: open
 priority: 2
-version: 4
+version: 5
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
@@ -13,9 +13,9 @@ labels:
 dependencies: []
 parent_id: is-01kyxmrxxwhdr0a5f90akc73a4
 created_at: 2026-08-01T03:18:07.538Z
-updated_at: 2026-08-01T07:31:30.184Z
+updated_at: 2026-08-01T16:14:27.140Z
 ---
-Measure large-store writer startup and retained-snapshot costs. Design a safe shared read-only base, overlay, copy-on-write seed, or equivalent that preserves the rows and constraints observed by the callback. Add explicit compaction and retention policy without changing f1.0 identity or weakening immutable publication. The unsafe empty-schema seed is not part of f1.0.
+Measure large-store writer startup, full-head copy cost, concurrent writer disk amplification, and retained-snapshot costs. Design a safe shared read-only base, overlay, copy-on-write seed, or equivalent that preserves the rows and constraints observed by the callback. Add explicit snapshot compaction and retention policy without changing f1.0 identity or weakening immutable publication. Applied transaction ledger checkpointing is tracked separately in fsq-bllj.
 
 ## Notes
 

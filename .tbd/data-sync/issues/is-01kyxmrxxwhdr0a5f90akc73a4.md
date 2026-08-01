@@ -5,7 +5,7 @@ title: fsqlite post-alpha format and portability roadmap
 kind: epic
 status: open
 priority: 2
-version: 25
+version: 27
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
@@ -32,6 +32,8 @@ child_order_hints:
   - is-01kyxzgq5hhnwwpgdgv9ed9spv
   - is-01kyxzgw7v31yehrbzzrmyp21q
   - is-01kyxzh0gy8tr2w2ngvnbjwhmr
+  - is-01kyz14vvh61g0chb0yx41eee3
+  - is-01kyz14w50n785p7rr6vc411v4
 created_at: 2026-08-01T03:09:38.619Z
-updated_at: 2026-08-01T06:28:57.683Z
+updated_at: 2026-08-01T16:05:07.358Z
 ---

@@ -5,7 +5,7 @@ title: Build format conformance fixtures and an independent verifier
 kind: feature
 status: open
 priority: 1
-version: 10
+version: 11
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
@@ -28,8 +28,10 @@ dependencies:
     target: is-01kyxn8f768vrn4jsk7jmt4nqx
   - type: blocks
     target: is-01kyxn8ffpjs5p46pm2g114pr3
+  - type: blocks
+    target: is-01kyz14vvh61g0chb0yx41eee3
 parent_id: is-01kyxmrxxwhdr0a5f90akc73a4
 created_at: 2026-08-01T03:10:12.912Z
-updated_at: 2026-08-01T03:21:31.406Z
+updated_at: 2026-08-01T16:14:47.629Z
 ---
 Publish golden fsqlite stores covering not-a-store, invalid, unsupported, sealed, live, in-flight, corrupt, mixed-store, and envelope quarantine outcomes. Build a verifier independent of the Node implementation under test. Version fixtures against f<major>.<minor> and make them the gate for every implementation.
