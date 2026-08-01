@@ -2,8 +2,20 @@
 # Remind about close protocol after git push
 # Installed by: tbd setup --auto
 
-input=$(cat)
-command=$(echo "$input" | jq -r '.tool_input.command // empty')
+if ! command=$(node -e '
+  const { readFileSync } = require("node:fs")
+  try {
+    const input = JSON.parse(readFileSync(0, "utf8"))
+    if (typeof input?.tool_input?.command === "string") {
+      process.stdout.write(input.tool_input.command)
+    }
+  } catch {
+    console.error("tbd closing reminder: invalid hook JSON")
+    process.exit(1)
+  }
+'); then
+  exit 1
+fi
 
 # Check if this is a git push command and .tbd exists
 if [[ "$command" == git\ push* ]] || [[ "$command" == *"&& git push"* ]] || [[ "$command" == *"; git push"* ]]; then
