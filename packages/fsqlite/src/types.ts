@@ -50,12 +50,23 @@ export type StoreRecognitionState = 'not-a-store' | 'invalid' | 'unsupported'
 
 export type StoreValidationState = StoreState | StoreRecognitionState
 
+/**
+ * Caller-declared constraints that row-level merge can break. Reported separately from
+ * {@link StoreState} because they are a different axis: the SQLite file is structurally
+ * sound, but a constraint the caller declared no longer holds. See fsql-format-spec.md §6.1.
+ */
+export interface ConstraintReport {
+  foreignKeyViolations: number
+}
+
 /** Recognition plus health classification and any human-readable issues. */
 export interface ValidateResult {
   state: StoreValidationState
   current?: number
   pending?: number
   issues: string[]
+  /** Present once the head has been opened; absent for recognition failures. */
+  constraints?: ConstraintReport
 }
 
 /**
@@ -68,6 +79,16 @@ export interface ReconcileResult {
   applied: number
   quarantined: number
   attempts: number
+  /**
+   * Committed rows the merge discarded rather than landed: an OMIT under `union`, or
+   * `lww` meeting a conflict type SQLite forbids REPLACE for (CONSTRAINT/NOTFOUND/
+   * FOREIGN_KEY). Their envelopes still count as applied. A non-zero total means data a
+   * writer committed is not in the published snapshot; surfaced so the loss is never
+   * silent (R2).
+   */
+  dropped: { total: number; byConflictType: Record<string, number> }
+  /** Foreign key violations in the published snapshot (see {@link ConstraintReport}). */
+  foreignKeyViolations: number
 }
 
 /**

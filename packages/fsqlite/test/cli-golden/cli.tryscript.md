@@ -80,6 +80,7 @@ $ fsqlite doctor store
 fsqlite doctor: store
   binding: [..]
   store: sealed
+  constraints: foreign_key_violations=0
 ? 0
 ```
 

@@ -145,6 +145,37 @@ A successfully captured envelope survives process failure but is only guaranteed
 power-loss durability after reconciliation publishes it.
 An optional durable-envelope mode is future work.
 
+## Design Constraints
+
+The full statement, with the mechanism behind each constraint and what it costs, is in
+the
+[design document](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#design-constraints).
+In short, fsqlite is built to keep the artifact an ordinary SQLite file, run with no
+server on any filesystem, lose at most the in-flight tail, surface every inconsistency
+it cannot prevent, accept many concurrent writers, keep readers universal, and embed
+without build steps.
+It buys that by giving up serializable isolation and by trusting writers to use the
+protocol.
+
+Two constraints shape day-to-day use more than the rest:
+
+**A write copies the current snapshot**, so per-write cost scales with store size rather
+than change size (about 2.3 ms per MiB on local disk: roughly 12 ms at 2 MiB, 184 ms at
+79 MiB). Copy-on-write filesystems (APFS, btrfs, XFS) reduce this to a metadata
+operation automatically.
+Insert-heavy writers can use `seed: 'schema-only'` to skip the copy entirely.
+See
+[Operating Envelope](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#operating-envelope).
+
+**The merge is keyed on primary keys**, so other constraints you declare are enforced at
+capture but can be broken by merging two individually-valid writes.
+`UNIQUE` collisions drop the incoming row; foreign keys hold within one write but not
+across concurrent ones.
+Every such case is reported rather than silent: `reconcile()` returns `dropped` and
+`foreignKeyViolations`, and `validate()` reports a `constraints` axis alongside the
+structural state. See
+[What the Merge Preserves](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#what-the-merge-preserves).
+
 ## Limitations
 
 - The format and API are alpha and may change.
@@ -159,6 +190,11 @@ An optional durable-envelope mode is future work.
   cross-row invariants.
   Use `strict` with retry for supported point-row invariants, or a single-writer
   strategy.
+- Per-write cost grows with store size, because a write seeds from a copy of the current
+  snapshot. Budget for it, or use a copy-on-write filesystem or `seed: 'schema-only'`.
+- `UNIQUE` constraints other than the primary key are not preserved by the merge, and
+  foreign keys are preserved within one write but not across concurrent writes.
+  Both are reported, never silently accepted.
 
 The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
 tests to guarantees.

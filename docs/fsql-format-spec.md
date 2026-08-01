@@ -55,6 +55,8 @@ paths below are relative to it.
 <store-root>/
   fsqlite.json                    # immutable format and store identity marker
   current                          # the pointer: ASCII decimal version (§4)
+  current.<hex10>.tmp              # transient: pointer swap in flight (§4)
+  fsqlite.json.<uuid>.tmp          # transient: marker write in flight (§12)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
   snapshots/
@@ -113,7 +115,10 @@ Naming grammar:
 - **Transients** are exactly the files matching: prefix `.build-`, prefix `.direct-`,
   prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. Transients are never part of
   store state; a *fresh* transient indicates work in flight, an *old* one indicates a
-  crash (§11).
+  crash (§11). They occur in three places: `snapshots/`, `tx/pending/`, and the **store
+  root** (the pointer and marker temps written by P2 and §12). Validation and GC MUST
+  cover all three, because a location swept by neither would hide crash debris
+  permanently.
 - **Envelope dir**: `<txid>.txn` (§5 defines `<txid>`).
 - **Hex tokens** (`<hex10>` etc.)
   are lowercase hex from a cryptographically random source; their only requirement is
@@ -320,14 +325,65 @@ a winner.
 
 All passes of one envelope MUST apply atomically (one transaction): an envelope either
 lands in full (modulo `omit`-dropped rows) or not at all.
-The Node implementation realizes per-table routing as one filtered
-`sqlite3changeset_apply` pass per distinct action, all inside a single `BEGIN IMMEDIATE`
-transaction, because the binding exposes the table name only to the filter callback (see
-`upstream-source-confirmations.md`).
+An implementation MAY realize per-table routing as one filtered changeset-apply pass per
+distinct action, all inside a single `BEGIN IMMEDIATE` transaction; the Node
+implementation does, because the binding exposes the table name only to the filter
+callback (see `upstream-source-confirmations.md`). A multi-pass implementation MUST
+preserve two properties that a single-pass implementation gets for free:
+
+- **F7 (deterministic pass order).** Passes MUST run in the fixed action order
+  `replace`, `omit`, `strict`, restricted to the actions the policy actually uses.
+  Pass order MUST NOT be derived from the order in which the caller declared its tables.
+  Otherwise the same policy expressed with its keys in a different order can merge the
+  same envelope differently, breaking the determinism this section requires.
+- **F8 (envelope-level foreign key atomicity).** Foreign key enforcement MUST be
+  deferred to the envelope’s commit, so that an intermediate pass may leave a reference
+  temporarily unsatisfied.
+  The unit the writer validated is the whole envelope, so the whole envelope is the unit
+  that must satisfy referential integrity.
+  (The Node implementation uses `PRAGMA defer_foreign_keys`.)
+
+**F9 (report dropped changes).** A change discarded by `omit`, including a `replace`
+action falling back to `omit` on a conflict type SQLite forbids `REPLACE` for, is a
+committed row that does not reach the published snapshot.
+Its envelope still counts as applied.
+An implementation MUST report the number of such changes, and SHOULD attribute them by
+conflict type, so the loss is observable rather than silent (**R2**).
 
 The **`writeWithRetry`** pattern (write → reconcile → if quarantined, re-seed and
 re-run) is the sanctioned compare-and-retry loop for cross-row invariants over `strict`
 tables; it is a client pattern, not a format feature.
+An implementation MUST NOT combine it with a `schema-only` seed: the retry re-runs a
+read-modify-write against a working copy that holds no rows.
+
+### 6.1 Constraint Closure
+
+The merge is keyed on primary keys, so a primary key conflict is the only constraint it
+can resolve. Other constraints a caller declares are enforced when the writer captures
+its envelope and can still be violated when two individually-valid envelopes are merged.
+This is a property of row-level write-set merge, not a defect to be fixed, and the
+format’s obligation is that every such case is detectable (**R2**).
+
+- **N1.** Every caller table MUST have a NON-NULL primary key (S4). The merge relies on
+  it; no other constraint is required or assumed.
+- **N2.** `UNIQUE` constraints other than the primary key are **not preserved**. A
+  collision arrives as a `CONSTRAINT` conflict, where SQLite forbids `REPLACE`, so
+  `replace` degrades to `omit` and the incoming row is dropped.
+  Implementations MUST count the drop per F9.
+- **N3.** `FOREIGN KEY` constraints are preserved **within** an envelope (F8) and are
+  **not preserved across** envelopes: one writer may delete a parent while another adds
+  a child, and both envelopes apply.
+  A reconciler MUST check referential integrity of the candidate snapshot
+  (`PRAGMA foreign_key_check` or equivalent) and MUST report the violation count;
+  `validate` MUST report it too (§11).
+- **N4.** A referential or other caller-constraint violation MUST NOT be classified as
+  `corrupt`. The SQLite file is well formed, and repair (§11) restores an earlier
+  snapshot, which cannot fix a caller-constraint problem and would discard valid data.
+  It is reported on a separate axis from the store-health state.
+- **N5.** Cross-row, range, and aggregate invariants are outside what the merge can
+  preserve (no read-set tracking).
+  A caller needing one MUST place the rows under a `strict` policy and use
+  compare-and-retry, or use the DirectStore strategy (§9).
 
 ## 7. The Publish Lock
 
@@ -452,6 +508,12 @@ layout, trusting no single file:
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
 | `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity (`application_id`, `format_version`, or `store_id`) mismatches the marker, or the head fails `integrity_check` |
 
+The four states above classify **structural** health.
+Caller-declared constraints are a separate axis: `validate` MUST additionally report the
+head’s referential integrity (§6.1 N3) and MUST NOT fold it into the structural state
+(N4). A store can be `sealed` and still carry foreign key violations; that combination
+means the file is sound and a constraint the caller declared does not hold.
+
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
 `invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
 classification error rather than a store-health result.
@@ -467,8 +529,12 @@ published snapshot was integrity-gated at publish and never modified (S6):
    snapshots.
 2. Acquire `publish.lock` and revalidate its owner token immediately before every
    pointer write, snapshot deletion, transient deletion, and envelope move.
-   Repair MUST refuse to begin while any publisher lock is present; it never deletes or
-   breaks that lock itself.
+   Repair MUST refuse to begin while a **live** publisher holds the lock, judged by the
+   same stale window as L2, and MUST NOT break a live lock.
+   Repair MAY reclaim a lock whose mtime is past that window through the ordinary fenced
+   acquisition path (L1 to L4). A leftover lock is itself an in-flight tell (§11), so
+   refusing on mere presence would leave repair unable to clear the debris it reports
+   and would strand a read-mostly store in `in-flight-capture` indefinitely.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
 4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`

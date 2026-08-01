@@ -39,6 +39,33 @@ The closest precedents are Apache Iceberg and Delta Lake: a table format plus a 
 protocol over immutable files, with multiple engine implementations.
 fsqlite is that shape over SQLite.
 
+## Design Constraints
+
+These are the constraints fsqlite is built to satisfy, the mechanism that satisfies
+each, and what satisfying it costs.
+They are the contract an adopter should evaluate before embedding fsqlite, and the
+checklist a change to the design has to be argued against.
+(Their derivation and the alternatives weighed against them are in the
+[research](research/research-2026-06-06-portable-concurrent-sqlite.md); this table is
+the current, governing statement.)
+
+| Constraint | What it demands | How the design meets it | What it costs |
+| --- | --- | --- | --- |
+| **C1. Portable artifact** | The at-rest artifact stays a standard SQLite file any tool or language can open, now and in years | Published snapshots are ordinary SQLite, stamped with `application_id` `FSQL`; no custom VFS, no loadable extension, no proprietary container | The live store is a *directory* of plain files, not one file, until `seal` |
+| **C2. No server** | No daemon, broker, or coordinator process; any process just opens files | Coordination is atomic `mkdir` plus atomic `rename`; the only serialized step is a millisecond publish | No cross-host lock service, so writers must cooperate (C9) |
+| **C3. Any filesystem** | Correct where POSIX byte-range locks and WAL shared memory are not, including NFS, SMB, and sync folders | Writers never use SQLite file locking or WAL `-shm`; publication is atomic dir-create and rename, which NFSv4 specifies | Cross-host validation is still an open gate (see Known Gaps) |
+| **C4. Bounded loss** | A crash, an interrupted write, or a copy taken while live loses at most the in-flight tail, never committed state | Immutable published heads plus an atomic pointer swap; the commit point is publication (**R1**) | An accepted `write()` is not power-loss durable until a reconcile publishes it |
+| **C5. No silent corruption** | Every inconsistency is detectable and surfaced, never silently accepted (**R2**) | Content digests, `integrity_check`, structural in-flight tells, reported dropped changes, and a reported constraint axis, all through `validate` | Some inconsistencies can only be *reported*, not prevented (see What the Merge Preserves) |
+| **C6. Many concurrent writers** | Optimistic and session-grained, not one coarse whole-store lock | Writers capture lock-free changeset envelopes; conflicts resolve per primary key at merge | Isolation is weaker than serializable, and writes become visible at `reconcile` |
+| **C7. Universal readers** | Reading requires no fsqlite code and no special build | A reader parses `current` and opens a snapshot; the session extension is confined to writers and reconcile | Readers see a published version, not the pending tail |
+| **C8. Trivial embedding** | Adding fsqlite to a tool must not add build steps, native modules, or install scripts | `node:sqlite` only, zero runtime dependencies, no install-time scripts | Ties the reference implementation to a Node version floor and to `node:sqlite` maturity |
+| **C9. Cooperative writers only** | Enforcement lives in the protocol, not the filesystem | Every writer goes through the envelope or DirectStore path | A process writing the tree directly can corrupt it, exactly as it could any SQLite file |
+| **C10. One connection per thread** | Thread safety without a shared-connection hazard | Every operation opens and closes its own connection; nothing is shared across threads | Per-operation open cost; the cross-process lease protects processes, not threads |
+
+Two constraints are deliberately **not** on this list, because fsqlite does not attempt
+them: serializable isolation across writers (C6 buys concurrency instead), and safety
+against writers that bypass the protocol (C9).
+
 ## The Contract
 
 **Readers are unchanged:** they open the published snapshot with plain SQLite in any
@@ -106,6 +133,81 @@ and hot-copy safety.
 For a cross-row invariant on a `strict` table, `writeWithRetry` provides a
 per-transaction optimistic compare-and-retry loop (re-seed from the new snapshot, re-run
 the work) that prevents lost updates without a lock.
+
+## What the Merge Preserves
+
+The merge is keyed on **primary keys**, so that is the only constraint it can resolve.
+Every other constraint a caller declares is honored when the writer captures its
+envelope and can still be broken when the reconciler merges two envelopes that were each
+valid on their own. This is inherent to row-level write-set merge, not an implementation
+gap, so the design’s obligation is to make every such case **visible** (C5), not to
+pretend it cannot happen.
+Normative rules are in format spec 6.1.
+
+| Constraint | Merge behavior | How it surfaces |
+| --- | --- | --- |
+| `PRIMARY KEY` | Resolved by the table’s policy (`lww` / `union` / `strict`) | The policy is the contract; `strict` quarantines the envelope |
+| `NOT NULL` on a PK | Required at `init`; the merge cannot break it | `init` rejects a violating schema |
+| `UNIQUE` (non-PK) | **Not preserved.** SQLite forbids `REPLACE` on a `CONSTRAINT` conflict, so `lww` falls back to dropping the incoming row | `reconcile().dropped` counts it, attributed to `CONSTRAINT` |
+| `FOREIGN KEY` | **Atomic within one envelope** (enforcement is deferred to the envelope’s commit, so a child may land in an earlier pass than its parent). **Not preserved across envelopes:** one writer can delete a parent while another adds a child | `reconcile().foreignKeyViolations` and `validate().constraints` |
+| `CHECK` | Enforced at capture; a merge that combines rows can still leave a cross-row predicate false | Not separately reported; use `strict` or DirectStore |
+| Cross-row and aggregate invariants | Not preserved (no read-set tracking; this is the classic write-skew anomaly) | Put the rows under `strict` and use `writeWithRetry`, or use DirectStore |
+
+Two consequences worth stating plainly, because they surprise people:
+
+- **A dropped change is a committed row that is not in the published snapshot.** Its
+  envelope still counts as applied.
+  `reconcile()` returns a `dropped` total broken down by conflict type so the loss is
+  observable; a non-zero total on a store you expected to be conflict-free means your
+  policy is discarding data.
+- **A constraint violation is not file corruption.** `validate()` reports it on a
+  separate axis (`constraints`) and leaves the structural state (`sealed` / `live` /
+  `corrupt`) alone, because rolling the store back to an older snapshot cannot fix a
+  caller-constraint problem and would discard good data to do it.
+
+If a constraint must hold absolutely, it belongs under a `strict` policy with
+`writeWithRetry`, or in the single-writer `DirectStore` lane, where it is enforced the
+way ordinary SQLite enforces it.
+
+## Operating Envelope
+
+The design’s dominant cost is that **a write copies the current snapshot**. Both a
+writer seeding its working copy and a reconciler building the next candidate begin with
+that copy, so per-write cost scales with *store size*, not with the size of the change.
+
+Measured on local disk with 2 KB rows, roughly 2.3 ms per MiB of snapshot:
+
+| Store size | Time per single-row `write()` |
+| --- | --- |
+| 2 MiB | about 12 ms |
+| 8 MiB | about 21 ms |
+| 32 MiB | about 72 ms |
+| 79 MiB | about 184 ms |
+
+Extrapolated, a 1 GiB store costs on the order of seconds per single-row write, and
+`writeWithRetry` (or the `write()` then `reconcile()` durability pattern) pays the copy
+twice. Practical guidance:
+
+- **Copy-on-write filesystems remove most of this.** The copy is issued as a reflink
+  request, so on APFS, btrfs, and XFS it becomes a metadata operation.
+  Filesystems without copy-on-write fall back to a full byte copy.
+  Check with `fsqlite fsinspect`.
+- **Insert-heavy writers can skip the copy** with `seed: 'schema-only'`, which builds an
+  empty working copy in constant time.
+  It is valid **only** for inserting new keys: an update or delete against an empty
+  working copy matches nothing and is silently lost, and re-inserting an existing key
+  clobbers columns the writer never read.
+  `writeWithRetry` refuses this seed for exactly that reason.
+- **Keep large payloads out of the store.** Content-address blobs as files and keep rows
+  small; this keeps both snapshots and changesets small.
+- **Shard when one store gets large.** Independent stores each have their own `current`
+  and reconcile lane, at the cost of no cross-shard atomic snapshot.
+- **Reconcile in batches.** One reconcile folds the whole committed tail for a single
+  base copy, so batching amortizes it; reconciling after every write does not.
+
+A cheaper seeding path (a shared read-only base with an overlay) is
+[roadmap](roadmap.md) work; it is the change that would lift this constraint rather than
+manage it.
 
 ## Two Write Strategies, One Format
 

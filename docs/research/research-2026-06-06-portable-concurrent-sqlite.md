@@ -198,11 +198,15 @@ The target properties (the “contours”), restated as testable requirements:
   a connection to its creating thread), which guarantees safety *only* when no single
   connection (or object derived from it) is used by two threads at once.
   So a connection is **never shared across Worker Threads**: one connection per thread.
-  The cross-process `mkdir` lease (which protects *processes*) is complemented by a
-  small **in-process mutex** that serializes this implementation’s own multi-step
-  protocol actions (lock acquire / reconcile / seal) when several in-process threads
-  each hold their own connection.
-  (Finding G2; review B1.)
+  The cross-process `mkdir` lease protects *processes*. This report originally proposed
+  complementing it with a small **in-process mutex** serializing multi-step protocol
+  actions (lock acquire / reconcile / seal).
+  The shipped design does not have one and does not need one: every operation opens and
+  closes its own connection, so nothing is shared across threads, and the `mkdir` lease
+  is a filesystem operation that excludes threads of one process exactly as it excludes
+  separate processes. The governing statement is constraint **C10** in the
+  [design](../fsqlite-design.md#design-constraints); Worker Thread coverage remains an
+  open testing gap. (Finding G2; review B1.)
 
 **Requirement review.** These are sound and mutually achievable, with three notes:
 

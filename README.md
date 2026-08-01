@@ -10,9 +10,14 @@ technical research, QA runbook, roadmap, and project plans.
 Release maintainers should follow the [release runbook](docs/releasing.md).
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile --ignore-scripts
 pnpm verify
 ```
+
+`--ignore-scripts` is required, not optional: fsqlite
+[allows no dependency lifecycle scripts](SUPPLY-CHAIN-SECURITY.md), so a plain
+`pnpm install` stops with `ERR_PNPM_IGNORED_BUILDS` rather than silently running one.
+This is the same command CI and [`CONTRIBUTING.md`](CONTRIBUTING.md) use.
 
 The first release is `fsqlite@0.1.0`. The project, `f1.0` format, and public API are in
 an alpha phase; cross-host NFS/SMB validation remains a disclosed pre-1.0 gate.

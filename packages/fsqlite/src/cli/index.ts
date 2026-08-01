@@ -220,6 +220,9 @@ function main(): void {
         console.log(`  repaired: ${actions.join('; ')}`)
       }
       console.log(`  store: ${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
+      if (v.constraints) {
+        console.log(`  constraints: foreign_key_violations=${v.constraints.foreignKeyViolations}`)
+      }
     }
     process.exit(exitCodeForState(v.state))
   }

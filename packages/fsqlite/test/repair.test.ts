@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, existsSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
@@ -93,7 +93,7 @@ test('repair preserves every snapshot when no clean recovery point exists', () =
   }
 })
 
-test('repair refuses to mutate while a publisher lock is present', () => {
+test('repair refuses to mutate while a LIVE publisher lock is present', () => {
   const { store, cleanup } = storeAt(1)
   try {
     const transient = join(store.snapDir, '.build-live.sqlite')
@@ -101,9 +101,34 @@ test('repair refuses to mutate while a publisher lock is present', () => {
     mkdirSync(store.publishLock)
     writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
 
-    assert.throws(() => store.repair(), /repair refused: publish\.lock is present/)
-    assert.equal(existsSync(transient), true)
+    assert.throws(() => store.repair(), /repair refused: publish\.lock is held by a live publisher/)
+    assert.equal(existsSync(transient), true, 'a live publisher keeps its build')
     assert.equal(existsSync(store.snapshotPath(1)), true)
+  } finally {
+    cleanup()
+  }
+})
+
+// A publisher killed mid-publish leaves publish.lock behind, and that leftover is itself an
+// `in-flight-capture` tell. Refusing on mere presence made repair unable to clear the exact
+// debris validate reports, so a read-mostly store could sit in-flight indefinitely with no
+// operator path. Staleness is judged as withLock judges it; fenced acquisition makes it safe.
+test('repair reclaims a stale publisher lock left by a killed publisher', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    mkdirSync(store.publishLock)
+    writeFileSync(
+      join(store.publishLock, 'owner.json'),
+      JSON.stringify({ token: 'dead', pid: 999999, host: 'gone', at: Date.now() - 3_600_000 }),
+    )
+    const old = new Date(Date.now() - 3_600_000)
+    utimesSync(store.publishLock, old, old)
+
+    assert.equal(store.validate().state, 'in-flight-capture', 'the leftover lock is a tell')
+    const result = store.repair()
+    assert.equal(result.state, 'sealed', 'repair clears the debris it diagnosed')
+    assert.equal(existsSync(store.publishLock), false, 'the stale lease is gone')
+    assert.equal(existsSync(store.snapshotPath(1)), true, 'the published head is untouched')
   } finally {
     cleanup()
   }

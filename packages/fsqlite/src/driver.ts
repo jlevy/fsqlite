@@ -98,6 +98,27 @@ export function integrityCheck(db: DatabaseSync): boolean {
 }
 
 /**
+ * Rows violating a declared FOREIGN KEY, per `PRAGMA foreign_key_check` ([] means clean).
+ *
+ * Structural integrity and referential integrity are different axes and neither
+ * `quick_check` nor `integrity_check` looks at foreign keys. Row-level merge resolves
+ * same-primary-key conflicts, so two envelopes that were each valid against the base can
+ * still combine into a dangling reference (one deletes a parent while the other adds a
+ * child). That is inherent to write-set merge; leaving it undetected is not, so validate
+ * reports it (R2). See fsql-format-spec.md §6.1.
+ */
+export function foreignKeyViolations(db: DatabaseSync): { table: string; parent: string }[] {
+  let rows: Record<string, unknown>[]
+  try {
+    rows = db.prepare('PRAGMA foreign_key_check').all()
+  } catch {
+    return [] // a schema with no foreign keys, or a build without FK support
+  }
+  const name = (value: unknown): string => (typeof value === 'string' ? value : '?')
+  return rows.map((r) => ({ table: name(r.table), parent: name(r.parent) }))
+}
+
+/**
  * Report what the current binding can do, so callers detect capabilities instead of
  * assuming them. A `SnapshotStore` writer requires `session`;
  * readers and `DirectStore` require none of these. Probing `session` actually creates

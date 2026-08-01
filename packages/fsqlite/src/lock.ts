@@ -36,7 +36,7 @@ export class LockTimeoutError extends Error {
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_POLL_MS = 25
-const DEFAULT_LOCK_STALE_MS = 20_000
+export const DEFAULT_LOCK_STALE_MS = 20_000
 
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.

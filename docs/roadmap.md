@@ -46,8 +46,18 @@ stable release, not a promise that unsupported environments work today.
   schema.
 - Design declared read-set validation for point-key invariants; document stronger
   patterns for range, predicate, aggregate, and cross-row invariants.
+- Decide whether a `UNIQUE` collision should quarantine its envelope rather than drop
+  the incoming row. `f1.0` reports the drop (format spec 6.1, N2); quarantining would be
+  a stronger but incompatible default.
+- Consider an opt-in mode that fails a reconcile whose candidate snapshot introduces
+  foreign key violations, instead of publishing and reporting them (N3).
 - Evaluate SQLite rebaser support without making it a base-format dependency.
 - Measure schema-only writer seeding and explicit compaction/retention for large stores.
+- Replace the per-write snapshot copy with a shared read-only base plus an overlay.
+  This is the change that would lift the operating-envelope constraint rather than
+  manage it; reflink copies and schema-only seeding only reduce its cost today.
+- Report filesystem copy-on-write support from `fsinspect`, so an adopter can tell
+  whether writer seeding is a metadata operation or a full copy on their target.
 - Research replay-based bit-rot recovery while keeping repair non-destructive and
   fail-closed.
 

@@ -105,25 +105,67 @@ const HANDLER_RETURN: Record<'replace' | 'omit' | 'strict', (type: number) => nu
 }
 
 /**
+ * Changes an apply pass discarded rather than landed, grouped by SQLite conflict type.
+ * A dropped change is a row the writer committed that is NOT in the published snapshot;
+ * reconcile reports the total so the loss is observable rather than silent (R2).
+ */
+export interface DroppedChanges {
+  total: number
+  byConflictType: Record<string, number>
+}
+
+const noDrops = (): DroppedChanges => ({ total: 0, byConflictType: {} })
+
+/**
  * Apply `changeset` to `db` honoring a normalized per-table `policy`, in ONE IMMEDIATE
  * transaction. Per-table policy is realized as one filtered apply pass per distinct
  * action (node:sqlite exposes the table name only via `filter`, not to the conflict
  * handler). A 'strict' table conflict makes its pass return `false` (ABORT rolls that
  * pass back); we then roll back the WHOLE tx and raise StrictConflictError so the caller
  * quarantines the envelope (atomic, since all passes share one tx).
+ *
+ * Two properties the multi-pass decomposition must preserve, both required by the format
+ * spec (§6) so independent implementations agree:
+ *
+ *   - DETERMINISTIC PASS ORDER. Passes run in the fixed ACTIONS order, never in the
+ *     caller's policy-object key order. Iterating `Object.values(policy)` would make the
+ *     merge result depend on which order the caller happened to declare its tables in.
+ *   - ENVELOPE-LEVEL FOREIGN KEY ATOMICITY. `PRAGMA defer_foreign_keys` holds FK
+ *     enforcement until COMMIT, so a pass that lands a child before the pass that lands
+ *     its parent does not trip a mid-apply violation. The envelope is checked as a whole
+ *     at COMMIT, which is the unit the writer actually validated.
+ *
+ * Returns the changes discarded by OMIT, so the caller can report them (R2): `replace`
+ * falls back to OMIT wherever SQLite forbids REPLACE (CONSTRAINT/NOTFOUND/FOREIGN_KEY),
+ * and `omit` discards by definition. Both silently lose a committed row otherwise.
  */
 export function applyWithPolicy(
   db: DatabaseSync,
   changeset: Uint8Array,
   policy: NormalizedPolicy,
   beforeCommit: () => void = () => undefined,
-): void {
-  const used = new Set(Object.values(policy))
+): DroppedChanges {
+  // Fixed order, independent of policy-object key order. Only actions the policy uses.
+  const inUse = new Set(Object.values(policy))
+  const passes = ACTIONS.filter((action) => inUse.has(action))
+  const dropped = noDrops()
   db.exec('BEGIN IMMEDIATE')
   try {
-    for (const action of used) {
+    // Per-transaction, and reset by SQLite at COMMIT. Lets the passes reach a consistent
+    // end state without each intermediate pass having to be referentially complete.
+    db.exec('PRAGMA defer_foreign_keys = ON')
+    for (const action of passes) {
       const filter = (table: string): boolean => actionFor(policy, table) === action
-      const ok = db.applyChangeset(changeset, { filter, onConflict: HANDLER_RETURN[action] })
+      const onConflict = (type: number): number => {
+        const decision = HANDLER_RETURN[action](type)
+        if (decision === CHANGESET_OMIT) {
+          const name = conflictName(type)
+          dropped.total++
+          dropped.byConflictType[name] = (dropped.byConflictType[name] ?? 0) + 1
+        }
+        return decision
+      }
+      const ok = db.applyChangeset(changeset, { filter, onConflict })
       // `ok === false` means the apply was aborted. For a 'strict' pass that is the expected
       // signal of a same-row conflict. For 'replace'/'omit' the handler never returns ABORT,
       // so a `false` here is an unexpected internal abort: surface it (don't silently drop
@@ -137,6 +179,8 @@ export function applyWithPolicy(
       }
     }
     beforeCommit()
+    // Deferred FK violations surface here, aborting the envelope rather than publishing a
+    // dangling reference the writer never created.
     db.exec('COMMIT')
   } catch (e) {
     try {
@@ -146,4 +190,5 @@ export function applyWithPolicy(
     }
     throw e
   }
+  return dropped
 }

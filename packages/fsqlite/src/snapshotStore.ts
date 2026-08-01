@@ -23,7 +23,6 @@
 
 import {
   mkdirSync,
-  copyFileSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -38,8 +37,9 @@ import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { withLock, ownerOf } from './lock.ts'
+import type { DroppedChanges } from './conflictPolicy.ts'
+import { fsyncPath, fsyncDir, publishPointer, cloneFile } from './fsutil.ts'
+import { withLock, ownerOf, DEFAULT_LOCK_STALE_MS } from './lock.ts'
 import {
   createStoreMarker,
   hasStoreMarker,
@@ -223,7 +223,7 @@ export class SnapshotStore {
    */
   init(): this {
     mkdirSync(this.dir, { recursive: true })
-    withLock(this.publishLock, () => {
+    withLock(this.publishLock, (token) => {
       let marker: StoreMarker
       if (hasStoreMarker(this.dir)) {
         marker = readStoreMarker(this.dir)
@@ -269,6 +269,12 @@ export class SnapshotStore {
           db.close()
         }
         fsyncPath(tmp)
+        // Fence before the destructive step (L3). init publishes a snapshot and a pointer
+        // like any other publisher, so a stale-broken initializer must not rename over a
+        // snapshot 0 a successor already published (S6: published snapshots are immutable).
+        if (ownerOf(this.publishLock) !== token) {
+          throw new Error('init lost ownership of publish.lock before publishing snapshot 0')
+        }
         renameSync(tmp, this.snapshotPath(0))
         fsyncDir(this.snapDir)
         publishPointer(this.dir, this.currentPath, 0)
@@ -487,7 +493,7 @@ export class SnapshotStore {
         seedDb.close()
       }
     } else {
-      copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
+      cloneFile(this.snapshotPath(base), work) // SAFE: source snapshot is immutable (S6)
     }
     let changeset: Uint8Array | null
     const db = driver.open(work)
@@ -539,6 +545,15 @@ export class SnapshotStore {
       seed = 'snapshot',
     }: { maxRetries?: number; seed?: 'snapshot' | 'schema-only' } = {},
   ): WriteWithRetryResult {
+    if (seed === 'schema-only') {
+      // writeWithRetry exists to re-read fresh state and recompute. A schema-only working
+      // copy contains no rows to read, so the re-run would recompute from nothing and the
+      // retry would be meaningless. Refuse the combination rather than loop pointlessly.
+      throw new Error(
+        "writeWithRetry cannot use seed 'schema-only': the retry re-runs a read-modify-write " +
+          'against a working copy that holds no rows. Use the default snapshot seed.',
+      )
+    }
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const txId = this.write(writerId, fn, { seed })
       if (txId === null) {
@@ -595,14 +610,23 @@ export class SnapshotStore {
       this.assertStoreIdentity()
       const pending = this.pendingTxns()
       if (pending.length === 0) {
-        return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
+        return {
+          published: base,
+          applied: 0,
+          quarantined: 0,
+          attempts: attempt + 1,
+          dropped: { total: 0, byConflictType: {} },
+          foreignKeyViolations: 0,
+        }
       }
 
       const tmp = join(this.snapDir, `.build-${rand()}.sqlite`)
-      copyFileSync(this.snapshotPath(base), tmp)
+      cloneFile(this.snapshotPath(base), tmp)
+      let fkViolations: number
       const applied: string[] = []
       const archivable: string[] = []
       const quarantined: [string, string][] = []
+      const dropped: DroppedChanges = { total: 0, byConflictType: {} }
       const db = driver.open(tmp)
       try {
         const seen = new Set(
@@ -666,9 +690,16 @@ export class SnapshotStore {
             continue
           }
           try {
-            applyWithPolicy(db, cs, policy, () => {
+            const lost = applyWithPolicy(db, cs, policy, () => {
               mark.run(man.tx_id, nowIso())
             })
+            // A dropped change is a committed row that did NOT reach the snapshot (an
+            // OMIT under `union`, or `lww` hitting a conflict type SQLite forbids
+            // REPLACE for). Accumulate it so the loss is reported, never silent (R2).
+            dropped.total += lost.total
+            for (const [type, n] of Object.entries(lost.byConflictType)) {
+              dropped.byConflictType[type] = (dropped.byConflictType[type] ?? 0) + n
+            }
             applied.push(txn)
             seen.add(txId)
           } catch (e) {
@@ -678,6 +709,7 @@ export class SnapshotStore {
           }
         }
         driver.quickCheck(db)
+        fkViolations = driver.foreignKeyViolations(db).length
       } finally {
         db.close()
       }
@@ -691,6 +723,8 @@ export class SnapshotStore {
           applied: 0,
           quarantined: quarantined.length,
           attempts: attempt + 1,
+          dropped,
+          foreignKeyViolations: fkViolations,
         }
       }
       if (crashAt === 'after-build') {
@@ -733,6 +767,8 @@ export class SnapshotStore {
         applied: applied.length,
         quarantined: quarantined.length,
         attempts: attempt + 1,
+        dropped,
+        foreignKeyViolations: fkViolations,
       }
     }
     throw new Error('reconcile exceeded retries (excessive publish contention)')
@@ -796,6 +832,7 @@ export class SnapshotStore {
     }
     sweepStaleTransients(this.snapDir)
     sweepStaleTransients(this.txPending)
+    sweepStaleTransients(this.dir) // current.*.tmp / fsqlite.json.*.tmp from a torn publish
     return { removed, kept: versions.length - removed, leased: [...leased] }
   }
 
@@ -865,9 +902,11 @@ export class SnapshotStore {
     // In-flight tells.
     const snapFiles = existsSync(this.snapDir) ? readdirSync(this.snapDir) : []
     const pendingFiles = existsSync(this.txPending) ? readdirSync(this.txPending) : []
+    const rootFiles = readdirSync(this.dir)
     const transients = [
       ...snapFiles.filter(isTransientFile),
       ...pendingFiles.filter(isTransientFile), // .work-* writer copies
+      ...rootFiles.filter(isTransientFile), // current.*.tmp / fsqlite.json.*.tmp
     ]
     if (transients.length) {
       issues.push(`transient build files present: ${transients.join(', ')}`)
@@ -900,6 +939,7 @@ export class SnapshotStore {
     // Integrity of the current head.
     const db = driver.openReadonly(this.snapshotPath(cur))
     let problems: string[]
+    let fkViolations: { table: string; parent: string }[]
     try {
       try {
         this._verifySnapshotIdentity(db, marker)
@@ -910,8 +950,21 @@ export class SnapshotStore {
         }
       }
       problems = driver.integrityProblems(db)
+      // Referential integrity is a DIFFERENT axis from structural integrity: neither
+      // quick_check nor integrity_check looks at foreign keys, and row-level merge can
+      // combine two individually-valid envelopes into a dangling reference. It does not
+      // make the SQLite file corrupt (repair must not roll the store back for it), so it
+      // is reported alongside the structural state rather than folded into it (R2).
+      fkViolations = driver.foreignKeyViolations(db)
     } finally {
       db.close()
+    }
+    if (fkViolations.length) {
+      const detail = [...new Set(fkViolations.map((v) => `${v.table}->${v.parent}`))].join(', ')
+      issues.push(
+        `${fkViolations.length} foreign key violation(s) in snapshot ${cur} (${detail}); ` +
+          `structurally sound but a declared caller constraint does not hold`,
+      )
     }
     if (problems.length) {
       return {
@@ -920,6 +973,7 @@ export class SnapshotStore {
       }
     }
 
+    const constraints = { foreignKeyViolations: fkViolations.length }
     const pendingCommitted = this.pendingTxns().length
     if (
       transients.length ||
@@ -928,12 +982,18 @@ export class SnapshotStore {
       sideFiles.length ||
       uncommitted.length
     ) {
-      return { state: 'in-flight-capture', current: cur, pending: pendingCommitted, issues }
+      return {
+        state: 'in-flight-capture',
+        current: cur,
+        pending: pendingCommitted,
+        issues,
+        constraints,
+      }
     }
     if (pendingCommitted > 0) {
-      return { state: 'live', current: cur, pending: pendingCommitted, issues }
+      return { state: 'live', current: cur, pending: pendingCommitted, issues, constraints }
     }
-    return { state: 'sealed', current: cur, pending: 0, issues }
+    return { state: 'sealed', current: cur, pending: 0, issues, constraints }
   }
 
   /**
@@ -969,10 +1029,24 @@ export class SnapshotStore {
    */
   repair({ lockOpts = {} }: { lockOpts?: LockOptions } = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
+    // Refuse a LIVE publisher; reclaim a stale lease. A lock left by a killed publisher is
+    // itself an `in-flight-capture` tell, so refusing on mere presence made repair unable to
+    // clear the very debris validate reports. Staleness is judged exactly as `withLock`
+    // judges it, and the fenced acquisition below is what actually makes the reclaim safe.
+    const staleMs = lockOpts.staleMs ?? DEFAULT_LOCK_STALE_MS
     if (existsSync(this.publishLock)) {
-      throw new Error(
-        'repair refused: publish.lock is present; wait for the publisher or clear it through normal lock recovery',
-      )
+      let ageMs: number
+      try {
+        ageMs = Date.now() - statSync(this.publishLock).mtimeMs
+      } catch {
+        ageMs = Number.POSITIVE_INFINITY // vanished between the checks: treat as reclaimable
+      }
+      if (ageMs <= staleMs) {
+        throw new Error(
+          `repair refused: publish.lock is held by a live publisher (${Math.round(ageMs)}ms old, ` +
+            `stale window ${staleMs}ms); wait for it to finish and retry`,
+        )
+      }
     }
     const actions = withLock(
       this.publishLock,

@@ -10,15 +10,23 @@
 // Both strategies produce the same snapshots and current pointer, so readers and writers
 // can use either strategy without changing the store format.
 
-import { copyFileSync, rmSync, renameSync } from 'node:fs'
+import { rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
+import { fsyncPath, fsyncDir, publishPointer, cloneFile } from './fsutil.ts'
 import { withLock, ownerOf } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore } from './snapshotStore.ts'
-import type { StoreOptions, WorkFn, ReadFn, ValidateResult, GcResult, ReadLease } from './types.ts'
+import type {
+  StoreOptions,
+  WorkFn,
+  ReadFn,
+  ValidateResult,
+  GcResult,
+  ReadLease,
+  RepairResult,
+} from './types.ts'
 
 const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
@@ -51,8 +59,17 @@ export class DirectStore {
   seal(dest: string): string {
     return this.base.seal(dest)
   }
-  gc(opts?: { retain?: number; leaseStaleMs?: number }): GcResult {
+  gc(opts?: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number }): GcResult {
     return this.base.gc(opts)
+  }
+  /**
+   * Restore the last consistent point. Recovery is identical for both strategies because
+   * they publish the identical format, but DirectStore is the lane most likely to be used
+   * by a tool with no fsqlite expertise, so it must not require reaching for SnapshotStore
+   * to recover its own store.
+   */
+  repair(opts?: { lockOpts?: LockOptions }): RepairResult {
+    return this.base.repair(opts)
   }
   readLease(): ReadLease {
     return this.base.readLease()
@@ -81,7 +98,7 @@ export class DirectStore {
           const base = this.base.currentVersion()
           const next = base + 1
           const tmp = join(this.base.snapDir, `.direct-${rand()}.sqlite`)
-          copyFileSync(this.base.snapshotPath(base), tmp)
+          cloneFile(this.base.snapshotPath(base), tmp)
           const db = driver.open(tmp)
           try {
             db.exec('BEGIN IMMEDIATE')

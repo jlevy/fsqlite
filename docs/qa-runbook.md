@@ -25,7 +25,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **96 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **104 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -51,6 +51,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `portability.test.ts` | Zip-and-go: a published snapshot opens as a plain SQLite file across bindings |
 | `direct.test.ts` | `DirectStore` single-writer copy→mutate→publish; identical on-disk format |
 | `driver-capabilities.test.ts` | `capabilities()` truthfully probes session/backup support and online backup remains integrity-clean during writes |
+| `constraints.test.ts` | Constraint closure (format spec 6.1): a `UNIQUE` collision under `lww` and a `NOTFOUND` update are counted as dropped changes rather than silently lost; a cross-writer dangling foreign key is detected by `reconcile` and `validate` without being misclassified as file corruption; merge outcome is identical under every permutation of policy-object key order; an envelope consistent as a whole applies even when its tables span passes; `writeWithRetry` refuses a schema-only seed |
 | `adoption.test.ts` | A realistic multi-table consumer schema and policy stay green |
 | `seed.test.ts` | Schema-only seeding (build a store from DDL, no data copy) |
 | `sqlite-facts.test.ts` | `isSqliteFile`, `sqliteFacts`, and `integrityReport` over any plain SQLite file (backs `stats` and `doctor`) |
@@ -93,10 +94,13 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 96` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 104` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
+  One case asserts a permission denial and reports as skipped when the suite runs as
+  root, since `chmod` cannot deny root; that is expected in containers, not a
+  regression.
 
 ### B2. Library Round Trip by Hand
 
@@ -185,20 +189,30 @@ node packages/fsqlite/src/cli/index.ts validate "$QA/corrupt"; echo "exit=$?" # 
 ```bash
 node --input-type=module -e '
 import { SnapshotStore } from "./packages/fsqlite/src/index.ts";
+import { setReconcileCrashForTest } from "./packages/fsqlite/src/snapshotStore.ts";
 const dir = process.env.QA + "/crash";
-const s = new SnapshotStore(dir, { schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} }).init();
+const opts = { schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy: { kv: "lww", "*": "strict" } };
+const s = new SnapshotStore(dir, opts).init();
 s.write("w", db => db.prepare("INSERT INTO kv VALUES (?,?)").run("a","1"));
-try { s.reconcile({ crashAt: "after-snapshot" }); } catch (e) { console.log("injected crash:", e.message); }
-const s2 = new SnapshotStore(dir, { schema:"CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} });
+setReconcileCrashForTest("after-snapshot");
+try { s.reconcile(); console.log("FAIL: no crash was injected"); }
+catch (e) { console.log("injected crash:", e.message); }
+setReconcileCrashForTest(null);
+const s2 = new SnapshotStore(dir, opts);
 console.log("state after crash:", s2.validate().state);
 console.log("repair:", s2.repair().state, "-> applied", s2.reconcile().applied);
 '
 ```
 
-- **Expect:** the injected crash is reported; the reopened store validates as
-  recoverable (not `corrupt`), `repair` returns it to a consistent state, and the
-  pending write still reconciles.
-- **PASS:** a crash between snapshot rename and pointer swap loses nothing published.
+- **Expect:** `injected crash: CRASH after-snapshot`, then
+  `state after crash: in-flight-capture`, then `repair: live -> applied 1` (`live`, not
+  `sealed`, because the captured envelope is still pending at repair time).
+- **PASS:** the crash actually fires, the reopened store is recoverable rather than
+  `corrupt`, `repair` restores consistency, and the pending write still reconciles.
+- **Gate integrity:** crash injection is a module-level seam, not a `reconcile()`
+  option. Passing `reconcile({ crashAt: ... })` silently ignores the unknown option and
+  injects nothing, leaving the store `sealed`, which reads as a pass while testing
+  nothing. If the first line does not print `injected crash`, this gate did not run.
 
 ### B8. Concurrency Demo
 
