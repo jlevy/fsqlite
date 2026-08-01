@@ -3,9 +3,9 @@ type: is
 id: is-01kyx98q02gh0k8bzswyzg0pff
 title: First dependency resolution and committed lockfile
 kind: task
-status: in_progress
+status: closed
 priority: 1
-version: 9
+version: 10
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase1
@@ -24,6 +24,8 @@ dependencies:
     target: is-01kyx98srj03h0xyjm7psw4k1j
 parent_id: is-01kyx97rm9wx146e3awnjr9can
 created_at: 2026-07-31T23:48:32.897Z
-updated_at: 2026-08-01T03:12:30.606Z
+updated_at: 2026-08-01T04:33:31.873Z
+closed_at: 2026-08-01T04:33:31.872Z
+close_reason: Committed the reviewed pnpm 11.14 lockfile; the frozen install passes the configured 14-day supply-chain policy in a fresh clone.
 ---
 The standalone pnpm resolution now exists locally and pnpm-lock.yaml has been generated. Review the resolved graph against the 14-day cool-off and install-script policy, validate a frozen reinstall, and commit the lockfile. This bead remains open until the lockfile is committed and reproducible.
