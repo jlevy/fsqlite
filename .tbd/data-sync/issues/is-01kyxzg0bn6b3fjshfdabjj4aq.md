@@ -5,7 +5,7 @@ title: "PR #1 review D4: heartbeat long publish-lock critical sections"
 kind: bug
 status: open
 priority: 2
-version: 3
+version: 4
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
@@ -13,6 +13,10 @@ labels:
 dependencies: []
 parent_id: is-01kyxmrxxwhdr0a5f90akc73a4
 created_at: 2026-08-01T06:17:00.532Z
-updated_at: 2026-08-01T06:28:56.845Z
+updated_at: 2026-08-01T07:31:30.419Z
 ---
-Owner engineering review D4/I9 large-store gap. packages/fsqlite/src/lock.ts:131-135 exports heartbeat but no engine path calls it; DirectStore holds the lease across copy/mutate/check/fsync/publish (directStore.ts:78-115), and repair scans every snapshot under it (snapshotStore.ts:1001-1090). With defaults stale=20s, timeout=30s, large stores can be stale-broken and livelock. Implement/reason about safe periodic heartbeats (or document calibrated limits) and add a controlled long-operation/large-store regression test.
+DirectStore holds the publish lease across copy, callback, candidate checks, fsync, and publication; repair can scan multiple snapshots under the lease. The Node default stale window is 20 seconds. Fencing preserves safety if a long operation is stale-broken, but repeated work can livelock or time out. Design a safe heartbeat for synchronous critical sections or shorten them through an optimistic protocol, then add a controlled long-operation regression. Until then, deployments must set staleMs above their worst-case operation and keep timeoutMs > staleMs.
+
+## Notes
+
+The C1-C12 design consolidation documents this as a liveness boundary, and the package README and QA Part C include the required tuning disclosure. Implementation remains post-alpha.
