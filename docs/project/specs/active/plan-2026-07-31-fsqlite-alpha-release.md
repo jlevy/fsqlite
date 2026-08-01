@@ -32,8 +32,8 @@ documentation and public API to the standard expected of a published package.
 - An honest `engines` range, so no consumer can install a version that cannot load.
 - Docs fit for a public repo: no monorepo residue, no internal tracker IDs, no
   references to unpublished internal documents.
-- A published `0.1.0-alpha.1` on npm under the `alpha` dist-tag, installable and usable
-  from a clean project.
+- A published `0.1.0` on npm under the `alpha` dist-tag, installable and usable from a
+  clean project.
 
 ## Non-Goals
 
@@ -152,8 +152,11 @@ The source arrived as a squashed code snapshot; prior repository history is not
 imported. Copyright is solely Joshua Levy under the MIT License.
 Public source, documentation, metadata, tests, and tracker records refer only to fsqlite
 and this repository.
-The only remaining identity decision is whether the npm release is unscoped or published
-under an organization scope.
+The npm package is published unscoped as `fsqlite` from Joshua Levy’s `jlevy` account.
+
+The project uses ordinary `0.x` semantic versions without prerelease suffixes.
+Documentation and the npm `alpha` dist-tag communicate the project phase, while package
+version `0.1.0` and Git tag `v0.1.0` identify the first release.
 
 ### Supply-chain posture
 
@@ -417,7 +420,7 @@ Goal: a stranger can find, understand, install, and use this.
   transition to npm trusted publishing in `docs/releasing.md`
 - [x] (`fsq-h8wt`) Make the tag workflow verify the manually published bootstrap version
   rather than attempting to publish the immutable version twice
-- [ ] (`fsq-cggp`) Publish `0.1.0-alpha.1` under the `alpha` dist-tag
+- [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 
 ## Testing Strategy
@@ -441,8 +444,8 @@ validation (`fsq-kkdi`).
 
 ## Rollout Plan
 
-Publish `0.1.0-alpha.1` to npm under the `alpha` dist-tag, so `npm install fsqlite` does
-not resolve to it by default.
+Publish `0.1.0` to npm under the `alpha` dist-tag, so `npm install fsqlite` does not
+resolve to it by default.
 The README states plainly that the format is draft, the API may move, and the cross-host
 concurrency gate is pending.
 
@@ -452,8 +455,7 @@ public API.
 
 ## Open Questions
 
-- **Publishing identity**: is there an npm org or scope preference, or does this publish
-  unscoped as `fsqlite`?
+None for the first publication.
 
 ## References
 

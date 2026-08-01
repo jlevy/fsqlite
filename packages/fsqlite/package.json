@@ -1,6 +1,6 @@
 {
   "name": "fsqlite",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0",
   "description": "Filesystem-friendly concurrent SQLite: immutable snapshot-publish + transaction-envelope changesets behind an NFS-safe mkdir lease, plus an easy-local DirectStore — over plain SQLite files, server-free, on any filesystem",
   "type": "module",
   "license": "MIT",

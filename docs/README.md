@@ -17,7 +17,7 @@ basis, and track validation and future work.
 | Test a release or evaluate its guarantees | [QA Runbook](qa-runbook.md) | Automated and manual tests mapped to claims and known gaps |
 | See current limitations and planned capabilities | [Roadmap](roadmap.md) | User-facing work after the first alpha |
 | Follow the detailed post-alpha plan | [Post-Alpha Roadmap Plan](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md) | Dependencies, acceptance criteria, and implementation sequencing for future work |
-| Review the alpha release work | [Alpha Release Plan](project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md) | Decisions, implementation checklist, testing, and publication gate for `0.1.0-alpha.1` |
+| Review the alpha release work | [Alpha Release Plan](project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md) | Decisions, implementation checklist, testing, and publication gate for `0.1.0` |
 | Publish a release | [Release Runbook](releasing.md) | Bootstrap publication, trusted publishing, verification, and recovery procedures |
 | Review dependency policy | [Supply-Chain Security](../SUPPLY-CHAIN-SECURITY.md) | Install, lockfile, lifecycle-script, and release controls |
 

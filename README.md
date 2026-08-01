@@ -14,7 +14,7 @@ pnpm install
 pnpm verify
 ```
 
-The current release target is `fsqlite@0.1.0-alpha.1`. The `f1.0` format and public API
-are alpha; cross-host NFS/SMB validation remains a disclosed pre-1.0 gate.
+The first release is `fsqlite@0.1.0`. The project, `f1.0` format, and public API are in
+an alpha phase; cross-host NFS/SMB validation remains a disclosed pre-1.0 gate.
 
 MIT © 2026 Joshua Levy.

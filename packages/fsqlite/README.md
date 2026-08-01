@@ -12,7 +12,7 @@ Readers still open normal SQLite files, and a store needs no database server or
 background service. The package has zero runtime dependencies and no install-time
 scripts.
 
-> **Alpha:** `0.1.0-alpha.1` defines the first public API and the draft `f1.0` store
+> **Alpha phase:** `0.1.0` defines the first public API and the draft `f1.0` store
 > format. Both may change before 1.0. The multi-process suite is extensive, but the real
 > cross-host NFS/SMB validation gate is still pending.
 
