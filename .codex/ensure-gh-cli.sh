@@ -143,8 +143,8 @@ if [ -n "${GH_TOKEN:-}" ]; then
         # A failed check does NOT prove the token is bad. In proxied remote
         # sessions (HTTPS_PROXY set, e.g. Claude Code cloud) the proxy can
         # intercept api.github.com, block the GraphQL query behind
-        # `gh auth status`, and even swap Authorization headers — gh then
-        # misreports a perfectly valid token as invalid. Retest on the direct
+        # `gh auth status`, and even swap Authorization headers. `gh` then
+        # misreports a valid token as invalid. Retest on the direct
         # channel (proxy bypassed for GitHub hosts only) before concluding.
         NP="$(github_no_proxy)"
         if [ -n "${HTTPS_PROXY:-}${https_proxy:-}" ] \

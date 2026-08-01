@@ -1,6 +1,6 @@
 // Clean-project package smoke test: pack the built tarball, install it into a throwaway
-// project with no dev tooling, and exercise the published contract -- the library import
-// (`fsqlite`) and the CLI bin (`fsqlite`). This is the only test that proves what npm
+// project with no development tooling, and exercise the published contract: the library
+// import (`fsqlite`) and the CLI bin (`fsqlite`). This test verifies what npm
 // consumers actually get, independent of the source checkout. It normally requires
 // `dist/`; the release workflow can instead verify an exact registry package spec.
 import { execFileSync } from 'node:child_process'
@@ -15,7 +15,7 @@ const registryPackage = process.env.FSQLITE_SMOKE_PACKAGE
 if (registryPackage === undefined) {
   assert.ok(
     existsSync(join(pkgDir, 'dist', 'index.mjs')),
-    'dist/ is missing -- run `npm run build` first',
+    'dist/ is missing: run `npm run build` first',
   )
 }
 
@@ -90,7 +90,7 @@ try {
       'installed package is missing dist/index.mjs',
     )
 
-    // Exercise the library entry through the package name (proves exports resolution + types shape).
+    // Exercise the library entry through the package name to verify exports and types.
     const storeDir = join(proj, 'store')
     writeFileSync(
       join(proj, 'use-lib.mjs'),
@@ -103,12 +103,12 @@ try {
         "assert.equal(s.read((db) => db.prepare('SELECT v FROM kv WHERE k=?').get('a')).v, '1')",
         "assert.equal(typeof DirectStore, 'function')",
         "assert.equal(typeof inspect, 'function')",
-        "console.log('  library import + write/reconcile/read OK')",
+        "console.log('  library import and write/reconcile/read OK')",
       ].join('\n'),
     )
     process.stdout.write(run('node', ['use-lib.mjs'], { cwd: proj }))
 
-    // Exercise the CLI bin through the installed package (proves the `bin` + shebang resolve).
+    // Exercise the installed CLI to verify its bin entry and shebang.
     const bin = join(proj, 'node_modules', '.bin', 'fsqlite')
     assert.match(run(bin, ['--help'], { cwd: proj }), /usage: fsqlite/, 'CLI --help')
     assert.equal(
@@ -117,7 +117,7 @@ try {
       'CLI info reports published head',
     )
     run(bin, ['validate', storeDir], { cwd: proj }) // exits 0 on a healthy store
-    console.log('  CLI bin --help / info / validate OK')
+    console.log('  CLI bin help, info, and validate OK')
 
     console.log('package smoke test passed')
   } finally {

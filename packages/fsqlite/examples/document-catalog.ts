@@ -1,10 +1,10 @@
 // Worked example: a document catalog that concurrent writers populate through fsqlite,
 // and a runnable demo of two writers updating one catalog at the same time.
 //
-// The consumer supplies ONLY its domain schema and a per-table merge policy; fsqlite
-// provides the concurrent, crash-safe engine. Nothing here is fsqlite-internal — it is
-// the concrete shape of a realistic adopter: a catalog of documents, their content
-// blobs, a URL index, and typed relationships, written by many agents at once.
+// The consumer supplies its domain schema and a per-table merge policy. fsqlite
+// provides the concurrent, crash-safe engine. This example contains only consumer code:
+// a catalog of documents, content blobs, a URL index, and typed relationships that many
+// agents can update concurrently.
 //
 //   node examples/document-catalog.ts
 
@@ -16,7 +16,7 @@ import type { ConflictPolicyInput } from '../src/types.ts'
 
 // A content-catalog schema: documents, their on-disk paths, content-addressed blobs, a
 // URL index, an action/request index, and typed relationships. Every table has an
-// explicit non-null PRIMARY KEY — the merge policy is keyed on it.
+// explicit non-null PRIMARY KEY because the merge policy is keyed on it.
 export const CATALOG_SCHEMA = `
 CREATE TABLE artifacts (
   artifact_id TEXT PRIMARY KEY NOT NULL,
@@ -111,7 +111,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       now(),
     )
   })
-  // Writer B, seeded off the same base, refetches the SAME url (newer) and re-adds an edge.
+  // Writer B starts from the same base, refetches the URL, and adds the edge again.
   cat.write('writerB', (db) => {
     db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run(
       'blob_sha256_bbb',
@@ -136,7 +136,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       'blob',
       'blob_sha256_aaa',
       now(),
-    ) // dup edge: union → no-op
+    ) // union ignores the duplicate edge
   })
 
   const res = cat.reconcile()

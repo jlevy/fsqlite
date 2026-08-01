@@ -206,7 +206,7 @@ export class SnapshotStore {
 
     this.schema = opts.schema ?? ''
     this.schemaVersion = opts.schemaVersion ?? 1
-    // A hash of the caller DDL catches divergent schemas at the SAME schema_version (an
+    // A hash of the caller DDL catches divergent schemas at the same schema_version (an
     // integer bump is easy to forget); reconcile quarantines a mismatch.
     this.schemaHash = sha256(this.schema).slice(0, 16)
     this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
@@ -285,7 +285,7 @@ export class SnapshotStore {
    * Confirm an existing store's stamped identity matches this handle's configuration, so opening
    * a store with the wrong schema fails loudly instead of silently. Checks application_id and
    * user_version (the foreign-readable capability pragmas) and the stamped schema_hash, which
-   * catches a divergent caller DDL at the SAME schema_version — an integer bump is easy to forget.
+   * catches divergent caller DDL even when the caller forgets to increment schema_version.
    */
   private _verifyCompatible(): void {
     const marker = readStoreMarker(this.dir)
@@ -402,7 +402,7 @@ export class SnapshotStore {
     this.assertStoreIdentity()
     // Optimistic claim, then verify: publish the lease *before* committing to read the
     // version, then confirm the snapshot still exists. This closes the check-then-act race
-    // with gc — gc re-reads leases immediately before each unlink (see `gc`), so either it
+    // with gc. gc re-reads leases immediately before each unlink (see `gc`), so either it
     // sees our lease and keeps the snapshot, or it deleted the snapshot before our lease was
     // visible and our existence check fails, sending us to retry against the new head. The
     // newest snapshots are inside gc's retain floor and never collected, so this terminates.
@@ -544,7 +544,7 @@ export class SnapshotStore {
       if (txId === null) {
         return { txId: null, attempts: attempt + 1, conflicted: false }
       }
-      this.reconcile() // idempotent + OCC-safe; folds ours (and any peers')
+      this.reconcile() // idempotent and OCC-safe; folds ours and any peers'
       const applied = this.read((db) =>
         Boolean(db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId)),
       )
@@ -740,9 +740,9 @@ export class SnapshotStore {
 
   /**
    * Delete superseded snapshots, always keeping `current`, every version >= current - retain
-   * (current plus its `retain` predecessors — spec G1), and any version pinned by a live
+   * (current plus its `retain` predecessors under spec G1), and any version pinned by a live
    * read-lease (leases past `leaseStaleMs` are treated as abandoned). Also sweeps *stale*
-   * transients — but never fresh ones, which may be a live reconcile/DirectStore build in
+   * transients but never fresh ones, which may be a live reconcile or DirectStore build in
    * another process (spec G3); `transientStaleMs` gates that.
    */
   gc({
@@ -773,9 +773,9 @@ export class SnapshotStore {
         throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
       }
     }
-    // Sweep STALE transients only (crash debris): a fresh .build-/.direct-/.work- file may be
-    // a live build in another process — deleting it would not corrupt anything (the publish
-    // would fail loudly and retry) but would waste its work. mtime age gates the sweep.
+    // Sweep stale transients only. A fresh .build-/.direct-/.work- file may be
+    // a live build in another process. Deleting it would not corrupt anything because the
+    // publish would fail loudly and retry, but it would waste work. mtime age gates the sweep.
     const sweepStaleTransients = (dir: string): void => {
       if (!existsSync(dir)) {
         return

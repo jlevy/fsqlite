@@ -8,20 +8,20 @@ env:
 timeout: 60000
 ---
 
-# fsqlite CLI: schema-agnostic operator surface
+# fsqlite CLI: Schema-Agnostic Operator Surface
 
 The maintenance commands (`info`, `validate`, `gc`, `seal`, `repair`, `doctor`) operate
-a store they did NOT create, knowing nothing of the caller’s schema or merge policy —
-the self-describing-format property.
-`fsqlite-seed` builds a deterministic store via the public API; everything else is the
-real CLI (`src/cli/index.ts`). Runs in a sandbox temp dir, so all `store*` paths are
-isolated and auto-cleaned.
+on a store they did not create and need no knowledge of the caller’s schema or merge
+policy. This demonstrates the self-describing format.
+`fsqlite-seed` builds a deterministic store through the public API. Every other command
+uses the real CLI (`src/cli/index.ts`). The script runs in a temporary sandbox, so all
+`store*` paths are isolated and removed automatically.
 
 ---
 
 ## Help
 
-# Test: bare invocation prints usage and exits non-zero
+# Test: Bare Invocation Prints Usage and Exits Non-Zero
 
 ```console
 $ fsqlite
@@ -29,7 +29,7 @@ usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [arg
 ? 64
 ```
 
-# Test: --help prints usage and exits 0
+# Test: `--help` Prints Usage and Exits 0
 
 ```console
 $ fsqlite --help
@@ -39,9 +39,9 @@ usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [arg
 
 ---
 
-## Inspect a sealed store
+## Inspect a Sealed Store
 
-# Test: seed a clean store, then info reports its state without knowing the schema
+# Test: Seed a Clean Store, Then Inspect Its State Without Schema Knowledge
 
 ```console
 $ fsqlite-seed store
@@ -65,7 +65,7 @@ $ fsqlite info store
 ? 0
 ```
 
-# Test: validate exits 0 on a sealed store
+# Test: Validate Exits 0 on a Sealed Store
 
 ```console
 $ fsqlite validate store
@@ -73,7 +73,7 @@ sealed
 ? 0
 ```
 
-# Test: doctor reports binding capabilities + store state
+# Test: Doctor Reports Binding Capabilities and Store State
 
 ```console
 $ fsqlite doctor store
@@ -85,9 +85,9 @@ fsqlite doctor: store
 
 ---
 
-## Validate exit codes on a damaged store
+## Validate Exit Codes on a Damaged Store
 
-# Test: an in-flight (orphan-ahead) store exits 2
+# Test: An In-Flight (Orphan-Ahead) Store Exits 2
 
 ```console
 $ fsqlite-seed inflight orphan
@@ -101,7 +101,7 @@ $ fsqlite validate inflight
 ? 2
 ```
 
-# Test: repair restores it to sealed (exit 0)
+# Test: Repair Restores It to Sealed (Exit 0)
 
 ```console
 $ fsqlite repair inflight
@@ -115,7 +115,7 @@ sealed
 ? 0
 ```
 
-# Test: a corrupt pointer exits 3
+# Test: A Corrupt Pointer Exits 3
 
 ```console
 $ fsqlite-seed bad corrupt
@@ -131,9 +131,9 @@ $ fsqlite validate bad
 
 ---
 
-## Maintenance: gc and seal
+## Maintenance: GC and Seal
 
-# Test: gc on a fresh store reports a JSON result and exits 0
+# Test: GC on a Fresh Store Reports a JSON Result and Exits 0
 
 ```console
 $ fsqlite gc store --retain 1
@@ -141,7 +141,7 @@ $ fsqlite gc store --retain 1
 ? 0
 ```
 
-# Test: seal writes a standalone single-file SQLite export
+# Test: Seal Writes a Standalone Single-File SQLite Export
 
 ```console
 $ fsqlite seal store export.sqlite
@@ -157,12 +157,12 @@ SQLite format 3
 
 ---
 
-## stats and doctor over any SQLite path
+## Stats and Doctor Over Any SQLite Path
 
 `stats` and `doctor` work on both an fsqlite store directory and a plain SQLite file,
 labeling which they are looking at and degrading gracefully on either.
 
-# Test: stats on an fsqlite store reports the fsqlite layer + current-snapshot facts
+# Test: Stats on an fsqlite Store Reports the fsqlite Layer and Current-Snapshot Facts
 
 ```console
 $ fsqlite-seed metrics-store
@@ -191,7 +191,7 @@ fsqlite stats: metrics-store
 ? 0
 ```
 
-# Test: stats on a plain SQLite file labels it plain-sqlite
+# Test: Stats on a Plain SQLite File Labels It Plain SQLite
 
 ```console
 $ fsqlite-seed plain.db plainfile
@@ -214,7 +214,7 @@ fsqlite stats: plain.db
 ? 0
 ```
 
-# Test: doctor on a clean plain SQLite file reports ok (exit 0)
+# Test: Doctor on a Clean Plain SQLite File Reports OK (Exit 0)
 
 ```console
 $ fsqlite doctor plain.db
@@ -224,7 +224,7 @@ fsqlite doctor: plain.db
 ? 0
 ```
 
-# Test: doctor on a corrupt plain SQLite file reports the failure (exit 3)
+# Test: Doctor on a Corrupt Plain SQLite File Reports the Failure (Exit 3)
 
 ```console
 $ fsqlite-seed badsql.db corrupt-sqlite
@@ -238,7 +238,7 @@ $ fsqlite doctor badsql.db
 ? 3
 ```
 
-# Test: doctor --fix restores an in-flight store (exit 0)
+# Test: Doctor `--fix` Restores an In-Flight Store (Exit 0)
 
 ```console
 $ fsqlite-seed docinflight orphan

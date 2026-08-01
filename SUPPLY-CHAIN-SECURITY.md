@@ -1,10 +1,10 @@
-# Supply-chain security
+# Supply-Chain Security
 
 fsqlite has no runtime dependencies and allows no dependency lifecycle scripts.
 Development dependencies are locked with pnpm and ordinarily must have been published
 for at least 14 days before they can enter the lockfile.
 
-## Time-limited security exception
+## Time-Limited Security Exception
 
 `brace-expansion@5.0.8` is pinned as a transitive override even though it had not yet
 cleared the 14-day cool-off on 2026-07-31. It is the first release patched against
@@ -15,3 +15,7 @@ restricted to this exact version and does not relax the repository-wide age gate
 Review this exception after 2026-08-06. Once the patched release has aged normally,
 remove it from `minimumReleaseAgeExclude`; keep the override only if the upstream
 dependency graph still resolves an affected version.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

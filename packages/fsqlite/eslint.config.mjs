@@ -2,8 +2,8 @@ import js from '@eslint/js'
 import eslintConfigPrettier from 'eslint-config-prettier/flat'
 import tseslint from 'typescript-eslint'
 
-// Type-aware ESLint flat config for `fsqlite`. This is authored-from-scratch, zero-runtime-dep
-// code held to the full strict bar — the `no-unsafe-*` family stays ON (no relaxations).
+// Type-aware ESLint flat config for `fsqlite`. This zero-runtime-dependency code is
+// held to the full strict bar, including the `no-unsafe-*` family.
 // Source, tests, workers, and examples are all linted; the tsconfig covers them.
 
 const typedFiles = ['**/*.ts', 'scripts/**/*.mjs']

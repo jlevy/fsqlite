@@ -1,18 +1,12 @@
-// lock.ts: NFS-safe mkdir lease lock with an owner token.
+// lock.ts provides an NFS-safe mkdir lease with an owner token.
 //
-// This is the ONLY mutual-exclusion primitive in fsqlite, and it is held only
-// around the short snapshot-publish step (re-check `current` pointer + rename),
-// never around writer work. It is deliberately NOT flock/fcntl: `mkdir(2)` is
-// atomic on local disk AND on NFS/SMB, which is exactly why the git/npm world uses
-// it for cross-host coordination. POSIX byte-range locks and WAL `-shm` shared
-// memory do not work across hosts; `mkdir` does.
+// Publication is fsqlite's only mutual-exclusion point. Writers do not hold the lease
+// while preparing changes. `mkdir(2)` provides cross-host coordination on local disks,
+// NFS, and SMB, where POSIX byte-range locks and WAL shared memory are unreliable.
 //
-// Correctness does NOT depend on this lock being perfect. The reconcile that uses it
-// is independently made idempotent (per-snapshot applied_tx ledger) and atomic
-// (immutable snapshots + atomic pointer swap), so a broken stale lease or two
-// overlapping holders cannot corrupt or double-apply. The lock is belt-and-suspenders;
-// the owner token lets a holder REVALIDATE ownership right before the destructive
-// publish (fencing) and abort if it lost the lease.
+// Correctness rests on immutable snapshots, an atomic pointer swap, and the applied_tx
+// ledger. The lease reduces redundant work. Its owner token lets a holder revalidate
+// ownership immediately before publication and abort if it lost the lease.
 
 import { mkdirSync, rmSync, statSync, writeFileSync, readFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
@@ -63,7 +57,7 @@ export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
  * can revalidate ownership via `ownerOf(lockPath) === token` immediately before a
  * destructive publish.
  *
- * INVARIANT: timeoutMs > staleMs (you must be able to wait longer than the stale
+ * Invariant: timeoutMs > staleMs (you must be able to wait longer than the stale
  * window, or you would break a lock you could otherwise have waited for).
  */
 export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: LockOptions = {}): T {
@@ -84,7 +78,7 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
     try {
       mkdirSync(lockPath)
       try {
-        writeOwner(join(lockPath, 'owner.json'), meta) // record owner INSIDE the lock dir
+        writeOwner(join(lockPath, 'owner.json'), meta)
       } catch (error) {
         rmSync(lockPath, { recursive: true, force: true })
         throw error
@@ -97,8 +91,8 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
       }
       // Lock exists. Break it only if it is older than the stale window. This is the
       // irreducible NFS hazard: a holder paused past the lease can be stolen out from
-      // under. The defense is `ownerOf()` revalidation in `fn` + a generous staleMs >>
-      // max critical section, NOT aggressive breaking.
+      // under it. The defense is `ownerOf()` revalidation in `fn` and a staleMs value
+      // well above the maximum critical section, not aggressive breaking.
       try {
         const st = statSync(lockPath)
         if (Date.now() - st.mtimeMs > staleMs) {
@@ -124,7 +118,7 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
   try {
     return fn(token)
   } finally {
-    // Fence the release the same way the publish step is fenced: only remove the dir if WE
+    // Fence the release the same way as publication: remove the directory only if we
     // still own it. A holder that stalled past staleMs and was stale-broken must not delete
     // a successor's live lock (which would let a third holder acquire concurrently). If we
     // lost ownership, leave the successor's lock alone; staleMs reclaims any true orphan.

@@ -1,6 +1,6 @@
 // Spawn a worker as a real child process. Workers are `.ts` run via Node's native
-// type-stripping (Node ≥ 22.18), so no build step and no `--experimental-sqlite` flag is
-// needed on the v22.13+ baseline. The worker prints a single JSON line on stdout.
+// type stripping in Node 22.18 or later, so the baseline needs no build step or
+// `--experimental-sqlite` flag. The worker prints one JSON line to stdout.
 
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'

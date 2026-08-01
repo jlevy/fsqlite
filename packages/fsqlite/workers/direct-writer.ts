@@ -1,5 +1,5 @@
 // Child-process direct writer for the direct-mode concurrency test. Each process does N
-// synchronous copy→mutate→publish writes; the publish lock serializes them across
+// synchronous copy, mutate, and publish operations; the publish lock serializes them across
 // processes. Every write becomes its own published version; zero loss.
 //
 // argv: <dir> <writerId> <count>

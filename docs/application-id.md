@@ -32,3 +32,7 @@ fixed and enforced by the `f1.0` format.
 Sources: [SQLite database file format](https://sqlite.org/fileformat.html),
 [SQLite `magic.txt`](https://github.com/sqlite/sqlite/blob/master/magic.txt), and
 [SQLite forum clarification](https://sqlite.org/forum/forumpost/c73d9a274737344d).
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

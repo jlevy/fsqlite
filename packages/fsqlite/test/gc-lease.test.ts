@@ -1,4 +1,4 @@
-// GC + read-lease: the packaging-safety property. A packager/uploader reads an older
+// GC and read leases protect packaging. A packager or uploader reads an older
 // immutable snapshot; reconcile's snapshot GC must not delete a version that an active
 // read-lease still pins, or the packager reads a hole. The lease is a file with a
 // heartbeat mtime so a dead packager's pin self-clears.
@@ -112,7 +112,7 @@ test('a packager reads a consistent pinned snapshot while writers keep publishin
     assert.equal(readVersionCount(store, lease.version), 3)
     advance(store, 3) // v6; current moves ahead of the pin
     store.gc({ retain: 1 })
-    // The packager reads the PINNED snapshot directly (not current): stable.
+    // The packager reads the pinned snapshot directly instead of current.
     assert.ok(
       existsSync(store.snapshotPath(lease.version)),
       'pinned snapshot still present mid-publish',

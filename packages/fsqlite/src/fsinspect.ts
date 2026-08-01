@@ -3,8 +3,8 @@
 // fsqlite's correctness rests on a handful of filesystem guarantees, not on a perfect
 // file lock. This probe measures those guarantees on a *target directory* so an operator
 // can tell, before trusting a shared path, whether it can host an fsqlite store and
-// whether plain WAL would be unsafe there. It is dependency-free (node:fs + node:sqlite)
-// and writes only inside a throwaway `.fsinspect-<pid>` subdir that it removes.
+// whether plain WAL would be unsafe there. It uses only node:fs and node:sqlite. It writes
+// inside a temporary `.fsinspect-<pid>` subdirectory and removes it afterward.
 
 import {
   mkdirSync,
@@ -214,7 +214,7 @@ function probeExclusiveCreate(scratch: string): ProbeResult {
   }
 }
 
-/** Write via one fd (flush+close), read via a fresh open: must see the bytes. */
+/** Write through one file descriptor, close it, then verify a fresh open sees the bytes. */
 function probeCloseToOpen(scratch: string): ProbeResult {
   const p = join(scratch, 'cto')
   try {
@@ -262,7 +262,7 @@ function probeMtimeResolution(scratch: string): ProbeResult {
   }
 }
 
-/** symlink + realpath round-trip (housekeeping + lock realpath canonicalization). */
+/** Verify the symlink and realpath behavior used for cleanup and lock path resolution. */
 function probeSymlink(scratch: string): ProbeResult {
   const target = join(scratch, 'real')
   const link = join(scratch, 'link')
@@ -358,7 +358,7 @@ export function inspect(dir: string): InspectReport {
       fsyncDir: probeFsyncDir(scratch),
       walViable: probeWalViable(scratch),
     }
-    // fsqlite needs the coordination primitives; it does NOT need WAL or hardlink.
+    // fsqlite needs the coordination primitives but does not need WAL or hard links.
     const required = ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen'] as const
     const missing = required.filter((k) => !probes[k].ok)
     const verdict = {
@@ -389,7 +389,7 @@ export function formatReport(report: InspectReport): string {
   )
   for (const [name, r] of Object.entries(report.probes)) {
     const detail = r.error
-      ? ` — ${r.error}`
+      ? `: ${r.error}`
       : name === 'mtimeResolution'
         ? ` (${String(r.resolutionMs)} ms)`
         : ''

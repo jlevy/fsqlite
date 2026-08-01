@@ -56,12 +56,12 @@ test('writeWithRetry re-seeds after a genuine concurrent conflict (forced interl
 
     const w1 = new SnapshotStore(dir, OPTS)
     const w2 = new SnapshotStore(dir, OPTS)
-    // w1 emits an increment envelope but does NOT reconcile.
+    // w1 emits an increment envelope without reconciling it.
     const tx1 = w1.write('w1', increment)
     assert.ok(tx1)
     // w2 uses the retry loop: its first attempt is based on v1, but reconcile() folds w1
-    // first (lower txid/clock) then w2 → w2 is a DATA conflict on 'c' → quarantined →
-    // w2 re-seeds from v2 and re-applies → c becomes 3.
+    // first because its txid sorts earlier. w2 then has a DATA conflict on 'c', is
+    // quarantined, reseeds from v2, and reapplies so c becomes 3.
     const r2 = w2.writeWithRetry('w2', increment)
     assert.equal(counter(w2), 3)
     assert.equal(r2.conflicted, true, 'the retry path was exercised')

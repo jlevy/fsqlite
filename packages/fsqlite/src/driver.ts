@@ -2,8 +2,8 @@
 //
 // fsqlite depends on exactly one capability that most SQLite bindings lack: the
 // session/changeset extension (sqlite3session_create / sqlite3changeset_apply).
-// `node:sqlite` ships it built-in and is zero-dependency (no native build/prebuild),
-// which is what makes the package trivially cross-platform. `better-sqlite3`'s bundled
+// `node:sqlite` ships it built-in and needs no runtime dependency, native build, or
+// prebuild. This keeps the package portable. `better-sqlite3`'s bundled
 // build does not enable SQLITE_ENABLE_SESSION. Deno exposes the same `node:sqlite` with
 // sessions; Bun does not implement `node:sqlite` yet. Any session-enabled SQLite build can
 // in principle host a writer against the same format.
@@ -76,7 +76,7 @@ export function quickCheck(db: DatabaseSync): void {
 
 /**
  * Full integrity check; returns the problems reported by `PRAGMA integrity_check` ([] means
- * clean). Returning the rows — not just a boolean — lets `validate`/`seal` surface *what* is
+ * clean). Returning the rows, not just a boolean, lets `validate`/`seal` surface *what* is
  * wrong instead of a bare "failed" verdict.
  */
 export function integrityProblems(db: DatabaseSync): string[] {

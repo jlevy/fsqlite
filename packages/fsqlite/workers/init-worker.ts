@@ -1,4 +1,4 @@
-// Child-process initializer for the concurrent-init test: each process opens the SAME
+// Child-process initializer for the concurrent-init test: each process opens the same
 // fresh store dir and calls init(). Fenced init must let exactly one process build
 // snapshot 0 while the rest converge on it, with no corruption or partial state.
 //

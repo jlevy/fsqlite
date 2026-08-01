@@ -48,7 +48,7 @@ test('N concurrent writer processes lose zero committed tx after reconcile', asy
     while (store.pendingTxns().length > 0 && guard++ < 50) {
       store.reconcile()
     }
-    assert.equal(count(store), WRITERS * PER, 'reconcile folded in every committed tx — zero loss')
+    assert.equal(count(store), WRITERS * PER, 'reconcile folded in every committed tx without loss')
     assert.notEqual(store.validate().state, 'corrupt')
   } finally {
     cleanup()
@@ -130,7 +130,7 @@ test('N concurrent direct-writer processes serialize via the lock with zero loss
     assert.equal(
       count(store),
       WRITERS * PER,
-      'every direct write published exactly once — serialized, zero loss',
+      'every direct write published exactly once without loss',
     )
     assert.equal(store.currentVersion(), WRITERS * PER, 'one published version per direct write')
     assert.notEqual(store.validate().state, 'corrupt')

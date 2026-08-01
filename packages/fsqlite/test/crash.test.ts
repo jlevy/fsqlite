@@ -1,6 +1,6 @@
 // Crash-recovery: kill reconcile at every publish step and prove recovery to
 // exactly-once. The guarantees under test are R1 (never lose a published snapshot) and
-// exactly-once (the applied_tx ledger + atomic pointer swap).
+// exactly once through the applied_tx ledger and atomic pointer swap.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -74,7 +74,7 @@ test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', ()
       .filter((x): x is string => Boolean(x))
       .map(Number)
       .filter((v) => v > store.currentVersion())
-    assert.equal(ahead.length, 0, 'no snapshot ahead of the pointer after recovery + gc')
+    assert.equal(ahead.length, 0, 'no snapshot ahead of the pointer after recovery and gc')
   } finally {
     cleanup()
   }

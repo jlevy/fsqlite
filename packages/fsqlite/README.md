@@ -169,3 +169,7 @@ evidence and portability work still required for 1.0.
 
 MIT © 2026 Joshua Levy.
 See [LICENSE](https://github.com/jlevy/fsqlite/blob/main/LICENSE).
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

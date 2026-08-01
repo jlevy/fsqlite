@@ -1,19 +1,14 @@
-// directStore.ts: the "easy local" write strategy, over the same immutable snapshot
-// format as SnapshotStore.
+// directStore.ts provides the local single-writer strategy over the same immutable
+// snapshot format as SnapshotStore.
 //
-// Alongside the safe, file-native, lock-free, NFS-safe multi-writer engine
-// (SnapshotStore), DirectStore is the "complete, reliable format with easier locking
-// when running locally and standalone." A single writer holds the publish lock and
-// builds the next snapshot by copy, mutate, publish, synchronously. There are
+// A writer holds the publish lock while it copies, mutates, and publishes the next
+// snapshot. DirectStore needs no changesets, transaction envelopes, reconcile step, or
+// conflict policy. It also needs no session extension, so its strategy works with a
+// standard SQLite build. This implementation uses node:sqlite; another binding requires
+// an adapter.
 //
-//   - no changesets, no transaction envelopes, no reconcile step, no conflict policy;
-//   - and crucially no session extension required even for the writer, so DirectStore runs
-//     on a stock SQLite build, not only a session-enabled one. It still uses node:sqlite via
-//     the driver; binding-agnostic operation would need a binding adapter (not yet built).
-//
-// Format compatibility is the point: a store written by DirectStore is byte-identical in
-// shape to one written by SnapshotStore (snapshots/ and current), so the two modes
-// interoperate: any reader opens either without knowing which wrote it.
+// Both strategies produce the same snapshots and current pointer, so readers and writers
+// can use either strategy without changing the store format.
 
 import { copyFileSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
@@ -29,17 +24,15 @@ const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
 
 /**
- * The easy-local single-writer strategy: each `write` synchronously copies the current
- * snapshot, mutates the copy, and publishes it under the lease lock, with no changesets, no
- * reconcile, and no session extension even for the writer (so it runs on a stock SQLite build).
- * It writes the identical on-disk format as {@link SnapshotStore} (read/seal/gc/validate
- * delegate there), so a store is interoperable between the two strategies.
+ * The local single-writer strategy. Each `write` copies the current snapshot, mutates
+ * the copy, and publishes it under the lease. It produces the same on-disk format as
+ * {@link SnapshotStore}.
  */
 export class DirectStore {
   private base: SnapshotStore
 
   constructor(dir: string, opts: StoreOptions = {}) {
-    this.base = new SnapshotStore(dir, opts) // reuse layout, init, read, validate, seal, gc
+    this.base = new SnapshotStore(dir, opts)
   }
 
   init(): this {
@@ -106,7 +99,7 @@ export class DirectStore {
             throw e
           }
           db.close()
-          // Re-validate under the lock before the destructive publish (fencing + OCC).
+          // Revalidate fencing and optimistic concurrency before publication.
           if (this.base.currentVersion() !== base) {
             rmSync(tmp, { force: true })
             return 'retry'

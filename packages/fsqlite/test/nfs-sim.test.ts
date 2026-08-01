@@ -28,7 +28,7 @@ test('close-to-open: a second store handle sees a publish with no stale cache', 
     assert.equal(artifactCount(hostB), 0)
     hostA.write('A', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
     hostA.reconcile()
-    // hostB opens fresh on every read → observes hostA's publish immediately.
+    // hostB opens fresh on every read and observes hostA's publish immediately.
     assert.equal(hostB.currentVersion(), 1)
     assert.equal(artifactCount(hostB), 1)
   } finally {

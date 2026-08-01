@@ -19,7 +19,7 @@ const now = (): string => new Date().toISOString()
 const one = <T>(s: SnapshotStore, sql: string, ...a: (string | number)[]): T =>
   s.read((db) => db.prepare(sql).get(...a) as T)
 
-test('the catalog schema merges correctly through fsqlite (lww + union)', () => {
+test('the catalog schema merges correctly through fsqlite (lww and union)', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const cat = new SnapshotStore(dir, STORE).init()
@@ -45,7 +45,7 @@ test('the catalog schema merges correctly through fsqlite (lww + union)', () => 
         'blob',
         'blob_a',
         now(),
-      ) // dup → union no-op
+      ) // union ignores the duplicate
     })
     const res = cat.reconcile()
     assert.equal(res.applied, 2)

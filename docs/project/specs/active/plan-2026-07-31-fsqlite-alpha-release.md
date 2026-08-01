@@ -13,9 +13,10 @@
 Establish `github.com/jlevy/fsqlite` as the standalone home of `fsqlite` and publish an
 alpha to npm.
 
-The package is filesystem-friendly concurrent SQLite: immutable snapshot-publish plus
-transaction-envelope changesets behind an NFS-safe `mkdir` lease, with an easy-local
-`DirectStore` mode, over plain SQLite files, server-free, on any filesystem.
+The package is filesystem-friendly concurrent SQLite: immutable snapshot publication and
+transaction-envelope changesets behind an NFS-safe `mkdir` lease, with a local
+single-writer `DirectStore` mode, over plain SQLite files, server-free, on any
+filesystem.
 
 The runtime code is already self-contained: no source, worker, or test import escapes
 the package. The work is to establish an independent toolchain, fix the recovery-path
@@ -30,8 +31,7 @@ documentation and public API to the standard expected of a published package.
   in CI and in pre-push hooks rather than by convention.
 - The four P0 correctness and compatibility defects fixed, each with a regression test.
 - An honest `engines` range, so no consumer can install a version that cannot load.
-- Docs fit for a public repo: no monorepo residue, no internal tracker IDs, no
-  references to unpublished internal documents.
+- Public docs describe fsqlite only and link only to public, maintained material.
 - A published `0.1.0` on npm under the `alpha` dist-tag, installable and usable from a
   clean project.
 
@@ -68,9 +68,8 @@ The npm name `fsqlite` is unclaimed (the registry returns 404).
 
 ## Design
 
-### Toolchain: pnpm, Node, `node --test`, tsdown
+### Toolchain: pnpm, Node, `node --test`, and tsdown
 
-Decided and not revisited.
 The deciding evidence: Bun cannot resolve `node:sqlite` at all, which is the module the
 entire storage engine is built on.
 Beyond that, under `bun test` `process.execPath` is the Bun binary, so the multi-process
@@ -95,12 +94,11 @@ One deviation from the guidelines is deliberate: `moduleResolution` is `NodeNext
 `Bundler`, because this package’s `.ts` import specifiers are resolved by Node at
 runtime rather than by a bundler.
 
-### Repo layout: workspace from day one
+### Repo Layout: Workspace From Day One
 
 The repo uses a `packages/` workspace with `packages/fsqlite` as the single published
-package, per the pnpm guideline’s “start mono, stay sane” advice.
+package.
 
-The case for it is concrete rather than speculative.
 The format spec already commits to shipping **conformance fixtures and a verifier**, a
 deliverable that is naturally its own package: it is consumed by other implementations,
 versioned against the format rather than against the Node library, and should not ship
@@ -112,9 +110,10 @@ breaking every doc link, whereas paying for the structure now is a root `package
 and `-F` filters in a few scripts.
 
 The one real cost is the README split: GitHub renders the repo root, npm renders the
-package. Resolve it by making `packages/fsqlite/README.md` canonical (it must be in the
-tarball) and keeping the root `README.md` a short repo overview that links to it, rather
-than maintaining two copies that drift.
+package. Resolve it by making `packages/fsqlite/README.md` the primary package guide.
+It must be in the tarball.
+Keep the root `README.md` as a short repository overview that links to it rather than
+maintaining two copies that drift.
 
 Format-level and research documentation lives in the repo-root `docs/`, since it spans
 implementations rather than belonging to the Node library.
@@ -137,7 +136,7 @@ docs/
   research/research-2026-06-06-portable-concurrent-sqlite.md
 packages/
   fsqlite/
-    README.md                canonical, npm landing page
+    README.md                primary npm landing page
     package.json
     src/ test/ workers/ examples/ scripts/
 ```
@@ -145,7 +144,7 @@ packages/
 The repo keeps a `pnpm-workspace.yaml` for the workspace globs, which is also where pnpm
 11 reads `minimumReleaseAge`; its default is only one day.
 
-### Project identity and provenance
+### Project Identity and Provenance
 
 This is a new standalone open-source project.
 The source arrived as a squashed code snapshot; prior repository history is not
@@ -158,11 +157,10 @@ The project uses ordinary `0.x` semantic versions without prerelease suffixes.
 Documentation and the npm `alpha` dist-tag communicate the project phase, while package
 version `0.1.0` and Git tag `v0.1.0` identify the first release.
 
-### Supply-chain posture
+### Supply-Chain Posture
 
-A package with zero runtime dependencies can credibly run **no lifecycle scripts at
-all**. That is a real security property and should be stated in the README, not just
-configured:
+A package with zero runtime dependencies needs **no lifecycle scripts**. State that
+security property in the README as well as configuring it:
 
 ```yaml
 # pnpm-workspace.yaml
@@ -173,7 +171,7 @@ blockExoticSubdeps: true
 allowBuilds: [] # zero runtime deps: nothing needs to build
 ```
 
-### The `engines` defect
+### The `engines` Defect
 
 `src/driver.ts:15` is a static named import:
 
@@ -207,7 +205,7 @@ ESLint 9 reaches end of support on 2026-08-06, and ESLint 10 removes eslintrc su
 The standalone scaffold therefore starts on ESLint 10 with a flat configuration rather
 than creating configuration debt days before the release.
 
-### Correctness defects to fix
+### Correctness Defects to Fix
 
 Three high-severity findings, all in the recovery and durability paths that the
 package’s value proposition rests on:
@@ -239,10 +237,10 @@ believes it is pinned when it is not; a failed `owner.json` write orphans the lo
 directory; and `writeWithRetry` retries four permanently-failing conditions and then
 misreports all of them as a persistent conflict.
 
-### Test suite hardening
+### Test Suite Hardening
 
-The suite is strong and stays as-is structurally.
-Three specific reliability problems need fixing, and two CI flags are non-negotiable.
+The suite keeps its structure.
+Three specific reliability problems need fixing, and two CI flags are required.
 
 `seed.test.ts` asserts wall-clock benchmark comparisons inside the correctness gate;
 margins are wide locally but a throttled shared runner can redden a PR that changed
@@ -258,7 +256,7 @@ And `--test-concurrency=2` matters because the default is CPU count, and on a tw
 runner the spawn-heavy files co-schedule dozens of processes, shrinking every timing
 budget in the suite proportionally.
 
-### Public API surface
+### Public API Surface
 
 Four rough edges are worth settling while breaking changes are still free:
 
@@ -271,7 +269,7 @@ Four rough edges are worth settling while breaking changes are still free:
   but are public and cross-module, so they land in the published `.d.mts` as API the
   package implicitly promises to keep.
 
-### Standalone store identity
+### Standalone Store Identity
 
 The caller-provided directory is the store root.
 A visible `fsqlite.json` marker makes it self-identifying without relying on generic
@@ -294,22 +292,21 @@ Optional marker fields may be added without a format bump, mandatory capabilitie
 component. A future explicit upgrade command will write and validate a side-by-side
 destination, preserve `store_id`, and leave the source untouched until operator cutover.
 
-### Docs
+### Documentation
 
 The design, format specification, QA runbook, source confirmations, and research report
-now describe the standalone project and the `f1.0` layout consistently.
-The remaining documentation work is packaging and navigation: move
-implementation-independent docs to the root `docs/`, rewrite the package landing page,
-add repository-level contributor and release documents, and publish a concise roadmap.
-
-The README needs a rewrite as an npm landing page.
-It currently has no install instructions anywhere in 176 lines, no badges, no license
-section, the Node floor buried at line 170, and relative links into `docs/` that resolve
-to nothing on npmjs.com because `files` excludes them.
+describe the standalone project and the `f1.0` layout consistently.
+Implementation-independent material lives under the root `docs/` directory.
+The package README is the npm landing page, with install instructions, runtime
+requirements, alpha limitations, and absolute links to public repository documentation
+because `files` excludes `docs/` from the tarball.
+The root README provides a short project and documentation map.
+Contributor, release, roadmap, changelog, and supply-chain documents cover
+repository-level operations without duplicating the technical references.
 
 ## Implementation Plan
 
-### Phase 1: Foundation and faithful lift
+### Phase 1: Foundation and Faithful Lift
 
 Goal: this repo builds, typechecks, lints, tests, and packs green, with behavior
 unchanged from the source.
@@ -350,7 +347,7 @@ with its own test.
 - [x] (`fsq-x211`) Confirm a clean-room `pnpm install --frozen-lockfile` reproduces
   green from scratch
 
-### Phase 2: Correctness and hardening
+### Phase 2: Correctness and Hardening
 
 Goal: the recovery paths behave as the docs claim.
 Every item lands with a regression test that fails before the fix.
@@ -385,7 +382,7 @@ Every item lands with a regression test that fails before the fix.
 - [x] (`fsq-xc8i`) Treat an envelope already consumed by another reconciler as a benign
   quarantine race without weakening fail-closed reason writes
 
-### Phase 3: Usability, docs, and alpha publish
+### Phase 3: Usability, Documentation, and Alpha Publish
 
 Goal: a stranger can find, understand, install, and use this.
 
@@ -420,6 +417,8 @@ Goal: a stranger can find, understand, install, and use this.
   transition to npm trusted publishing in `docs/releasing.md`
 - [x] (`fsq-h8wt`) Make the tag workflow verify the manually published bootstrap version
   rather than attempting to publish the immutable version twice
+- [x] (`fsq-qqvg`) Apply common documentation guidelines across maintained prose, with
+  per-file beads and automated dash and footer drift checks
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 

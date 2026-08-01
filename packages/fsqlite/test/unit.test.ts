@@ -103,7 +103,7 @@ test('set-union policy drops duplicate relationship inserts without conflict', (
   }
 })
 
-test('reconcile is idempotent — replaying an applied tx does not double-apply', () => {
+test('reconcile is idempotent: replaying an applied tx does not double-apply', () => {
   const { store, cleanup } = freshStore()
   try {
     store.write('A', (db) => {
@@ -363,7 +363,7 @@ test('seal produces a clean single-file snapshot that passes integrity_check', (
   }
 })
 
-test('gc drops old snapshots but keeps current + retained', () => {
+test('gc drops old snapshots but keeps current and retained snapshots', () => {
   const { store, cleanup } = freshStore()
   try {
     for (let i = 0; i < 6; i++) {

@@ -54,3 +54,7 @@ Open a [GitHub issue](https://github.com/jlevy/fsqlite/issues) with the Node ver
 filesystem type, relevant mount options, a minimal reproduction, and the output of
 `fsqlite doctor` and `fsqlite fsinspect` when applicable.
 Avoid attaching database contents that contain private data.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

@@ -1,7 +1,7 @@
-// fsqlite: a standalone, dependency-free, cross-platform, file-native concurrent SQLite
-// store: immutable snapshot-publish + transaction-envelope changesets, guarded by an
-// NFS-safe mkdir lease lock and an idempotent ledger; plus an easy-local DirectStore over
-// the same on-disk format.
+// fsqlite provides filesystem-friendly concurrent SQLite through immutable snapshot
+// publication, transaction-envelope changesets, an NFS-safe mkdir lease, and an
+// idempotent ledger. DirectStore provides a local single-writer strategy over the same
+// format.
 //
 // See README.md for the rationale and the correctness model.
 

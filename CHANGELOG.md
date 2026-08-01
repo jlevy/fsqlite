@@ -2,7 +2,7 @@
 
 All notable changes to fsqlite are documented here.
 
-## 0.1.0 - 2026-07-31
+## 0.1.0: 2026-07-31
 
 First standalone alpha.
 
@@ -18,3 +18,7 @@ First standalone alpha.
 
 This is an alpha: the API and format may change before 1.0, and real multi-host NFS/SMB
 validation is still pending.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

@@ -47,7 +47,7 @@ test('schema-only seed defers same-key detection to reconcile (lww still resolve
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'first', 't'),
     )
     store.reconcile() // 'a' now in the head
-    // A schema-only writer does NOT see the existing 'a' (empty base): the insert
+    // A schema-only writer does not see the existing 'a' in its empty base. The insert
     // succeeds locally and the clash surfaces at reconcile, where lww replaces.
     store.write(
       'B',

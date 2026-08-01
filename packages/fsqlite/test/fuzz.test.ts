@@ -1,5 +1,5 @@
 // Randomized multi-process chaos. Unlike concurrent.test.ts (which seeds tx then races
-// reconcilers), this runs writers, reconcilers, and readers ALL AT ONCE with randomized
+// reconcilers), this runs writers, reconcilers, and readers together with randomized
 // counts and staggered starts: the realistic contention where a reconciler publishes
 // while writers are still dropping envelopes. Invariants after draining: zero loss, no
 // double-apply, integrity-clean head, readers never torn.
@@ -34,7 +34,7 @@ interface ReaderResult {
 const isReaderResult = (r: unknown): r is ReaderResult =>
   typeof (r as { torn?: unknown }).torn === 'boolean'
 
-test(`chaos: concurrent writers + reconcilers + readers converge (seed ${FUZZ_SEED})`, async () => {
+test(`chaos: concurrent writers, reconcilers, and readers converge (seed ${FUZZ_SEED})`, async () => {
   const { dir, cleanup } = tmpStore()
   try {
     new SnapshotStore(dir, STORE_OPTS).init()
@@ -46,14 +46,14 @@ test(`chaos: concurrent writers + reconcilers + readers converge (seed ${FUZZ_SE
     const expected = WRITERS * PER
 
     const jobs: Promise<unknown>[] = []
-    // Writers + readers start immediately.
+    // Writers and readers start immediately.
     for (let i = 0; i < WRITERS; i++) {
       jobs.push(runAsync('writer.ts', [dir, `w${i}`, String(PER)]))
     }
     for (let i = 0; i < READERS; i++) {
       jobs.push(runAsync<ReaderResult>('reader.ts', [dir, '400']))
     }
-    // Reconcilers start staggered so some publish WHILE writers are still going.
+    // Reconcilers start staggered so some publish while writers are still active.
     for (let i = 0; i < RECONCILERS; i++) {
       jobs.push(sleep(rnd(5, 60)).then(() => runAsync('reconciler.ts', [dir, '200'])))
     }

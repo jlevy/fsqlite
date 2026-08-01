@@ -139,7 +139,7 @@ remain disclosed.
   byte-independent but logically equivalent snapshots.
 - Windows tests race publishers through the actual replace primitive.
 - Path tests cover URI handling, symlinks, spaces, Unicode, drive-letter paths, and UNC
-  paths without conflating canonicalization with store identity.
+  paths without conflating path normalization with store identity.
 
 ## Non-Goals
 

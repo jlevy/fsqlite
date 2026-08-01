@@ -1,12 +1,12 @@
-# fsqlite On-Disk Format and Coordination Protocol — Specification
+# fsqlite On-Disk Format and Coordination Protocol: Specification
 
 **format_version: f1.0** · Status: Draft (normative for the f1.0 format; tracks the Node
 reference implementation at `packages/fsqlite/`)
 
-This is the normative definition of the fsqlite **store format** and **coordination
-protocol** — the language-agnostic deliverable that the Node library and CLI merely
-implement first. A conforming implementation in any language can read, write, reconcile,
-or operate a store interoperably with every other conforming implementation.
+This document defines the fsqlite **store format** and **coordination protocol**. The
+protocol is language-independent; the Node library and CLI are its first implementation.
+A conforming implementation in any language can read, write, reconcile, or operate a
+store interoperably with every other conforming implementation.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are to be interpreted as
 in RFC 2119. Requirements are stated against four conformance roles defined in §13:
@@ -23,12 +23,12 @@ normative; protocol *invariants* are.
 
 Everything in this format serves two correctness invariants:
 
-- **R1 (bounded loss).** A crash, stale-lock overlap, torn capture, or hot copy taken
-  while live loses at most the *unpublished tail* — never a previously published
-  snapshot. The **commit point of the store is snapshot publication** (§6); see §10 for
-  what is durable before that point.
-- **R2 (no silent corruption).** Every detectable inconsistency is surfaced by
-  validation (§11), never silently accepted or repaired-over.
+- **R1 (bounded loss).** A crash, stale-lock overlap, torn capture, or copy taken while
+  the store is live loses at most the *unpublished tail* and never a previously
+  published snapshot. The **commit point of the store is snapshot publication** (§6); see
+  §10 for what is durable before that point.
+- **R2 (no silent corruption).** Validation surfaces every detectable inconsistency
+  (§11) rather than accepting or repairing it silently.
 
 Three structural properties deliver them:
 
@@ -40,11 +40,11 @@ Three structural properties deliver them:
    until `current` names it, and `current` is replaced atomically.
 3. **The lock is not load-bearing for correctness.** The publish lock (§7) only reduces
    wasted work. Exactly-once application is guaranteed by the `applied_tx` ledger plus
-   optimistic concurrency on `current` (§6), so overlapping lock holders — possible
-   after a stale-lock break — cannot double-apply or corrupt.
+   optimistic concurrency on `current` (§6). Lock holders can overlap after a stale-lock
+   break, but they cannot double-apply or corrupt.
 
-The on-disk artifact never stops being ordinary SQLite: any SQLite binding in any
-language can open a published snapshot with no fsqlite code at all.
+The on-disk artifact remains an ordinary SQLite file: any SQLite binding in any language
+can open a published snapshot with no fsqlite code at all.
 
 ## 2. Store Layout
 
@@ -155,8 +155,9 @@ Requirements:
 - **S4.** Every *caller* table (any table not named `sqlite_*`, `applied_tx`, or
   `fsqlite_meta`) MUST have a primary key, and unless it is a single-column
   `INTEGER PRIMARY KEY` (a non-null rowid alias), every PK column MUST be declared
-  `NOT NULL`. Writers/initializers MUST reject schemas violating this — the merge policy
-  (§6) is keyed on primary keys, and SQLite otherwise permits NULLs in non-integer PKs.
+  `NOT NULL`. Writers/initializers MUST reject schemas violating this requirement
+  because the merge policy (§6) is keyed on primary keys, and SQLite otherwise permits
+  NULLs in non-integer PKs.
 
 - **S5.** A published snapshot MUST NOT have live `-wal`/`-shm` side files.
   (Snapshots are built and committed in rollback-journal mode and are closed before
@@ -169,7 +170,7 @@ Requirements:
 Snapshot 0 is the schema-only initial snapshot created by `init` (empty caller tables,
 both reserved tables, identity stamped).
 First-open MUST be fenced: build under the publish lock through a uniquely-named
-transient, rename into place, then publish the pointer — so concurrent initializers
+transient, rename into place, and then publish the pointer so concurrent initializers
 converge on one snapshot 0. After init (and on every reopen), an implementation MUST
 verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
 equals its `schema_version`, `application_id` equals `0x4653514C`, and
@@ -182,14 +183,14 @@ equals its `schema_version`, `application_id` equals `0x4653514C`, and
 required; the Node implementation writes the bare number with no trailing newline).
 
 - **P1.** Readers MUST parse strictly: after trimming ASCII whitespace, the content MUST
-  match `^\d+$`. Anything else (including empty) is **corruption**, surfaced per R2 —
-  never silently treated as version 0.
+  match `^\d+$`. Anything else, including empty content, is **corruption** and MUST be
+  surfaced per R2 rather than silently treated as version 0.
 - **P2.** The pointer MUST be replaced atomically and durably: write the new content to
   a uniquely-named temp file in the same directory → fsync the temp file → `rename()` it
   over `current` → fsync the directory.
 - **P3.** The snapshot a new pointer names MUST already be durable (fsynced and renamed
   into `snapshots/`, directory fsynced) *before* the pointer swap.
-  The pointer must never name a snapshot that power loss could un-create.
+  The pointer must never name a snapshot that could disappear after power loss.
 
 ## 5. Transaction Envelopes (the Writer Protocol)
 
@@ -214,7 +215,7 @@ chronological.
 | `format_version` | Store format version from `fsqlite.json`; reconcile quarantines a mismatch |
 | `store_id` | Store identity from `fsqlite.json`; reconcile quarantines a mismatch |
 | `writer_id` | The raw writer id (provenance) |
-| `base_version` | The published version the working copy was seeded from (informational; the format is not base-pinned — see §6) |
+| `base_version` | The published version the working copy was seeded from (informational; the format is not base-pinned; see §6) |
 | `schema_version` | Writer’s schema generation; reconcile quarantines a mismatch |
 | `schema_hash` | Writer’s DDL hash; reconcile quarantines a mismatch |
 | `created_at` | ISO-8601 timestamp (informational) |
@@ -228,8 +229,8 @@ chronological.
 1. **W1.** Validate the writer id against the regex above.
 2. **W2.** Read `current` → base; build a private working copy as a `.work-*` transient
    under `tx/pending/`: either a file copy of the (immutable) base snapshot
-   (`seed: snapshot` — correct for any mutation) or an empty database holding only the
-   schema (`seed: schema-only` — O(1), valid **only** for inserts of new keys; same-key
+   (`seed: snapshot`, correct for any mutation) or an empty database holding only the
+   schema (`seed: schema-only`, O(1), valid **only** for inserts of new keys; same-key
    collisions then surface at reconcile under the table’s policy).
 3. **W3.** Run the caller’s work inside one transaction while recording a session over
    all tables; extract the changeset; delete the working copy.
@@ -243,8 +244,8 @@ chronological.
 A writer MAY copy the base snapshot by plain file copy precisely because published
 snapshots are immutable (S6). If the seed copy fails because aggressive GC removed the
 base between the pointer read and the copy (possible only with `retain` near 0), the
-writer MUST fail loudly or retry from a fresh pointer read — never proceed on a torn
-copy.
+writer MUST fail loudly or retry from a fresh pointer read and MUST NOT proceed on a
+torn copy.
 
 > **Durability note.** The envelope files are *not* required to be fsynced; see §10 for
 > exactly what that means and when an accepted write becomes power-loss-durable.
@@ -272,15 +273,15 @@ Protocol:
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
    - otherwise **apply** the changeset under the per-table merge policy (below) and
-     record `tx_id` in `applied_tx` — both into the build snapshot, both before publish;
-     if the apply aborts (strict conflict or any error) → **quarantine** with the
-     reason; continue with the next envelope.
+     record `tx_id` in `applied_tx`; both writes occur in the build snapshot before
+     publication; if the apply aborts (strict conflict or any error) → **quarantine**
+     with the reason; continue with the next envelope.
 4. **F4.** Run an integrity gate (`PRAGMA quick_check`) on the build.
    A failure aborts the whole reconcile (the build is a discarded transient; nothing was
    published).
-5. **F5.** If nothing applied: discard the build, perform the archive/quarantine moves,
-   done. Otherwise **publish** under the lock (§7):
-   - **F5a.** Re-read `current`; if ≠ base, a peer published first — discard the build
+5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
+   moves, and finish. Otherwise **publish** under the lock (§7):
+   - **F5a.** Re-read `current`; if ≠ base, a peer published first, so discard the build
      and retry from F1 (**optimistic concurrency**).
    - **F5b.** Re-validate lock ownership by token (**fencing**, §7); on loss, discard
      and retry.
@@ -302,17 +303,18 @@ both build, but only one can publish a given version; the loser rebuilds from th
 winner’s snapshot, where the winner’s ledger makes already-folded envelopes no-ops.
 A crash before F5c publishes nothing (the build is a transient); a crash after F5c loses
 only the F6 moves, which are recovered by the ledger-skip.
-**Note that `base_version` in the manifest is informational: an envelope seeded from
-version N may legitimately be folded into version N+k** — cross-version merge is
-resolved by the per-table policy, not by base pinning.
+**`base_version` in the manifest is informational.
+An envelope seeded from version N may be folded into version N+k.** The per-table policy
+resolves cross-version merges; the base does not pin them.
 
-**Per-table merge policy.** A policy maps table name → action, with `'*'` as the default
-for unlisted tables; the default `'*'` action MUST be `strict` (deny-by-default: an
-unconfigured table never silently picks a winner).
+**Per-table merge policy.** A policy maps each table name to an action, with `'*'` as
+the default for unlisted tables.
+The default `'*'` action MUST be `strict`, so an unconfigured table never silently picks
+a winner.
 
 | Action (aliases) | On a same-PK conflict |
 | --- | --- |
-| `replace` (`lww`) | Incoming row wins — but only where SQLite permits `REPLACE` (DATA and CONFLICT conflict types); other conflict types fall back to `omit` |
+| `replace` (`lww`) | Incoming row wins where SQLite permits `REPLACE` (DATA and CONFLICT conflict types); other conflict types fall back to `omit` |
 | `omit` (`union`) | Existing row wins (first-writer-wins / set-union); the conflicting incoming change is dropped |
 | `strict` | The *entire envelope* is rejected (quarantined); none of its changes land |
 
@@ -330,9 +332,8 @@ tables; it is a client pattern, not a format feature.
 ## 7. The Publish Lock
 
 The publish lock is a **`mkdir` lease**: `mkdir(store-root/publish.lock)` succeeds for
-exactly one creator on local disk *and* on NFS/SMB (the same primitive git and npm use
-cross-host). It is held only around the publish step (F5) — never around writer work or
-the build.
+exactly one creator on local disk and on NFS/SMB. It is held only around the publish
+step (F5), not around writer work or the build.
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
@@ -340,15 +341,16 @@ the build.
   (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window, by
   removing the dir and retrying acquisition.
   (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
-  An implementation MUST enforce **timeout > stale window** — otherwise it could break a
-  lock it could simply have waited out.
+  An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
+  lock it could have waited for.
 - **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
   holder MUST re-read `owner.json` and verify its own token immediately before the
   destructive publish step (F5b), and MUST abandon the publish on a mismatch.
 - **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
-  `owner.json` still carries its token — a stale-broken holder must not delete a
-  successor’s live lock (which would admit a third concurrent holder).
-- **L5.** Correctness MUST NOT depend on L1–L4 (see §1): even two overlapping holders
+  `owner.json` still carries its token.
+  A stale-broken holder must not delete a successor’s live lock because doing so would
+  admit a third concurrent holder.
+- **L5.** Correctness MUST NOT depend on L1-L4 (see §1): even two overlapping holders
   cannot double-publish a version (F5a) or double-apply an envelope (the ledger).
   Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
   and OCC, not staleness precision, carry correctness.
@@ -371,20 +373,20 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
 - **G2.** GC MUST re-scan the lease directory **immediately before each individual
-  snapshot unlink** — a lease may have been published after GC’s initial scan (this is
+  snapshot unlink**. A lease may have been published after GC’s initial scan (this is
   the GC-side half of the race closure; RL1 is the reader-side half).
   The newest `retain` versions are never collected, which bounds RL1’s retries.
-- **G3.** GC MAY also sweep *stale* transients (`.build-*`, `.direct-*`, `*.tmp`) — but
+- **G3.** GC MAY also sweep *stale* transients (`.build-*`, `.direct-*`, `*.tmp`), but
   MUST NOT sweep *fresh* ones, which may belong to a live reconcile or DirectStore write
   in another process. Staleness is mtime-based with a window comfortably above any
   plausible build duration.
 
 ## 9. The DirectStore Strategy
 
-DirectStore is the easy-local single-writer strategy **over the identical format**. A
-store written by either strategy has the same `fsqlite.json` identity marker and is read
-by the other strategy, and by plain `sqlite3`; no on-disk field records which write
-strategy produced a snapshot.
+DirectStore is the local single-writer strategy **over the same format**. Snapshots
+produced by either strategy share the same `fsqlite.json` identity marker and can be
+read by the other strategy or plain `sqlite3`. No on-disk field records which strategy
+produced a snapshot.
 
 Protocol (per write): acquire the publish lock → read `current` → base → copy the base
 snapshot to a `.direct-*` transient → mutate it in one transaction → integrity-gate
@@ -392,10 +394,10 @@ snapshot to a `.direct-*` transient → mutate it in one transaction → integri
 rename to `snapshots/<base+1>`, fsync dir, pointer swap (P2/P3) → release.
 On an OCC or fencing failure, discard and retry.
 
-There are no envelopes, no reconcile, no merge policy — and **no session extension even
-for the writer**, so the strategy runs on any SQLite build.
-Because it performs OCC on `current` under the same lock, DirectStore composes safely
-with SnapshotStore reconcilers publishing into the same store.
+There are no envelopes, reconcile step, or merge policy.
+The writer **does not require the session extension**, so the strategy runs on any
+SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
+composes safely with SnapshotStore reconcilers publishing into the same store.
 
 ## 10. Durability Model
 
@@ -412,17 +414,19 @@ The required barriers:
 
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss
-durable until a reconcile publishes a snapshot containing it** — the envelope files are
-not fsynced. After a power loss, R1’s “unpublished tail” therefore includes accepted
-envelopes that had not yet been folded.
+durable until a reconcile publishes a snapshot containing it** because the envelope
+files are not fsynced.
+After a power loss, R1’s “unpublished tail” therefore includes accepted envelopes that
+had not yet been folded.
 Implementations MAY additionally fsync the envelope payload and dir to harden
 accepted-but-unpublished writes (see Open issue O3); callers needing a hard durability
 receipt run `reconcile()` after `write()`.
 
 Published snapshots, once the pointer swap’s barriers complete, MUST survive power loss.
 A torn publish (power loss between snapshot rename and pointer swap) leaves an orphan
-snapshot ahead of a valid pointer — state `in-flight-capture`, restored by repair (§11);
-the previous head is intact (R1).
+snapshot ahead of a valid pointer.
+Repair restores this `in-flight-capture` state (§11), and the previous head remains
+intact (R1).
 
 ## 11. Validation States and Repair
 
@@ -470,8 +474,8 @@ published snapshot was integrity-gated at publish and never modified (S6):
 4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
    reason file).
 
-Repair MUST NOT delete committed pending envelopes (they are unpublished work — folded
-by the next reconcile) and MUST NOT modify any snapshot in place.
+Repair MUST NOT delete committed pending envelopes because the next reconcile folds this
+unpublished work. Repair also MUST NOT modify any snapshot in place.
 
 ## 12. Versioning and Evolution
 
@@ -494,7 +498,7 @@ by the next reconcile) and MUST NOT modify any snapshot in place.
   *caller’s* schema. Same version and same hash → compatible; same version and different
   hash → reject at open, quarantine at reconcile; different version → reject/quarantine
   (until a future caller-schema migration protocol defines an upgrade path).
-- **Unknown manifest fields and unknown `fsqlite_meta` keys MUST be ignored** — they are
+- **Unknown manifest fields and unknown `fsqlite_meta` keys MUST be ignored.** They are
   the forward-compatibility channel.
 - The changeset payload format is owned by SQLite’s session extension and versioned by
   SQLite itself; fsqlite inherits its compatibility guarantees.
@@ -527,39 +531,40 @@ upgrade implementation is post-alpha work.
   read batch); a snapshot already open stays consistent forever (immutability).
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
-**Writer**: W1–W4, S4 schema validation at init, the compatibility check of §3, and a
+**Writer**: W1-W4, S4 schema validation at init, the compatibility check of §3, and a
 session-capable SQLite build (or the DirectStore strategy, §9).
 
-**Reconciler**: F1–F6, the policy semantics of §6, L1–L5, and the §12 quarantine rules.
+**Reconciler**: F1-F6, the policy semantics of §6, L1-L5, and the §12 quarantine rules.
 A reconciler MUST NOT apply an envelope outside the deterministic order, MUST NOT
 publish a build whose integrity gate failed, and MUST NOT mutate a published snapshot.
 
 **Operator tool**: MUST implement `validate` per §11 before any destructive operation;
-`repair` MUST follow §11’s rules; GC MUST follow G1–G3.
+`repair` MUST follow §11’s rules; GC MUST follow G1-G3.
 
-**Conformance fixtures** (post-alpha): a directory of golden stores — sealed, live,
-in-flight (orphan-ahead), corrupt-pointer, corrupt-head, quarantined-envelope — plus a
-verifier script, so any implementation can be tested against the same artifacts.
+**Conformance fixtures** (post-alpha): a directory of sealed, live, in-flight
+(orphan-ahead), corrupt-pointer, corrupt-head, and quarantined-envelope golden stores,
+plus a verifier script.
+The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O2 — Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
+- **O2: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
   semantics; Win32 `rename` fails on an existing target.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
   semantics. The cross-platform CI matrix gates the claim.
-- **O3 — Envelope durability option.** §10 makes accepted-but-unpublished writes
+- **O3: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
-- **O5 — Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
+- **O5: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
   Correctness never depends on these (L5), but liveness tuning on skewed clusters is
   undocumented; the planned real-NFS gate and protocol model both probe this.
-- **O6 — `base_version` is unused.** Manifests record the seed base, but reconcile
+- **O6: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
-  Either document it as provenance-only (this spec does) or define semantics (e.g.
-  staleness warnings) in a future version.
+  This specification treats it only as provenance.
+  A future version could instead define semantics such as staleness warnings.
 
 ## 15. References
 
@@ -568,8 +573,8 @@ verifier script, so any implementation can be tested against the same artifacts.
   [`upstream-source-confirmations.md`](upstream-source-confirmations.md)
 - Fixed SQLite file identity: [`application-id.md`](application-id.md)
 - Test-to-guarantee map and manual QA: [`qa-runbook.md`](qa-runbook.md)
-- SQLite session extension: https://sqlite.org/sessionintro.html · `VACUUM INTO`:
-  https://sqlite.org/lang_vacuum.html
+- [SQLite session extension](https://sqlite.org/sessionintro.html)
+- [`VACUUM INTO`](https://sqlite.org/lang_vacuum.html)
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

@@ -1,6 +1,6 @@
 # fsqlite Design and Rationale
 
-Status: current design of the shipped package.
+Status: current design of the implementation in this repository.
 Companions: the normative on-disk format and protocol live in
 [`fsql-format-spec.md`](fsql-format-spec.md); the background, prior art, and validation
 experiments live in the
@@ -12,29 +12,28 @@ the test-to-guarantee map lives in the [QA runbook](qa-runbook.md).
 SQLite’s own concurrency machinery assumes one local disk: WAL mode needs a
 shared-memory `-shm` file (the SQLite project states WAL “is not supported on a network
 filesystem”), and the fallback POSIX byte-range locks are notoriously unreliable there.
-So a live SQLite file shared over NFS/SMB or a cloud-sync folder silently corrupts or
-fails to lock — exactly where agents increasingly run (cloud agent workspaces, shared
-network drives, synced directories).
-The serious “distributed SQLite” projects sidestep this rather than fix it: they
-centralize the writer behind a server or coordinator (LiteFS, rqlite/dqlite) or replace
-SQLite’s storage layer (mvSQLite).
-Nothing offers server-free, any-filesystem, multi-writer access that keeps the artifact
-a plain SQLite file.
-(Full analysis: research, Findings B–E.)
+Consequently, a live SQLite file shared over NFS/SMB or a cloud-sync folder can corrupt
+or fail to lock. These environments include shared cloud workspaces, network drives, and
+synced directories. Existing “distributed SQLite” projects use a different architecture:
+they centralize the writer behind a server or coordinator (LiteFS, rqlite/dqlite) or
+replace SQLite’s storage layer (mvSQLite).
+No surveyed option provides server-free, multi-writer access across these filesystems
+while keeping the artifact a plain SQLite file.
+See research Findings B through E.
 
 ## What fsqlite Is
 
-fsqlite is **two things, and the order matters**:
+fsqlite combines a format with its first implementation:
 
-1. **A language-agnostic format and coordination protocol** (the durable deliverable,
+1. **A language-independent format and coordination protocol** (the durable deliverable,
    normatively specified in [`fsql-format-spec.md`](fsql-format-spec.md)): immutable
    versioned snapshots, a visible `fsqlite.json` identity marker, a tiny atomic
    `current` pointer, changeset transaction envelopes, an `applied_tx` ledger, an
    `fsqlite_meta` identity stamp, and an NFS-safe `mkdir` lease.
-   Any language or tool can *read* it today (it is just SQLite); other languages can
-   implement *writers* against the spec.
+   Any language or tool can *read* it today because snapshots are SQLite files.
+   Other languages can implement *writers* against the specification.
 2. **A Node reference implementation** (`node:sqlite`, zero runtime dependencies) and
-   its `fsqlite` CLI — the first implementation of the format and its proving ground.
+   its `fsqlite` CLI, which implement and exercise the format.
 
 The closest precedents are Apache Iceberg and Delta Lake: a table format plus a commit
 protocol over immutable files, with multiple engine implementations.
@@ -42,24 +41,25 @@ fsqlite is that shape over SQLite.
 
 ## The Contract
 
-**Readers are unchanged** — open the published snapshot with plain SQLite, any language,
-no extension. **Writers adopt a thin convention** — hand fsqlite a unit of work and a
-per-table merge policy — and get many concurrent writers and unlimited readers,
-server-free, designed for any filesystem, crash- and hot-copy-safe, at row-level
-optimistic granularity.
+**Readers are unchanged:** they open the published snapshot with plain SQLite in any
+language and need no extension.
+**Writers adopt a thin convention:** they give fsqlite a unit of work and a per-table
+merge policy.
+In return, fsqlite coordinates many writers and unlimited readers without a
+server, using row-level optimistic conflict handling and filesystem-safe publication.
 The trade is serializable isolation and instant cross-writer visibility: writes merge
-and become visible at `reconcile`, and every table needs a NON-NULL primary key
+and become visible at `reconcile`, and every caller table needs a NON-NULL primary key
 (enforced at `init`).
 
 Two correctness invariants govern everything.
-**R1 (bounded loss):** a crash, stale-lock overlap, torn capture, or hot copy taken
-while live loses at most the unpublished tail, never a previously published snapshot.
-**R2 (no silent corruption):** every inconsistency is detectable and surfaced by
-`validate`, never silently accepted.
+**R1 (bounded loss):** a crash, stale-lock overlap, torn capture, or copy taken while
+the store is live loses at most the unpublished tail, never a previously published
+snapshot. **R2 (no silent corruption):** every inconsistency is detectable and surfaced
+by `validate`, never silently accepted.
 
 ## The Mechanism
 
-- **Writers are lock-free** — each drops a uniquely-named SQLite changeset envelope,
+- **Writers are lock-free**: each drops a uniquely-named SQLite changeset envelope,
   seeded from the current immutable snapshot.
   Unique paths mean conflict-free on local disk *and* NFS.
 - **Published heads are immutable** versioned snapshots, selected by a tiny atomic
@@ -69,7 +69,7 @@ while live loses at most the unpublished tail, never a previously published snap
   `format: "fsqlite"`, `format_version: "f1.0"`, required features, and a UUID
   `store_id`. The same version and identity are stamped into snapshots and envelopes so
   mixed-store contents fail validation.
-- **Readers open only an immutable snapshot** — any SQLite binding, any language, no
+- **Readers open only an immutable snapshot**: any SQLite binding, any language, no
   session extension.
 - **The one mutual-exclusion point** is an NFS-safe `mkdir` lease held only for the
   short publish, backed by an idempotent ledger so correctness never depends on the lock
@@ -79,21 +79,22 @@ while live loses at most the unpublished tail, never a previously published snap
 per-snapshot `applied_tx` ledger (exactly-once), and optimistic concurrency on `current`
 (overlapping reconcilers build separate temp files) mean a stale-lock break or a process
 killed mid-publish cannot corrupt or double-apply.
-The `mkdir` lease is belt-and-suspenders.
-(Full argument: research, Findings H; normative steps: format spec §6–§7.)
+The `mkdir` lease reduces redundant work but does not carry correctness.
+See research Finding H and format spec §§6-7 for the complete argument and normative
+steps.
 
 ## Concurrency Guarantees, Precisely
 
-(Full statement and a fair WAL comparison: research, Finding K.)
+Research Finding K gives the full statement and comparison with WAL.
 
 - **Reads:** unlimited, lock-free, never blocked, snapshot-isolated at published-version
   granularity.
-- **Writes:** the *capture* (envelope) phase is unlimited and lock-free — there is no
+- **Writes:** the *capture* (envelope) phase is unlimited and lock-free: there is no
   global write lock on the application path.
   Only the brief, out-of-band `reconcile` merge is serialized (lease and OCC), and it
   serializes *producing a new snapshot*, not *accepting independent writes*.
 - **Conflict granularity is per-row (per primary key)**, not whole-DB or per-table:
-  writers touching different rows — even in the same table — never conflict; only a
+  writers touching different rows, even in the same table, never conflict; only a
   same-PK clash is resolved by that table’s policy (`lww`/`union`/`strict`).
 - **Isolation is deliberately weaker than WAL:** row-level write-set merge and
   read-your-own-writes within a session, not serializable (no read-set tracking), and a
@@ -108,9 +109,9 @@ the work) that prevents lost updates without a lock.
 
 ## Two Write Strategies, One Format
 
-- **`SnapshotStore`** — the lock-free, NFS-safe concurrent multi-writer engine
-  (envelopes and `reconcile`); writers need the session extension, readers do not.
-- **`DirectStore`** — the easy-local single-writer strategy: synchronous copy → mutate →
+- **`SnapshotStore`**: the lock-free, NFS-safe concurrent multi-writer engine (envelopes
+  and `reconcile`); writers need the session extension, readers do not.
+- **`DirectStore`**: the local single-writer strategy: synchronous copy → mutate →
   publish under the lock, no changesets or reconcile, and no session extension even for
   the writer.
 
@@ -119,30 +120,28 @@ the work) that prevents lost updates without a lock.
 1. **It removes the session-extension requirement for writers.** `SnapshotStore` writers
    need `SQLITE_ENABLE_SESSION`, which most SQLite bindings do not ship
    (`better-sqlite3` does not compile it; Bun has no `node:sqlite`; many non-Node
-   bindings lack it). The DirectStore strategy writes with *any* SQLite build, so it is
-   the portability lane for writers — and the path to non-Node writers against the same
-   format without waiting for session support.
-2. **Strictly simpler, stronger semantics when there is one writer.** Full serializable
-   isolation, no merge policy to design, no quarantines, no write-skew caveats — and a
+   bindings lack it). The DirectStore strategy writes with *any* SQLite build, so it is a
+   portable writer strategy and a path to non-Node writers against the same format
+   without waiting for session support.
+2. **Simpler, stronger semantics when there is one writer.** Full serializable
+   isolation, no merge policy to design, no quarantines, no write-skew caveats, and a
    write is visible to readers the moment it returns (no reconcile step, no visibility
    lag).
 3. **The write is the durability point.** DirectStore publishes synchronously, so a
-   returned write is power-loss durable — `SnapshotStore` writes are durable only at the
-   next reconcile (format spec §10).
-4. **Zero-migration graduation.** Start single-writer with DirectStore; adopt
-   `SnapshotStore` when concurrent writers arrive — same store, same readers, same
-   tools. The two even compose live (DirectStore does OCC on `current` under the same
-   lock).
+   returned write is power-loss durable.
+   `SnapshotStore` writes become durable at the next reconcile (format spec §10).
+4. **Zero-migration graduation.** Start single-writer with DirectStore, then adopt
+   `SnapshotStore` when concurrent writers arrive without changing the store, readers,
+   or tools. The two can operate concurrently because DirectStore checks `current`
+   optimistically under the same lock.
 
 The cost is global write serialization (the lock is held across copy → mutate →
 publish), which is exactly right for a single writer and wrong for many.
 
-Default to `SnapshotStore` (the always-on safe floor for many writers or network
-filesystems).
-Offer `DirectStore` as an **opt-in** for provably-single-writer local use —
-never auto-selected from filesystem detection (detection is unreliable; the dangerous
-cases look local). The two interoperate on one store because they share the on-disk
-format.
+Use `SnapshotStore` for multiple writers or network filesystems.
+Use `DirectStore` only for a local store with one writer.
+Never select DirectStore automatically from filesystem detection because unsafe cases
+can look local. The two strategies interoperate because they share the on-disk format.
 
 ## Design Refinements Carried from the Research
 
@@ -156,9 +155,10 @@ format.
   (Research, Finding C.)
 - **A declared read set (`commitIf`) is the future escape hatch** alongside
   `writeWithRetry`: letting a caller declare point-key reads revalidated at merge would
-  soundly close write skew for fully-declared invariants only — not phantom or predicate
-  reads; aggregate and range invariants need a version-stamped guard row or the
-  `DirectStore` lane. (Research, Finding K.)
+  close write skew for fully declared point-key invariants only.
+  It cannot close phantom or predicate reads; aggregate and range invariants need a
+  version-stamped guard row or the `DirectStore` lane.
+  (Research, Finding K.)
 - **Capability detection over assumption.** `driver.capabilities()` probes session
   support by actually recording a changeset; a `SnapshotStore` write fails loudly on a
   session-less runtime rather than degrading silently.
@@ -180,9 +180,9 @@ const store = new SnapshotStore(dir, {
   schemaVersion: 1,
   conflictPolicy: {
     // per-table merge semantics
-    url_index: 'lww', //   last-writer-wins
-    relationships: 'union', //   set-union
-    '*': 'strict', //   deny-by-default: conflict ⇒ quarantine the envelope
+    url_index: 'lww', // last-writer-wins
+    relationships: 'union', // set-union
+    '*': 'strict', // deny-by-default: quarantine a conflicting envelope
   },
 }).init()
 
@@ -190,7 +190,7 @@ const txId = store.write('writer-a', (db) => {
   /* INSERT/UPDATE/DELETE */
 })
 const rows = store.read((db) => db.prepare('SELECT …').all())
-const res = store.reconcile() // build → quick_check → atomic publish; exactly-once
+const res = store.reconcile() // build, quick_check, and atomic publication; exactly once
 store.writeWithRetry('writer-a', (db) => {
   /* read-modify-write on strict rows */
 })
@@ -200,9 +200,9 @@ store.validate()
 store.repair()
 store.seal('out.sqlite')
 
-// Easy-local alternative over the same format:
+// Local single-writer alternative over the same format:
 const v = new DirectStore(dir, opts).write((db) => {
-  /* … */
+  /* write through plain SQLite */
 })
 ```
 
@@ -212,10 +212,10 @@ const v = new DirectStore(dir, opts).write((db) => {
 | --- | --- |
 | `src/lock` | NFS-safe `mkdir` lease with an owner token for revalidate-before-publish; invariant `timeoutMs > staleMs` |
 | `src/storeFormat` | Root marker creation and validation; format/store identity and required-feature gating |
-| `src/driver` | Thin `node:sqlite` wrapper — the session/changeset chokepoint; capability probing |
+| `src/driver` | Thin `node:sqlite` wrapper: the session/changeset chokepoint; capability probing |
 | `src/conflictPolicy` | Per-table policy via one filtered apply pass per action; conflict-type-aware `replace`; `strict` detected via the ABORT pass |
 | `src/snapshotStore` | The concurrent engine: `init/read/write/writeWithRetry/reconcile/gc/validate/repair/seal/readLease` |
-| `src/directStore` | The easy-local single-writer strategy over the same format |
+| `src/directStore` | The local single-writer strategy over the same format |
 | `src/cli` | The reference CLI: schema-agnostic operations over any store or plain SQLite file |
 
 ## The CLI Is a First-Class Deliverable
@@ -224,17 +224,17 @@ A reference implementation needs a reference CLI so the format is operable by ha
 from scripts. Every subcommand is schema-agnostic (it works on the
 snapshot/pointer/envelope/lease layer), so an operator can maintain a store they did not
 create: `info`, `validate`, `gc`, `seal`, `repair`, plus `stats` and `doctor`, which
-span **any SQLite path** — an fsqlite store directory or a plain SQLite file — labeling
-which they see, and `fsinspect`, which empirically probes a filesystem for the
+span **any SQLite path** (an fsqlite store directory or a plain SQLite file), label
+which form they see, and `fsinspect`, which empirically probes a filesystem for the
 guarantees fsqlite relies on (atomic `mkdir`, rename-replace, close-to-open visibility,
 a WAL negative control).
 
 ## Cross-Platform Posture
 
-By construction, writers never use SQLite file locking or WAL `-shm` (the parts that
-break on network filesystems) — only atomic dir-create and snapshot copies; the publish
-lock is `mkdir` (atomic on NFS); `reconcile` builds without WAL; and `validate` flags a
-live `-wal`/`-shm` next to snapshots (the cloud-sync hazard).
+Writers never use SQLite file locking or WAL `-shm`, the mechanisms that fail on network
+filesystems. They use atomic directory creation and snapshot copies.
+The publish lock uses `mkdir`; `reconcile` builds without WAL; `validate` flags a live
+`-wal` or `-shm` file next to a snapshot.
 Windows needs rename-replace semantics (`MOVEFILE_REPLACE_EXISTING`); see format spec
 §14, Open Issue O2.
 
@@ -262,23 +262,23 @@ Caller schema migrations are a separate concern.
 
 [`document-catalog.ts`](../packages/fsqlite/examples/document-catalog.ts) is the
 concrete shape of a realistic adopter: a catalog of documents, content-addressed blobs,
-a URL index, and typed relationships, written by many agents at once — the consumer
-supplies only its schema and merge policy.
+a URL index, and typed relationships that many agents can update concurrently.
+The consumer supplies only its schema and merge policy.
 [`adoption.test.ts`](../packages/fsqlite/test/adoption.test.ts) runs the same schema and
 policy through the engine (last-writer-wins refetch, deduplicated union edge,
-strict-default quarantine), so the example can never drift.
+strict-default quarantine), keeping the example’s schema and policy aligned with the
+tests.
 
-## Validation Posture and Known Gaps
+## Validation and Known Gaps
 
-The full test-to-guarantee map and the manual pre-publish review live in the
-[QA runbook](qa-runbook.md); remaining format questions live in the format spec’s §14.
-The two most important honesty points: the real cross-host NFS/SMB gate is still pending
-(today’s validation is single-host plus simulated network-filesystem semantics), and the
-store’s commit point is publication — an accepted `write()` is not power-loss durable
-until a reconcile publishes it (format spec §10). All deferred validation and evolution
-work is mapped in the
+The [QA runbook](qa-runbook.md) maps tests to guarantees and defines the manual
+pre-publish review. The format specification lists remaining format questions in §14.
+Real cross-host NFS/SMB validation is still pending; current validation uses one host
+plus simulated network-filesystem semantics.
+The store’s commit point is publication, so an accepted `write()` is not power-loss
+durable until a reconcile publishes it (format spec §10). The
 [post-alpha roadmap](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md)
-and its dedicated post-alpha plan.
+maps all deferred validation and evolution work.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

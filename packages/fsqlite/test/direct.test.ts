@@ -1,4 +1,4 @@
-// Direct-mode (the "easy local" write strategy) and format interoperability with the
+// DirectStore provides local single-writer operation and format interoperability with the
 // envelope engine. The two write strategies share one immutable-snapshot format, so a
 // store written by one reads identically via the other and via plain sqlite3. These cover
 // the in-process behavior and format interop; multi-process direct-writer concurrency runs
@@ -17,7 +17,7 @@ test('direct write → read round-trips and increments the version synchronously
     const v = store.write((db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
     })
-    assert.equal(v, 1, 'a direct write publishes immediately — no pending tail, no reconcile')
+    assert.equal(v, 1, 'a direct write publishes immediately with no pending tail or reconcile')
     assert.equal(store.currentVersion(), 1)
     assert.equal(
       store.read(

@@ -1,5 +1,5 @@
 // Fencing / lease semantics of the publish lock. The publish lock is the only
-// mutual-exclusion point, and correctness must NOT depend on it being perfect. These
+// mutual-exclusion point, and correctness must not depend on it being perfect. These
 // tests pin the three properties that make that true:
 //   - revalidate-before-publish: a holder whose lease was stolen aborts (the
 //     ownerOf(lockPath) === token check) instead of writing under a new owner
@@ -32,7 +32,7 @@ test('revalidate-before-publish: a holder whose lease was stolen aborts the dest
     const result = withLock(
       lockPath,
       (token) => {
-        // Simulate a stale-break + steal by a second reconciler while we were paused:
+        // Simulate a stale break and lease theft by a second reconciler while paused:
         // the lock dir is reclaimed and re-owned by a different token.
         rmSync(lockPath, { recursive: true, force: true })
         mkdirSync(lockPath)

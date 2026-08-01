@@ -1,6 +1,6 @@
-// Plain-SQLite inspection behind the `stats` and `doctor` CLI commands. These read ANY
-// SQLite file — not just an fsqlite store — so the operator tool is useful on any SQLite
-// path and degrades gracefully, labeling plain-SQLite facts vs the fsqlite layer.
+// Plain-SQLite inspection behind the `stats` and `doctor` CLI commands. These read any
+// SQLite file, not just an fsqlite store, so the operator tool works on any SQLite path
+// and distinguishes plain-SQLite facts from the fsqlite layer.
 
 import { openSync, readSync, closeSync, statSync } from 'node:fs'
 import * as driver from './driver.ts'

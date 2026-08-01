@@ -54,3 +54,7 @@ For a later release during the alpha phase:
 
 Stable releases use the same process with the appropriate npm dist-tag after the
 package’s compatibility policy is established.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

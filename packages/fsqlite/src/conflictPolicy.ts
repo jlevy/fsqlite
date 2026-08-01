@@ -66,7 +66,7 @@ export class StrictConflictError extends Error {
 }
 
 /**
- * A policy maps table name → action, with `'*'` the default for unlisted tables.
+ * A policy maps each table name to an action, with `'*'` as the default.
  * Aliases: 'lww' = 'replace' (last-writer-wins), 'union' = 'omit' (set-union /
  * first-writer-wins).
  *

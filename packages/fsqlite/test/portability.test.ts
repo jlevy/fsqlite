@@ -1,8 +1,6 @@
-// Portability: the published head is a standard SQLite file, openable by ANY binding /
-// language / the sqlite3 CLI, with no session extension. There is no sqlite3 CLI in this
-// environment, so we prove it binding-agnostically: the file carries the SQLite magic
-// header and the capability pragmas (application_id / user_version) a foreign reader uses
-// to recognize and version-gate the store.
+// A published head is a standard SQLite file that any binding, language, or sqlite3 CLI
+// can open without the session extension. These tests verify the SQLite header and the
+// application_id and user_version pragmas used by other readers.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

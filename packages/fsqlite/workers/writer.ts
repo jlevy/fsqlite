@@ -1,5 +1,5 @@
 // Child-process writer for the concurrency tests. Emits N transaction envelopes, each
-// inserting a uniquely-keyed artifact + url_index row, then exits. Writers never
+// inserting a uniquely keyed artifact and url_index row, then exits. Writers never
 // coordinate: unique envelope paths make them conflict-free.
 //
 // argv: <dir> <writerId> <count>

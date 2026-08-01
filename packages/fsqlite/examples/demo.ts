@@ -36,7 +36,7 @@ const tree = (label: string): void => {
   console.log('  current →', store.currentVersion())
 }
 
-// Two writers seed off the SAME base (v0) with no coordination; B clashes on art_1.
+// Two writers seed from the same base without coordination; B clashes on art_1.
 store.write('agentA', (db) => {
   db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('art_1', 'Alpha (by A)', 't1')
   db.prepare('INSERT INTO url_index VALUES (?,?,?,?)').run('u_a', 'https://a', 'blob_a', 't1')
@@ -45,11 +45,11 @@ store.write('agentB', (db) => {
   db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('art_1', 'Alpha (by B)', 't2') // last-writer-wins
   db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('art_2', 'Beta', 't2')
 })
-tree('after two concurrent writers — envelopes pending, catalog NOT yet updated')
+tree('after two concurrent writers: envelopes pending, catalog NOT yet updated')
 
 const res = store.reconcile()
 console.log('\nreconcile:', JSON.stringify(res))
-tree('after reconcile — folded into an immutable snapshot, envelopes archived')
+tree('after reconcile: folded into an immutable snapshot, envelopes archived')
 
 console.log(
   '\nartifacts now:',

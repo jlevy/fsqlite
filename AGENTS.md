@@ -18,7 +18,7 @@ actions rather than telling them to run commands.
 
 <!-- END TBD INTEGRATION -->
 
-## Build & Test
+## Build and Test
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
@@ -45,7 +45,7 @@ An fsqlite store is a caller-provided directory identified by `fsqlite.json`.
 snapshots; `DirectStore` synchronously copy-mutates-publishes the same format.
 The atomic `current` pointer is the commit point.
 
-## Conventions & Patterns
+## Conventions and Patterns
 
 - Runtime code uses only Node built-ins; do not add runtime dependencies casually.
 - Normal open never upgrades the directory format or the caller’s schema.
@@ -54,3 +54,7 @@ The atomic `current` pointer is the commit point.
 - `PRAGMA application_id` belongs to fsqlite; `user_version` belongs to the caller.
 - Use `apply_patch` for edits and preserve unrelated worktree changes.
 - Run `pnpm verify` before closing implementation beads.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

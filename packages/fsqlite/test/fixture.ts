@@ -1,4 +1,4 @@
-// Shared test fixture: a small caller schema + merge policy, exercising the three
+// Shared test fixture: a small caller schema and merge policy that exercise the three
 // representative merge semantics (last-writer-wins, set-union, abort).
 
 import { mkdtempSync, rmSync } from 'node:fs'

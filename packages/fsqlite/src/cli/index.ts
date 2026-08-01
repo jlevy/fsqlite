@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // fsqlite CLI: operate a store from the shell with no server and no app code.
 //
-// The maintenance ops are SCHEMA-AGNOSTIC: info / validate / gc / seal / repair work on
-// ANY fsqlite store without knowing the caller's schema or merge policy, because they act
-// on the snapshot/pointer/envelope layer, not the table data. `reconcile` is intentionally
-// NOT here: folding envelopes needs the app's per-table merge policy, so it stays an app
-// call.
+// The info, validate, gc, seal, and repair commands work on any fsqlite store without
+// knowing the caller's schema or merge policy. They operate on snapshots, pointers,
+// envelopes, and leases rather than table data. Reconcile remains a library call because
+// folding envelopes needs the application's per-table merge policy.
 //
 // Usage:
 //   fsqlite info      <dir>
@@ -220,7 +219,7 @@ function main(): void {
       if (actions.length) {
         console.log(`  repaired: ${actions.join('; ')}`)
       }
-      console.log(`  store: ${v.state}${v.issues.length ? ' — ' + v.issues.join('; ') : ''}`)
+      console.log(`  store: ${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
     }
     process.exit(exitCodeForState(v.state))
   }
@@ -250,7 +249,7 @@ function main(): void {
     }
     case 'validate': {
       const v = store.validate()
-      console.log(`${v.state}${v.issues.length ? ' — ' + v.issues.join('; ') : ''}`)
+      console.log(`${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
       process.exit(exitCodeForState(v.state))
       break
     }

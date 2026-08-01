@@ -5,12 +5,33 @@ import { fileURLToPath } from 'node:url'
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(packageDir, '../..')
 const realRepoDir = realpathSync(repoDir)
+const generatedMarkdown = new Set(['.agents/skills/tbd/SKILL.md', '.claude/skills/tbd/SKILL.md'])
+const generatedProse = new Set([...generatedMarkdown, 'pnpm-lock.yaml'])
+const executableMarkdown = new Set(['packages/fsqlite/test/cli-golden/cli.tryscript.md'])
+const proseExtensions = new Set([
+  '.cjs',
+  '.cts',
+  '.js',
+  '.json',
+  '.md',
+  '.mjs',
+  '.mts',
+  '.sh',
+  '.ts',
+  '.yaml',
+  '.yml',
+])
 
 /** @param {string} dir @param {(path: string) => boolean} accept @returns {string[]} */
 function filesBelow(dir, accept) {
   const files = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === '.tbd' || entry.name === 'node_modules') {
+    if (
+      entry.name === '.git' ||
+      entry.name === '.tbd' ||
+      entry.name === 'dist' ||
+      entry.name === 'node_modules'
+    ) {
       continue
     }
     const path = join(dir, entry.name)
@@ -105,8 +126,31 @@ function checkMarkdownSafety(path, source) {
   }
 }
 
+function checkEditorialSafety() {
+  const proseFiles = filesBelow(repoDir, (path) => proseExtensions.has(extname(path)))
+  for (const path of proseFiles) {
+    const repoPath = relative(repoDir, path).split(sep).join('/')
+    if (generatedProse.has(repoPath)) {
+      continue
+    }
+
+    const source = readFileSync(path, 'utf8')
+    if (/[\u2013\u2014]/u.test(source)) {
+      throw new Error(`${path}: maintained prose contains an em dash or en dash`)
+    }
+    if (
+      extname(path) === '.md' &&
+      !executableMarkdown.has(repoPath) &&
+      !source.includes('This document follows common-doc-guidelines.md.')
+    ) {
+      throw new Error(`${path}: maintained Markdown is missing the common-doc-guidelines footer`)
+    }
+  }
+}
+
 /** @param {number} nodeTests */
 export function checkDocClaims(nodeTests) {
+  checkEditorialSafety()
   const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
   const claimPatterns = [
     {

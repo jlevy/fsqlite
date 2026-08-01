@@ -22,7 +22,7 @@ function storeAt(n: number) {
   return { store, dir, cleanup }
 }
 
-test('repair clears an in-flight capture (orphan snapshot + transient + uncommitted tx)', () => {
+test('repair clears an in-flight capture (orphan snapshot, transient, and uncommitted tx)', () => {
   const { store, cleanup } = storeAt(3) // current = 3
   try {
     copyFileSync(store.snapshotPath(3), store.snapshotPath(4)) // orphan ahead of pointer

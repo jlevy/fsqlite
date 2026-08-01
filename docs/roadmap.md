@@ -56,3 +56,7 @@ stable release, not a promise that unsupported environments work today.
 The minimum 1.0 bar is a settled public API, independent conformance fixtures and
 verifier, real cross-host shared-filesystem evidence, explicit format-upgrade semantics,
 and validated publication behavior on every claimed operating system.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->
