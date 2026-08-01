@@ -6,12 +6,13 @@
 
 **Server-free, file-first concurrent SQLite for local agents.**
 
-fsqlite is the Node reference implementation of a language-independent store format for
-cooperative processes that share compact state without writing one live SQLite database
-file. Writers capture transactions independently, reconciliation publishes immutable
-SQLite snapshots with atomic filesystem operations, and readers use ordinary SQLite
-tools and bindings. The package has zero runtime dependencies, no install-time scripts,
-and no required database server or background service.
+fsqlite is the Node reference implementation of a language-independent store format that
+lets cooperative processes share compact state through independent transaction capture
+and immutable SQLite snapshots.
+Reconciliation publishes each new generation with atomic filesystem operations, and
+readers use ordinary SQLite tools and bindings.
+The package has zero runtime dependencies, no install-time scripts, and no required
+database server or background service.
 
 > **Alpha phase:** `0.1.0` defines the first public API and the draft `f1.0` store
 > format. Both may change before 1.0. The multi-process suite is extensive, but the real
@@ -19,7 +20,7 @@ and no required database server or background service.
 
 ## Why fsqlite Exists
 
-One computer no longer implies one database client.
+A single computer can run many independent database clients.
 A local workspace may have an interactive application, coding agents, background
 indexers, research agents, and automation processes updating the same knowledge base,
 task graph, document catalog, or cache.
@@ -28,15 +29,16 @@ running a database server beside every workspace is often disproportionate.
 
 fsqlite targets the gap between a shared live SQLite file and a database service:
 
-- cooperative processes capture row transactions without sharing a writable SQLite file
-  or waiting for the publication lease
+- cooperative processes capture row transactions independently in private SQLite copies
+  and commit uniquely named envelope files; capture does not wait for the publication
+  lease
 - immutable generations, an atomic pointer, fencing, optimistic publication, and an
   exactly-once ledger protect published state from process crashes and racing publishers
 - every published generation is a standard SQLite file that can be inspected, sealed,
   archived, handed to another agent environment, or carried by an application-defined
   replication transport
 - the format and commit protocol are language-independent; this package is the first
-  implementation, not a new database engine or query language
+  implementation, and applications continue to use SQLite’s engine and query language
 
 The
 [portable concurrent SQLite research](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
@@ -49,20 +51,20 @@ and
 [comparison matrix](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md#comparison-matrix)
 explain why SQLite session changesets, immutable snapshots, and atomic publication fit
 the server-free agent use case.
-As of the report’s 2026-08-01 update, no surveyed alternative combined direct
-server-free access, independent cooperative capture, filesystem publication, and stock
-SQLite snapshots for unmodified readers.
+As of the report’s 2026-08-01 update, fsqlite occupies a distinct position among the
+surveyed alternatives by combining direct server-free access, independent cooperative
+capture, filesystem publication, and stock SQLite snapshots for unmodified readers.
 
 ## Should You Use fsqlite?
 
-Host count is not the first decision branch.
-A single machine can have many independent writers, while several callers can sometimes
-share one serialized writer lane.
-Choose from writer independence, visibility, isolation, snapshot size, and write
-cadence:
+Choose a storage model from the way writers coordinate and when updates must become
+visible. A single machine can have many independent writers, while several callers can
+sometimes share one serialized writer lane.
+Writer independence, visibility, isolation, snapshot size, and write cadence determine
+the fit:
 
 Here, an “agent” is an independently running cooperative process with its own store
-handle, not several threads sharing one SQLite connection.
+handle. Threads sharing one SQLite connection belong to a different coordination model.
 
 | Situation | Default choice | Why |
 | --- | --- | --- |
@@ -74,8 +76,9 @@ handle, not several threads sharing one SQLite connection.
 `SnapshotStore` is the main fsqlite strategy for the common multi-agent case.
 It trades immediate visibility and serializability for independent capture and
 file-native handoff.
-`DirectStore` is a serialized fsqlite publication strategy, not a reason to wrap an
-otherwise ordinary single-client SQLite application.
+`DirectStore` serves workloads that value immutable generations and immediate
+publication enough to serialize every complete callback.
+Ordinary SQLite remains the simpler choice for a single embedded owner.
 
 fsqlite buys immutable published states, explicit recovery points, and file-native
 coordination without a required service.
@@ -84,9 +87,8 @@ visibility, more transient disk use, and a multi-writer merge model that is not
 serializable. Agent count alone does not determine fit: snapshot bytes multiplied by
 write rate and burst size determine most of the cost.
 
-Both fsqlite strategies require capability-defined filesystem operations.
-That makes shared network storage an important target, but not an automatic guarantee:
-the exact mount must provide correct exclusive directory creation, atomic
+Safety on shared network storage depends on the capabilities of the exact mount.
+Both fsqlite strategies require correct exclusive directory creation, atomic
 rename-replace, close-to-open visibility, and file and directory fsync behavior.
 The alpha’s one-host `fsinspect` result is useful diagnostic evidence, not proof that an
 arbitrary NFS or SMB deployment is safe across hosts.

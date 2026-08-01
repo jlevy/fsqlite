@@ -7,11 +7,10 @@
 **Server-free, file-first concurrent SQLite for local agents.**
 
 fsqlite is a language-independent store format and a zero-runtime-dependency Node.js
-library for cooperative processes that share compact state without writing one live
-SQLite database file.
-Writers capture transactions independently, reconciliation publishes immutable SQLite
-snapshots with atomic filesystem operations, and readers use ordinary SQLite tools and
-bindings.
+library that lets cooperative processes share compact state through independent
+transaction capture and immutable SQLite snapshots.
+Reconciliation publishes each new generation with atomic filesystem operations, and
+readers use ordinary SQLite tools and bindings.
 
 > **Alpha phase:** `0.1.0` defines the first public API and draft `f1.0` format.
 > Both may change before 1.0. Local POSIX multi-process behavior has extensive automated
@@ -20,7 +19,7 @@ bindings.
 
 ## Why fsqlite Exists
 
-One computer no longer implies one database client.
+A single computer can run many independent database clients.
 A local workspace may have an interactive application, coding agents, background
 indexers, research agents, and automation processes updating the same knowledge base,
 task graph, document catalog, or cache.
@@ -41,17 +40,19 @@ The usual choices leave a gap:
 
 fsqlite combines a different set of properties:
 
-- cooperative local processes capture row transactions without sharing a writable SQLite
-  file or waiting for the publication lease
+- cooperative local processes capture row transactions independently in private SQLite
+  copies and commit uniquely named envelope files; capture does not wait for the
+  publication lease
 - immutable generations, an atomic `current` pointer, fencing, optimistic publication,
   and an exactly-once ledger protect published state from process crashes and racing
   publishers
-- no database server, daemon, or background service is required
+- deployment needs only cooperative processes and a store directory; no database server,
+  daemon, or background service is required
 - every published generation is a standard SQLite file that can be inspected, sealed,
   archived, handed to another agent environment, or carried by an application-defined
   replication transport
 - the format and commit protocol are language-independent; Node is the first reference
-  implementation, not a new database engine or query language
+  implementation, and applications continue to use SQLite’s engine and query language
 
 The
 [portable concurrent SQLite research](docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
@@ -66,20 +67,20 @@ and
 [comparison matrix](docs/research/research-2026-06-06-portable-concurrent-sqlite.md#comparison-matrix)
 explain why SQLite session changesets, immutable snapshots, and atomic publication fit
 the server-free agent use case.
-As of the report’s 2026-08-01 update, no surveyed alternative combined direct
-server-free access, independent cooperative capture, filesystem publication, and stock
-SQLite snapshots for unmodified readers.
+As of the report’s 2026-08-01 update, fsqlite occupies a distinct position among the
+surveyed alternatives by combining direct server-free access, independent cooperative
+capture, filesystem publication, and stock SQLite snapshots for unmodified readers.
 
 ## Choose by Writer Relationship
 
-Host count is not the first decision branch.
-A single machine can have many independent writers, while several callers can sometimes
-share one serialized writer lane.
-Choose from writer independence, visibility, isolation, snapshot size, and write
-cadence:
+Choose a storage model from the way writers coordinate and when updates must become
+visible. A single machine can have many independent writers, while several callers can
+sometimes share one serialized writer lane.
+Writer independence, visibility, isolation, snapshot size, and write cadence determine
+the fit:
 
 Here, an “agent” is an independently running cooperative process with its own store
-handle, not several threads sharing one SQLite connection.
+handle. Threads sharing one SQLite connection belong to a different coordination model.
 
 | Situation | Default choice | Why |
 | --- | --- | --- |
@@ -91,13 +92,13 @@ handle, not several threads sharing one SQLite connection.
 `SnapshotStore` is the main fsqlite strategy for the common multi-agent case.
 It trades immediate visibility and serializability for independent capture and
 file-native handoff.
-`DirectStore` is a serialized fsqlite publication strategy, not a reason to wrap an
-otherwise ordinary single-client SQLite application.
+`DirectStore` serves workloads that value immutable generations and immediate
+publication enough to serialize every complete callback.
+Ordinary SQLite remains the simpler choice for a single embedded owner.
 
-Both strategies are designed around capability-defined filesystem operations rather than
-filesystem names. That makes shared network storage an important target, but not an
-automatic guarantee: the exact mount must provide correct exclusive directory creation,
-atomic rename-replace, close-to-open visibility, and file and directory fsync behavior.
+Safety on shared network storage depends on the capabilities of the exact mount.
+Both strategies require correct exclusive directory creation, atomic rename-replace,
+close-to-open visibility, and file and directory fsync behavior.
 The alpha’s one-host `fsinspect` result is useful diagnostic evidence, not proof that an
 arbitrary NFS or SMB deployment is safe across hosts.
 Once a shared mount has real multi-host evidence, prefer `SnapshotStore` when local or
@@ -173,11 +174,12 @@ atomically publishes it by replacing `current`.
 
 The protocol protects cooperative writers against capture-path contention, racing
 reconcilers, duplicate application, stale publication leases, torn reads, and process
-crashes.
-It does not make raw tools safe to write into the store, and SnapshotStore merge
-is not serializable across writers because changesets record write sets rather than
-general read sets. The [design constraints](docs/fsqlite-design.md#design-constraints)
-state the complete guarantees and trust boundary.
+crashes. The trust boundary covers cooperative fsqlite writers; raw tools must treat
+published snapshots as read-only.
+SnapshotStore provides deterministic write-set conflict handling rather than
+serializability across writers because changesets do not record general read sets.
+The [design constraints](docs/fsqlite-design.md#design-constraints) state the complete
+guarantees and trust boundary.
 
 ## Portable Sharing and Replication
 
@@ -186,11 +188,11 @@ file. `seal()` pins a generation and creates an integrity-checked standalone SQL
 for handoff, archival, upload, or import into another environment.
 Readers need no fsqlite extension.
 
-fsqlite does not provide remote transport, consensus, or automatic bidirectional
-replication.
-It provides a stable file boundary that an application can move with its own
-transport. Reconcile the desired pending work before sealing when the exported artifact
-must include the complete accepted tail.
+fsqlite provides a stable file boundary that an application can move with its own
+transport. Remote transport, consensus, and automatic bidirectional replication remain
+application responsibilities.
+Reconcile the desired pending work before sealing when the exported artifact must
+include the complete accepted tail.
 
 ## Costs and Boundaries
 
