@@ -14,6 +14,7 @@ export {
   applyWithPolicy,
   conflictName,
   StrictConflictError,
+  PermanentConflictError,
 } from './conflictPolicy.ts'
 export { withLock, ownerOf, heartbeat, LockTimeoutError } from './lock.ts'
 export { capabilities, backupDatabase } from './driver.ts'

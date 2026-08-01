@@ -135,6 +135,13 @@ heuristic from one host, not a substitute for the pending multi-host gate.
 - A process crash loses at most the unpublished tail, never an earlier published
   snapshot.
 - Changeset data and its `applied_tx` ledger entry commit in one SQLite transaction.
+- Replaceable row conflicts follow the table policy.
+  NOTFOUND, CONSTRAINT, and FOREIGN_KEY conflicts quarantine the complete envelope
+  instead of ledgering a partial apply.
+- Foreign keys are checked after each reconciled envelope, before publication, and by
+  `validate` and `seal`.
+- Filtered merge passes have a fixed `replace`, `omit`, `strict` order, independent of
+  policy key insertion order.
 - Read leases prevent garbage collection of a snapshot in use.
 - Maintenance fails closed on malformed identity, leases, or unsupported capabilities.
 - Repair identifies a clean recovery point before deleting anything and will not race a
@@ -159,6 +166,16 @@ An optional durable-envelope mode is future work.
   cross-row invariants.
   Use `strict` with retry for supported point-row invariants, or a single-writer
   strategy.
+- `SnapshotStore` seeds each default writer by copying the published snapshot, so write
+  latency grows with snapshot size.
+  In a reviewer-local benchmark using 2 KB rows, snapshot seeding rose from 11.8 ms per
+  write at 2.0 MiB to 183.6 ms at 78.8 MiB, about 2.3 ms per MiB. A linear 1 GiB
+  extrapolation is roughly 2.4 seconds for a single-row write.
+  Treat these hardware-specific measurements as sizing evidence, not a performance
+  guarantee. `seed: 'schema-only'` avoids the snapshot copy but is safe only for inserts
+  of new keys. Large-store seeding, compaction, and safe shared-base alternatives are
+  tracked in
+  [post-alpha roadmap work `fsq-fp06`](https://github.com/jlevy/fsqlite/blob/main/docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md).
 
 The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
 tests to guarantees.

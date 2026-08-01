@@ -31,6 +31,18 @@ jobs:
       - name: Verify tag matches package version
         working-directory: packages/fsqlite
         run: test "${GITHUB_REF_NAME}" = "v$(node --print "require('./package.json').version")"
+      - name: Choose npm dist-tag
+        if: github.ref_name != 'v0.1.0'
+        id: npm-dist-tag
+        working-directory: packages/fsqlite
+        run: |
+          version="$(node --print "require('./package.json').version")"
+          major="${version%%.*}"
+          if [[ "$version" == *-* || "$major" == "0" ]]; then
+            echo 'tag=alpha' >> "$GITHUB_OUTPUT"
+          else
+            echo 'tag=latest' >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify owner-authenticated bootstrap publication
         if: github.ref_name == 'v0.1.0'
         working-directory: packages/fsqlite
@@ -40,7 +52,7 @@ jobs:
           test "$(npm view fsqlite@0.1.0 version)" = "0.1.0"
           test "$(npm view fsqlite dist-tags.alpha)" = "0.1.0"
           node scripts/package-smoke.mjs
-      - name: Publish alpha to npm with trusted publishing
+      - name: Publish to npm with trusted publishing
         if: github.ref_name != 'v0.1.0'
         working-directory: packages/fsqlite
-        run: npm publish --access public --tag alpha
+        run: npm publish --access public --tag "${{ steps.npm-dist-tag.outputs.tag }}"

@@ -10,7 +10,7 @@ technical research, QA runbook, roadmap, and project plans.
 Release maintainers should follow the [release runbook](docs/releasing.md).
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile --ignore-scripts
 pnpm verify
 ```
 

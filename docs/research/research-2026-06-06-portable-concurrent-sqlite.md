@@ -198,11 +198,11 @@ The target properties (the “contours”), restated as testable requirements:
   a connection to its creating thread), which guarantees safety *only* when no single
   connection (or object derived from it) is used by two threads at once.
   So a connection is **never shared across Worker Threads**: one connection per thread.
-  The cross-process `mkdir` lease (which protects *processes*) is complemented by a
-  small **in-process mutex** that serializes this implementation’s own multi-step
-  protocol actions (lock acquire / reconcile / seal) when several in-process threads
-  each hold their own connection.
-  (Finding G2; review B1.)
+  The reference implementation opens fresh connections for operations and does not
+  provide a process-local mutex.
+  Its filesystem protocol coordinates processes at a shared store root; an explicit
+  Worker Thread coordination contract and tests are deferred to `fsq-5nx4`. (Finding
+  G2.)
 
 **Requirement review.** These are sound and mutually achievable, with three notes:
 
@@ -1293,7 +1293,7 @@ Every remaining row below names the evidence still needed; this is the checklist
 | Area | What to test |
 | --- | --- |
 | Local contention | many processes, one effective writer at the merge, no double-ownership *(automated ✓)* |
-| Worker Threads | a process-local mutex prevents shared-connection interleaving |
+| Worker Threads | one connection per thread; explicit coordination contract and tests deferred to `fsq-5nx4` |
 | Crash safety | kill mid-write/at-every-publish-step, reopen, `integrity_check` *(automated ✓)* |
 | Stale locks | a stale lease is reclaimed without two breakers owning it *(automated ✓)* |
 | Compromised locks | lock deletion/replacement while held aborts the current operation *(automated ✓)* |
@@ -1337,7 +1337,7 @@ plan:
 7. **Stronger isolation:** declared read-set validation for point-key invariants, with
    guard rows or DirectStore for predicate and aggregate invariants.
 8. **Threading and process-local coordination:** Worker Thread tests and an explicit
-   in-process serialization contract.
+   coordination contract.
 9. **Binding improvements:** table-name conflict context, rebaser exposure, and a
    decision on whether `base_version` should acquire staleness semantics.
 10. **DirectStore journal policy:** measure rollback-journal variants without changing

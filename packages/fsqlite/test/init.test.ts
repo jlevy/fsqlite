@@ -4,10 +4,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 import { runAsync } from './spawn.ts'
+import { setOwnerWriterForTest } from '../src/lock.ts'
 
 test('init enforces the NON-NULL primary key contract', () => {
   const cases: [string, RegExp | null][] = [
@@ -144,6 +146,24 @@ test('N processes initializing one fresh store concurrently converge on a clean 
     )
     assert.equal(tables, 2, 'the caller schema and the applied_tx ledger are both present')
   } finally {
+    cleanup()
+  }
+})
+
+test('init abandons snapshot-0 publication after losing its lock token', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    setOwnerWriterForTest((path, data) => {
+      writeFileSync(path, data)
+      const lock = join(dir, 'publish.lock')
+      rmSync(lock, { recursive: true, force: true })
+      mkdirSync(lock)
+      writeFileSync(join(lock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+    })
+    assert.throws(() => new SnapshotStore(dir, STORE_OPTS).init(), /lost ownership|publish lock/i)
+    assert.equal(readdirSync(join(dir, 'snapshots')).length, 0, 'no unfenced snapshot is published')
+  } finally {
+    setOwnerWriterForTest(null)
     cleanup()
   }
 })

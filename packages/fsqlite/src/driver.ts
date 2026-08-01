@@ -18,9 +18,28 @@ import type { WorkFn, Capabilities } from './types.ts'
 export { constants }
 export type DB = DatabaseSync
 
+/** Bounded wait for a transient SQLite file lock held by another local connection. */
+const WRITER_BUSY_TIMEOUT_MS = 5_000
+
 /** Open a read-write database (used for writer working copies and reconcile temps). */
 export function open(path: string): DatabaseSync {
-  return new DatabaseSync(path)
+  const db = new DatabaseSync(path)
+  try {
+    db.exec(`
+      PRAGMA journal_mode = DELETE;
+      PRAGMA synchronous = FULL;
+      PRAGMA foreign_keys = ON;
+      PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS};
+    `)
+    return db
+  } catch (error) {
+    try {
+      db.close()
+    } catch {
+      // Preserve the pragma failure that made this connection unusable.
+    }
+    throw error
+  }
 }
 
 /** Open an immutable published snapshot read-only. Needs no session support. */
@@ -66,18 +85,37 @@ function pragmaOk(db: DatabaseSync, pragma: string): boolean {
   return row !== undefined && rows.length === 1 && Object.values(row)[0] === 'ok'
 }
 
+/** Return caller-declared foreign key violations with stable diagnostic detail. */
+export function foreignKeyProblems(db: DatabaseSync): string[] {
+  try {
+    return (db.prepare('PRAGMA foreign_key_check').all() as Record<string, unknown>[]).map(
+      (row) => `foreign_key_check: ${JSON.stringify(row)}`,
+    )
+  } catch (error) {
+    return [`foreign_key_check error: ${error instanceof Error ? error.message : String(error)}`]
+  }
+}
+
+/** Fail when caller-declared foreign keys do not hold at the current transaction boundary. */
+export function foreignKeyCheck(db: DatabaseSync): void {
+  const problems = foreignKeyProblems(db)
+  if (problems.length > 0) {
+    throw new Error(problems.join('; '))
+  }
+}
+
 /** Cheap integrity gate run before publishing a candidate snapshot. */
 export function quickCheck(db: DatabaseSync): void {
   if (!pragmaOk(db, 'quick_check')) {
     const rows = db.prepare('PRAGMA quick_check').all()
     throw new Error(`quick_check failed: ${JSON.stringify(rows)}`)
   }
+  foreignKeyCheck(db)
 }
 
 /**
- * Full integrity check; returns the problems reported by `PRAGMA integrity_check` ([] means
- * clean). Returning the rows, not just a boolean, lets `validate`/`seal` surface *what* is
- * wrong instead of a bare "failed" verdict.
+ * Full integrity validation; returns physical corruption and foreign key problems.
+ * Returning diagnostics lets `validate` and `seal` surface what is wrong.
  */
 export function integrityProblems(db: DatabaseSync): string[] {
   let rows: Record<string, unknown>[]
@@ -89,7 +127,8 @@ export function integrityProblems(db: DatabaseSync): string[] {
     return [`integrity_check error: ${(e as Error).message}`]
   }
   const messages = rows.map((r) => String(Object.values(r)[0]))
-  return messages.length === 1 && messages[0] === 'ok' ? [] : messages
+  const integrity = messages.length === 1 && messages[0] === 'ok' ? [] : messages
+  return [...integrity, ...foreignKeyProblems(db)]
 }
 
 /** Full integrity check (used by validate/seal). */

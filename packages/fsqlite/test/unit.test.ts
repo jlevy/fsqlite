@@ -161,29 +161,33 @@ test('an envelope whose manifest tx_id differs from its directory is quarantined
   }
 })
 
-test('reconcile preserves an envelope when its quarantine reason cannot be written', () => {
-  const { store, cleanup } = freshStore()
-  let txDir: string | undefined
-  try {
-    const txId = store.write('A', (db) => {
-      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
-    })
-    assert.ok(txId)
-    txDir = join(store.txPending, `${txId}.txn`)
-    writeFileSync(join(txDir, 'changeset.bin'), Buffer.from('corrupted'))
-    chmodSync(txDir, 0o500)
+test(
+  'reconcile preserves an envelope when its quarantine reason cannot be written',
+  { skip: process.getuid?.() === 0 ? 'requires a non-root process' : false },
+  () => {
+    const { store, cleanup } = freshStore()
+    let txDir: string | undefined
+    try {
+      const txId = store.write('A', (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+      })
+      assert.ok(txId)
+      txDir = join(store.txPending, `${txId}.txn`)
+      writeFileSync(join(txDir, 'changeset.bin'), Buffer.from('corrupted'))
+      chmodSync(txDir, 0o500)
 
-    assert.throws(() => store.reconcile(), /EACCES|permission denied/i)
-    assert.equal(existsSync(txDir), true)
-    assert.equal(existsSync(join(store.txQuarantine, `${txId}.txn`)), false)
-    assert.equal(count(store, 'artifacts'), 0)
-  } finally {
-    if (txDir && existsSync(txDir)) {
-      chmodSync(txDir, 0o700)
+      assert.throws(() => store.reconcile(), /EACCES|permission denied/i)
+      assert.equal(existsSync(txDir), true)
+      assert.equal(existsSync(join(store.txQuarantine, `${txId}.txn`)), false)
+      assert.equal(count(store, 'artifacts'), 0)
+    } finally {
+      if (txDir && existsSync(txDir)) {
+        chmodSync(txDir, 0o700)
+      }
+      cleanup()
     }
-    cleanup()
-  }
-})
+  },
+)
 
 test('quarantine tolerates another reconciler consuming the envelope first', () => {
   const { store, cleanup } = freshStore()
@@ -212,7 +216,7 @@ test('quarantine tolerates another reconciler consuming the envelope first', () 
   }
 })
 
-test('last-writer-wins handles a NOTFOUND conflict by OMIT, not SQLITE_MISUSE', () => {
+test('last-writer-wins quarantines a NOTFOUND conflict instead of ledgering an omitted update', () => {
   const { dir, cleanup } = tmpStore()
   const store = new SnapshotStore(dir, {
     ...STORE_OPTS,
@@ -233,8 +237,8 @@ test('last-writer-wins handles a NOTFOUND conflict by OMIT, not SQLITE_MISUSE', 
       db.prepare('UPDATE counters SET n=? WHERE k=?').run(5, 'x')
     })
     const res = store.reconcile()
-    assert.equal(res.applied, 2, 'delete lands, update hits NOTFOUND → OMIT (no MISUSE throw)')
-    assert.equal(res.quarantined, 0)
+    assert.equal(res.applied, 1, 'the delete lands and the stale update does not')
+    assert.equal(res.quarantined, 1, 'the NOTFOUND envelope is quarantined atomically')
     assert.equal(count(store, 'counters'), 0, 'row stays deleted')
   } finally {
     cleanup()

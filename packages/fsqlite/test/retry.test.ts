@@ -89,3 +89,35 @@ test('writeWithRetry reports a permanent quarantine without retrying it', () => 
     cleanup()
   }
 })
+
+test('writeWithRetry does not rerun caller code after a permanent UNIQUE conflict', () => {
+  const { dir, cleanup } = tmpStore()
+  const options: StoreOptions = {
+    schema: `
+      CREATE TABLE url_index (
+        id TEXT PRIMARY KEY NOT NULL,
+        url TEXT NOT NULL UNIQUE
+      );
+    `,
+    schemaVersion: 1,
+    conflictPolicy: { url_index: 'lww', '*': 'strict' },
+  }
+  try {
+    const store = new SnapshotStore(dir, options).init()
+    store.write('first', (db) => {
+      db.prepare('INSERT INTO url_index VALUES (?,?)').run('a', 'https://example.com')
+    })
+    let calls = 0
+    assert.throws(
+      () =>
+        store.writeWithRetry('second', (db) => {
+          calls++
+          db.prepare('INSERT INTO url_index VALUES (?,?)').run('b', 'https://example.com')
+        }),
+      /permanently quarantined: apply-failed: permanent conflict \(CONSTRAINT\)/,
+    )
+    assert.equal(calls, 1, 'a permanent changeset conflict must not rerun caller code')
+  } finally {
+    cleanup()
+  }
+})

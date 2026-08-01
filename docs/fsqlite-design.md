@@ -96,6 +96,12 @@ Research Finding K gives the full statement and comparison with WAL.
 - **Conflict granularity is per-row (per primary key)**, not whole-DB or per-table:
   writers touching different rows, even in the same table, never conflict; only a
   same-PK clash is resolved by that table’s policy (`lww`/`union`/`strict`).
+- **Caller-declared constraints remain publication invariants:** DATA and
+  same-primary-key CONFLICT cases use the table policy.
+  NOTFOUND, CONSTRAINT, and FOREIGN_KEY cases quarantine the whole envelope.
+  Reconcile checks foreign keys after each envelope and before its ledger entry, then
+  checks them again before publication and during validation.
+  Filtered policy passes always run in `replace`, `omit`, `strict` order.
 - **Isolation is deliberately weaker than WAL:** row-level write-set merge and
   read-your-own-writes within a session, not serializable (no read-set tracking), and a
   committed write is visible to readers only after reconcile.
@@ -138,6 +144,19 @@ the work) that prevents lost updates without a lock.
 The cost is global write serialization (the lock is held across copy → mutate →
 publish), which is exactly right for a single writer and wrong for many.
 
+`SnapshotStore` has a different large-store cost: its default writer seeds a private
+working database by copying the current snapshot.
+A reviewer-local benchmark with 2 KB rows measured 11.8 ms per write at 2.0 MiB and
+183.6 ms at 78.8 MiB, a slope near 2.3 ms per MiB. A linear 1 GiB extrapolation is
+roughly 2.4 seconds for a single-row write.
+These measurements are hardware-specific sizing evidence, not a portability or
+performance guarantee.
+Measure the target workload before adopting `SnapshotStore` for a large catalog.
+`seed: 'schema-only'` avoids the snapshot copy but is valid only for inserts of new
+keys. Writer-seeding optimization, compaction, and safe shared read-only base or overlay
+designs remain post-alpha work in
+[`fsq-fp06`](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md).
+
 Use `SnapshotStore` for multiple writers or network filesystems.
 Use `DirectStore` only for a local store with one writer.
 Never select DirectStore automatically from filesystem detection because unsafe cases
@@ -147,6 +166,10 @@ can look local. The two strategies interoperate because they share the on-disk f
 
 - **Thread safety.** The bindings build `SQLITE_THREADSAFE=2`, so a connection is never
   shared across worker threads (one connection per thread).
+  The reference implementation opens fresh connections for operations and has no
+  process-local mutex.
+  Worker Thread coordination beyond that connection boundary is deferred to
+  [`fsq-5nx4`](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md).
   The cross-process `mkdir` lease protects *processes*. (Research, Finding G2.)
 - **Backup is a contract.** Expose `backup()` / `vacuumInto()` / `seal()`; never
   document “copy the live file and hope.”
@@ -190,7 +213,7 @@ const txId = store.write('writer-a', (db) => {
   /* INSERT/UPDATE/DELETE */
 })
 const rows = store.read((db) => db.prepare('SELECT …').all())
-const res = store.reconcile() // build, quick_check, and atomic publication; exactly once
+const res = store.reconcile() // build, integrity gates, and atomic publication; exactly once
 store.writeWithRetry('writer-a', (db) => {
   /* read-modify-write on strict rows */
 })
@@ -236,7 +259,7 @@ filesystems. They use atomic directory creation and snapshot copies.
 The publish lock uses `mkdir`; `reconcile` builds without WAL; `validate` flags a live
 `-wal` or `-shm` file next to a snapshot.
 Windows needs rename-replace semantics (`MOVEFILE_REPLACE_EXISTING`); see format spec
-§14, Open Issue O2.
+§14, Open Issue O1.
 
 ## Format Identity and Evolution
 

@@ -2,8 +2,23 @@
 // ordering; fsync gives power-loss durability. Process-crash safety needs neither, so these
 // are cheap belt-and-suspenders for the hosted-on-real-disk case.
 
-import { openSync, fsyncSync, closeSync, renameSync, writeFileSync } from 'node:fs'
+import { openSync, fsyncSync, closeSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
+
+type AfterFsyncPathHook = (path: string) => void
+let afterFsyncPathHook: AfterFsyncPathHook | null = null
+type AfterFsyncDirHook = (path: string) => void
+let afterFsyncDirHook: AfterFsyncDirHook | null = null
+
+/** Internal fault-injection seam; pass null to remove the hook. */
+export function setAfterFsyncPathForTest(hook: AfterFsyncPathHook | null): void {
+  afterFsyncPathHook = hook
+}
+
+/** Internal fault-injection seam; pass null to remove the hook. */
+export function setAfterFsyncDirForTest(hook: AfterFsyncDirHook | null): void {
+  afterFsyncDirHook = hook
+}
 
 /** fsync a file's contents to disk so a following rename is crash-durable. */
 export function fsyncPath(p: string): void {
@@ -13,6 +28,7 @@ export function fsyncPath(p: string): void {
   } finally {
     closeSync(fd)
   }
+  afterFsyncPathHook?.(p)
 }
 
 /** fsync a directory so a rename into it survives power loss. A no-op where unsupported. */
@@ -30,13 +46,19 @@ export function fsyncDir(p: string): void {
   } finally {
     closeSync(fd)
   }
+  afterFsyncDirHook?.(p)
 }
 
 /** Durably replace a store's numeric current pointer. */
 export function publishPointer(storeDir: string, currentPath: string, version: number): void {
   const tempPath = `${currentPath}.${randomBytes(5).toString('hex')}.tmp`
-  writeFileSync(tempPath, String(version))
-  fsyncPath(tempPath)
-  renameSync(tempPath, currentPath)
-  fsyncDir(storeDir)
+  try {
+    writeFileSync(tempPath, String(version), { flag: 'wx' })
+    fsyncPath(tempPath)
+    renameSync(tempPath, currentPath)
+    fsyncDir(storeDir)
+  } catch (error) {
+    rmSync(tempPath, { force: true })
+    throw error
+  }
 }

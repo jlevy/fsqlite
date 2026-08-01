@@ -12,7 +12,7 @@ const FORMAT_VERSION_PATTERN = /^f(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const STORE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SUPPORTED_REQUIRED_FEATURES: ReadonlySet<string> = new Set()
 
-function isNonEmptyStringArray(value: unknown): value is string[] {
+function isArrayOfNonEmptyStrings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0)
 }
 
@@ -87,7 +87,7 @@ export function recognizeStore(storeDir: string): StoreRecognition {
     }
   }
   const requiredFeatures = marker.required_features
-  if (!isNonEmptyStringArray(requiredFeatures)) {
+  if (!isArrayOfNonEmptyStrings(requiredFeatures)) {
     return {
       state: 'invalid',
       issue: `invalid ${STORE_MARKER_FILENAME}: required_features must be an array of strings`,

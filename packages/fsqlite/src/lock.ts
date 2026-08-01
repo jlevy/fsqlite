@@ -36,7 +36,7 @@ export class LockTimeoutError extends Error {
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_POLL_MS = 25
-const DEFAULT_LOCK_STALE_MS = 20_000
+export const DEFAULT_LOCK_STALE_MS = 20_000
 
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.
@@ -46,10 +46,20 @@ const sleepSync = (ms: number): void => {
 
 type OwnerWriter = (path: string, data: string) => void
 let writeOwner: OwnerWriter = writeFileSync
+type StaleLockRemover = (path: string) => void
+const removeLockDirectory: StaleLockRemover = (path) => {
+  rmSync(path, { recursive: true, force: true })
+}
+let removeStaleLock = removeLockDirectory
 
 /** Internal fault-injection seam; pass null to restore the filesystem writer. */
 export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
   writeOwner = writer ?? writeFileSync
+}
+
+/** Internal fault-injection seam; pass null to restore stale-lock removal. */
+export function setStaleLockRemoverForTest(remover: StaleLockRemover | null): void {
+  removeStaleLock = remover ?? removeLockDirectory
 }
 
 /**
@@ -103,11 +113,15 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
               /* ignore */
             }
           }
-          rmSync(lockPath, { recursive: true, force: true })
+          removeStaleLock(lockPath)
           continue
         }
-      } catch {
-        continue // lock vanished between exists-check and stat: retry immediately
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          continue // lock vanished between exists-check and stat: retry immediately
+        }
+        sleepSync(pollMs)
+        continue
       }
       sleepSync(pollMs)
     }
@@ -146,4 +160,16 @@ function readOwner(lockPath: string): OwnerMeta | null {
 export function ownerOf(lockPath: string): string | null {
   const o = readOwner(lockPath)
   return o ? o.token : null
+}
+
+/** Whether an existing lock is still inside its live lease window. */
+export function isLockFresh(lockPath: string, staleMs = DEFAULT_LOCK_STALE_MS): boolean {
+  try {
+    return Date.now() - statSync(lockPath).mtimeMs <= staleMs
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false
+    }
+    throw error
+  }
 }

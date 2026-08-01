@@ -6,7 +6,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
+import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 test('direct write → read round-trips and increments the version synchronously', () => {
@@ -94,3 +97,94 @@ test('direct mode never records a session (so it runs on session-less bindings)'
     cleanup()
   }
 })
+
+test('direct writers use explicit rollback, durability, foreign-key, and busy-timeout settings', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new DirectStore(dir, STORE_OPTS).init()
+    store.write((db) => {
+      assert.equal(db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'delete')
+      assert.equal(db.prepare('PRAGMA synchronous').get()?.synchronous, 2)
+      assert.equal(db.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1)
+      assert.equal(db.prepare('PRAGMA busy_timeout').get()?.timeout, 5000)
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    const snapshot = store.snapshotPath(store.currentVersion())
+    assert.equal(existsSync(`${snapshot}-wal`), false)
+    assert.equal(existsSync(`${snapshot}-shm`), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('DirectStore forwards repair and transient cleanup maintenance options', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new DirectStore(dir, STORE_OPTS).init()
+    const transient = join(dir, 'snapshots', '.direct-stale.sqlite')
+    writeFileSync(transient, 'stale')
+    const old = new Date(Date.now() - 120_000)
+    utimesSync(transient, old, old)
+
+    store.gc({ transientStaleMs: 60_000 })
+
+    assert.equal(existsSync(transient), false)
+    assert.equal(store.repair().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+for (const scenario of [
+  {
+    name: 'snapshot fsync',
+    setHook: setAfterFsyncPathForTest,
+    matches: (path: string, dir: string) => path.includes('.direct-') && path.startsWith(dir),
+  },
+  {
+    name: 'snapshot directory fsync',
+    setHook: setAfterFsyncDirForTest,
+    matches: (path: string, dir: string) => path === join(dir, 'snapshots'),
+  },
+]) {
+  test(`DirectStore retries when its publication lease is stolen during ${scenario.name}`, () => {
+    const { dir, cleanup } = tmpStore()
+    let calls = 0
+    try {
+      const store = new DirectStore(dir, STORE_OPTS).init()
+      const publishLock = join(dir, 'publish.lock')
+      scenario.setHook((path) => {
+        if (!scenario.matches(path, dir)) {
+          return
+        }
+        scenario.setHook(null)
+        rmSync(publishLock, { recursive: true, force: true })
+        mkdirSync(publishLock)
+        writeFileSync(join(publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+        const old = new Date(Date.now() - 10_000)
+        utimesSync(publishLock, old, old)
+      })
+
+      const version = store.write(
+        (db) => {
+          calls++
+          db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+        },
+        { lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 } },
+      )
+
+      assert.equal(version, 1)
+      assert.equal(calls, 2, 'the unfenced build is discarded and caller code is rerun')
+      assert.equal(
+        store.read(
+          (db) =>
+            (db.prepare('SELECT COUNT(*) count FROM artifacts').get() as { count: number }).count,
+        ),
+        1,
+      )
+    } finally {
+      scenario.setHook(null)
+      cleanup()
+    }
+  })
+}

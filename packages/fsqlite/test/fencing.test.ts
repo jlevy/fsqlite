@@ -11,7 +11,8 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { SnapshotStore, withLock, ownerOf, heartbeat } from '../src/index.ts'
-import { setOwnerWriterForTest } from '../src/lock.ts'
+import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
+import { setOwnerWriterForTest, setStaleLockRemoverForTest } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
@@ -82,6 +83,30 @@ test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', ()
   }
 })
 
+test('a failed stale-lock removal backs off until timeout', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  mkdirSync(lockPath)
+  const oldTime = new Date(Date.now() - 10_000)
+  utimesSync(lockPath, oldTime, oldTime)
+  let attempts = 0
+  setStaleLockRemoverForTest(() => {
+    attempts++
+    const error = new Error('injected stale removal failure') as NodeJS.ErrnoException
+    error.code = 'EPERM'
+    throw error
+  })
+  try {
+    assert.throws(() => {
+      withLock(lockPath, () => undefined, { timeoutMs: 80, staleMs: 1, pollMs: 20 })
+    }, /could not acquire/)
+    assert.ok(attempts <= 5, `stale removal should poll rather than spin; attempts=${attempts}`)
+  } finally {
+    setStaleLockRemoverForTest(null)
+    cleanup()
+  }
+})
+
 test('lock heartbeat reports loss instead of silently succeeding', () => {
   const { dir, cleanup } = tmpStore()
   try {
@@ -135,6 +160,39 @@ test('OCC on the pointer: a reconcile that builds against a superseded base conv
     assert.equal(s2.currentVersion(), 1)
     assert.equal(artifactCount(s2), 1)
   } finally {
+    cleanup()
+  }
+})
+
+test('SnapshotStore retries when its lease is stolen after the snapshot rename', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    store.write('writer', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    setAfterFsyncDirForTest((path) => {
+      if (path !== store.snapDir) {
+        return
+      }
+      setAfterFsyncDirForTest(null)
+      rmSync(store.publishLock, { recursive: true, force: true })
+      mkdirSync(store.publishLock)
+      writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+      const old = new Date(Date.now() - 10_000)
+      utimesSync(store.publishLock, old, old)
+    })
+
+    const result = store.reconcile({
+      lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 },
+    })
+
+    assert.equal(result.attempts, 2)
+    assert.equal(result.applied, 1)
+    assert.equal(artifactCount(store), 1)
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    setAfterFsyncDirForTest(null)
     cleanup()
   }
 })

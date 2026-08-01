@@ -39,7 +39,7 @@ import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
 import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { withLock, ownerOf } from './lock.ts'
+import { isLockFresh, withLock, ownerOf } from './lock.ts'
 import {
   createStoreMarker,
   hasStoreMarker,
@@ -223,7 +223,7 @@ export class SnapshotStore {
    */
   init(): this {
     mkdirSync(this.dir, { recursive: true })
-    withLock(this.publishLock, () => {
+    withLock(this.publishLock, (token) => {
       let marker: StoreMarker
       if (hasStoreMarker(this.dir)) {
         marker = readStoreMarker(this.dir)
@@ -269,8 +269,18 @@ export class SnapshotStore {
           db.close()
         }
         fsyncPath(tmp)
+        if (existsSync(this.currentPath)) {
+          rmSync(tmp, { force: true })
+          return
+        }
+        if (ownerOf(this.publishLock) !== token) {
+          throw new Error('init lost ownership of publish.lock before snapshot publication')
+        }
         renameSync(tmp, this.snapshotPath(0))
         fsyncDir(this.snapDir)
+        if (ownerOf(this.publishLock) !== token) {
+          throw new Error('init lost ownership of publish.lock before pointer publication')
+        }
         publishPointer(this.dir, this.currentPath, 0)
       } catch (e) {
         rmSync(tmp, { force: true })
@@ -610,7 +620,7 @@ export class SnapshotStore {
             String(r.tx_id),
           ),
         )
-        const mark = db.prepare('INSERT INTO applied_tx VALUES (?, ?)')
+        const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
         for (const txn of pending) {
           const txId = txn.replace(/\.txn$/, '')
           if (seen.has(txId)) {
@@ -667,6 +677,7 @@ export class SnapshotStore {
           }
           try {
             applyWithPolicy(db, cs, policy, () => {
+              driver.foreignKeyCheck(db)
               mark.run(man.tx_id, nowIso())
             })
             applied.push(txn)
@@ -698,6 +709,7 @@ export class SnapshotStore {
       } // tmp orphaned; current unchanged
 
       const next = base + 1
+      fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
       const result = withLock(
         this.publishLock,
         (token): 'retry' | 'published' => {
@@ -707,12 +719,14 @@ export class SnapshotStore {
           if (ownerOf(this.publishLock) !== token) {
             return 'retry'
           } // lost ownership (stale break): fencing
-          fsyncPath(tmp) // make the new snapshot durable before it can be named by current
           renameSync(tmp, this.snapshotPath(next)) // overwrites any orphan from a crashed publish
           fsyncDir(this.snapDir)
           if (crashAt === 'after-snapshot') {
             throw new Error('CRASH after-snapshot')
           }
+          if (this.currentVersion() !== base || ownerOf(this.publishLock) !== token) {
+            return 'retry'
+          } // a holder that lost its lease must not publish the pointer
           publishPointer(this.dir, this.currentPath, next)
           return 'published'
         },
@@ -794,6 +808,7 @@ export class SnapshotStore {
         }
       }
     }
+    sweepStaleTransients(this.dir)
     sweepStaleTransients(this.snapDir)
     sweepStaleTransients(this.txPending)
     return { removed, kept: versions.length - removed, leased: [...leased] }
@@ -863,9 +878,11 @@ export class SnapshotStore {
     }
 
     // In-flight tells.
+    const rootFiles = readdirSync(this.dir)
     const snapFiles = existsSync(this.snapDir) ? readdirSync(this.snapDir) : []
     const pendingFiles = existsSync(this.txPending) ? readdirSync(this.txPending) : []
     const transients = [
+      ...rootFiles.filter(isTransientFile),
       ...snapFiles.filter(isTransientFile),
       ...pendingFiles.filter(isTransientFile), // .work-* writer copies
     ]
@@ -916,7 +933,7 @@ export class SnapshotStore {
     if (problems.length) {
       return {
         state: 'corrupt',
-        issues: [...issues, `snapshot ${cur} failed integrity_check: ${problems.join('; ')}`],
+        issues: [...issues, `snapshot ${cur} failed integrity validation: ${problems.join('; ')}`],
       }
     }
 
@@ -955,7 +972,7 @@ export class SnapshotStore {
     try {
       const problems = driver.integrityProblems(out)
       if (problems.length) {
-        throw new Error(`sealed snapshot failed integrity_check: ${problems.join('; ')}`)
+        throw new Error(`sealed snapshot failed integrity validation: ${problems.join('; ')}`)
       }
     } finally {
       out.close()
@@ -969,10 +986,8 @@ export class SnapshotStore {
    */
   repair({ lockOpts = {} }: { lockOpts?: LockOptions } = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
-    if (existsSync(this.publishLock)) {
-      throw new Error(
-        'repair refused: publish.lock is present; wait for the publisher or clear it through normal lock recovery',
-      )
+    if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
+      throw new Error('repair refused: publish.lock is present and held by a live publisher')
     }
     const actions = withLock(
       this.publishLock,
@@ -1066,7 +1081,7 @@ export class SnapshotStore {
         actions.push(`removed ${wasIntegrityClean ? 'orphan' : 'corrupt'} snapshot ${v}`)
       }
     }
-    for (const dir of [this.snapDir, this.txPending]) {
+    for (const dir of [this.dir, this.snapDir, this.txPending]) {
       if (!existsSync(dir)) {
         continue
       }

@@ -25,7 +25,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **96 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **112 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -93,7 +93,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 96` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 112` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -184,14 +184,30 @@ node packages/fsqlite/src/cli/index.ts validate "$QA/corrupt"; echo "exit=$?" # 
 
 ```bash
 node --input-type=module -e '
+import assert from "node:assert/strict";
 import { SnapshotStore } from "./packages/fsqlite/src/index.ts";
+import { setReconcileCrashForTest } from "./packages/fsqlite/src/snapshotStore.ts";
 const dir = process.env.QA + "/crash";
-const s = new SnapshotStore(dir, { schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} }).init();
+const options = { schema: "CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} };
+const s = new SnapshotStore(dir, options).init();
 s.write("w", db => db.prepare("INSERT INTO kv VALUES (?,?)").run("a","1"));
-try { s.reconcile({ crashAt: "after-snapshot" }); } catch (e) { console.log("injected crash:", e.message); }
-const s2 = new SnapshotStore(dir, { schema:"CREATE TABLE kv (k TEXT PRIMARY KEY NOT NULL, v TEXT)", conflictPolicy:{kv:"lww","*":"strict"} });
-console.log("state after crash:", s2.validate().state);
-console.log("repair:", s2.repair().state, "-> applied", s2.reconcile().applied);
+let crash;
+try {
+  setReconcileCrashForTest("after-snapshot");
+  s.reconcile();
+} catch (e) {
+  crash = e;
+} finally {
+  setReconcileCrashForTest(null);
+}
+assert.match(crash?.message ?? "", /CRASH after-snapshot/);
+const s2 = new SnapshotStore(dir, options);
+assert.equal(s2.validate().state, "in-flight-capture");
+assert.equal(s2.repair().state, "live");
+assert.equal(s2.reconcile().applied, 1);
+assert.deepEqual(s2.read(db => db.prepare("SELECT k, v FROM kv").all()).map(row => ({ ...row })), [{ k:"a", v:"1" }]);
+assert.equal(s2.validate().state, "sealed");
+console.log("PASS: crash detected, repaired, reconciled, and sealed");
 '
 ```
 

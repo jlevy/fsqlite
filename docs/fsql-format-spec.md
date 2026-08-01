@@ -55,6 +55,8 @@ paths below are relative to it.
 <store-root>/
   fsqlite.json                    # immutable format and store identity marker
   current                          # the pointer: ASCII decimal version (§4)
+  current.<hex>.tmp                # transient: pointer publication (§4)
+  fsqlite.json.<uuid>.tmp          # transient: marker creation (§3)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
   snapshots/
@@ -124,7 +126,8 @@ Naming grammar:
 A snapshot is a complete, self-contained SQLite database file.
 Requirements:
 
-- **S1.** It MUST be a well-formed SQLite database passing `PRAGMA integrity_check`.
+- **S1.** It MUST be a well-formed SQLite database passing `PRAGMA integrity_check` and
+  returning no rows from `PRAGMA foreign_key_check`.
 
 - **S2.** It MUST carry `PRAGMA application_id = 0x4653514C` (ASCII `FSQL`) and
   `PRAGMA user_version` = the caller’s `schema_version`. The application id belongs to
@@ -272,13 +275,16 @@ Protocol:
      directory, `format_version` or `store_id` differs from the marker, or
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
-   - otherwise **apply** the changeset under the per-table merge policy (below) and
-     record `tx_id` in `applied_tx`; both writes occur in the build snapshot before
-     publication; if the apply aborts (strict conflict or any error) → **quarantine**
-     with the reason; continue with the next envelope.
-4. **F4.** Run an integrity gate (`PRAGMA quick_check`) on the build.
-   A failure aborts the whole reconcile (the build is a discarded transient; nothing was
-   published).
+   - otherwise **apply** the changeset under the per-table merge policy (below), run
+     `PRAGMA foreign_key_check`, and record `tx_id` in `applied_tx`; all three
+     operations occur in one transaction in the build snapshot before publication; if
+     the apply or foreign key check aborts → **quarantine** with the reason; continue
+     with the next envelope.
+     Since the prior transaction boundary passed the same check, any reported foreign
+     key violation belongs to the current envelope.
+4. **F4.** Run an integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`)
+   on the build. A failure aborts the whole reconcile (the build is a discarded
+   transient; nothing was published).
 5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
    moves, and finish. Otherwise **publish** under the lock (§7):
    - **F5a.** Re-read `current`; if ≠ base, a peer published first, so discard the build
@@ -312,15 +318,23 @@ the default for unlisted tables.
 The default `'*'` action MUST be `strict`, so an unconfigured table never silently picks
 a winner.
 
-| Action (aliases) | On a same-PK conflict |
+| Action (aliases) | On a replaceable DATA or CONFLICT conflict |
 | --- | --- |
-| `replace` (`lww`) | Incoming row wins where SQLite permits `REPLACE` (DATA and CONFLICT conflict types); other conflict types fall back to `omit` |
+| `replace` (`lww`) | Incoming row wins |
 | `omit` (`union`) | Existing row wins (first-writer-wins / set-union); the conflicting incoming change is dropped |
 | `strict` | The *entire envelope* is rejected (quarantined); none of its changes land |
 
-All passes of one envelope MUST apply atomically (one transaction): an envelope either
-lands in full (modulo `omit`-dropped rows) or not at all.
-The Node implementation realizes per-table routing as one filtered
+NOTFOUND, CONSTRAINT, and FOREIGN_KEY conflicts are not replaceable.
+Every action MUST reject and quarantine the entire envelope for those conflict types.
+An implementation MUST NOT omit a nonreplaceable change and then record its envelope in
+`applied_tx`.
+
+All passes of one envelope MUST apply atomically in one transaction.
+An envelope either lands in full, except for replaceable changes deliberately dropped by
+`omit`, or not at all.
+Implementations that require one filtered pass per action MUST run the passes in this
+order: `replace`, `omit`, `strict`. Policy object or map insertion order MUST NOT affect
+reconciliation. The Node implementation realizes per-table routing as one filtered
 `sqlite3changeset_apply` pass per distinct action, all inside a single `BEGIN IMMEDIATE`
 transaction, because the binding exposes the table name only to the filter callback (see
 `upstream-source-confirmations.md`).
@@ -354,7 +368,7 @@ step (F5), not around writer work or the build.
   cannot double-publish a version (F5a) or double-apply an envelope (the ledger).
   Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
   and OCC, not staleness precision, carry correctness.
-  (See Open issue O5.)
+  (See Open issue O3.)
 
 ## 8. Read Leases and Garbage Collection
 
@@ -376,10 +390,11 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   snapshot unlink**. A lease may have been published after GC’s initial scan (this is
   the GC-side half of the race closure; RL1 is the reader-side half).
   The newest `retain` versions are never collected, which bounds RL1’s retries.
-- **G3.** GC MAY also sweep *stale* transients (`.build-*`, `.direct-*`, `*.tmp`), but
-  MUST NOT sweep *fresh* ones, which may belong to a live reconcile or DirectStore write
-  in another process. Staleness is mtime-based with a window comfortably above any
-  plausible build duration.
+- **G3.** GC MAY also sweep *stale* transients at the store root, in `snapshots/`, and
+  in `tx/pending/` (`.build-*`, `.direct-*`, `.work-*`, and `*.tmp`), but MUST NOT sweep
+  *fresh* ones, which may belong to a live initializer, reconcile, DirectStore write, or
+  envelope capture in another process.
+  Staleness is mtime-based with a window comfortably above any plausible build duration.
 
 ## 9. The DirectStore Strategy
 
@@ -390,9 +405,9 @@ produced a snapshot.
 
 Protocol (per write): acquire the publish lock → read `current` → base → copy the base
 snapshot to a `.direct-*` transient → mutate it in one transaction → integrity-gate
-(`quick_check`) → re-check `current` == base (OCC) and lock token (fencing) → fsync,
-rename to `snapshots/<base+1>`, fsync dir, pointer swap (P2/P3) → release.
-On an OCC or fencing failure, discard and retry.
+(`quick_check` and `foreign_key_check`) → re-check `current` == base (OCC) and lock
+token (fencing) → fsync, rename to `snapshots/<base+1>`, fsync dir, pointer swap (P2/P3)
+→ release. On an OCC or fencing failure, discard and retry.
 
 There are no envelopes, reconcile step, or merge policy.
 The writer **does not require the session extension**, so the strategy runs on any
@@ -419,7 +434,7 @@ files are not fsynced.
 After a power loss, R1’s “unpublished tail” therefore includes accepted envelopes that
 had not yet been folded.
 Implementations MAY additionally fsync the envelope payload and dir to harden
-accepted-but-unpublished writes (see Open issue O3); callers needing a hard durability
+accepted-but-unpublished writes (see Open issue O2); callers needing a hard durability
 receipt run `reconcile()` after `write()`.
 
 Published snapshots, once the pointer swap’s barriers complete, MUST survive power loss.
@@ -447,10 +462,10 @@ layout, trusting no single file:
 
 | State | Meaning / detection |
 | --- | --- |
-| `sealed` | Pointer valid, head passes `integrity_check`, no committed pending envelopes, no in-flight tells |
+| `sealed` | Pointer valid, head passes `integrity_check` and `foreign_key_check`, no committed pending envelopes, no in-flight tells |
 | `live` | As `sealed`, but committed pending envelopes await reconcile |
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
-| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity (`application_id`, `format_version`, or `store_id`) mismatches the marker, or the head fails `integrity_check` |
+| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity (`application_id`, `format_version`, or `store_id`) mismatches the marker, or the head fails `integrity_check` or `foreign_key_check` |
 
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
 `invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
@@ -460,15 +475,18 @@ classification error rather than a store-health result.
 published snapshot was integrity-gated at publish and never modified (S6):
 
 1. Scan snapshots without modifying any file.
-   If the pointer is valid and its snapshot passes `integrity_check`, keep it.
+   If the pointer is valid and its snapshot passes `integrity_check` and
+   `foreign_key_check`, keep it.
    Otherwise identify the **newest integrity-clean snapshot**. If none exists, fail
    without deleting or rewriting anything so forensic recovery remains possible.
    Only after finding a clean destination may repair re-point and delete corrupt
    snapshots.
-2. Acquire `publish.lock` and revalidate its owner token immediately before every
-   pointer write, snapshot deletion, transient deletion, and envelope move.
-   Repair MUST refuse to begin while any publisher lock is present; it never deletes or
-   breaks that lock itself.
+2. Acquire `publish.lock` through L1-L5 and revalidate its owner token immediately
+   before every pointer write, snapshot deletion, transient deletion, and envelope move.
+   A fresh publisher lock makes repair refuse without mutation.
+   A stale lock MAY be reclaimed only through the normal fenced stale-break and
+   acquisition path in L2-L4; repair MUST then act only while its acquired token remains
+   valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
 4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
@@ -548,20 +566,20 @@ The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O2: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
+- **O1: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
   semantics; Win32 `rename` fails on an existing target.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
   semantics. The cross-platform CI matrix gates the claim.
-- **O3: Envelope durability option.** §10 makes accepted-but-unpublished writes
+- **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
-- **O5: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
+- **O3: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
   Correctness never depends on these (L5), but liveness tuning on skewed clusters is
   undocumented; the planned real-NFS gate and protocol model both probe this.
-- **O6: `base_version` is unused.** Manifests record the seed base, but reconcile
+- **O4: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
   This specification treats it only as provenance.
   A future version could instead define semantics such as staleness warnings.

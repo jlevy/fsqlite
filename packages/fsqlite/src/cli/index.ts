@@ -35,9 +35,18 @@ for (const stream of [process.stdout, process.stderr]) {
 }
 
 const [cmd, dir, ...rest] = process.argv.slice(2)
+class CliExit extends Error {
+  readonly code: number
+
+  constructor(code: number) {
+    super()
+    this.code = code
+  }
+}
+
 const fail = (msg: string): never => {
   console.error(`fsqlite: ${msg}`)
-  process.exit(64)
+  throw new CliExit(64)
 }
 const flag = (name: string, dflt: string): string => {
   const i = rest.indexOf(name)
@@ -99,7 +108,7 @@ function main(): void {
     console.log(
       'usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [args]',
     )
-    process.exit(cmd ? 0 : 64)
+    process.exitCode = cmd ? 0 : 64
     return
   }
   if (!dir) {
@@ -110,7 +119,8 @@ function main(): void {
   if (cmd === 'fsinspect') {
     const report = inspect(dir)
     console.log(rest.includes('--json') ? JSON.stringify(report, null, 2) : formatReport(report))
-    process.exit(report.verdict.fsqliteSafe ? 0 : 1)
+    process.exitCode = report.verdict.fsqliteSafe ? 0 : 1
+    return
   }
 
   // stats/doctor work on any SQLite path, so classify before assuming a store.
@@ -128,7 +138,8 @@ function main(): void {
         console.log('  kind: plain-sqlite (no fsqlite layer)')
         printSqliteFacts(f, '  ')
       }
-      process.exit(0)
+      process.exitCode = 0
+      return
     }
     const store = new SnapshotStore(dir)
     const v = store.validate()
@@ -168,7 +179,8 @@ function main(): void {
         printSqliteFacts(snapshot, '    ')
       }
     }
-    process.exit(0)
+    process.exitCode = 0
+    return
   }
 
   if (cmd === 'doctor') {
@@ -192,7 +204,8 @@ function main(): void {
         console.log('  kind: plain-sqlite (no fsqlite layer)')
         console.log(`  integrity: ${ok ? 'ok' : problems.join('; ')}`)
       }
-      process.exit(ok ? 0 : 3)
+      process.exitCode = ok ? 0 : 3
+      return
     }
     const caps = capabilities()
     const store = new SnapshotStore(dir)
@@ -221,7 +234,8 @@ function main(): void {
       }
       console.log(`  store: ${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
     }
-    process.exit(exitCodeForState(v.state))
+    process.exitCode = exitCodeForState(v.state)
+    return
   }
 
   if (!hasStoreMarker(dir)) {
@@ -250,8 +264,8 @@ function main(): void {
     case 'validate': {
       const v = store.validate()
       console.log(`${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
-      process.exit(exitCodeForState(v.state))
-      break
+      process.exitCode = exitCodeForState(v.state)
+      return
     }
     case 'gc': {
       const retain = Number(flag('--retain', '3'))
@@ -283,6 +297,10 @@ function main(): void {
 try {
   main()
 } catch (e: unknown) {
-  console.error(`fsqlite: ${e instanceof Error ? e.message : String(e)}`)
-  process.exit(1)
+  if (e instanceof CliExit) {
+    process.exitCode = e.code
+  } else {
+    console.error(`fsqlite: ${e instanceof Error ? e.message : String(e)}`)
+    process.exitCode = 1
+  }
 }

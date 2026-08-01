@@ -70,7 +70,7 @@ export function sqliteFacts(path: string): SqliteFacts {
   }
 }
 
-/** `integrity_check` problems for a plain SQLite file ([] = clean). */
+/** Physical integrity and foreign key problems for a plain SQLite file ([] = clean). */
 export function integrityReport(path: string): string[] {
   const db = driver.openReadonly(path)
   try {

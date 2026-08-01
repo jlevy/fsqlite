@@ -18,7 +18,15 @@ import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
 import { withLock, ownerOf } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore } from './snapshotStore.ts'
-import type { StoreOptions, WorkFn, ReadFn, ValidateResult, GcResult, ReadLease } from './types.ts'
+import type {
+  StoreOptions,
+  WorkFn,
+  ReadFn,
+  ValidateResult,
+  GcResult,
+  ReadLease,
+  RepairResult,
+} from './types.ts'
 
 const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
@@ -51,8 +59,11 @@ export class DirectStore {
   seal(dest: string): string {
     return this.base.seal(dest)
   }
-  gc(opts?: { retain?: number; leaseStaleMs?: number }): GcResult {
+  gc(opts?: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number }): GcResult {
     return this.base.gc(opts)
+  }
+  repair(opts?: { lockOpts?: LockOptions }): RepairResult {
+    return this.base.repair(opts)
   }
   readLease(): ReadLease {
     return this.base.readLease()
@@ -109,8 +120,15 @@ export class DirectStore {
             return 'retry'
           }
           fsyncPath(tmp) // durable snapshot before it can be named by current
+          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
+            rmSync(tmp, { force: true })
+            return 'retry'
+          }
           renameSync(tmp, this.base.snapshotPath(next))
           fsyncDir(this.base.snapDir)
+          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
+            return 'retry'
+          }
           publishPointer(this.base.dir, this.base.currentPath, next)
           return next
         },

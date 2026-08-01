@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, existsSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
@@ -109,6 +109,25 @@ test('repair refuses to mutate while a publisher lock is present', () => {
   }
 })
 
+test('repair reclaims a stale publisher lock before restoring the store', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const transient = join(store.snapDir, '.build-abandoned.sqlite')
+    writeFileSync(transient, 'abandoned work')
+    mkdirSync(store.publishLock)
+    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'dead' }))
+    const old = new Date(Date.now() - 10_000)
+    utimesSync(store.publishLock, old, old)
+
+    const result = store.repair({ lockOpts: { staleMs: 100, timeoutMs: 500, pollMs: 5 } })
+    assert.ok(result.actions.some((action) => action.includes('removed transient')))
+    assert.equal(existsSync(transient), false)
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
 test('repair revalidates its fence before every destructive step', () => {
   const { store, cleanup } = storeAt(1)
   try {
@@ -157,6 +176,29 @@ test('orphan .direct-/.work- transients are surfaced by validate and removed by 
       false,
       'repair removed the .work- orphan',
     )
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('root pointer transients are surfaced, swept by gc, and removed by repair', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const stale = join(store.dir, 'current.deadbeef.tmp')
+    writeFileSync(stale, '1')
+    const old = new Date(Date.now() - 120_000)
+    utimesSync(stale, old, old)
+    assert.equal(store.validate().state, 'in-flight-capture')
+    assert.ok(store.validate().issues.some((issue) => issue.includes('current.deadbeef.tmp')))
+
+    store.gc({ transientStaleMs: 60_000 })
+    assert.equal(existsSync(stale), false, 'gc sweeps stale root transient')
+
+    const fresh = join(store.dir, 'fsqlite.json.deadbeef.tmp')
+    writeFileSync(fresh, '{}')
+    store.repair()
+    assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
     assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
