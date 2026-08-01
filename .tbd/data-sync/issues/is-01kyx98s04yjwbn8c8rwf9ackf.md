@@ -3,9 +3,9 @@ type: is
 id: is-01kyx98s04yjwbn8c8rwf9ackf
 title: Complete package metadata and verify LICENSE attribution
 kind: task
-status: open
+status: closed
 priority: 2
-version: 4
+version: 5
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase1
@@ -16,6 +16,8 @@ dependencies:
     target: is-01kyx9gpb1y0gkwhw9ze32913r
 parent_id: is-01kyx97rm9wx146e3awnjr9can
 created_at: 2026-07-31T23:48:34.947Z
-updated_at: 2026-08-01T03:11:14.012Z
+updated_at: 2026-08-01T04:31:41.327Z
+closed_at: 2026-08-01T04:31:41.327Z
+close_reason: Completed the standalone toolchain and repository foundation with strict type/lint/format gates, local dev dependencies, metadata, and root documentation layout; full local verification passes.
 ---
 Add repository metadata with the packages/fsqlite directory field, homepage, bugs, and author Joshua Levy. Verify the MIT LICENSE names Joshua Levy as the sole copyright holder. Ensure publint and npm provenance can resolve the repository metadata.
