@@ -1,8 +1,7 @@
 # fsqlite
 
+[![Follow @ojoshe on X](https://img.shields.io/badge/follow_%40ojoshe-black?logo=x&logoColor=white)](https://x.com/ojoshe)
 [![CI](https://github.com/jlevy/fsqlite/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/fsqlite/actions/workflows/ci.yml)
-[![npm alpha](https://img.shields.io/npm/v/fsqlite/alpha.svg?label=npm%20alpha)](https://www.npmjs.com/package/fsqlite)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jlevy/fsqlite/blob/main/LICENSE)
 
 **Server-free, file-first concurrent SQLite for local agents.**
 
