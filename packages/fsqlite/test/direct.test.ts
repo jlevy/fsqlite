@@ -80,6 +80,29 @@ test('format interop: a store written directly is read by SnapshotStore (and vic
   }
 })
 
+test('direct writer with divergent schema fails before invoking its callback', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    new DirectStore(dir, STORE_OPTS).init()
+    const rogue = new DirectStore(dir, {
+      ...STORE_OPTS,
+      schema: (STORE_OPTS.schema ?? '') + '\nCREATE TABLE extra (z TEXT PRIMARY KEY NOT NULL);',
+    })
+    let callbackRan = false
+    assert.throws(
+      () =>
+        rogue.write(() => {
+          callbackRan = true
+        }),
+      /schema is incompatible|schema_hash/i,
+    )
+    assert.equal(callbackRan, false)
+    assert.equal(rogue.currentVersion(), 0)
+  } finally {
+    cleanup()
+  }
+})
+
 test('direct mode never records a session (so it runs on session-less bindings)', () => {
   const { dir, cleanup } = tmpStore()
   try {

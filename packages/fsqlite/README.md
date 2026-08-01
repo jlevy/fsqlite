@@ -51,9 +51,7 @@ store.write('worker-a', (db) => {
 // Reconciliation folds pending envelopes into a new immutable snapshot.
 store.reconcile()
 
-const row = store.read((db) =>
-  db.prepare('SELECT value FROM kv WHERE key = ?').get('answer'),
-)
+const row = store.read((db) => db.prepare('SELECT value FROM kv WHERE key = ?').get('answer'))
 console.log(row)
 ```
 
@@ -62,6 +60,12 @@ The `f1.0` writer contract does not support virtual tables or DDL inside write
 callbacks. Conflict actions are `lww` (replace), `union` (keep the existing row), and
 `strict` (quarantine the conflicting envelope).
 The `'*'` default is `strict` when omitted.
+
+Call `init()` on each application handle before ordinary use.
+On an existing store it verifies the exact caller-schema identity rather than executing
+the DDL again. `schemaVersion` is an integer from 0 through 2,147,483,647. Incrementing
+it does not migrate a store; a different version or exact schema string is incompatible
+until a future explicit migration protocol exists.
 
 ## Choose a Write Strategy
 
@@ -98,6 +102,13 @@ or copied contents fail closed.
 Snapshot databases carry SQLite `application_id` `0x4653514C` (`FSQL`); your schema owns
 `PRAGMA user_version`.
 
+The directory format and caller schema have separate identities.
+`format_version: "f1.0"` identifies the fsqlite protocol.
+The caller-schema identity is `schemaVersion` plus the first 16 lowercase hexadecimal
+characters of SHA-256 over the exact UTF-8 schema string.
+Whitespace or comments change that token even if the resulting SQLite schema would be
+equivalent.
+
 `recognizeStore()` distinguishes a missing marker, invalid metadata, unsupported
 versions/features, and a supported store.
 Opening a store never upgrades it.
@@ -131,6 +142,8 @@ corrupt `3`, unsupported `4`, and not an fsqlite store `64`.
 `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
+Its safe verdict requires working directory fsync as well as the coordination
+primitives.
 
 ## Correctness Model
 
@@ -146,6 +159,8 @@ Maintenance fails closed on malformed identity, unsupported capabilities, unread
 leases, or a missing clean recovery point.
 
 Publication fsyncs the snapshot, pointer, and containing directories.
+A required directory fsync failure aborts initialization or publication rather than
+silently weakening the durability claim.
 A successfully captured envelope survives process failure but is only guaranteed
 power-loss durability after reconciliation publishes it.
 An optional durable-envelope mode is future work.
@@ -165,6 +180,11 @@ is the normative protocol authority.
 - Cross-host NFS/SMB behavior is designed into the protocol but not yet proven by the
   real multi-host gate.
   Do not treat the alpha as that proof.
+- The natural workload is a few to a few dozen cooperative local agents, short data
+  callbacks, a single-digit-MiB head, occasional writes, and batched reconciliation.
+  A handful of agents against a low-tens-of-MiB head can fit with background-latency
+  tolerance, but requires measurement.
+  Large or high-frequency workloads are a poor default fit.
 - Reconciliation serializes publication, and visibility across writers occurs when
   reconciliation completes rather than immediately after envelope capture.
 - Row-level policies do not by themselves protect arbitrary range, aggregate, or
@@ -173,27 +193,41 @@ is the normative protocol authority.
   strategy.
 - `SnapshotStore` seeds each default writer by copying the published snapshot, so write
   latency grows with snapshot size.
-  In a reviewer-local benchmark using 2 KB rows, snapshot seeding rose from 11.8 ms per
-  write at 2.0 MiB to 183.6 ms at 78.8 MiB, about 2.3 ms per MiB. A linear 1 GiB
-  extrapolation is roughly 2.4 seconds for a single-row write.
-  Treat these hardware-specific measurements as sizing evidence, not a performance
-  guarantee. Any faster seed must preserve the data and constraints the callback
-  observes; safe large-store overlays, compaction, and shared-base alternatives remain
-  on the [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md).
+  Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2
+  ms for 2.0 MiB and 163.8 to 164.6 ms for 21.7 MiB. Eight child processes issuing 40
+  total writes against 21.7 MiB took 8.4 to 8.9 seconds including startup.
+  Treat these hardware-specific measurements as sizing evidence, not a portable rate or
+  performance guarantee.
+  Any faster seed must preserve the data and constraints the callback observes; safe
+  large-store overlays, compaction, and shared-base alternatives remain on the
+  [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md).
+  Table count adds schema setup work and some SQLite pages, but snapshot bytes are the
+  main scaling variable.
+  Batching reconciliation amortizes the build and publication, not the per-writer seed
+  copy.
+- Concurrent writers can transiently require one head-sized working copy each, in
+  addition to retained snapshots, read leases, a reconcile build, and envelopes.
+  Reconcile also loads the lifetime `applied_tx` ledger, which is not yet checkpointed.
+  Monitor free space and pending backlog.
 - DirectStore holds its lease across copy, callback, checks, fsync, and publication.
   Configure a stale window longer than the worst-case operation.
   A stolen lease is fenced safely but can cause the callback to retry.
 - Use `readLease()`, `seal()`, or the backup helpers for live backups.
+  `seal()` acquires its own read lease for the selected snapshot.
   An arbitrary recursive directory copy racing publication or garbage collection is not
   a supported backup contract.
 - Write callbacks are data transactions over a fixed schema.
   Persistent and temporary DDL, including temporary tables and triggers, and virtual
   tables are outside the `f1.0` concurrent-writer contract.
+  Caller-schema migration, including admission of old writers and handling old pending
+  envelopes, is post-alpha work.
 
 The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
 tests to guarantees.
 The [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md) tracks the
-evidence and portability work still required for 1.0.
+evidence and portability work still required for 1.0. The
+[schema and workload assessment](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md)
+gives detailed severity, measurements, and adoption guidance.
 
 ## License
 

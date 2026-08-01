@@ -29,9 +29,13 @@ documents.
 A domain-agnostic reference that asks:
 
 > How can a **SQLite database** support safe, convenient **concurrent** use from **local
-> applications**, with **no database server**, on **any filesystem** (including NFS and
-> consumer sync folders), while keeping the file a **portable, durable, tool-compatible
+> applications**, with **no database server**, on local storage and capability-validated
+> shared filesystems, while keeping the file a **portable, durable, tool-compatible
 > artifact** and never losing more than the current transaction?
+
+NFS and SMB are targets that require mount-specific evidence.
+Consumer synchronization folders have a different replication model and are not assumed
+to satisfy the protocol.
 
 SQLite is a strong archival and interchange format: a single public-domain file readable
 by nearly every language and tool.
@@ -183,8 +187,11 @@ The target properties (the “contours”), restated as testable requirements:
   A *minimal, ephemeral, auto-managed* coordinator is acceptable only as an optional
   optimization, never required: cross-platform daemon lifecycle management is itself a
   liability.
-- **R-FS: filesystem-agnostic, including NFS/SMB/FUSE/sync.** Correct where POSIX
-  `flock`/`fcntl` byte-range locks and WAL shared memory do **not** work.
+- **R-FS: capability-defined rather than filesystem-label-defined.** Target local and
+  shared filesystems where the required atomic create, rename, visibility, and
+  durability primitives are validated.
+  NFS, SMB, FUSE, and synchronization products require separate evidence; a product name
+  alone proves nothing.
 - **R-DURABLE: bounded loss and safe snapshot backup.** A crash or interrupted protocol
   operation loses at most the current unpublished tail: never a previously committed
   state, never the whole dataset.
@@ -697,7 +704,9 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
 - **Write (lock-free).** Seed a session from the *current immutable snapshot* (safe: it
   is never mutated), run the caller’s work, extract a changeset, and write an envelope
   with the `COMMITTED` marker **last**. Unique paths ⇒ conflict-free concurrent writes
-  on local disk **and** NFS; partial/uncommitted envelopes are ignored.
+  on a conforming filesystem; partial/uncommitted envelopes are ignored.
+  Local behavior is tested.
+  Multi-host NFS/SMB behavior remains a separate gate.
 - **Reconcile (out-of-band).** Build the next snapshot in a temp file from the current
   snapshot and committed pending envelopes (skipping any already in the snapshot’s
   `applied_tx` ledger; quarantining digest/schema-mismatched or strict-conflicting
@@ -722,8 +731,11 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
 - **R-CONCURRENCY.** Writers never block each other (unique envelopes); only conflicting
   transactions are resolved by policy at reconcile (last-writer-wins / set- union /
   strict-quarantine). This is per-session optimism, not a whole-DB lock.
-- **R-FS / R-NOSERVER.** The only shared mutations are atomic file/dir creates and one
-  atomic rename: reliable on local disk and NFS. No WAL `-shm`, no `fcntl`, no daemon.
+- **R-FS / R-NOSERVER.** The only shared mutations are file/directory creates and one
+  atomic rename. The protocol requires those operations, close-to-open visibility, and
+  fsync barriers to pass capability validation.
+  Local behavior is tested; multi-host NFS and SMB evidence is pending.
+  No WAL `-shm`, no `fcntl`, no daemon.
 - **R-FORMAT / R-LOCAL / R-XPLAT.** Every published snapshot is a standard SQLite file;
   readers are universal; `node:sqlite` is zero-dependency so install is trivial cross-
   platform.
@@ -805,7 +817,12 @@ concurrency:
   read by the concurrent engine and vice versa; N direct-writer processes serialize with
   zero loss.
 
-**Performance (indicative, small metadata rows on local tmpfs):**
+**Historical prototype performance (indicative, small metadata rows on local tmpfs):**
+
+These June measurements predate the current maintained workload calibration and are not
+release claims. See the
+[current schema and workload assessment](research-2026-08-01-schema-evolution-and-workload-fit.md)
+for reproducible commands, current numbers, and operating-envelope guidance.
 
 - Write (envelope, default snapshot-seed): ~4-5 ms/write at a few-hundred-row catalog,
   growing with catalog size because the writer copies the current snapshot to seed its
@@ -941,7 +958,8 @@ listed as a possible extension, not a v1 need.
 **Summary of the trade.** Compared with WAL, immutable snapshots let readers proceed
 without touching a live file, and transaction envelopes accept many concurrent writers
 instead of one global writer.
-The design works on NFS and tolerates hot copies.
+The design targets capability-validated shared filesystems and supports pinned immutable
+snapshot copies. Real multi-host NFS and SMB proof is still pending.
 In exchange, it provides weaker isolation: row-level merge with write-set conflict
 detection and visibility only after reconcile.
 This meets R-FS, R-DURABLE, and R-CONCURRENCY at the cost of serializability.
@@ -969,9 +987,9 @@ This meets R-FS, R-DURABLE, and R-CONCURRENCY at the cost of serializability.
    binding-level; the C API is richer.
    This shapes v1 (filter-based per-table policy; constrained writable surface so no
    rebaser is needed) and gives a clean upstream ask.
-6. **Two write strategies, one format** serves both “many agents, maybe on NFS” and “one
-   local tool with simple coordination” without forking the on-disk format or the reader
-   path.
+6. **Two write strategies, one format** serves both “many agents on a validated shared
+   path” and “one local tool with simple coordination” without forking the on-disk
+   format or the reader path.
 
 ## Comparison Matrix
 
@@ -979,21 +997,21 @@ Concurrency approaches for a single SQLite store with no server.
 Read vs write concurrency stated separately, with the conflict/lock **granularity** and
 the **isolation** each provides (see Finding K for the precise definitions and caveats):
 
-| Approach | Read concurrency | Write concurrency | Conflict / lock granularity | Isolation | Server-free | Any FS (incl. NFS) | Hot-copy-safe |
+| Approach | Read concurrency | Write concurrency | Conflict / lock granularity | Isolation | Server-free | Shared-filesystem fit | Immutable snapshot export |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Single connection, rollback journal (default) | readers exclude the writer | **1 writer** | whole-DB | serializable | ✓ | ✗ (locks) | ✗ |
 | **WAL** with `busy_timeout` | **many, lock-free** (snapshot) | **1 writer** (global) | **whole-DB write lock** | writer serializable; readers snapshot | ✓ | ✗ (`-shm`) | ✗ |
 | libSQL `BEGIN CONCURRENT` | many | **many** (commit-time check) | **page-level** | snapshot isolation and OCC | ✓ | ✗ (`-shm`) | ✗ |
 | Turso/limbo (`journal_mode=mvcc`) | many (MVCC snapshot) | **many** (commit-time check) | **row-level** | snapshot isolation and row OCC | ✓ (embedded) | ✗ (in-process/local; in-memory versions) | ✗ |
-| Wrapper `mkdir`-lock with rollback (≈ **DirectStore**) | **many** (immutable snapshots) | **1 writer** (lease) | whole-DB | each publish atomic | ✓ | ✓ | ✓ |
+| Wrapper `mkdir`-lock with rollback (≈ **DirectStore**) | **many** (immutable snapshots) | **1 writer** (lease) | whole-DB | each publish atomic | ✓ | conditional on validated primitives | ✓ |
 | Elected coordinator (LiteFS) | many | **1 primary** (replicas read-only) | engine-level | serializable | ✗ (FUSE daemon and lease) | n/a: own FUSE FS and replication | n/a (replicated) |
 | Raft server (rqlite/dqlite) | many | many | engine-level | serializable | ✗ (cluster) | n/a: replicates over the network | n/a (replicated) |
-| **Snapshot-publish and changeset log** (this doc) | **unlimited, lock-free** (snapshot per version) | **unlimited at capture** and one out-of-band merge | **per-row (per-PK)**, per-table policy | row-level write-set merge and DATA-conflict detection (not serializable) | **✓** | **✓** | **✓✓** |
+| **Snapshot-publish and changeset log** (this doc) | **unlimited, lock-free** (snapshot per version) | **unlimited at capture** and one out-of-band merge | **per-row (per-PK)**, per-table policy | row-level write-set merge and DATA-conflict detection (not serializable) | **✓** | conditional; real multi-host gate pending | **✓** (pinned snapshot) |
 
-A fairness note on the “Any FS” column: LiteFS and rqlite/dqlite are not “unsafe on
-NFS”; they **do not use a shared filesystem at all.** LiteFS gives each node its own
-FUSE filesystem and *replicates* writes from a single elected primary; rqlite/dqlite
-replicate via Raft over the network.
+A fairness note on the “Shared-filesystem fit” column: LiteFS and rqlite/dqlite are not
+“unsafe on NFS”; they **do not use a shared filesystem at all.** LiteFS gives each node
+its own FUSE filesystem and *replicates* writes from a single elected primary;
+rqlite/dqlite replicate via Raft over the network.
 Both require a **running process** (a daemon/cluster), which is exactly the cost the
 server-free approaches avoid.
 So they solve a *different* problem (multi-node replication) rather than “share one file
@@ -1021,8 +1039,8 @@ The full landscape of these alternatives is catalogued in [Related Work](#relate
 A cross-process `mkdir`/`flock` lease with `BEGIN IMMEDIATE` and
 `nolock`/rollback-journal open-fresh-on-NFS around each transaction.
 
-**Pros:** small (~40 lines over an existing lock); appropriate for modest local/NFS
-writes; keeps one standard SQLite file.
+**Pros:** small (~40 lines over an existing lock); appropriate for modest local writes
+and validated shared filesystems; keeps one standard SQLite file.
 **Cons:** it is the **coarse one-writer-at-a-time** model the requirements want to
 avoid; the lease-break/coherence hazards on NFS are *managed, not eliminated*; no
 per-session optimism.
@@ -1219,19 +1237,19 @@ Every remaining row below names the evidence still needed; this is the checklist
 | Compromised locks | lock deletion/replacement while held aborts the current operation *(automated ✓)* |
 | Backup | backup during writes; `integrity_check`; restore-and-read *(automated ✓)* |
 | URI modes | normal, `immutable=1`, `nolock=1` where supported |
-| Filesystems | APFS, ext4, NTFS, **NFSv4.1/EFS/Filestore**, SMB, cloud-sync caveats |
+| Filesystems | APFS, ext4, NTFS, **NFSv4.1/EFS/Filestore**, SMB; consumer sync products are a separate unsupported model until tested |
 | Cross-language | Node writer and Python/Rust/Go readers; later multi-language writers |
 | Path handling | symlinks, spaces, Unicode, Windows drive paths |
 | Dependency policy | frozen lockfile, install-script policy, package cool-off *(alpha ✓)* |
 
 **The `fsinspect` filesystem-capability diagnostic.** Because the filesystem row is the
-single biggest unknown and is hard to introspect, a small dependency-light probe
-(shipped as an `fsqlite` subcommand) empirically reports, per environment: atomic
-`mkdir` mutual-exclusion; atomic `rename`-replace; `O_EXCL` race; `fcntl`(OFD)/`flock`
-enforcement; `mtime` precision; WAL `-shm` shareability; `fsync`/close-to-open
-visibility; dir-entry latency; and a filesystem-type fingerprint.
-It turns “we assume NFS does X” into a measured fact on this cloud agent’s network
-drive, a laptop, real NFS/EFS, etc.
+single biggest unknown and is hard to introspect, the shipped probe reports atomic
+`mkdir` mutual exclusion, atomic rename-replace, exclusive create, close-to-open
+visibility, mtime precision, symlink and hard-link behavior, directory fsync, WAL
+viability, and a filesystem-type fingerprint.
+It is one-host diagnostic evidence, not proof of cross-host semantics.
+The real gate must run coordinated operations from at least two hosts on the target
+mount.
 
 ## Areas of Further Research
 

@@ -49,6 +49,7 @@
     "cli": "node src/cli/index.ts",
     "demo": "node examples/demo.ts",
     "benchmark:seed": "node benchmarks/seed.ts",
+    "benchmark:workload-fit": "node benchmarks/workload-fit.ts",
     "example:catalog": "node examples/document-catalog.ts",
     "test": "node scripts/run-tests.mjs",
     "test:golden": "tryscript run 'test/cli-golden/*.tryscript.md'",

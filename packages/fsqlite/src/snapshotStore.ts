@@ -77,6 +77,21 @@ const DEFAULT_RECONCILE_RETRIES = 8
 const DEFAULT_RETAINED_SNAPSHOTS = 3
 const DEFAULT_LEASE_STALE_MS = 60_000
 const DEFAULT_TRANSIENT_STALE_MS = 60_000
+const MAX_SCHEMA_VERSION = 0x7fffffff
+
+function validateSchemaVersion(value: unknown = 1): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_SCHEMA_VERSION
+  ) {
+    throw new TypeError(
+      `schemaVersion must be an integer between 0 and ${MAX_SCHEMA_VERSION}; received ${String(value)}`,
+    )
+  }
+  return value
+}
 
 // Transient (never-store-state) files, per fsql-format-spec.md §2: reconcile builds,
 // DirectStore builds, init's snapshot-0 temp, and writer working copies. A fresh one is
@@ -263,8 +278,8 @@ export function verifySnapshotForPublish(
   const storedHash = metaValue(db, 'schema_hash')
   if (storedHash !== schemaHash) {
     throw new Error(
-      `store schema is incompatible: stamped schema_hash ${storedHash} does not match this schema's ${schemaHash} ` +
-        `(the DDL changed without bumping schemaVersion ${schemaVersion})`,
+      `store schema is incompatible: stamped schema_hash ${storedHash} does not match the requested ` +
+        `exact DDL hash ${schemaHash} at schemaVersion ${schemaVersion}`,
     )
   }
 }
@@ -306,9 +321,9 @@ export class SnapshotStore {
     this.publishLock = join(dir, 'publish.lock')
 
     this.schema = opts.schema ?? ''
-    this.schemaVersion = opts.schemaVersion ?? 1
-    // A hash of the caller DDL catches divergent schemas at the same schema_version (an
-    // integer bump is easy to forget); reconcile quarantines a mismatch.
+    this.schemaVersion = validateSchemaVersion(opts.schemaVersion)
+    // The exact caller-DDL hash completes the immutable schema identity. A version or hash
+    // mismatch is incompatible in f1.0; neither token performs migration.
     this.schemaHash = sha256(this.schema).slice(0, 16)
     this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
     this.toolVersion = opts.toolVersion ?? DEFAULT_TOOL_VERSION
@@ -531,10 +546,10 @@ export class SnapshotStore {
         `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
       )
     }
+    this._verifyCompatible()
     driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
     const marker = readStoreMarker(this.dir)
     const base = this.currentVersion()
-    this.assertStoreIdentity()
     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
     copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
     let changeset: Uint8Array | null
@@ -641,7 +656,7 @@ export class SnapshotStore {
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const base = this.currentVersion()
-      this.assertStoreIdentity()
+      this._verifyCompatible()
       const pending = this.pendingTxns()
       if (pending.length === 0) {
         return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
@@ -1001,22 +1016,27 @@ export class SnapshotStore {
     if (this.pendingTxns().length > 0) {
       throw new Error('cannot seal: pending tx must be reconciled first')
     }
-    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const lease = this.readLease()
     try {
-      driver.vacuumInto(db, destPath)
-    } finally {
-      db.close()
-    }
-    const out = driver.openReadonly(destPath)
-    try {
-      const problems = driver.integrityProblems(out)
-      if (problems.length) {
-        throw new Error(`sealed snapshot failed integrity validation: ${problems.join('; ')}`)
+      const db = driver.openReadonly(this.snapshotPath(lease.version))
+      try {
+        driver.vacuumInto(db, destPath)
+      } finally {
+        db.close()
       }
+      const out = driver.openReadonly(destPath)
+      try {
+        const problems = driver.integrityProblems(out)
+        if (problems.length) {
+          throw new Error(`sealed snapshot failed integrity validation: ${problems.join('; ')}`)
+        }
+      } finally {
+        out.close()
+      }
+      return destPath
     } finally {
-      out.close()
+      lease.release()
     }
-    return destPath
   }
 
   /**

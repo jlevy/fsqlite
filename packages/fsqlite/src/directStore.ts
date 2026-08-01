@@ -85,7 +85,10 @@ export class DirectStore {
       maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
     }: { lockOpts?: LockOptions; maxRetries?: number } = {},
   ): number {
-    this.base.read(() => true)
+    const marker = readStoreMarker(this.base.dir)
+    this.base.read((db) => {
+      verifySnapshotForPublish(db, marker, this.base.schemaVersion, this.base.schemaHash)
+    })
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const out = withLock(
         this.base.publishLock,

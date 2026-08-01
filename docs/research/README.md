@@ -16,7 +16,13 @@ The report distinguishes point-in-time ecosystem observations from current proje
 decisions. For current behavior, read it with the [design](../fsqlite-design.md) and the
 normative [format specification](../fsql-format-spec.md).
 
-Two focused evidence records complement the report:
+The focused
+[Schema Evolution and Workload Fit](research-2026-08-01-schema-evolution-and-workload-fit.md)
+assessment checks the current alpha against the complete design review.
+It gives schema lifecycle rules, local performance measurements, severity, adoption
+guidance, and reconsideration triggers.
+
+Two source evidence records complement those reports:
 
 - [Upstream Source Confirmations](../upstream-source-confirmations.md) records pinned
   public source locations for SQLite and Node behavior

@@ -137,6 +137,9 @@ Requirements:
   the fsqlite format and MUST NOT be caller-configurable; it lets foreign tools identify
   an fsqlite snapshot.
   The user version remains caller-owned schema metadata.
+  `schema_version` MUST be an integer from 0 through 2,147,483,647. An implementation
+  MUST reject another value before creating a marker, directory, transient, or snapshot;
+  it MUST NOT rely on SQLite to coerce the value.
 
 - **S3.** It MUST contain the two reserved tables, copied forward into every successor
   snapshot:
@@ -153,9 +156,12 @@ Requirements:
   ```
 
   Defined `fsqlite_meta` keys: `schema_hash` (first 16 lowercase-hex characters of the
-  SHA-256 of the caller’s schema DDL string, UTF-8), `tool_version` (informational),
-  `format_version` (this document’s version, currently `'f1.0'`), and `store_id`
-  (matching `fsqlite.json`). Implementations MUST ignore unknown keys.
+  SHA-256 of the exact UTF-8 bytes of the caller-supplied schema DDL string),
+  `tool_version` (informational), `format_version` (this document’s version, currently
+  `'f1.0'`), and `store_id` (matching `fsqlite.json`). Implementations MUST ignore
+  unknown keys. `schema_hash` is a conservative identity token.
+  Implementations MUST NOT canonicalize SQL before hashing it or treat the token as an
+  independent proof of the effective `sqlite_schema` contents.
   The table and all defined keys are required.
 
   The reserved tables MUST have exactly the columns, declared types, non-null rules, and
@@ -188,8 +194,16 @@ transient, rename into place, and then publish the pointer so concurrent initial
 converge on one snapshot 0. After init (and on every reopen), an implementation MUST
 verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
 equals its `schema_version`, `application_id` equals `0x4653514C`, and
-`fsqlite_meta.schema_hash` equals the hash of its own DDL. The last check rejects a
-*divergent schema at the same version*, which the integer alone cannot catch.
+`fsqlite_meta.schema_hash` equals the hash of its exact supplied DDL string.
+The last check rejects a *divergent schema at the same version*, which the integer alone
+cannot catch.
+
+An application using the caller schema MUST complete `init` before ordinary reads and
+writes. Writer and reconciler implementations MUST also repeat the configured-schema
+compatibility check before capturing, moving, quarantining, or publishing work, so a
+handle that skipped `init` cannot mutate the store under the wrong schema identity.
+Schema-agnostic readers and operator tools MAY inspect supported on-disk identity
+without the caller DDL.
 
 ## 4. The `current` Pointer
 
@@ -239,7 +253,8 @@ chronological.
 
 **Writer protocol** (all steps lock-free):
 
-1. **W1.** Validate the writer id against the regex above.
+1. **W1.** Validate the writer id against the regex above and verify the configured
+   caller-schema identity against the published snapshot.
 2. **W2.** Read `current` → base; copy the immutable base snapshot to a private
    `.work-*` transient under `tx/pending/`. The callback MUST observe the same data and
    declared constraints its changeset is based on.
@@ -275,6 +290,8 @@ order, §5), so any two reconcilers folding the same tail build equivalent snaps
 Protocol:
 
 1. **F1.** Read `current` → base.
+   Verify that the reconciler’s configured caller-schema identity matches the published
+   snapshot before it moves or classifies any envelope.
    List committed envelopes (dirs `*.txn` containing `COMMITTED`), sorted
    lexicographically. If none: done.
 2. **F2.** Copy the base snapshot to a `.build-*` transient.
@@ -332,7 +349,10 @@ resolves cross-version merges; the base does not pin them.
 **Per-table merge policy.** A policy maps each table name to an action, with `'*'` as
 the default for unlisted tables.
 The default `'*'` action MUST be `strict`, so an unconfigured table never silently picks
-a winner.
+a winner. Conflict policy is not stamped in the `f1.0` marker, snapshot, or envelope.
+All reconcilers participating in one caller-schema epoch MUST use the same effective
+policy. A future caller-schema migration that changes tables or constraints MUST define
+the corresponding policy transition.
 
 | Action (aliases) | On a replaceable DATA or CONFLICT conflict |
 | --- | --- |
@@ -420,6 +440,9 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   heartbeat by touching the file.
   GC MAY treat leases older than its staleness window (Node default 60 s) as abandoned
   and delete them.
+- A conforming `seal` or equivalent export that reads a selected snapshot while GC may
+  run MUST hold a read lease for that version until the standalone artifact is complete
+  and validated.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
 - **G2.** GC MUST re-scan the lease directory **immediately before each individual
@@ -468,6 +491,13 @@ The required barriers:
 | Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
+
+File and directory fsync barriers in this table are required, not best effort.
+If opening or fsyncing a required directory fails, initialization or publication MUST
+fail loudly and MUST NOT report a power-loss-durable success.
+A capability probe used to declare a target safe MUST include directory fsync.
+A platform or filesystem without that capability is unsupported for `f1.0` mutation
+rather than silently downgraded.
 
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss
@@ -560,9 +590,14 @@ unpublished work. Repair also MUST NOT modify any snapshot in place.
   An incompatible layout or protocol increments the major component.
   Package versions and format versions never imply one another.
 - **`schema_version`** (`PRAGMA user_version`) and **`schema_hash`** version the
-  *caller’s* schema. Same version and same hash → compatible; same version and different
-  hash → reject at open, quarantine at reconcile; different version → reject/quarantine
-  (until a future caller-schema migration protocol defines an upgrade path).
+  *caller’s* schema. Together they are one immutable `f1.0` schema identity.
+  Same version and same hash → compatible; same version and different hash → reject at
+  open, quarantine a foreign envelope at reconcile; different version → reject or
+  quarantine. Incrementing `schema_version` does not migrate a store.
+  No normal `f1.0` operation changes either token on an existing store.
+  A future caller-schema migration protocol must define writer admission, treatment of
+  old pending envelopes, deterministic DDL and data transformation, conflict-policy
+  transition, validation, crash recovery, rollback, and cutover.
 - **Unknown manifest fields and unknown `fsqlite_meta` keys MUST be ignored.** They are
   the forward-compatibility channel.
 - The changeset payload format is owned by SQLite’s session extension and versioned by
@@ -596,7 +631,7 @@ upgrade implementation is post-alpha work.
   read batch); a snapshot already open stays consistent forever (immutability).
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
-**Writer**: W1-W4, S3-S4 callback and schema validation, the compatibility check of §3,
+**Writer**: W1-W4, S2-S4 callback and schema validation, the compatibility check of §3,
 and a session-capable SQLite build (or the DirectStore strategy, §9).
 
 **Reconciler**: F1-F6, the policy semantics of §6, L1-L5, and the §12 quarantine rules.

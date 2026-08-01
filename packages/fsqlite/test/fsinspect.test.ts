@@ -50,7 +50,13 @@ test('inspect returns a structured report with all probes', async () => {
 test('local temp disk passes every required coordination probe', async () => {
   await withTmp((dir) => {
     const r = inspect(dir)
-    for (const k of ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen'] as const) {
+    for (const k of [
+      'mkdirAtomic',
+      'renameReplace',
+      'exclusiveCreate',
+      'closeToOpen',
+      'fsyncDir',
+    ] as const) {
       assert.ok(r.probes[k].ok, `expected ${k} ok on local disk: ${r.probes[k].error ?? ''}`)
     }
     assert.equal(r.verdict.fsqliteSafe, true)

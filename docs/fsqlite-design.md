@@ -9,7 +9,9 @@ design deliberately stops.
 The [QA runbook](qa-runbook.md) maps those claims to evidence.
 The dated [research report](research/research-2026-06-06-portable-concurrent-sqlite.md)
 records prior art, source analysis, and experiments, but does not define current
-behavior.
+behavior. The focused
+[schema evolution and workload assessment](research/research-2026-08-01-schema-evolution-and-workload-fit.md)
+calibrates the alpha against the complete PR review and current measurements.
 
 ## The Problem
 
@@ -58,15 +60,15 @@ of the promise.
 | --- | --- | --- | --- | --- |
 | `C1` | Published data stays portable and tool-readable. | Every head is a complete SQLite file. Readers need no fsqlite extension. | The live store is a directory, not one mutable database file. | Spec S1-S6; `portability.test.ts`; QA B4 |
 | `C2` | Ordinary operation needs no server or background service. | Processes coordinate through immutable files, envelopes, atomic rename, and a `mkdir` lease. | Applications schedule reconciliation themselves. | Spec F1-F6 and L1-L5; multiprocess suites |
-| `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, visibility after close, and durable fsync ordering. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
+| `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, visibility after close, and durable fsync ordering. Publication fails if a required directory fsync is unavailable. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
 | `C4` | Readers stay lock-free and independent writers can capture work concurrently. | Readers open immutable heads. `SnapshotStore` writers create unique transaction envelopes without the publish lease. | Cross-writer visibility occurs only after reconcile. | Spec W1-W4 and reader role; `concurrent.test.ts` |
 | `C5` | A crash cannot destroy a previously published state. | Immutable snapshots, durable snapshot-before-pointer ordering, atomic pointer replacement, fencing, OCC on `current`, and the in-snapshot ledger define one commit point. | Accepted envelopes are not power-loss durable until publication. Arbitrary recursive copies of a live store are outside the guarantee. | Spec R1, P1-P3, F5, and section 10; crash, kill, and fencing suites |
 | `C6` | Detectable inconsistencies fail closed and repair never guesses. | Recognition separates absent, invalid, unsupported, and corrupt stores. Identity, digests, integrity, foreign keys, reserved tables, and schema compatibility are checked before destructive work or publication. | Undetectable hardware or protocol-bypassing corruption remains possible. Repair needs a verified clean recovery point. | Spec R2 and section 11; hardening, store-format, and repair suites |
 | `C7` | Merge results are deterministic, exactly once, and closed over declared SQLite constraints. | Envelopes apply in byte-sorted order; action passes are fixed as `replace`, `omit`, `strict`; data and ledger entry share one transaction; nonreplaceable conflicts quarantine the complete envelope; foreign keys are checked at envelope boundaries. | Same-primary-key DATA/CONFLICT cases still require an application policy. General business invariants need stronger patterns. | Spec F1-F6 and merge policy; `merge-constraints.test.ts` |
-| `C8` | A store and its evolution are self-identifying. | Root `fsqlite.json`, UUID `store_id`, format string `f1.0`, required features, snapshot metadata, and SQLite application ID cross-check one another. | Unknown required features and unsupported versions block mutation. Upgrades are explicit and side by side. | Spec M1-M5 and section 12; `store-format.test.ts` |
+| `C8` | A store and its evolution are self-identifying. | Root `fsqlite.json`, UUID `store_id`, format string `f1.0`, required features, snapshot metadata, SQLite application ID, and caller-schema identity cross-check one another. | Unknown features, unsupported versions, and a different caller-schema token block mutation. Format and schema migrations are separate explicit operations. | Spec M1-M5 and section 12; `store-format.test.ts`; `init.test.ts` |
 | `C9` | The writable surface has an explicit cooperative trust boundary. | Writers use fsqlite APIs, callbacks cannot mutate fsqlite-owned rows, persistent or temporary SQLite schema state, or format identity state, and candidate snapshots are revalidated before publish. Runtime capabilities are probed rather than assumed. | A process with direct filesystem access can still violate the protocol. Callback functions that may be retried must not perform unrecoverable external side effects. | Spec S2-S4 and roles; direct, store-format, and capability suites |
 | `C10` | Consistency claims must be precise. | Reads are snapshot-isolated by published version. Merge is optimistic write-set reconciliation with per-table same-row policy. `DirectStore` serializes its write transaction. | `SnapshotStore` is not serializable and does not validate general read sets, ranges, predicates, or aggregates. | `retry.test.ts`; research Finding K |
-| `C11` | The format must be operable and recoverable without application schema code. | The CLI recognizes, validates, repairs, seals, collects, and diagnoses stores. Read leases pin snapshots during long reads or exports. | Staleness uses clocks and mtime, so tuning affects liveness. | Spec RL1-RL2, G1-G3, and section 11; CLI goldens and GC/lease suites |
+| `C11` | The format must be operable and recoverable without application schema code. | The CLI recognizes, validates, repairs, seals, collects, and diagnoses stores. Read leases pin snapshots during long reads or exports; `seal()` acquires one internally. | Staleness uses clocks and mtime, so tuning affects liveness. | Spec RL1-RL2, G1-G3, and section 11; CLI goldens and GC/lease suites |
 | `C12` | The reference package must remain easy to audit and adopt. | It uses `node:sqlite`, has zero runtime dependencies and no install scripts, retains `node:test`, and publishes a schema-agnostic CLI. | Snapshot writers require the SQLite session extension and the documented Node range. | Package smoke, minimum-Node CI, lint, typecheck, and supply-chain gate |
 
 ## Architecture
@@ -126,12 +128,21 @@ can reject an entire envelope across keys or tables.
 DDL is not a transaction-envelope operation.
 Callbacks that change the SQLite schema, `application_id`, `user_version`, or
 fsqlite-owned tables fail.
-Change application schemas through a future explicit schema-migration protocol, not a
-write callback. Virtual tables are not part of the `f1.0` writable schema contract
-because SQLite sessions do not capture them and their shadow tables do not satisfy the
-caller-table primary-key rule.
-Treat search indexes and similar structures as rebuildable projections outside the
-concurrent envelope path.
+The caller schema is one immutable compatibility epoch in `f1.0`. Changing
+`schemaVersion` makes a handle incompatible; it does not migrate the store.
+Application write and reconcile paths verify the configured exact schema identity before
+they capture, move, or publish work, even if a caller skipped `init()`. Change
+application schemas through a future explicit schema-migration protocol, not a version
+bump or write callback.
+
+Conflict policy is deployment configuration rather than stamped store metadata.
+Every reconciler for one schema epoch must therefore use the same policy.
+A future schema migration must define how policy changes with tables and constraints.
+
+Virtual tables are not part of the `f1.0` writable schema contract because SQLite
+sessions do not capture them and their shadow tables do not satisfy the caller-table
+primary-key rule. Treat search indexes and similar structures as rebuildable projections
+outside the concurrent envelope path.
 
 ## Two Write Strategies
 
@@ -183,13 +194,60 @@ Periodic heartbeat support for long synchronous critical sections remains tracke
 ### Snapshot size
 
 SnapshotStore writer capture is O(snapshot size) because it copies the current head.
-A reviewer-local benchmark with 2 KB rows measured 11.8 ms per write at 2.0 MiB and
-183.6 ms at 78.8 MiB, about 2.3 ms per MiB. A linear 1 GiB extrapolation is roughly 2.4
-seconds for one single-row write.
-These are hardware-specific sizing observations, not a performance guarantee.
+Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2 ms
+for a 2.0 MiB head and 163.8 to 164.6 ms for a 21.7 MiB head.
+A separate reviewer run measured 11.8 ms at 2.0 MiB and 183.6 ms at 78.8 MiB. The
+algorithm has a linear copy floor, but the measurements do not establish a portable rate
+or justify a GiB extrapolation.
+
+Table count is a secondary input, not the main scaling law.
+Session setup and callback-boundary checks visit schema objects, and every table
+consumes some SQLite pages, but data and indexes usually dominate snapshot bytes.
+Two local calibration runs from 1 to 250 empty caller tables increased median capture
+from about 2.5 ms to about 16.3 ms while the snapshot itself grew from 28 KiB to 2.0
+MiB. Intermediate and tail timings were noisy, so this does not establish an independent
+linear table-count law.
 
 Measure the target workload before adopting SnapshotStore for a large database.
 Safe copy-on-write, overlay, shared-base, and compaction designs remain on the roadmap.
+The
+[workload assessment](research/research-2026-08-01-schema-evolution-and-workload-fit.md)
+records the measurement method and limits.
+
+### Capacity and Cadence
+
+Snapshot bytes determine the full-copy and integrity-check floor.
+Pending envelope count and bytes determine sorting, hashing, apply, and archive work.
+The lifetime `applied_tx` count adds another growing term because reconcile loads the
+complete ledger into memory and every later snapshot carries it.
+
+Lock-free capture permits concurrent agents, but `W` in-flight writers can require about
+`W` working copies of the head.
+A reconcile build, retained predecessors, active read leases, envelopes, and quarantine
+evidence add to peak disk use.
+
+Batching several envelopes into one reconcile amortizes the build copy, integrity gate,
+fsync, and pointer publication.
+It does not amortize each writer’s seed copy.
+Reconcile after every small write only when the immediate visibility or durability
+boundary is worth both full-copy paths.
+
+### Workload Fit
+
+The natural alpha workload is a few to a few dozen cooperative local agents, short data
+callbacks, a single-digit-MiB head, occasional writes, and batched reconciliation.
+A handful of agents against a head in the low tens of MiB can fit when background
+latency is acceptable, but it requires workload-specific measurement.
+In the maintained calibration, eight processes issuing 40 total writes against 21.7 MiB
+took 8.4 to 8.9 seconds including process startup.
+At 50 to 100 MiB, frequent capture or reconcile-after-write is a conditional to poor fit
+and needs capacity monitoring.
+Hundreds of MiB to GiB heads with frequent small writes, immediate global visibility, or
+high sustained transaction rates are poor default fits.
+
+This boundary does not make the architecture less useful in its intended lane.
+It makes fsqlite a coordination format for compact local state, not a replacement for a
+general database service.
 
 ### Filesystems
 
@@ -197,15 +255,18 @@ The protocol requires correct exclusive directory creation, atomic rename-replac
 close-to-open visibility, and fsync behavior.
 `fsinspect` probes these properties from one host, and local multiprocess tests simulate
 network-shaped visibility.
-Neither is a substitute for the pending two-host NFS/SMB gate.
+Directory fsync is part of the safe verdict and publication fails closed when it is
+unavailable. Neither is a substitute for the pending two-host NFS/SMB gate.
 The alpha is a protocol design and reference implementation, not universal certification
 of shared filesystems.
+Consumer synchronization folders are not conforming shared filesystems.
 
 ### Backup and copying
 
 Published snapshots are immutable.
 A reader can pin one with `readLease()` and copy that file safely.
-`seal()` and the backup helpers create integrity-checked standalone SQLite artifacts.
+`seal()` pins its selected source snapshot with an internal read lease and creates an
+integrity-checked standalone SQLite artifact.
 
 An arbitrary recursive copy of a live store is not a supported backup API. Such a copy
 may include recoverable transients, but fsqlite does not promise that arbitrary
@@ -233,6 +294,18 @@ Snapshots and envelopes repeat format and store identity.
 Snapshot files also carry the fixed SQLite `application_id` `0x4653514C` (`FSQL`). The
 caller owns `PRAGMA user_version` and the stamped schema hash.
 
+Those caller fields form one immutable schema identity for an `f1.0` store:
+
+- `schemaVersion` is an integer from 0 through 2,147,483,647 and is stored as
+  `user_version`;
+- `schemaHash` is the first 16 lowercase hexadecimal characters of SHA-256 over the
+  exact UTF-8 schema string supplied at initialization;
+- exact equality of both tokens is required for application mutation and reconciliation.
+
+The hash is deliberately sensitive to whitespace, comments, order, and other textually
+different but possibly equivalent DDL. It is an identity token, not canonical SQL and
+not a standalone tamper detector.
+
 The version grammar is `f<major>.<minor>`. Major versions are incompatible.
 Minor versions are additive only when an implementation explicitly declares
 compatibility.
@@ -242,7 +315,10 @@ being misclassified as corruption.
 Opening a store never migrates it.
 Whole-format upgrades are explicit and side by side: pin and validate the source, build
 and validate a destination, preserve `store_id`, keep the source untouched, then let the
-operator cut over. Caller-schema migration is a separate protocol.
+operator cut over.
+Caller-schema migration is a separate protocol that must define writer
+admission, old pending-envelope handling, deterministic DDL and data transformation,
+constraint and policy validation, crash recovery, rollback, and cutover.
 
 ## Trust Boundary
 
@@ -251,6 +327,8 @@ can detect. It does not sandbox a process that owns the files.
 
 Conforming participants must:
 
+- call `init()` on application handles before ordinary reads and writes so creation and
+  schema compatibility are explicit;
 - treat published snapshots, the marker, pointer, envelopes, leases, and reserved tables
   as fsqlite-owned;
 - open published snapshots read-only;

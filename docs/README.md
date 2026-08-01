@@ -11,6 +11,7 @@ basis, and track validation and future work.
 | --- | --- | --- |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
 | Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | System constraints, rationale, strategy choice, trust boundary, operating envelope, and tradeoffs |
+| Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Current design-review dispositions, measurements, severity, and adoption boundaries |
 | Review the evidence and alternatives | [Portable Concurrent SQLite Research](research/README.md) | Technical research on SQLite sessions, coordination, filesystems, bindings, prior art, and validation gaps |
 | Reproduce source-level SQLite and Node claims | [Upstream Source Confirmations](upstream-source-confirmations.md) | Pinned public sources and file-level evidence |
 | Verify the SQLite file identifier | [Application ID](application-id.md) | Selection and registry status of the fixed `FSQL` application ID |

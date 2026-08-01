@@ -31,6 +31,11 @@ remain disclosed. The system constraints and operating boundaries are in
 - Snapshots and transaction manifests repeat the format version and store identity.
 - Snapshot SQLite files use the fixed fsqlite `application_id`; callers own
   `PRAGMA user_version` and `schema_hash`.
+- In `f1.0`, `schema_version` and the exact-DDL `schema_hash` form one immutable
+  caller-schema identity.
+  A version bump rejects an existing store; it does not migrate it.
+- Conflict policy is deployment configuration rather than stamped metadata.
+  Every reconciler in one caller-schema epoch must use the same effective policy.
 - Unknown optional metadata is ignored.
   Unknown required features and unsupported versions block operation without repair or
   mutation.
@@ -63,6 +68,8 @@ remain disclosed. The system constraints and operating boundaries are in
 | `fsq-gv1o` | Future `base_version` staleness semantics |
 | `fsq-39gh` | DirectStore rollback-journal variant measurements |
 | `fsq-fp06` | Writer seeding and snapshot-compaction optimization |
+| `fsq-bllj` | Applied transaction ledger checkpointing and bounds |
+| `fsq-3a09` | Capacity and reconciliation backlog observability |
 | `fsq-x5k5` | Replay-based bit-rot recovery research |
 | `fsq-a0ct` | SQLite URI and store-path portability validation |
 | `fsq-ffdq` | Heartbeat or critical-section redesign for long publish-lock operations |
@@ -88,6 +95,8 @@ remain disclosed. The system constraints and operating boundaries are in
 - Specify an optional durable-envelope receipt mode for callers that need accepted
   writes to survive power loss before reconcile.
 - Expand `fsinspect` with evidence-based shared-filesystem and cloud-sync diagnostics.
+- Keep consumer synchronization folders outside the shared-filesystem support claim
+  unless a separate replication and consistency protocol is defined and tested.
 - Use the shared-filesystem evidence to decide whether a monotonic fence or a
   single-host proxy-lock gate is warranted.
 - Measure `DELETE`, `TRUNCATE`, and `PERSIST` rollback-journal variants for DirectStore,
@@ -112,10 +121,13 @@ remain disclosed. The system constraints and operating boundaries are in
 - Validate SQLite URI modes and store paths containing symlinks, spaces, Unicode,
   Windows drive paths, and UNC paths.
 
-### Schema and Isolation Evolution
+### Schema, Isolation, and Scale Evolution
 
 - Specify deterministic caller-schema migration across immutable snapshot generations,
-  with quarantine rules for writers on the wrong schema.
+  with writer admission and quarantine rules for participants on the wrong schema.
+- Define quiescence or fencing, handling of old committed envelopes, deterministic DDL
+  and data transformation, constraint validation, conflict-policy transition, atomic
+  cutover, interruption recovery, rollback, and old-writer behavior.
 - Design declared read-set validation for point-key invariants.
 - Require version-stamped guard rows or DirectStore for range, predicate, and aggregate
   invariants that cannot be made safe by a declared point-key read set.
@@ -126,6 +138,13 @@ remain disclosed. The system constraints and operating boundaries are in
 - Remove redundant identity reads only after preserving fail-closed behavior across
   marker replacement and mixed-store tests.
 - Measure explicit snapshot compaction and retention for large stores.
+- Design a crash-safe checkpoint for `applied_tx`. It must preserve exactly-once
+  behavior if an old archived or copied envelope reappears, and it must define repair
+  and format compatibility.
+- Extend `stats` with current snapshot bytes, retained and leased bytes, pending
+  envelope count and bytes, quarantine count and bytes, applied-ledger count, and
+  reconcile duration. Keep thresholds workload-specific rather than encoding one
+  universal limit.
 
 ## Dependency Shape
 
@@ -139,6 +158,8 @@ remain disclosed. The system constraints and operating boundaries are in
    API settles.
 6. Performance and recovery investigations begin from conformance fixtures so an
    optimization or repair proposal cannot silently redefine the format.
+7. Ledger checkpointing depends on conformance fixtures that replay old envelopes and
+   interrupt every checkpoint boundary.
 
 ## Validation
 
@@ -153,6 +174,11 @@ remain disclosed. The system constraints and operating boundaries are in
 - Windows tests race publishers through the actual replace primitive.
 - Path tests cover URI handling, symlinks, spaces, Unicode, drive-letter paths, and UNC
   paths without conflating path normalization with store identity.
+- Caller-schema migration tests cover old pending envelopes, old writers after cutover,
+  policy transition, deterministic data transformation, rollback, and every crash
+  boundary.
+- Performance work records snapshot bytes, pending count and bytes, ledger count,
+  retained bytes, writer concurrency, and reconcile cadence with every result.
 
 ## Non-Goals
 

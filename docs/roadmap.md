@@ -12,7 +12,9 @@ stable release, not a promise that unsupported environments work today.
 - Build a verifier independent of the Node implementation.
 - Specify explicit side-by-side whole-format upgrades that preserve `store_id`, validate
   the destination, and leave the source untouched until cutover.
-- Separate caller-schema migration from fsqlite directory-format migration.
+- Specify caller-schema migration separately from fsqlite directory-format migration.
+  Cover writer admission, old pending envelopes, deterministic DDL and data transforms,
+  conflict-policy transition, validation, interruption recovery, rollback, and cutover.
 - Settle whether envelope `base_version` remains provenance or gains staleness rules.
 
 ### Shared Filesystems and Durability
@@ -25,6 +27,8 @@ stable release, not a promise that unsupported environments work today.
 - Design an optional durable-envelope receipt mode for writes that must survive power
   loss before reconcile.
 - Expand `fsinspect` from single-host heuristics using evidence from those gates.
+- Keep consumer synchronization folders outside the supported shared-filesystem model
+  unless a separate replication and consistency protocol is validated.
 - Decide from the evidence whether a monotonic fence or single-host proxy lock is
   necessary.
 - Add a heartbeat or shorter optimistic critical section for DirectStore and repair so
@@ -53,6 +57,10 @@ stable release, not a promise that unsupported environments work today.
   that preserves the callback’s observed data and constraints for large stores.
 - Measure explicit snapshot compaction and retention without weakening immutable
   publication.
+- Design a crash-safe checkpoint for the lifetime `applied_tx` ledger so reconcile time,
+  memory, and snapshot bytes do not grow without bound.
+- Expose snapshot, retention, lease, pending-envelope, quarantine, and ledger capacity
+  metrics so operators can measure the variables that drive cost.
 - Research replay-based bit-rot recovery while keeping repair non-destructive and
   fail-closed.
 

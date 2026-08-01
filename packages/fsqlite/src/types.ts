@@ -24,9 +24,17 @@ export type NormalizedPolicy = Record<string, 'replace' | 'omit' | 'strict'>
 export interface StoreOptions {
   /** Caller DDL applied to snapshot 0. Every table must have a NON-NULL primary key. */
   schema?: string
-  /** Bumped when `schema` changes incompatibly; stamped as `user_version` and on envelopes. */
+  /**
+   * Immutable caller-schema identity for this store epoch, stamped as `user_version` and
+   * on envelopes. Must be an integer from 0 through 2,147,483,647. Changing it does not
+   * migrate an existing store; a different value is incompatible until an explicit future
+   * migration protocol is used.
+   */
   schemaVersion?: number
-  /** Per-table merge policy (table to action, `'*'` the default); see {@link ConflictPolicyInput}. */
+  /**
+   * Per-table merge policy (table to action, `'*'` the default). Every reconciler for one
+   * store epoch must use the same effective policy; see {@link ConflictPolicyInput}.
+   */
   conflictPolicy?: ConflictPolicyInput
   /** Free-form writer/tool version recorded on each envelope for provenance. */
   toolVersion?: string

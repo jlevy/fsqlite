@@ -31,18 +31,11 @@ export function fsyncPath(p: string): void {
   afterFsyncPathHook?.(p)
 }
 
-/** fsync a directory so a rename into it survives power loss. A no-op where unsupported. */
+/** fsync a directory so a rename into it survives power loss. Fails if unsupported. */
 export function fsyncDir(p: string): void {
-  let fd: number
-  try {
-    fd = openSync(p, 'r')
-  } catch {
-    return // directory fsync is not available on every platform/filesystem
-  }
+  const fd = openSync(p, 'r')
   try {
     fsyncSync(fd)
-  } catch {
-    /* ignore: best-effort durability barrier */
   } finally {
     closeSync(fd)
   }

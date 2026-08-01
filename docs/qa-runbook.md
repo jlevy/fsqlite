@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **121 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **127 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -37,8 +37,8 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 
 | Suite | Constraints | Guarantee it protects |
 | --- | --- | --- |
-| `unit.test.ts` | `C5-C7` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, schema, quarantine-write, NOTFOUND quarantine, validation-state, and envelope-size handling |
-| `init.test.ts` | `C6-C8` | Non-null primary-key contract; schema-version and schema-hash compatibility; fenced racing first-open |
+| `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, wrong-schema admission, quarantine-write, NOTFOUND quarantine, validation-state, envelope-size handling, and seal/GC pinning |
+| `init.test.ts` | `C6-C8` | Non-null primary-key contract; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open |
 | `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, and read-lease protection from concurrent GC |
 | `concurrent.test.ts` | `C2-C5`, `C7` | Real multiprocess writers, zero loss under contention, exactly-once racing reconcile, and torn-read-free readers |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
@@ -50,12 +50,13 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
-| `direct.test.ts` | `C5`, `C9`, `C10` | DirectStore publication, format interoperability, retry fencing, callback boundary, and owned-metadata protection |
+| `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
 | `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes plus integrity-clean online backup |
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states, feature/version gating, marker fencing, and mixed-store quarantine |
-| `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, and WAL negative control |
+| `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required directory fsync, and WAL negative control |
+| `fsutil.test.ts` | `C3`, `C5` | Pointer-temp cleanup and fail-closed directory fsync behavior |
 
 ### Multiprocess Worker Harness (`workers/`)
 
@@ -93,7 +94,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 121` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 127` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -254,9 +255,9 @@ use.
    A multi-host soak on a real NFS, SMB, or EFS mount is **deferred**. **Manual check:**
    run B9 against the target filesystem and confirm `fsqlite-safe`.
 2. **Power-Loss Durability.** Publication uses fsync barriers for the snapshot, pointer,
-   and their directories, but there is **no fault-injected block-device test**
-   simulating real power loss in CI. **Manual check:** reason about B7 (process-crash)
-   as the closest reproducible proxy.
+   and their directories, and a missing directory fsync capability fails closed.
+   There is **no fault-injected block-device test** simulating real power loss in CI.
+   **Manual check:** reason about B7 (process-crash) as the closest reproducible proxy.
 3. **Cross-Language Writers.** Readers work across bindings; non-Node *writers*
    (Python/APSW and Rust/rusqlite) against the format are **future work**. **Manual
    check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.
@@ -271,9 +272,17 @@ use.
    future gates. **Manual check:** do not extend the support claim beyond the published
    package runtime and platform statement.
 6. **Large Stores.** SnapshotStore capture copies the complete head for every write.
-   **Manual check:** benchmark the target snapshot size and workload.
+   **Manual check:** benchmark snapshot bytes, pending count and bytes, writer
+   concurrency, reconciliation cadence, retained and leased bytes, free space, and
+   lifetime `applied_tx` count for the target workload.
+   Start with `pnpm -F fsqlite benchmark:seed` and
+   `pnpm -F fsqlite benchmark:workload-fit`; both emit their method, environment, and
+   measurements as JSON and intentionally remain outside the correctness gate.
    Any alternative seed protocol must preserve the callback’s read base and reject
    unsupported mutations.
+7. **Caller-Schema Migration.** `f1.0` rejects a different schema identity but does not
+   migrate it. **Manual check:** deploy one exact schema and conflict policy per store
+   epoch. Do not increment `schemaVersion` expecting an automatic upgrade.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

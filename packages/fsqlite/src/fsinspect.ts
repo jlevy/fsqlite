@@ -302,12 +302,14 @@ function probeHardlink(scratch: string): ProbeResult {
 function probeFsyncDir(scratch: string): ProbeResult {
   try {
     const fd = openSync(scratch, 'r')
-    fsyncSync(fd)
-    closeSync(fd)
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
     return ok()
   } catch (e) {
-    // Some platforms (Windows) reject directory fsync; not fatal for fsqlite.
-    return fail(e, { fatal: false })
+    return fail(e)
   }
 }
 
@@ -358,8 +360,14 @@ export function inspect(dir: string): InspectReport {
       fsyncDir: probeFsyncDir(scratch),
       walViable: probeWalViable(scratch),
     }
-    // fsqlite needs the coordination primitives but does not need WAL or hard links.
-    const required = ['mkdirAtomic', 'renameReplace', 'exclusiveCreate', 'closeToOpen'] as const
+    // fsqlite needs the coordination and durability primitives but not WAL or hard links.
+    const required = [
+      'mkdirAtomic',
+      'renameReplace',
+      'exclusiveCreate',
+      'closeToOpen',
+      'fsyncDir',
+    ] as const
     const missing = required.filter((k) => !probes[k].ok)
     const verdict = {
       fsqliteSafe: missing.length === 0,

@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
@@ -48,6 +48,48 @@ test('init rejects reopening a store with an incompatible schema version', () =>
   }
 })
 
+test('schemaVersion rejects values SQLite cannot preserve before touching the store path', () => {
+  const { dir, cleanup } = tmpStore()
+  const schema = 'CREATE TABLE t (k TEXT PRIMARY KEY NOT NULL);'
+  const invalid = [1.5, -1, 2_147_483_648, NaN, Infinity, '1', null]
+  try {
+    for (const [index, schemaVersion] of invalid.entries()) {
+      const storeDir = join(dir, `invalid-${index}`)
+      assert.throws(
+        () =>
+          new SnapshotStore(storeDir, {
+            schema,
+            schemaVersion: schemaVersion as number,
+          }).init(),
+        /schemaVersion.*integer between 0 and 2147483647/i,
+      )
+      assert.equal(existsSync(storeDir), false, 'validation must precede filesystem mutation')
+    }
+  } finally {
+    cleanup()
+  }
+})
+
+test('schemaVersion preserves both ends of the supported fsqlite range', () => {
+  const { dir, cleanup } = tmpStore()
+  const schema = 'CREATE TABLE t (k TEXT PRIMARY KEY NOT NULL);'
+  try {
+    for (const schemaVersion of [0, 2_147_483_647]) {
+      const storeDir = join(dir, `valid-${schemaVersion}`)
+      const store = new SnapshotStore(storeDir, { schema, schemaVersion }).init()
+      assert.equal(
+        store.read(
+          (db) =>
+            (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+        ),
+        schemaVersion,
+      )
+    }
+  } finally {
+    cleanup()
+  }
+})
+
 test('init rejects reopening a store with a divergent schema at the SAME version', () => {
   const { dir, cleanup } = tmpStore()
   try {
@@ -62,7 +104,7 @@ test('init rejects reopening a store with a divergent schema at the SAME version
           schemaVersion: 1,
         }).init(),
       /schema is incompatible|schema_hash/i,
-      'a changed DDL without a schemaVersion bump must be rejected, not silently accepted',
+      'changed exact DDL at the same schemaVersion must be rejected, not silently accepted',
     )
     // Reopening with the original DDL still succeeds (the hash matches).
     assert.doesNotThrow(

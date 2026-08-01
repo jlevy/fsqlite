@@ -357,7 +357,7 @@ test('changeset data rolls back when its applied_tx ledger insert fails', () => 
   }
 })
 
-test('an envelope written under a divergent schema (same version) is quarantined by schema_hash', () => {
+test('a writer handle with divergent schema is rejected before it captures an envelope', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
@@ -365,13 +365,35 @@ test('an envelope written under a divergent schema (same version) is quarantined
       ...STORE_OPTS,
       schema: (STORE_OPTS.schema ?? '') + '\nCREATE TABLE extra (z TEXT PRIMARY KEY NOT NULL);',
     })
-    rogue.write('rogue', (db) => {
+    assert.throws(
+      () =>
+        rogue.write('rogue', (db) => {
+          db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+        }),
+      /schema is incompatible|schema_hash/i,
+    )
+    assert.equal(store.pendingTxns().length, 0)
+    assert.equal(count(store, 'artifacts'), 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a reconciler handle with divergent schema leaves compatible pending work untouched', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    store.write('good', (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
     })
-    const res = store.reconcile()
-    assert.equal(res.applied, 0)
-    assert.equal(res.quarantined, 1)
-    assert.equal(count(store, 'artifacts'), 0)
+    const rogue = new SnapshotStore(dir, {
+      ...STORE_OPTS,
+      schema: (STORE_OPTS.schema ?? '') + '\nCREATE TABLE extra (z TEXT PRIMARY KEY NOT NULL);',
+    })
+    assert.throws(() => rogue.reconcile(), /schema is incompatible|schema_hash/i)
+    assert.equal(store.pendingTxns().length, 1)
+    assert.equal(store.reconcile().applied, 1)
+    assert.equal(count(store, 'artifacts'), 1)
   } finally {
     cleanup()
   }
@@ -408,6 +430,62 @@ test('seal produces a clean single-file snapshot that passes integrity_check', (
       !existsSync(out + '-wal') && !existsSync(out + '-shm'),
       'no live side files in a sealed file',
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('seal pins its selected snapshot against concurrent aggressive gc', () => {
+  const { store, dir, cleanup } = freshStore()
+  try {
+    store.write('A', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    store.reconcile()
+    const selectedVersion = store.currentVersion()
+    const selectedPath = store.snapshotPath(selectedVersion)
+    const acquireLease = store.readLease.bind(store)
+    let leaseCalls = 0
+    let released = false
+    store.readLease = () => {
+      leaseCalls++
+      const lease = acquireLease()
+      store.write('B', (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('b', 'B', 't')
+      })
+      store.reconcile()
+      store.gc({ retain: 0 })
+      assert.equal(
+        existsSync(selectedPath),
+        true,
+        'the internal lease must keep the selected source available',
+      )
+      return {
+        ...lease,
+        release: () => {
+          lease.release()
+          released = true
+        },
+      }
+    }
+
+    const out = join(dir, 'sealed-pinned.sqlite')
+    store.seal(out)
+    assert.equal(leaseCalls, 1)
+    assert.equal(released, true)
+
+    const db = new DatabaseSync(out, { readOnly: true })
+    try {
+      assert.equal(
+        (db.prepare('SELECT COUNT(*) AS count FROM artifacts').get() as { count: number }).count,
+        1,
+        'seal exports the version selected and pinned at the start',
+      )
+    } finally {
+      db.close()
+    }
+    store.gc({ retain: 0 })
+    assert.equal(existsSync(selectedPath), false, 'seal releases its internal lease')
   } finally {
     cleanup()
   }

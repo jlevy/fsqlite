@@ -56,6 +56,9 @@ documentation and public API to the standard expected of a published package.
 - **Compatibility with unpublished layouts or APIs.** This is a new project.
   The alpha defines its first public API and on-disk format without compatibility shims
   for development-only predecessors.
+- **Automatic caller-schema migration.** `f1.0` has one immutable caller-schema
+  identity. A different schema version or exact DDL hash is incompatible until a
+  separate, deterministic migration protocol is specified.
 
 ## Background
 
@@ -281,6 +284,9 @@ Snapshots repeat the format version and store identity so copied or mixed store 
 fail validation. Transaction manifests repeat both values as well.
 Snapshot files use the fixed SQLite `application_id` `0x4653514C` (`FSQL`); callers own
 `PRAGMA user_version` and `schema_hash`, not the fsqlite file identity.
+Those two caller fields form one immutable `f1.0` schema identity.
+Incrementing `schemaVersion` rejects an existing store and does not migrate it.
+The hash covers the exact UTF-8 schema string rather than canonical SQL.
 
 The marker is visible JSON rather than hidden YAML because it is machine-owned format
 identity, not user configuration: Node parses it without another dependency, its types
@@ -316,6 +322,20 @@ Bounded-loss backup applies to pinned immutable snapshots and supported backup/s
 operations, not an arbitrary recursive copy of a live directory.
 Long DirectStore and repair critical sections remain safe through fencing but need a
 heartbeat or shorter critical section for better liveness.
+
+The final schema and workload review adds four calibrated boundaries:
+
+- application mutation verifies exact schema compatibility even when a handle skipped
+  `init()`;
+- required directory fsync failures abort instead of silently weakening the power-loss
+  claim;
+- `seal()` pins its selected source snapshot against aggressive GC;
+- snapshot bytes, pending work, concurrent writer copies, and lifetime ledger count are
+  the operational scale variables.
+  Table count alone is secondary.
+
+The detailed evidence and reconsideration triggers are in
+`docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md`.
 
 ### Documentation
 
@@ -412,6 +432,12 @@ Every item lands with a regression test that fails before the fix.
   triggers in both write strategies
 - [x] (`fsq-jwyo`) Remove the unsafe schema-only seed mode from the public API and
   `f1.0` protocol
+- [x] (`fsq-auor`) Validate caller-schema version inputs and reject wrong-schema
+  mutation before callback or envelope work
+- [x] (`fsq-pwiv`) Fail closed when a required directory fsync is unavailable and
+  include it in the `fsinspect` safe verdict
+- [x] (`fsq-ji7m`) Pin the selected snapshot throughout `seal()` so aggressive GC cannot
+  remove its source
 
 ### Phase 3: Usability, Documentation, and Alpha Publish
 
@@ -450,12 +476,16 @@ Goal: a stranger can find, understand, install, and use this.
   rather than attempting to publish the immutable version twice
 - [x] (`fsq-qqvg`) Apply common documentation guidelines across maintained prose, with
   per-file beads and automated dash and footer drift checks
+- [x] (`fsq-dq4o`) Complete the schema evolution and workload-fit design review, align
+  all design-facing documents, and publish the standalone assessment
+- [x] (`fsq-bd76`) Make the snapshot-size, table-count, and independent-agent workload
+  calibrations reproducible with maintained JSON-emitting benchmarks
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 121 `node:test` cases
+The current suite is the baseline and must stay green throughout: 127 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 24 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and
@@ -470,7 +500,9 @@ CI runs the full gate on every push: format check, Markdown check, zero-warning 
 
 Deferred and disclosed rather than silently missing: the real cross-host NFS/EFS gate
 (`fsq-at6m`), power-loss fault injection (`fsq-hm6r`), and Windows publication
-validation (`fsq-kkdi`).
+validation (`fsq-kkdi`). Deterministic caller-schema migration (`fsq-xma9`), applied
+ledger checkpointing (`fsq-bllj`), and capacity observability (`fsq-3a09`) are explicit
+post-alpha work.
 
 ## Rollout Plan
 
@@ -490,6 +522,7 @@ None for the first publication.
 ## References
 
 - `docs/fsqlite-design.md`, `docs/fsql-format-spec.md`
+- `docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md`
 - tbd guidelines: `typescript-lint-format-rules`, `supply-chain-hardening`,
   `typescript-rules`, `error-handling-rules`, `general-testing-rules`,
   `common-doc-guidelines`
