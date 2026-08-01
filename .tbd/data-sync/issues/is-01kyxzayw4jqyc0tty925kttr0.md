@@ -3,9 +3,9 @@ type: is
 id: is-01kyxzayw4jqyc0tty925kttr0
 title: "Address review: PR #1 - engineering review"
 kind: task
-status: in_progress
+status: closed
 priority: 1
-version: 34
+version: 35
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase3
@@ -47,6 +47,8 @@ child_order_hints:
   - is-01kyy0w5bqwz14smer6t0qbjze
   - is-01kyy1jq46z3a7mf3bqx4awr0s
 created_at: 2026-08-01T06:14:15.171Z
-updated_at: 2026-08-01T06:53:26.533Z
+updated_at: 2026-08-01T06:59:52.636Z
+closed_at: 2026-08-01T06:59:52.635Z
+close_reason: "Addressed all PR #1 engineering review and follow-up findings in cac31b9 and 9abfa3b. Fixed findings have regression coverage, I8d and release-policy differences are explicitly rebutted, post-alpha work is reparented to active future beads, the full disposition map is posted, and all CI checks passed."
 ---
 Address every unique finding in the owner-authored engineering review posted on PR #1 at commit 5ea2ef7. Map duplicate blocker, design, implementation, research, and coverage observations to one finding bead each; independently reproduce or inspect each claim; fix, rebut, or defer explicitly; publish a complete disposition map; and finish with green CI.
