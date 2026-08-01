@@ -5,7 +5,7 @@ title: fsqlite standalone 0.1.0 release
 kind: epic
 status: open
 priority: 1
-version: 50
+version: 51
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels: []
 dependencies: []
@@ -57,6 +57,7 @@ child_order_hints:
   - is-01kyxtc4dz2dfnshtc7wfzxhea
   - is-01kyxtmtng8gvetkhppycpmj25
   - is-01kyxx07nysksek996shk8edgz
+  - is-01kyxzayw4jqyc0tty925kttr0
 created_at: 2026-07-31T23:48:01.800Z
-updated_at: 2026-08-01T05:33:26.589Z
+updated_at: 2026-08-01T06:14:15.171Z
 ---
