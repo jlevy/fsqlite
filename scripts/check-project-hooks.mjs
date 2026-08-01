@@ -24,6 +24,19 @@ const codexCommandHooks = Object.values(codexHooksConfig.hooks).flatMap((eventHo
 assert(codexCommandHooks.length > 0, 'Expected Codex command hooks')
 
 for (const hook of codexCommandHooks) {
+  if (hook.command.includes('tbd-closing-reminder.sh')) {
+    assert.match(
+      hook.command,
+      /^bash -c 'repo_root=\$\(pwd -P\);/,
+      `Codex closing hook must locate itself from the working-directory ancestry: ${hook.command}`,
+    )
+    assert.doesNotMatch(
+      hook.command,
+      /git rev-parse/,
+      `Codex closing hook bootstrap must not require git: ${hook.command}`,
+    )
+    continue
+  }
   assert.match(
     hook.command,
     /^bash "\$\(git rev-parse --show-toplevel\)\/\.codex\/[^"]+"(?: |$)/,
@@ -76,8 +89,14 @@ assert.equal(
 )
 
 const closingHookCommands = [
-  { name: 'Codex', command: codexPostToolUseCommand },
-  { name: 'Claude', command: claudeHooksConfig.hooks.PostToolUse[0].hooks[0].command },
+  {
+    name: 'Codex',
+    command: codexPostToolUseCommand,
+  },
+  {
+    name: 'Claude',
+    command: claudeHooksConfig.hooks.PostToolUse[0].hooks[0].command,
+  },
 ]
 const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-closing-hook-'))
 const closingMarker = join(hookTestDir, 'closing-ran')
@@ -139,6 +158,23 @@ try {
     TBD_HOOK_TEST_NPX_MARKER: npxMarker,
     TBD_HOOK_TEST_NPX_STATUS: '37',
   }
+  const noGitBin = join(hookTestDir, 'no-git-bin')
+  mkdirSync(noGitBin)
+  writeFileSync(join(noGitBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
+    mode: EXECUTABLE_MODE,
+  })
+  symlinkSync(process.execPath, join(noGitBin, 'node'))
+  symlinkSync(join(hookTestDir, 'tbd'), join(noGitBin, 'tbd'))
+  const noGitEnv = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: repoRoot,
+    HOME: hookTestDir,
+    PATH: noGitBin,
+    TBD_HOOK_PATH_PREFIX: '',
+    TBD_HOOK_TEST_MARKER: closingMarker,
+  }
+  const symlinkedPackageDir = join(hookTestDir, 'symlinked-package')
+  symlinkSync(join(repoRoot, 'packages', 'fsqlite'), symlinkedPackageDir)
 
   for (const hook of closingHookCommands) {
     rmSync(closingMarker, { force: true })
@@ -223,7 +259,103 @@ try {
       /npm install -g get-tbd@0\.4\.2/,
       `${hook.name} closing hook did not explain how to install the missing CLI`,
     )
+
+    rmSync(closingMarker, { force: true })
+    const withoutGit = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: noGitEnv,
+      input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+      shell: true,
+    })
+    assert.equal(
+      withoutGit.status,
+      0,
+      `${hook.name} closing hook failed when git was unavailable:\n${withoutGit.stderr}`,
+    )
+    assert.equal(
+      existsSync(closingMarker),
+      true,
+      `${hook.name} closing hook skipped tbd closing when git was unavailable`,
+    )
+
+    const pushForms = [
+      'git commit -m test\ngit push origin HEAD',
+      `git -C "${repoRoot}" push origin HEAD`,
+      '/usr/bin/git push origin HEAD',
+      "GIT_SSH_COMMAND='ssh -i /tmp/key' git push origin HEAD",
+      'env GIT_CONFIG_COUNT=1 git push origin HEAD',
+      'command git push origin HEAD',
+    ]
+    for (const command of pushForms) {
+      rmSync(closingMarker, { force: true })
+      const alternatePush = spawnSync(hook.command, {
+        cwd: join(repoRoot, 'packages', 'fsqlite'),
+        encoding: 'utf8',
+        env: hookEnv,
+        input: JSON.stringify({ tool_input: { command } }),
+        shell: true,
+      })
+      assert.equal(
+        alternatePush.status,
+        0,
+        `${hook.name} closing hook failed for command ${JSON.stringify(command)}:\n${alternatePush.stderr}`,
+      )
+      assert.equal(
+        existsSync(closingMarker),
+        true,
+        `${hook.name} closing hook missed push command ${JSON.stringify(command)}`,
+      )
+    }
+
+    const nonPushForms = [
+      'echo git push',
+      'git commit -m push',
+      'git --help push',
+      'git --version push',
+      'git -h push',
+      'printf "git push\\n"',
+    ]
+    for (const command of nonPushForms) {
+      rmSync(closingMarker, { force: true })
+      const nonPush = spawnSync(hook.command, {
+        cwd: join(repoRoot, 'packages', 'fsqlite'),
+        encoding: 'utf8',
+        env: hookEnv,
+        input: JSON.stringify({ tool_input: { command } }),
+        shell: true,
+      })
+      assert.equal(
+        nonPush.status,
+        0,
+        `${hook.name} closing hook failed for non-push command ${JSON.stringify(command)}`,
+      )
+      assert.equal(
+        existsSync(closingMarker),
+        false,
+        `${hook.name} closing hook misclassified non-push command ${JSON.stringify(command)}`,
+      )
+    }
   }
+
+  rmSync(closingMarker, { force: true })
+  const symlinkedCodex = spawnSync(codexPostToolUseCommand, {
+    cwd: symlinkedPackageDir,
+    encoding: 'utf8',
+    env: { ...noGitEnv, PWD: symlinkedPackageDir },
+    input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+    shell: true,
+  })
+  assert.equal(
+    symlinkedCodex.status,
+    0,
+    `Codex closing hook failed from a symlinked package directory:\n${symlinkedCodex.stderr}`,
+  )
+  assert.equal(
+    existsSync(closingMarker),
+    true,
+    'Codex closing hook skipped tbd closing from a symlinked package directory',
+  )
 } finally {
   rmSync(hookTestDir, { recursive: true, force: true })
 }
