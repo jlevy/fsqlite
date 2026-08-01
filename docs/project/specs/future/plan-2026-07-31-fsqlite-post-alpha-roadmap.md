@@ -18,7 +18,8 @@ commitment has an owner, dependency path, and validation bar.
 The alpha release remains governed by `plan-2026-07-31-fsqlite-alpha-release.md`.
 Deferring the work here does not weaken the alpha contract: unsupported capabilities
 must fail closed, normal opens never migrate a store, and claims not yet validated
-remain disclosed.
+remain disclosed. The system constraints and operating boundaries are in
+`docs/fsqlite-design.md`; this plan tracks work and does not redefine them.
 
 ## Fixed Starting Point
 
@@ -37,6 +38,10 @@ remain disclosed.
   They preserve `store_id`, validate the destination, and leave the source untouched
   until cutover.
 - Caller-schema migration and fsqlite directory-format migration are separate protocols.
+- SnapshotStore callbacks run against a full copy of the published head.
+  The unsafe schema-only shortcut is not part of `f1.0`.
+- Write callbacks cannot mutate schema, identity, schema version, or fsqlite-owned
+  tables. DirectStore revalidates the candidate before publication.
 
 ## Workstreams
 
@@ -59,6 +64,8 @@ remain disclosed.
 | `fsq-fp06` | Writer seeding and snapshot-compaction optimization |
 | `fsq-x5k5` | Replay-based bit-rot recovery research |
 | `fsq-a0ct` | SQLite URI and store-path portability validation |
+| `fsq-ffdq` | Heartbeat or critical-section redesign for long publish-lock operations |
+| `fsq-dwwg` | Remove redundant marker and snapshot identity reads from hot paths |
 
 ### Conformance and Format Evolution
 
@@ -87,6 +94,8 @@ remain disclosed.
   explicit alternative.
 - Research replay-based bit-rot recovery without making repair destructive or
   speculative.
+- Add a safe heartbeat or shorter optimistic critical section for DirectStore and repair
+  operations that may exceed the lease stale window.
 
 ### Platform and Runtime Portability
 
@@ -111,8 +120,11 @@ remain disclosed.
   invariants that cannot be made safe by a declared point-key read set.
 - Evaluate SQLite rebaser support and upstream binding improvements without making them
   prerequisites for the base format.
-- Measure schema-only writer seeding, safe read-only-base approaches, and explicit
-  snapshot compaction/retention for large stores.
+- Design and measure a safe overlay, shared read-only base, or equivalent writer seed
+  for large stores. It must preserve the data and constraints observed by the callback.
+- Remove redundant identity reads only after preserving fail-closed behavior across
+  marker replacement and mixed-store tests.
+- Measure explicit snapshot compaction and retention for large stores.
 
 ## Dependency Shape
 

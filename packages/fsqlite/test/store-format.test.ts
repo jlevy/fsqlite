@@ -203,6 +203,25 @@ test('a snapshot with the wrong SQLite application_id is corrupt', () => {
   }
 })
 
+test('a snapshot missing an fsqlite-owned table is corrupt', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const db = new DatabaseSync(store.snapshotPath(0))
+    try {
+      db.exec('DROP TABLE applied_tx')
+    } finally {
+      db.close()
+    }
+
+    const validation = store.validate()
+    assert.equal(validation.state, 'corrupt')
+    assert.match(validation.issues.join('; '), /invalid fsqlite-owned table applied_tx/)
+  } finally {
+    cleanup()
+  }
+})
+
 test('reconcile quarantines a transaction envelope from another store', () => {
   const { dir, cleanup } = tmpStore()
   try {

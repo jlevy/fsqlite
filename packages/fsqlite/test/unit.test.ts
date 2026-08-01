@@ -1,8 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -156,6 +164,44 @@ test('an envelope whose manifest tx_id differs from its directory is quarantined
       'tx-id-mismatch',
     )
     assert.equal(count(store, 'artifacts'), 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('an envelope that targets an fsqlite-owned table is quarantined', () => {
+  const { store, dir, cleanup } = freshStore()
+  try {
+    const txId = store.write('A', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    assert.ok(txId)
+
+    const work = join(dir, 'malicious.sqlite')
+    copyFileSync(store.snapshotPath(0), work)
+    const db = new DatabaseSync(work)
+    const session = db.createSession()
+    let changeset: Uint8Array
+    try {
+      db.prepare('INSERT INTO applied_tx VALUES (?, ?)').run('forged', '2026-08-01T00:00:00Z')
+      changeset = session.changeset()
+    } finally {
+      db.close()
+    }
+    const txDir = join(store.txPending, `${txId}.txn`)
+    writeFileSync(join(txDir, 'changeset.bin'), changeset)
+    const manifestPath = join(txDir, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+    manifest.changeset_sha256 = createHash('sha256').update(changeset).digest('hex')
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+
+    const result = store.reconcile()
+    assert.equal(result.applied, 0)
+    assert.equal(result.quarantined, 1)
+    assert.match(
+      readFileSync(join(store.txQuarantine, `${txId}.txn`, 'QUARANTINE'), 'utf8'),
+      /fsqlite-owned table applied_tx/,
+    )
   } finally {
     cleanup()
   }

@@ -165,15 +165,116 @@ interface Manifest {
   created_at: string
   changeset: string
   changeset_sha256: string
-  seed: string
   tool_version: string
 }
 
+interface TableColumn {
+  name: string
+  type: string
+  notnull: number
+  pk: number
+}
+
+const EXPECTED_OWNED_TABLES: Record<string, TableColumn[]> = {
+  applied_tx: [
+    { name: 'tx_id', type: 'TEXT', notnull: 1, pk: 1 },
+    { name: 'applied_at', type: 'TEXT', notnull: 1, pk: 0 },
+  ],
+  fsqlite_meta: [
+    { name: 'key', type: 'TEXT', notnull: 1, pk: 1 },
+    { name: 'value', type: 'TEXT', notnull: 1, pk: 0 },
+  ],
+}
+
+function metaValue(db: driver.DB, key: string): string | undefined {
+  const hasMeta = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fsqlite_meta'")
+    .get()
+  if (!hasMeta) {
+    return undefined
+  }
+  const row = db.prepare('SELECT value FROM fsqlite_meta WHERE key = ?').get(key) as
+    { value: string } | undefined
+  return row?.value
+}
+
+function verifyOwnedTableShapes(db: driver.DB): void {
+  for (const [table, expected] of Object.entries(EXPECTED_OWNED_TABLES)) {
+    const actual = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as TableColumn[]
+    const normalized = actual.map(({ name, type, notnull, pk }) => ({
+      name,
+      type: type.toUpperCase(),
+      notnull,
+      pk,
+    }))
+    if (JSON.stringify(normalized) !== JSON.stringify(expected)) {
+      throw new Error(`snapshot has invalid fsqlite-owned table ${table}`)
+    }
+  }
+}
+
+/** @internal Verify the format-owned identity and tables of a candidate snapshot. */
+export function verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
+  const applicationId = Number(
+    (db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id,
+  )
+  if (applicationId !== FSQLITE_APPLICATION_ID) {
+    throw new Error(
+      `snapshot application_id ${applicationId} does not match fsqlite application_id ${FSQLITE_APPLICATION_ID}`,
+    )
+  }
+  verifyOwnedTableShapes(db)
+  const storedFormatVersion = metaValue(db, 'format_version')
+  if (storedFormatVersion !== marker.format_version) {
+    throw new Error(
+      `snapshot format version ${String(storedFormatVersion)} does not match ${STORE_MARKER_FILENAME} ` +
+        marker.format_version,
+    )
+  }
+  const storedStoreId = metaValue(db, 'store_id')
+  if (storedStoreId !== marker.store_id) {
+    throw new Error(
+      `snapshot store_id ${String(storedStoreId)} does not match ${STORE_MARKER_FILENAME} ${marker.store_id}`,
+    )
+  }
+  for (const key of ['schema_hash', 'tool_version']) {
+    if (metaValue(db, key) === undefined) {
+      throw new Error(`snapshot is missing required fsqlite_meta key ${key}`)
+    }
+  }
+}
+
+/** @internal Reassert all format and caller-schema invariants before publication. */
+export function verifySnapshotForPublish(
+  db: driver.DB,
+  marker: StoreMarker,
+  schemaVersion: number,
+  schemaHash: string,
+): void {
+  verifySnapshotIdentity(db, marker)
+  const version = Number(
+    (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
+  )
+  if (version !== schemaVersion) {
+    throw new Error(
+      `store schema version ${version} is incompatible with the requested ${schemaVersion}`,
+    )
+  }
+  const storedHash = metaValue(db, 'schema_hash')
+  if (storedHash !== schemaHash) {
+    throw new Error(
+      `store schema is incompatible: stamped schema_hash ${storedHash} does not match this schema's ${schemaHash} ` +
+        `(the DDL changed without bumping schemaVersion ${schemaVersion})`,
+    )
+  }
+}
+
 /**
- * The lock-free, NFS-safe concurrent multi-writer engine: writers drop changeset envelopes
+ * The lock-free concurrent multi-writer engine: writers drop changeset envelopes
  * (`write`), an out-of-band `reconcile` folds them into the next immutable snapshot and
  * publishes it with an atomic pointer swap, and readers (`read`) open only the published
- * snapshot. Writers need the session extension; readers need none. Correctness rests on the
+ * snapshot. Writers need the session extension; readers need none. Shared filesystems must
+ * provide the capabilities required by the format specification. Correctness rests on
  * immutable snapshots, the `applied_tx` ledger, and optimistic concurrency on `current`, not
  * on the publish lock being perfect.
  */
@@ -301,49 +402,14 @@ export class SnapshotStore {
     const marker = readStoreMarker(this.dir)
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
-      this._verifySnapshotIdentity(db, marker)
-      const ver = Number(
-        (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
-      )
-      if (ver !== this.schemaVersion) {
-        throw new Error(
-          `store schema version ${ver} is incompatible with the requested ${this.schemaVersion}`,
-        )
-      }
-      const storedHash = this._metaValue(db, 'schema_hash')
-      if (storedHash !== this.schemaHash) {
-        throw new Error(
-          `store schema is incompatible: stamped schema_hash ${storedHash} does not match this schema's ${this.schemaHash} ` +
-            `(the DDL changed without bumping schemaVersion ${this.schemaVersion})`,
-        )
-      }
+      verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
     } finally {
       db.close()
     }
   }
 
   private _verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
-    const applicationId = Number(
-      (db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id,
-    )
-    if (applicationId !== FSQLITE_APPLICATION_ID) {
-      throw new Error(
-        `snapshot application_id ${applicationId} does not match fsqlite application_id ${FSQLITE_APPLICATION_ID}`,
-      )
-    }
-    const storedFormatVersion = this._metaValue(db, 'format_version')
-    if (storedFormatVersion !== marker.format_version) {
-      throw new Error(
-        `snapshot format version ${String(storedFormatVersion)} does not match ${STORE_MARKER_FILENAME} ` +
-          marker.format_version,
-      )
-    }
-    const storedStoreId = this._metaValue(db, 'store_id')
-    if (storedStoreId !== marker.store_id) {
-      throw new Error(
-        `snapshot store_id ${String(storedStoreId)} does not match ${STORE_MARKER_FILENAME} ${marker.store_id}`,
-      )
-    }
+    verifySnapshotIdentity(db, marker)
   }
 
   /** Refuse store operations if the marker and published snapshot do not identify the same store. */
@@ -355,19 +421,6 @@ export class SnapshotStore {
     } finally {
       db.close()
     }
-  }
-
-  /** Read one fsqlite_meta value, or undefined if the table or row is absent. */
-  private _metaValue(db: driver.DB, key: string): string | undefined {
-    const hasMeta = db
-      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fsqlite_meta'")
-      .get()
-    if (!hasMeta) {
-      return undefined
-    }
-    const row = db.prepare('SELECT value FROM fsqlite_meta WHERE key = ?').get(key) as
-      { value: string } | undefined
-    return row?.value
   }
 
   snapshotPath(v: number): string {
@@ -468,17 +521,11 @@ export class SnapshotStore {
    * commit it to the pending tail. Mutates no live state; the change becomes visible only
    * when a later `reconcile()` folds it in. Returns the tx id, or null if `fn` changed nothing.
    *
-   * `seed` controls how the writer's working copy is built:
-   *   'snapshot'    (default): copy the current immutable snapshot. Correct for any
-   *                 mutation; cost is O(snapshot size) per write.
-   *   'schema-only': build an empty DB with just the schema (NO copy). O(1) per write,
-   *                 but ONLY valid for inserts of NEW keys (same-key clashes defer to reconcile).
+   * The writer copies the current immutable snapshot so the callback observes the same
+   * rows and constraints its changeset is based on. The O(snapshot size) cost is an
+   * explicit part of the alpha operating envelope.
    */
-  write(
-    writerId: string,
-    fn: WorkFn,
-    { seed = 'snapshot' }: { seed?: 'snapshot' | 'schema-only' } = {},
-  ): string | null {
+  write(writerId: string, fn: WorkFn): string | null {
     if (!SAFE_WRITER_ID.test(writerId)) {
       throw new Error(
         `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
@@ -489,20 +536,16 @@ export class SnapshotStore {
     const base = this.currentVersion()
     this.assertStoreIdentity()
     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
-    if (seed === 'schema-only') {
-      const seedDb = driver.open(work)
-      try {
-        seedDb.exec(this.schema) // tables only; no data copy
-      } finally {
-        seedDb.close()
-      }
-    } else {
-      copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
-    }
+    copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
     let changeset: Uint8Array | null
     const db = driver.open(work)
     try {
-      changeset = driver.recordChangeset(db, fn)
+      driver.protectOwnedTables(db)
+      const boundary = driver.captureCallbackBoundary(db)
+      changeset = driver.recordChangeset(db, (callbackDb) => {
+        fn(callbackDb)
+        driver.assertCallbackBoundary(callbackDb, boundary)
+      })
     } finally {
       db.close()
       rmSync(work, { force: true })
@@ -526,7 +569,6 @@ export class SnapshotStore {
       created_at: nowIso(),
       changeset: CHANGESET_FILENAME,
       changeset_sha256: sha256(changeset),
-      seed,
       tool_version: this.toolVersion,
     }
     writeFileSync(join(txDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
@@ -544,13 +586,10 @@ export class SnapshotStore {
   writeWithRetry(
     writerId: string,
     fn: WorkFn,
-    {
-      maxRetries = DEFAULT_WRITE_RETRIES,
-      seed = 'snapshot',
-    }: { maxRetries?: number; seed?: 'snapshot' | 'schema-only' } = {},
+    { maxRetries = DEFAULT_WRITE_RETRIES }: { maxRetries?: number } = {},
   ): WriteWithRetryResult {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const txId = this.write(writerId, fn, { seed })
+      const txId = this.write(writerId, fn)
       if (txId === null) {
         return { txId: null, attempts: attempt + 1, conflicted: false }
       }
@@ -687,6 +726,7 @@ export class SnapshotStore {
             quarantined.push([txn, `apply-failed: ${(e as Error).message}`])
           }
         }
+        verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
         driver.quickCheck(db)
       } finally {
         db.close()

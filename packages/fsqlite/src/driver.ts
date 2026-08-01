@@ -48,6 +48,65 @@ export function openReadonly(path: string): DatabaseSync {
 }
 
 /**
+ * Make fsqlite-owned tables read-only for an application callback. These TEMP triggers
+ * guard ordinary INSERT, UPDATE, and DELETE mistakes without changing the published
+ * snapshot schema. Candidate validation still runs after the callback to catch DDL and
+ * pragma changes.
+ */
+export function protectOwnedTables(db: DatabaseSync): void {
+  for (const table of ['applied_tx', 'fsqlite_meta']) {
+    for (const action of ['INSERT', 'UPDATE', 'DELETE']) {
+      const trigger = `fsqlite_protect_${table}_${action.toLowerCase()}`
+      db.exec(`
+        CREATE TEMP TRIGGER ${trigger}
+        BEFORE ${action} ON main.${table}
+        BEGIN
+          SELECT RAISE(ABORT, 'fsqlite-owned table ${table} is read-only');
+        END;
+      `)
+    }
+  }
+}
+
+interface CallbackBoundary {
+  applicationId: number
+  userVersion: number
+  schema: string
+}
+
+/** Capture the format and schema state an application callback must leave unchanged. */
+export function captureCallbackBoundary(db: DatabaseSync): CallbackBoundary {
+  const applicationId = Number(
+    (db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id,
+  )
+  const userVersion = Number(
+    (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
+  )
+  const schema = JSON.stringify(
+    db
+      .prepare(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+      )
+      .all(),
+  )
+  return { applicationId, userVersion, schema }
+}
+
+/** Fail a callback that attempts format or schema migration inside a data-write API. */
+export function assertCallbackBoundary(db: DatabaseSync, before: CallbackBoundary): void {
+  const after = captureCallbackBoundary(db)
+  if (after.applicationId !== before.applicationId) {
+    throw new Error('application callback changed the fsqlite SQLite application id')
+  }
+  if (after.userVersion !== before.userVersion) {
+    throw new Error('application callback changed the caller schema version')
+  }
+  if (after.schema !== before.schema) {
+    throw new Error('application callback changed the SQLite schema')
+  }
+}
+
+/**
  * Run `fn` while recording a session over all tables, returning the changeset blob
  * (or null if nothing changed). The body runs inside a single transaction.
  */

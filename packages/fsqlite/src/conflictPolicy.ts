@@ -45,6 +45,8 @@ const CHANGESET_ABORT = sqliteConstant('SQLITE_CHANGESET_ABORT')
 const replaceable = (type: number): boolean =>
   type === CHANGESET_DATA || type === CHANGESET_CONFLICT
 
+const FSQLITE_OWNED_TABLES = new Set(['applied_tx', 'fsqlite_meta'])
+
 /** Action vocabulary and normative filtered-pass order. */
 export const ACTIONS = Object.freeze(['replace', 'omit', 'strict'] as const)
 
@@ -153,7 +155,14 @@ export function applyWithPolicy(
       if (!used.has(action)) {
         continue
       }
-      const filter = (table: string): boolean => actionFor(policy, table) === action
+      const ownedTables = new Set<string>()
+      const filter = (table: string): boolean => {
+        if (FSQLITE_OWNED_TABLES.has(table)) {
+          ownedTables.add(table)
+          return false
+        }
+        return actionFor(policy, table) === action
+      }
       const strict: number[] = []
       const permanent: number[] = []
       let ok: boolean
@@ -170,6 +179,11 @@ export function applyWithPolicy(
           throw new StrictConflictError(strict, { cause: error })
         }
         throw error
+      }
+      if (ownedTables.size > 0) {
+        throw new PermanentConflictError(
+          [...ownedTables].sort().map((table) => `fsqlite-owned table ${table}`),
+        )
       }
       // `ok === false` means the apply was aborted. Surface the recorded conflict types so
       // the caller can quarantine the envelope with an actionable reason.

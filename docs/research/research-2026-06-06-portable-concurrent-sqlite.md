@@ -1,7 +1,7 @@
 ---
 title: Portable, Server-Free, Concurrent SQLite for Local Applications
 description: A domain-agnostic reference on building a locally-friendly, portable,
-  thread-safe, NFS-safe, data-loss-safe usage pattern (package/wrapper/adapter) around
+  thread-safe, shared-filesystem-oriented, data-loss-safe usage pattern around
   SQLite: covering the locking/journaling/filesystem background, the session/changeset
   extension, source-grounded node:sqlite findings, the prior-art landscape, and a
   validated snapshot-publish and transaction-envelope design with a reference implementation.
@@ -157,12 +157,13 @@ compiled in** (confirmed: `node/deps/sqlite/sqlite.gyp:24,27`), and **Python’s
 and **Rust’s `rusqlite` (`session` feature)** expose it too.
 That matters here because a changeset is the file-native, server-free, optimistic
 commit-log this problem needs: writers each emit a uniquely-named changeset **file**
-(conflict-free even on NFS), a merge step folds them with a domain conflict policy, and,
+(free of shared-path contention when the target filesystem provides the required create
+and visibility semantics), a merge step folds them with a domain conflict policy, and,
 the key property, **readers never need the extension at all**, since they just open the
 resulting standard SQLite file.
-In other words, the thing that makes “concurrent, server-free, NFS-safe,
-per-session-optimistic SQLite” tractable has been sitting in the engine for ~10 years;
-what changed is that it is finally reachable from a zero-dependency local runtime.
+In other words, the primitive that makes concurrent, server-free, per-session optimistic
+SQLite tractable has been sitting in the engine for ~10 years; what changed is that it
+is finally reachable from a zero-dependency local runtime.
 The rest of this document is, in large part, an argument that this underused primitive
 is a suitable foundation, subject to the binding-level limits in Findings G and G2.
 
@@ -184,10 +185,12 @@ The target properties (the “contours”), restated as testable requirements:
   liability.
 - **R-FS: filesystem-agnostic, including NFS/SMB/FUSE/sync.** Correct where POSIX
   `flock`/`fcntl` byte-range locks and WAL shared memory do **not** work.
-- **R-DURABLE: bounded loss and hot-copy-safe.** A crash, an interrupted write, or a
-  **file copy taken while the DB is live** loses at most the current/in-flight
-  transaction: never a previously-committed state, never the whole dataset.
-  A **repair** path exists for anomalies (stale locks, recovering a hot copy).
+- **R-DURABLE: bounded loss and safe snapshot backup.** A crash or interrupted protocol
+  operation loses at most the current unpublished tail: never a previously committed
+  state, never the whole dataset.
+  A published immutable snapshot can be pinned and copied safely.
+  Arbitrary recursive copying of a live directory is not a required guarantee.
+  A **repair** path exists for protocol anomalies and interrupted operations.
 - **R-CONCURRENCY: wrapper-managed, session/optimistic, not one-big-lock.** A thin
   wrapper API may manage concurrency, but the goal is **optimistic,
   session-/transaction-grained** concurrency (worst-case loss = one session), not a
@@ -201,8 +204,8 @@ The target properties (the “contours”), restated as testable requirements:
   The reference implementation opens fresh connections for operations and does not
   provide a process-local mutex.
   Its filesystem protocol coordinates processes at a shared store root; an explicit
-  Worker Thread coordination contract and tests are deferred to `fsq-5nx4`. (Finding
-  G2.)
+  Worker Thread coordination contract and tests remain on the roadmap.
+  (Finding G2.)
 
 **Requirement review.** These are sound and mutually achievable, with three notes:
 
@@ -240,7 +243,7 @@ The target properties (the “contours”), restated as testable requirements:
 
 **In scope:** in-process/local concurrent access to a single logical SQLite store with
 no required server; locking/journaling/filesystem behavior; the session/changeset
-extension; the snapshot/commit-log pattern; crash/durability/hot-copy safety;
+extension; the snapshot/commit-log pattern; crash safety and immutable-snapshot backup;
 cross-language reader portability; a generic format, protocol, and implementation.
 
 **Out of scope:** analytical/columnar engines (DuckDB/Parquet) and full-text/vector
@@ -262,8 +265,7 @@ file. The on-disk format is cross-platform and endianness-independent.
 Portability is mostly a discipline, not luck:
 
 - Store **store-relative, slash-separated UTF-8 paths** in any path columns; never
-  absolute or platform-specific paths (a real bug observed in `qmd`, whose `init`
-  recorded absolute paths).
+  absolute or platform-specific paths.
 - Keep the **authoritative tables on core SQLite features only.** FTS5 is broadly
   available; loadable extensions (e.g. `sqlite-vec`’s `vec0` virtual table), custom
   collations, and compile-time options are **not** guaranteed.
@@ -369,9 +371,9 @@ lock-free row-level writers rather than one writer at a time.
 > `backup()`/`vacuumInto()`/`copyUnderLock()` and **never** documents “copy the live
 > `.sqlite` and hope.”
 > Every backup helper runs `PRAGMA integrity_check` in tests.
-> `fsqlite` gets hot-copy *safety* for free from immutable snapshots (Finding H), but
-> the sanctioned backup surface still matters for the `DirectStore` floor and for
-> sealing. (Review B2; Finding R6 detail.)
+> A pinned immutable fsqlite snapshot is safe to copy while publication continues, but
+> the sanctioned backup surface still matters for retention, the `DirectStore` floor,
+> and sealing. (Review B2; Finding R6 detail.)
 
 **SQLite-native VFS / locking options: adopt or dismiss.** SQLite already ships several
 locking strategies; the cross-host theorem (Finding B) says none of the “cleverer” ones
@@ -445,8 +447,8 @@ because it was compile-time-disabled in most builds: until `node:sqlite` exposed
 first-class.
 
 **The gap:** a small, dependency-light, cross-platform package that gives optimistic,
-session-grained, no-server, NFS-safe, hot-copy-safe concurrent access while keeping the
-artifact a standard SQLite file.
+session-grained, no-server concurrency designed for shared-filesystem primitives, with
+safe immutable-snapshot backup and a standard SQLite artifact.
 That is the thing worth building.
 
 ### F. The SQLite session / changeset extension: the file-native primitive
@@ -638,9 +640,10 @@ path is synchronous, pulls a `graceful-fs` dep, and has no owner-token fencing, 
 `onCompromised` notification).
 Adopt its mtime-precision handling and default constants** (`stale ≥ 5000`,
 `update = stale/2`) on top of the owner-token *revalidate-before-publish* fencing.
-Crucially, proper-lockfile alone does not make a *live* SQLite DB NFS-safe: it only
-protects the lock. The design still needs the immutable-snapshot and idempotent-ledger
-model so correctness does not depend on the lock at all.
+Crucially, proper-lockfile alone does not make a *live* SQLite database safe on NFS: it
+only protects the lock.
+The design still needs the immutable-snapshot and idempotent-ledger model so correctness
+does not depend on the lock at all.
 
 The lease directory carries an explicit **owner manifest** so a stale-break is auditable
 and a fencing check has something to revalidate against:
@@ -708,12 +711,12 @@ with immutable published snapshots selected by an atomic pointer.** On disk:
 
 **Why this satisfies each requirement:**
 
-- **R-DURABLE / hot-copy-safe / R-DETECT.** Published heads are **immutable** and the
-  pointer swap is **atomic**, so a crash, an interrupted write, or a *file copy taken
-  while live* cannot damage a committed state: recovery returns the last
-  `quick_check`-validated `current`, losing at most the unpublished tail (≤ one session
-  per writer). A naive hot copy can capture extra pending envelopes (harmless: ignored
-  unless `COMMITTED`) and a consistent older snapshot.
+- **R-DURABLE / safe snapshot backup / R-DETECT.** Published heads are **immutable** and
+  the pointer swap is **atomic**, so a crash or interrupted protocol operation cannot
+  damage a committed state: recovery returns the last validated published head, losing
+  at most the unpublished tail.
+  A pinned immutable snapshot can be copied safely.
+  Arbitrary recursive copying of the live directory is outside this guarantee.
   Content digests, `integrity_check`, and structural “in-flight tells” make every
   anomaly detectable.
 - **R-CONCURRENCY.** Writers never block each other (unique envelopes); only conflicting
@@ -740,9 +743,8 @@ For the common single-writer-on-local-disk case, the same immutable-snapshot for
 supports a **direct** strategy: one writer holds the publish lock and does **copy →
 mutate → publish** synchronously: *no changesets, no envelopes, no reconcile, and no
 session extension even for the writer*, so it runs on **any** SQLite binding
-(`better-sqlite3`, `bun:sqlite`). It is a coarse single-writer serializer (the lock is
-held across the short write), but still immutable-snapshot-safe (R-DURABLE) and NFS-safe
-(`mkdir` and atomic rename).
+(`better-sqlite3`, `bun:sqlite`). It is a coarse local single-writer serializer (the
+lock is held across the complete write) and remains immutable-snapshot-safe (R-DURABLE).
 Because it writes the identical on-disk shape, a store can be written directly when
 alone and read/operated by the concurrent engine later: **two write strategies, one
 format.** This is the simpler, easier-locking-locally option alongside the full
@@ -752,7 +754,7 @@ Its single-writer transaction uses the conservative, WAL-free recipe that the wh
 document argues for:
 
 ```sql
-PRAGMA journal_mode=DELETE;   -- rollback journal, no -wal/-shm (portable, NFS-safe at rest)
+PRAGMA journal_mode=DELETE;   -- rollback journal, no -wal/-shm side files at rest
 PRAGMA synchronous=FULL;      -- durability under the configured sync policy
 PRAGMA foreign_keys=ON;
 PRAGMA busy_timeout=5000;     -- absorb brief local contention
@@ -808,11 +810,11 @@ concurrency:
 - Write (envelope, default snapshot-seed): ~4-5 ms/write at a few-hundred-row catalog,
   growing with catalog size because the writer copies the current snapshot to seed its
   session.
-- **Seeding crossover (2 KB rows):** snapshot-seed 10.5 → 28.6 ms/write as the catalog
-  grows 500 → 5500 rows, while an opt-in **schema-only seed** (build an empty
-  schema-only working DB, valid for inserts of new keys) stays **flat at ~16 ms/write**.
-  So: default to snapshot-seed when small/for any mutation; switch insert-heavy writers
-  to schema-only once the catalog is large.
+- **Seeding experiment (2 KB rows):** snapshot seeding grew from 10.5 to 28.6 ms/write
+  as the catalog grew from 500 to 5500 rows.
+  An empty-schema experiment stayed near 16 ms/write, but it did not preserve the
+  writer’s read base and was rejected before `0.1.0` as unsafe.
+  The result motivates a safe shared-base or overlay design, not that shortcut.
 - Reconcile: ~6 ms/tx (one base copy per pass, per-tx apply, ledger insert, and
   `quick_check`).
 
@@ -853,19 +855,18 @@ different concurrency:
   independent writes*. (And even two merges racing are safe: OCC; the loser retries to a
   no-op.)
 
-**Conflict granularity is per-row, not whole-DB and not even per-table.** Because
-merging is done with changesets, two writers that touch **different rows never
-conflict**, even in the same table, and both land with zero loss.
-Two writers that touch **different tables** never conflict.
-A conflict arises only when two writers touch the **same primary key**, and it is
-resolved by that table’s policy: `lww` (last-writer-wins by deterministic order),
-`union` (keep first / drop duplicate), or `strict` (quarantine the losing tx).
-Changesets carry old and new values, so the engine also detects a genuine **DATA
+**Replaceable conflict granularity is per primary key, not whole-DB or per-table.**
+Changesets route same-primary-key DATA and CONFLICT cases through that table’s policy:
+`lww` (last-writer-wins by deterministic order), `union` (keep first / drop duplicate),
+or `strict` (quarantine the losing transaction).
+Writers touching different keys do not create that class of conflict.
+Caller-declared constraints can still connect different keys or tables: UNIQUE, CHECK,
+NOT NULL, and foreign-key failures reject the complete envelope in the settled `f1.0`
+design. Changesets carry old and new values, so the engine also detects a genuine **DATA
 conflict**: two writers each modified the same existing row from the same base, rather
 than causing an insert collision.
-So the write-concurrency granularity the requirements asked for ("different
-tables/sections instead of a global write lock") is already exceeded: it is
-**row-level**.
+The write-concurrency unit is therefore row-granular for replaceable policy conflicts
+and envelope-granular when a declared constraint rejects the combined change.
 
 **Isolation: honestly weaker than serializable.** The design is **not serializable
 across writers.** It tracks each transaction’s *write set* (the rows it changed), not
@@ -955,10 +956,10 @@ This meets R-FS, R-DURABLE, and R-CONCURRENCY at the cost of serializability.
    writers” into “each writer drops a uniquely-named file” and “a merge step folds
    them,” all plain files, conflict-free even on NFS: exactly the per-session optimism
    the requirements ask for.
-3. **Immutability provides hot-copy and crash safety.** Because published heads never
-   mutate and the pointer swap is atomic, *any* copy of the directory yields a
-   consistent older state and an ignorable unpublished tail.
-   R-DURABLE falls out of the data model, not out of careful locking.
+3. **Immutability provides safe snapshot backup and crash safety.** Because published
+   heads never mutate, a pinned head is byte-stable while publication continues.
+   R-DURABLE falls out of the data model and the atomic pointer commit, not out of
+   careful SQLite locking.
 4. **Readers are universal; only writers/merge need the extension.** This keeps the
    tri-language and tool-compatibility goal intact: Python/Rust/`sqlite3` read a
    published snapshot today; the session requirement is confined to the writer/reconcile
@@ -1000,18 +1001,18 @@ on whatever disk you happen to be on.”
 
 The headline contrast: **WAL gives you the strongest isolation (true serializable) but a
 single global writer and only on local disk; this design gives you many concurrent
-writers resolved at row granularity and works on any filesystem / survives hot copies,
-but with weaker (merge-based) isolation.** They sit at opposite ends of the
+writer captures, immutable snapshot backup, and a protocol that avoids SQLite locking,
+but with weaker merge-based isolation.** They sit at opposite ends of the
 concurrency-vs-isolation trade, and the right pick depends on whether you need
-serializability or many-writer, any-FS, and hot-copy safety with no server.
-(`DirectStore` is the middle: WAL’s single-writer simplicity but any-FS/hot-copy-safe
-and on any binding.)
+serializability or concurrent capture and server-free filesystem publication.
+(`DirectStore` is the middle: WAL’s single-writer simplicity with immutable publication
+and any SQLite binding.)
 Of the in-engine efforts, **Turso/limbo’s row-level MVCC is the closest external
 analogue to this design’s row-level optimism**: it is a same-host, in-memory-versioned,
-new-engine approach (no NFS, no hot-copy story, not a standard SQLite file), which is
-exactly the axis on which `fsqlite` differs: file-native and any-FS rather than
-in-process. The full landscape of these alternatives is catalogued in
-[Related Work](#related-work).
+new-engine approach (no shared-filesystem or immutable-snapshot backup story, not a
+standard SQLite file), which is exactly the axis on which `fsqlite` differs: file-native
+and protocol-defined rather than in-process.
+The full landscape of these alternatives is catalogued in [Related Work](#related-work).
 
 ## Options Considered
 
@@ -1047,15 +1048,17 @@ The Findings-H design: lock-free changeset writers, immutable snapshots, atomic 
 idempotent reconcile, `mkdir` lease only around publish, and the Findings-I direct mode
 for the simple local case.
 
-**Pros:** satisfies every requirement (per-session optimism; no server; NFS-safe;
-hot-copy and crash safe; standard-SQLite readers; cross-platform via `node:sqlite`);
-validated by the QA suite; correctness independent of lock perfection.
+**Pros:** satisfies the architectural requirements (per-session optimism; no server;
+filesystem-safe protocol; safe immutable-snapshot backup; crash safety; standard-SQLite
+readers; cross-platform reference runtime); validated by the QA suite; correctness
+independent of lock perfection.
 **Cons:** writers/reconcile need the session extension (Node `node:sqlite` / Python APSW
 / Rust `rusqlite` / Go `zombiezen-go` / Deno), which on Node is now a **Release
 candidate** (no longer `--experimental`-flagged, but a conservative release should still
 gate on Stable); reader latency lags the pending tail until reconcile; per-write
-snapshot-seed cost grows with catalog size (mitigated by schema-only seed / compaction);
-no auto-rebase merge in v1 (constrained writable surface instead).
+snapshot-seed cost grows with catalog size and needs a future safe overlay or
+shared-base optimization; no auto-rebase merge in v1 (constrained writable surface
+instead).
 
 > **Option C trade.** Option C buys many lock-free row-level writers, but it pays a
 > **harder session dependency** than the single-writer floor (the commit-log *needs*
@@ -1150,109 +1153,25 @@ would provide.
 
 ## Recommendations
 
-**Use the standalone, dependency-free package** that implements Option C with this
-surface:
+The evidence supports Option C: immutable SQLite snapshots, transaction envelopes, and
+filesystem publication, with a separate serialized local-writer strategy over the same
+format. The implementation and API have continued to change since this research was
+written, so they are intentionally not reproduced here.
 
-```ts
-const store = new SnapshotStore(dir, {
-  schema: SCHEMA_SQL, // caller DDL applied to snapshot 0; every table NON-NULL PK
-  schemaVersion: 1,
-  conflictPolicy: {
-    // per-table merge semantics
-    cache_table: 'lww', // last-writer-wins (REPLACE on DATA/CONFLICT, OMIT else)
-    edges: 'union', // set-union (OMIT duplicates)
-    '*': 'strict', // deny-by-default: quarantine a conflicting transaction
-  },
-}).init()
+The current resolution is maintained in three places:
 
-const txId = store.write(writerId, (db) => {
-  /* INSERT/UPDATE/DELETE */
-}) // lock-free envelope
-const rows = store.read((db) => db.prepare('…').all()) // immutable snapshot
-const res = store.reconcile() // build, quick_check, and atomic publication; exactly once
-const lease = store.readLease() // pin current for a packager; lease.release() after
-store.gc({ retain: 3 })
-store.validate()
-store.repair()
-store.seal('out.sqlite')
+- [Design and Constraints](../fsqlite-design.md) defines the system constraints,
+  rationale, trust boundary, operating envelope, and strategy choice.
+- [Format Specification](../fsql-format-spec.md) normatively defines interoperable
+  `f1.0` behavior.
+- [Roadmap](../roadmap.md) owns unresolved evidence, portability, evolution, isolation,
+  and performance work.
 
-// Local single-writer alternative over the same format (no session extension, any binding):
-const v = new DirectStore(dir, opts).write((db) => {
-  /* write through plain SQLite */
-})
-```
-
-**Reference implementation modules:**
-
-- **`storeFormat`**: durable creation and strict validation of the visible
-  `fsqlite.json` root marker.
-  It gates `f1.0`, required features, and the UUID `store_id`; the same identity is
-  repeated in snapshots and transaction manifests.
-- **`lock`**: `withLock(lockPath, fn(token), {timeoutMs>staleMs, staleMs, pollMs})`,
-  `ownerOf(lockPath)`, and `heartbeat`: the NFS-safe **`mkdir` lease lock with an owner
-  token**, held only around publish; supports revalidate-before-publish (fencing).
-  Invariant `timeoutMs > staleMs`. ~50 lines.
-- **`driver`**: thin `node:sqlite` wrapper: `open`/`openReadonly`,
-  `recordChangeset(db, fn)` (session over a single tx), `vacuumInto`, `quickCheck`,
-  `integrityCheck`. The only place the session extension is touched; lazy-loaded for
-  write/reconcile.
-- **`conflictPolicy`**: `normalize(policy)` and
-  `applyWithPolicy(db, changeset, policy)`: per-table policy via **one filtered
-  `applyChangeset` pass per action** (the binding gives the table name only to
-  `filter`), conflict-type-aware `'replace'`, and `'strict'` detected via the **`false`
-  return** of an ABORT pass → roll back the whole tx → quarantine.
-- **`snapshotStore`**: the engine: `init` (root marker and snapshot 0 with schema, fixed
-  `application_id`, caller `user_version`, store identity, and an `applied_tx` ledger
-  table), `read`, `write` (seed-from-snapshot or `seed:'schema-only'`; envelope with
-  `COMMITTED` last; manifest carries `format_version`, `store_id`, `schema_version`,
-  `schema_hash`, and `changeset_sha256`), `reconcile` (build-temp → apply non-ledgered
-  committed tx with the policy → `quick_check` → atomic publish under the lease, with
-  OCC re-check and exactly-once via `applied_tx`), `gc` (retain N and leased),
-  `readLease`, `validate` (distinguish not-a-store, invalid, unsupported, sealed, live,
-  in-flight, and corrupt states), `repair` (restore the last consistent point without
-  deleting evidence until a clean snapshot is known), and `seal` (`VACUUM INTO`
-  finalize).
-- **`directStore`**: the local single-writer strategy: `write(fn)` = lock, copy current,
-  mutate → `quick_check` → atomic publish, with OCC; reuses the same layout/read.
-- **CLI**: schema-agnostic `info`/`validate`/`gc`/`seal`/`repair` (these operate on the
-  snapshot/pointer/envelope layer, so they need no schema or policy: an operator can
-  maintain a store they did not create).
-  `validate` exits 0 for sealed or live, 2 for in-flight, 3 for invalid or corrupt, and
-  4 for unsupported.
-- **Tests**: a multi-process harness (writer/reconciler/reader/direct-writer/lock-holder
-  child processes) covers zero-loss concurrency, racing reconcilers, exactly-once
-  publication, non-torn readers, crashes at every publish step, true SIGKILL, randomized
-  chaos, fencing and leases, GC and leases, portability (magic header and pragmas),
-  repair, direct-mode interop.
-
-The TypeScript reference implementation includes the `node:test` and CLI golden suites
-(counts in the QA runbook), a runnable demo, a generic-consumer example, and
-`upstream-source-confirmations.md` recording exact upstream source lines.
-It remains domain-agnostic: callers provide their schema and merge policy.
-
-**Recommended post-alpha sequencing:**
-
-1. **Cross-platform install/runtime matrix** (macOS arm64/x64, Linux glibc/musl
-   x64/arm64, Windows x64) installing the packed tarball, and a **real
-   NFSv4.1/EFS/Filestore gate** (the one thing single-host tests cannot settle:
-   `mkdir`/rename atomicity under contention, `actimeo`/close-to-open, lease-break under
-   partition, `fsync` durability, Windows replacement, and path portability).
-2. **Conformance fixtures and explicit side-by-side format upgrades** so independent
-   implementations can prove `f1.x` interoperability and future formats can migrate
-   without in-place risk.
-3. **Caller-schema migration** across snapshot versions (deterministic DDL step;
-   reconcile quarantines schema-mismatch via `schema_hash`).
-4. **Cheaper seeding** for large catalogs (schema-only default for insert-heavy writers,
-   or a shared read-only base and overlay) and snapshot compaction/retention without
-   weakening immutable publication.
-5. **Optional later:** Python (APSW) / Rust (`rusqlite`) writer parity against the same
-   envelope format; upstream `node:sqlite` asks (forward the conflict iterator/table
-   name and expose the rebaser).
-
-The alpha decisions are settled: use changesets, constrain the writable surface instead
-of requiring a rebaser, keep DirectStore strictly opt-in, identify stores only through
-`fsqlite.json`, and never upgrade during open.
-Replay-based bit-rot recovery is a bounded research task, not a capability claim.
+One research proposal was rejected before `0.1.0`: an empty schema-only writer seed.
+Without the published rows as its read base, updates and deletes can disappear and an
+existing-key insert can overwrite columns the writer never observed.
+A future large-store optimization must preserve the callback’s observed data and
+declared constraints.
 
 ## What `fsqlite` Can and Cannot Promise
 
@@ -1263,8 +1182,9 @@ The boundary is explicit:
 - the at-rest artifact stays an **ordinary SQLite file** any tool/language can read;
 - **writers are serialized at the merge**, and a committed write becomes visible after
   `reconcile` (snapshot isolation at published-version granularity for readers);
-- **bounded loss**: a crash, an interrupted write, or a hot copy loses at most the
-  unpublished tail, never a previously published snapshot (R-DURABLE);
+- **bounded loss**: a crash or interrupted protocol operation loses at most the
+  unpublished tail, never a previously published snapshot; a pinned immutable snapshot
+  is safe to copy (R-DURABLE);
 - **no silent corruption**: every detectable anomaly is surfaced by `validate`/`doctor`
   (R-DETECT);
 - **package-created backups are consistent snapshots** (backup API / `VACUUM INTO` / a
@@ -1293,7 +1213,7 @@ Every remaining row below names the evidence still needed; this is the checklist
 | Area | What to test |
 | --- | --- |
 | Local contention | many processes, one effective writer at the merge, no double-ownership *(automated ✓)* |
-| Worker Threads | one connection per thread; explicit coordination contract and tests deferred to `fsq-5nx4` |
+| Worker Threads | one connection per thread; explicit coordination contract and tests remain on the roadmap |
 | Crash safety | kill mid-write/at-every-publish-step, reopen, `integrity_check` *(automated ✓)* |
 | Stale locks | a stale lease is reclaimed without two breakers owning it *(automated ✓)* |
 | Compromised locks | lock deletion/replacement while held aborts the current operation *(automated ✓)* |
@@ -1322,8 +1242,8 @@ plan:
 1. **Format conformance and evolution:** golden fixtures, an independent verifier, and
    explicit side-by-side whole-format upgrades.
 2. **Real shared-filesystem behavior:** multi-host NFS/SMB tests, clock skew, attribute
-   caching, lease breaks, monotonic-fence evidence, and expanded `fsinspect` diagnostics
-   and expanded `fsinspect` diagnostics.
+   caching, lease breaks, monotonic-fence evidence, and expanded `fsinspect`
+   diagnostics.
 3. **Windows publication and path portability:** atomic rename-replace under racing
    publishers, URI modes, path edge cases, and a packed package matrix on supported
    architectures.
@@ -1345,11 +1265,9 @@ plan:
 11. **Large-store efficiency:** measure writer seeding and explicit snapshot
     compaction/retention without weakening immutable publication.
 
-## Next Steps
-
-The standalone alpha work is tracked by `plan-2026-07-31-fsqlite-alpha-release.md`.
-Post-alpha research and implementation are tracked by
-`plan-2026-07-31-fsqlite-post-alpha-roadmap.md`.
+Current implementation work is tracked in the [roadmap](../roadmap.md).
+Project plans preserve sequencing and acceptance criteria but do not redefine the
+design.
 
 ## Methodology
 

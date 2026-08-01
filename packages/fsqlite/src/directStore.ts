@@ -17,7 +17,8 @@ import * as driver from './driver.ts'
 import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
 import { withLock, ownerOf } from './lock.ts'
 import type { LockOptions } from './lock.ts'
-import { SnapshotStore } from './snapshotStore.ts'
+import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
+import { readStoreMarker } from './storeFormat.ts'
 import type {
   StoreOptions,
   WorkFn,
@@ -95,8 +96,17 @@ export class DirectStore {
           copyFileSync(this.base.snapshotPath(base), tmp)
           const db = driver.open(tmp)
           try {
+            driver.protectOwnedTables(db)
+            const boundary = driver.captureCallbackBoundary(db)
             db.exec('BEGIN IMMEDIATE')
             fn(db)
+            driver.assertCallbackBoundary(db, boundary)
+            verifySnapshotForPublish(
+              db,
+              readStoreMarker(this.base.dir),
+              this.base.schemaVersion,
+              this.base.schemaHash,
+            )
             db.exec('COMMIT')
             driver.quickCheck(db)
           } catch (e) {

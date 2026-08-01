@@ -58,8 +58,9 @@ console.log(row)
 ```
 
 Every table must have a non-null primary key.
-Conflict actions are `lww` (replace), `union` (keep the existing row), and `strict`
-(quarantine the conflicting envelope).
+The `f1.0` writer contract does not support virtual tables or DDL inside write
+callbacks. Conflict actions are `lww` (replace), `union` (keep the existing row), and
+`strict` (quarantine the conflicting envelope).
 The `'*'` default is `strict` when omitted.
 
 ## Choose a Write Strategy
@@ -75,6 +76,8 @@ The `'*'` default is `strict` when omitted.
 Both strategies can open the same store.
 `DirectStore` keeps the immutable publication and recovery model while removing the
 envelope/reconcile step.
+Its callback may run more than once after a fencing or publication race, so keep
+external side effects outside the callback or make them idempotent.
 
 ## A Store Identifies Itself
 
@@ -131,28 +134,28 @@ heuristic from one host, not a substitute for the pending multi-host gate.
 
 ## Correctness Model
 
-- Published snapshots are immutable; `current` is the atomic commit pointer.
-- A process crash loses at most the unpublished tail, never an earlier published
-  snapshot.
-- Changeset data and its `applied_tx` ledger entry commit in one SQLite transaction.
-- Replaceable row conflicts follow the table policy.
-  NOTFOUND, CONSTRAINT, and FOREIGN_KEY conflicts quarantine the complete envelope
-  instead of ledgering a partial apply.
-- Foreign keys are checked after each reconciled envelope, before publication, and by
-  `validate` and `seal`.
-- Filtered merge passes have a fixed `replace`, `omit`, `strict` order, independent of
-  policy key insertion order.
-  Foreign-key enforcement is deferred until every pass for the complete envelope has
-  landed.
-- Read leases prevent garbage collection of a snapshot in use.
-- Maintenance fails closed on malformed identity, leases, or unsupported capabilities.
-- Repair identifies a clean recovery point before deleting anything and will not race a
-  publisher.
+Published snapshots are immutable, `current` is the atomic commit pointer, and every
+changeset shares one SQLite transaction with its `applied_tx` ledger entry.
+Replaceable same-primary-key conflicts follow the table policy.
+NOTFOUND, CONSTRAINT, and FOREIGN_KEY outcomes quarantine the complete envelope, and
+foreign keys are checked at envelope and publication boundaries.
+
+Callbacks cannot change the SQLite schema, format identity, caller schema version, or
+fsqlite-owned tables.
+Maintenance fails closed on malformed identity, unsupported capabilities, unreadable
+leases, or a missing clean recovery point.
 
 Publication fsyncs the snapshot, pointer, and containing directories.
 A successfully captured envelope survives process failure but is only guaranteed
 power-loss durability after reconciliation publishes it.
 An optional durable-envelope mode is future work.
+
+The
+[design constraints](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#design-constraints)
+state the complete guarantees, costs, and trust boundaries.
+The
+[format specification](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md)
+is the normative protocol authority.
 
 ## Limitations
 
@@ -174,10 +177,17 @@ An optional durable-envelope mode is future work.
   write at 2.0 MiB to 183.6 ms at 78.8 MiB, about 2.3 ms per MiB. A linear 1 GiB
   extrapolation is roughly 2.4 seconds for a single-row write.
   Treat these hardware-specific measurements as sizing evidence, not a performance
-  guarantee. `seed: 'schema-only'` avoids the snapshot copy but is safe only for inserts
-  of new keys. Large-store seeding, compaction, and safe shared-base alternatives are
-  tracked in
-  [post-alpha roadmap work `fsq-fp06`](https://github.com/jlevy/fsqlite/blob/main/docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md).
+  guarantee. Any faster seed must preserve the data and constraints the callback
+  observes; safe large-store overlays, compaction, and shared-base alternatives remain
+  on the [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md).
+- DirectStore holds its lease across copy, callback, checks, fsync, and publication.
+  Configure a stale window longer than the worst-case operation.
+  A stolen lease is fenced safely but can cause the callback to retry.
+- Use `readLease()`, `seal()`, or the backup helpers for live backups.
+  An arbitrary recursive directory copy racing publication or garbage collection is not
+  a supported backup contract.
+- Write callbacks are data transactions over a fixed schema.
+  DDL and virtual tables are outside the `f1.0` concurrent-writer contract.
 
 The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
 tests to guarantees.

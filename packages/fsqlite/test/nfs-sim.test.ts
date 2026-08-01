@@ -1,12 +1,12 @@
-// NFS and shared-storage behavior, simulated locally (a real gate needs a real NFSv4.1,
-// EFS, or Filestore mount). These tests pin the two design properties that make the model
-// NFS-safe in principle:
+// Shared-storage behavior, simulated locally (a real gate needs a real NFSv4.1, EFS, or
+// Filestore mount). These tests pin two design properties used by the shared-filesystem
+// protocol:
 //   1. Close-to-open coherence: every read opens a FRESH connection to the immutable
 //      snapshot named by `current`, so a second "host" observes a publish with no stale
 //      connection-cache. fsqlite never holds a long-lived handle to a mutable shared DB
 //      file: the exact thing that corrupts SQLite-on-NFS.
-//   2. Conflict-free writes: writers only CREATE uniquely-named envelope dirs; atomic
-//      directory create is the one primitive that works on NFS, so a burst never collides.
+//   2. Conflict-free writes: writers only CREATE uniquely named envelope directories,
+//      so a local burst never collides.
 // What this canNOT prove without a real mount: fcntl/lease-break races under true network
 // partition, attribute-cache staleness (actimeo), and fsync durability.
 

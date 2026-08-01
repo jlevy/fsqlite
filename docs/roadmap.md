@@ -27,6 +27,8 @@ stable release, not a promise that unsupported environments work today.
 - Expand `fsinspect` from single-host heuristics using evidence from those gates.
 - Decide from the evidence whether a monotonic fence or single-host proxy lock is
   necessary.
+- Add a heartbeat or shorter optimistic critical section for DirectStore and repair so
+  operations longer than the lease stale window do not livelock.
 
 ### Platform and Runtime Portability
 
@@ -47,7 +49,10 @@ stable release, not a promise that unsupported environments work today.
 - Design declared read-set validation for point-key invariants; document stronger
   patterns for range, predicate, aggregate, and cross-row invariants.
 - Evaluate SQLite rebaser support without making it a base-format dependency.
-- Measure schema-only writer seeding and explicit compaction/retention for large stores.
+- Design and measure a safe overlay, shared read-only base, or equivalent writer seed
+  that preserves the callback’s observed data and constraints for large stores.
+- Measure explicit snapshot compaction and retention without weakening immutable
+  publication.
 - Research replay-based bit-rot recovery while keeping repair non-destructive and
   fail-closed.
 

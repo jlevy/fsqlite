@@ -6,6 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import type { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
@@ -112,6 +113,74 @@ test('direct writers use explicit rollback, durability, foreign-key, and busy-ti
     const snapshot = store.snapshotPath(store.currentVersion())
     assert.equal(existsSync(`${snapshot}-wal`), false)
     assert.equal(existsSync(`${snapshot}-shm`), false)
+  } finally {
+    cleanup()
+  }
+})
+
+for (const scenario of [
+  {
+    name: 'SQLite application id',
+    mutate: (db: DatabaseSync) => {
+      db.exec('PRAGMA application_id = 0')
+    },
+    error: /application callback changed the fsqlite SQLite application id/,
+  },
+  {
+    name: 'caller schema version',
+    mutate: (db: DatabaseSync) => {
+      db.exec('PRAGMA user_version = 99')
+    },
+    error: /application callback changed the caller schema version/,
+  },
+  {
+    name: 'owned metadata rows',
+    mutate: (db: DatabaseSync) => {
+      db.exec("DELETE FROM fsqlite_meta WHERE key = 'store_id'")
+    },
+    error: /fsqlite-owned table fsqlite_meta is read-only/,
+  },
+  {
+    name: 'owned ledger schema',
+    mutate: (db: DatabaseSync) => {
+      db.exec('DROP TABLE applied_tx')
+    },
+    error: /application callback changed the SQLite schema/,
+  },
+  {
+    name: 'caller schema',
+    mutate: (db: DatabaseSync) => {
+      db.exec('CREATE TABLE unversioned_change (id TEXT PRIMARY KEY)')
+    },
+    error: /application callback changed the SQLite schema/,
+  },
+]) {
+  test(`DirectStore rejects callback changes to the ${scenario.name}`, () => {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new DirectStore(dir, STORE_OPTS).init()
+      assert.throws(() => store.write(scenario.mutate), scenario.error)
+      assert.equal(store.currentVersion(), 0)
+      assert.equal(store.validate().state, 'sealed')
+    } finally {
+      cleanup()
+    }
+  })
+}
+
+test('SnapshotStore callbacks cannot mutate fsqlite-owned rows', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    assert.throws(
+      () =>
+        store.write('bad-writer', (db) => {
+          db.exec("INSERT INTO applied_tx VALUES ('forged', '2026-08-01T00:00:00Z')")
+        }),
+      /fsqlite-owned table applied_tx is read-only/,
+    )
+    assert.equal(store.currentVersion(), 0)
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }

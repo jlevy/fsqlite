@@ -1,7 +1,7 @@
 {
   "name": "fsqlite",
   "version": "0.1.0",
-  "description": "Filesystem-friendly concurrent SQLite with immutable snapshot publication, transaction-envelope changesets, an NFS-safe mkdir lease, and a local single-writer DirectStore over plain SQLite files",
+  "description": "Filesystem-friendly concurrent SQLite with immutable snapshot publication, transaction-envelope changesets, a fenced mkdir lease, and a local single-writer DirectStore over plain SQLite files",
   "type": "module",
   "license": "MIT",
   "author": "Joshua Levy",

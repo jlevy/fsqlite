@@ -14,7 +14,7 @@ repository at the listed commit and re-verify them in any scratch directory.
 | `sqlite/sqlite` | `002d33d` (2026-06-04) | SQLite session, changeset, locking, and WAL semantics |
 | `nodejs/node` @ `v22.22.2` | `2645dc73` (bundles SQLite **3.51.2**) | The `node:sqlite` binding (`src/node_sqlite.cc`) |
 | `WiseLibs/better-sqlite3` | `f93f490` (v12.10.0, bundles SQLite **3.53.2**) | Alternative Node binding: format and session availability |
-| `moxystudio/node-proper-lockfile` | `9f8c303` (v4.1.2) | Prior art for the NFS-safe `mkdir` lease lock |
+| `moxystudio/node-proper-lockfile` | `9f8c303` (v4.1.2) | Prior art for a `mkdir` lease intended for network filesystems |
 
 ## A. SQLite Engine Semantics (`sqlite/sqlite`)
 

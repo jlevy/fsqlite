@@ -39,8 +39,8 @@ export interface StoreOptions {
 }
 
 /**
- * Store health. `sealed`/`live` are healthy; `in-flight-capture` means a publish or
- * hot copy is mid-flight (retryable); `corrupt` means an inconsistency `validate` surfaced
+ * Store health. `sealed`/`live` are healthy; `in-flight-capture` means a capture,
+ * publish, or maintenance operation is mid-flight (retryable); `corrupt` means an inconsistency `validate` surfaced
  * rather than silently accepted (R2).
  */
 export type StoreState = 'sealed' | 'live' | 'in-flight-capture' | 'corrupt'

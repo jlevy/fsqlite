@@ -1,8 +1,8 @@
-// lock.ts provides an NFS-safe mkdir lease with an owner token.
+// lock.ts provides a fenced mkdir lease with an owner token.
 //
 // Publication is fsqlite's only mutual-exclusion point. Writers do not hold the lease
-// while preparing changes. `mkdir(2)` provides cross-host coordination on local disks,
-// NFS, and SMB, where POSIX byte-range locks and WAL shared memory are unreliable.
+// while preparing changes. `mkdir(2)` provides cross-process coordination on filesystems
+// whose exclusive directory-creation semantics pass the required capability checks.
 //
 // Correctness rests on immutable snapshots, an atomic pointer swap, and the applied_tx
 // ledger. The lease reduces redundant work. Its owner token lets a holder revalidate

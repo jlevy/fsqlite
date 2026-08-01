@@ -25,31 +25,21 @@ try {
       }
     })
   }
-  const measure = (iterations: number, seed: 'snapshot' | 'schema-only'): number => {
+  const measure = (iterations: number): number => {
     const started = process.hrtime.bigint()
     for (let index = 0; index < iterations; index++) {
-      store.write(
-        'benchmark',
-        (db) =>
-          db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`write-${sequence++}`, blob, 't'),
-        { seed },
+      store.write('benchmark', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`write-${sequence++}`, blob, 't'),
       )
     }
     return Number(process.hrtime.bigint() - started) / 1e6 / iterations
   }
 
   grow(500)
-  const snapshotSmall = measure(20, 'snapshot')
+  const snapshotSmall = measure(20)
   grow(5000)
-  const snapshotLarge = measure(20, 'snapshot')
-  const schemaOnlyLarge = measure(20, 'schema-only')
-  console.log(
-    JSON.stringify(
-      { millisecondsPerWrite: { snapshotSmall, snapshotLarge, schemaOnlyLarge } },
-      null,
-      2,
-    ),
-  )
+  const snapshotLarge = measure(20)
+  console.log(JSON.stringify({ millisecondsPerWrite: { snapshotSmall, snapshotLarge } }, null, 2))
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

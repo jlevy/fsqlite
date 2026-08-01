@@ -10,22 +10,31 @@ basis, and track validation and future work.
 | Need | Document | Role |
 | --- | --- | --- |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
-| Understand the architecture and tradeoffs | [fsqlite Design](fsqlite-design.md) | Current rationale for the two store strategies, concurrency model, identity, API, and evolution policy |
+| Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | System constraints, rationale, strategy choice, trust boundary, operating envelope, and tradeoffs |
 | Review the evidence and alternatives | [Portable Concurrent SQLite Research](research/README.md) | Technical research on SQLite sessions, coordination, filesystems, bindings, prior art, and validation gaps |
 | Reproduce source-level SQLite and Node claims | [Upstream Source Confirmations](upstream-source-confirmations.md) | Pinned public sources and file-level evidence |
 | Verify the SQLite file identifier | [Application ID](application-id.md) | Selection and registry status of the fixed `FSQL` application ID |
 | Test a release or evaluate its guarantees | [QA Runbook](qa-runbook.md) | Automated and manual tests mapped to claims and known gaps |
 | See current limitations and planned capabilities | [Roadmap](roadmap.md) | User-facing work after the first alpha |
-| Follow the detailed post-alpha plan | [Post-Alpha Roadmap Plan](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md) | Dependencies, acceptance criteria, and implementation sequencing for future work |
-| Review the alpha release work | [Alpha Release Plan](project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md) | Decisions, implementation checklist, testing, and publication gate for `0.1.0` |
 | Publish a release | [Release Runbook](releasing.md) | Bootstrap publication, trusted publishing, verification, and recovery procedures |
 | Review dependency policy | [Supply-Chain Security](../SUPPLY-CHAIN-SECURITY.md) | Install, lockfile, lifecycle-script, and release controls |
 
-The format specification governs interoperable on-disk behavior.
-The design describes the current implementation choices.
-The dated research report supplies background and evidence; where it discusses
-alternatives or future work, the format specification and design describe the current
-behavior. Plans and the roadmap track work rather than define shipped guarantees.
+The format specification is the only normative protocol authority.
+The design owns the stable `C1` through `C12` system-constraint registry and explains
+how the implementation fits it.
+The package README is a consumer guide.
+The QA runbook is an evidence index.
+The dated research and source confirmations support claims but do not define current
+behavior.
+The roadmap and project plans track work rather than define shipped guarantees.
+
+## Project Records
+
+These standalone plans preserve decisions, acceptance criteria, and sequencing.
+They are maintainer records, not additional design authorities.
+
+- [0.1.0 release plan](project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md)
+- [Post-alpha format and portability plan](project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md)
 
 ## Publication Boundary
 

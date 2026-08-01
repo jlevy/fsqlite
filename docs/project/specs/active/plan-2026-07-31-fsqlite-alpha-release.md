@@ -14,9 +14,9 @@ Establish `github.com/jlevy/fsqlite` as the standalone home of `fsqlite` and pub
 alpha to npm.
 
 The package is filesystem-friendly concurrent SQLite: immutable snapshot publication and
-transaction-envelope changesets behind an NFS-safe `mkdir` lease, with a local
+transaction-envelope changesets behind a fenced `mkdir` lease, with a local
 single-writer `DirectStore` mode, over plain SQLite files, server-free, on any
-filesystem.
+filesystem that supplies the protocol’s required coordination and durability behavior.
 
 The runtime code is already self-contained: no source, worker, or test import escapes
 the package. The work is to establish an independent toolchain, fix the recovery-path
@@ -242,11 +242,11 @@ misreports all of them as a persistent conflict.
 The suite keeps its structure.
 Three specific reliability problems need fixing, and two CI flags are required.
 
-`seed.test.ts` asserts wall-clock benchmark comparisons inside the correctness gate;
-margins are wide locally but a throttled shared runner can redden a PR that changed
-nothing. `kill.test.ts:60` sleeps 15ms before `SIGKILL`, far less than Node cold-start,
-so on CI the child is almost certainly killed before doing any work and the test passes
-as a **silent false green**, never exercising the mid-build property it claims to cover.
+The writer-seeding benchmark must stay outside the correctness gate because a throttled
+shared runner can redden a PR that changed nothing.
+`kill.test.ts:60` sleeps 15ms before `SIGKILL`, far less than Node cold-start, so on CI
+the child is almost certainly killed before doing any work and the test passes as a
+**silent false green**, never exercising the mid-build property it claims to cover.
 `fsinspect.test.ts:66-72` asserts a numeric mtime resolution, but the probe legitimately
 returns `null` on a filesystem with one-second granularity.
 
@@ -291,6 +291,31 @@ Optional marker fields may be added without a format bump, mandatory capabilitie
 `required_features`, and incompatible layout or protocol changes increment the major
 component. A future explicit upgrade command will write and validate a side-by-side
 destination, preserve `store_id`, and leave the source untouched until operator cutover.
+
+### Consolidated Design Constraints
+
+`docs/fsqlite-design.md` owns the stable `C1` through `C12` system-constraint registry.
+`docs/fsql-format-spec.md` remains the sole normative protocol authority, and the QA
+runbook maps constraints to tests.
+Package prose, research, and plans link to those authorities rather than restating a
+competing contract.
+
+The PR review identified two unsafe edges that are resolved before publication:
+
+- The schema-only writer seed is removed from `f1.0`. A callback now always observes a
+  full copy of the published head, so updates, deletes, and existing-key inserts cannot
+  silently operate against an empty database.
+- Application callbacks cannot mutate fsqlite-owned rows, SQLite schema, application ID,
+  or caller schema version.
+  DirectStore reasserts identity and reserved-table invariants before publishing its
+  candidate.
+
+The review also narrows two claims.
+Different primary keys may still conflict through a UNIQUE or foreign-key constraint.
+Bounded-loss backup applies to pinned immutable snapshots and supported backup/seal
+operations, not an arbitrary recursive copy of a live directory.
+Long DirectStore and repair critical sections remain safe through fencing but need a
+heartbeat or shorter critical section for better liveness.
 
 ### Documentation
 
@@ -381,6 +406,10 @@ Every item lands with a regression test that fails before the fix.
   written
 - [x] (`fsq-xc8i`) Treat an envelope already consumed by another reconciler as a benign
   quarantine race without weakening fail-closed reason writes
+- [x] (`fsq-rysf`) Protect the callback trust boundary and reassert candidate identity
+  before DirectStore publication
+- [x] (`fsq-jwyo`) Remove the unsafe schema-only seed mode from the public API and
+  `f1.0` protocol
 
 ### Phase 3: Usability, Documentation, and Alpha Publish
 
@@ -424,7 +453,7 @@ Goal: a stranger can find, understand, install, and use this.
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 113 `node:test` cases
+The current suite is the baseline and must stay green throughout: 119 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 24 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and

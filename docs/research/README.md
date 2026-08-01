@@ -23,9 +23,10 @@ Two focused evidence records complement the report:
 - [Application ID](../application-id.md) records selection and registration of the
   SQLite file identifier
 
-Research is included when it supports the standalone format or implementation.
-Consumer-specific evaluations and duplicated preliminary notes are excluded; reusable
-findings from that work are incorporated into the report with public sources.
+This material is dated evidence.
+The current [design constraints](../fsqlite-design.md#design-constraints), normative
+format specification, QA runbook, and roadmap supersede any recommendation or future
+work described in the report.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
