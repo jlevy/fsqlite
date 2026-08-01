@@ -5,7 +5,7 @@ title: "Address review: PR #1 - engineering review"
 kind: task
 status: in_progress
 priority: 1
-version: 33
+version: 34
 spec_path: docs/project/specs/active/plan-2026-07-31-fsqlite-alpha-release.md
 labels:
   - phase3
@@ -45,7 +45,8 @@ child_order_hints:
   - is-01kyy0w4vtf0j5z7tf2hdp49vt
   - is-01kyy0w53nc0t0jsr325pxk63y
   - is-01kyy0w5bqwz14smer6t0qbjze
+  - is-01kyy1jq46z3a7mf3bqx4awr0s
 created_at: 2026-08-01T06:14:15.171Z
-updated_at: 2026-08-01T06:41:07.446Z
+updated_at: 2026-08-01T06:53:26.533Z
 ---
 Address every unique finding in the owner-authored engineering review posted on PR #1 at commit 5ea2ef7. Map duplicate blocker, design, implementation, research, and coverage observations to one finding bead each; independently reproduce or inspect each claim; fix, rebut, or defer explicitly; publish a complete disposition map; and finish with green CI.
