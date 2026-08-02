@@ -5,20 +5,21 @@
 
 **Portable, stable SQLite, packaged for concurrent agents.**
 
-fsqlite is an agent-friendly store format and coordination strategy for ordinary SQLite
-databases. Install this zero-runtime-dependency Node.js library, point cooperative
-processes at a store directory, and keep using SQLite’s engine, SQL, transactions,
-schema, constraints, tools, and file format.
-Complete databases become immutable generations that writers can update without sharing
-one live writable SQLite file.
+fsqlite is ordinary SQLite with a file-level coordination layer for concurrent agents.
+It publishes complete databases as immutable versions, so writers do not share one live
+SQLite file.
 
-Supported Node releases already include SQLite: Node 22.18+ on the 22.x line, or Node
-24+. The package accesses that included SQLite library through the built-in
-`node:sqlite` module.
-Installing fsqlite therefore requires no separate SQLite installation or native build,
-and fsqlite and direct `node:sqlite` calls use the same SQLite library supplied by Node.
-This package is the first implementation of the language-independent `f1.0` commit
-protocol.
+You keep SQLite’s engine, SQL, transactions, portable file format, standard tools, and
+server-free operation.
+fsqlite adds concurrency-safe publication for cooperative writers.
+`seal()` can make a consistent point-in-time copy while publication continues; a
+successful copy contains one complete version, and later work is outside that copy.
+
+This zero-runtime-dependency package uses SQLite built into Node 22.18+ on the 22.x line
+and Node 24+, through the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html)
+module. It requires no separate SQLite installation or native build.
+fsqlite and direct `node:sqlite` calls use the same SQLite library; this package is the
+first implementation of the language-independent `f1.0` commit protocol.
 
 > **Alpha phase:** `0.1.0` defines the first public API and the draft `f1.0` store
 > format. Both may change before 1.0. The multi-process suite is extensive, but the real
@@ -212,8 +213,33 @@ explains the required filesystem evidence and deployment choices in detail.
 
 ## Architecture
 
-An fsqlite store is a directory containing immutable SQLite generations, a `current`
-pointer, and optional transaction envelopes:
+A typical `SnapshotStore` directory looks like this:
+
+```text
+knowledge.fsqlite/
+├── fsqlite.json                         # format and store identity
+├── current                              # contains "1"; atomic commit point
+├── snapshots/
+│   ├── 000000000000.fsqlite.sqlite      # retained prior generation
+│   └── 000000000001.fsqlite.sqlite      # generation named by current
+├── tx/
+│   ├── pending/
+│   │   └── <txid>.txn/
+│   │       ├── manifest.json
+│   │       ├── changeset.bin
+│   │       └── COMMITTED
+│   ├── applied/
+│   └── quarantine/
+└── leases/                              # temporary pins for copying and GC
+```
+
+The `.fsqlite.sqlite` files are the data: each is a complete standard SQLite database,
+closed and published without `-wal` or `-shm` side files.
+`fsqlite.json`, `current`, `tx/`, and `leases/` are the coordination layer.
+During work or recovery, short-lived `publish.lock/`, `.build-*`, `.direct-*`,
+`.work-*`, and `*.tmp` paths may also appear.
+
+The two write paths publish the same layout:
 
 ```mermaid
 flowchart TB
@@ -521,10 +547,14 @@ is the normative protocol authority.
 - DirectStore holds its lease across copy, callback, checks, fsync, and publication.
   Configure a stale window longer than the worst-case operation.
   A stolen lease is fenced safely but can cause the callback to retry.
-- Use `readLease()`, `seal()`, or the backup helpers for live backups.
-  `seal()` acquires its own read lease for the selected snapshot.
-  An arbitrary recursive directory copy racing publication or garbage collection is not
-  a supported backup contract.
+- `seal()` pins one published snapshot and creates an integrity-checked point-in-time
+  SQLite file while writers continue.
+  Pending changes and versions published after the snapshot was selected are outside
+  that export. Use `readLease()` or the backup helpers for other live-copy workflows; an
+  arbitrary recursive directory copy racing publication or garbage collection is not
+  supported. The
+  [backup and copying design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#backup-and-copying)
+  defines the supported workflows.
 - Write callbacks are data transactions over a fixed schema.
   Persistent and temporary DDL, including temporary tables and triggers, and virtual
   tables are outside the `f1.0` concurrent-writer contract.

@@ -5,18 +5,21 @@
 
 **Portable, stable SQLite, packaged for concurrent agents.**
 
-fsqlite is an agent-friendly store format and coordination strategy for ordinary SQLite
-databases. It keeps SQLite’s engine, SQL, transactions, and file format intact, then
-packages complete databases as immutable generations that cooperative writers can update
-without sharing one live writable SQLite file.
-Ordinary SQLite tools and bindings can open every published generation directly.
+fsqlite is ordinary SQLite with a file-level coordination layer for concurrent agents.
+It publishes complete databases as immutable versions, so writers do not share one live
+SQLite file.
 
-Supported Node releases already include SQLite: Node 22.18+ on the 22.x line, or Node
-24+. The reference package accesses that included SQLite library through the built-in
-`node:sqlite` module.
-Installing fsqlite therefore requires no separate SQLite installation or native build,
-and fsqlite and direct `node:sqlite` calls use the same SQLite library supplied by Node.
-The surrounding `f1.0` commit protocol is language-independent.
+You keep SQLite’s engine, SQL, transactions, portable file format, standard tools, and
+server-free operation.
+fsqlite adds concurrency-safe publication for cooperative writers.
+`seal()` can make a consistent point-in-time copy while publication continues; a
+successful copy contains one complete version, and later work is outside that copy.
+
+The Node reference package uses SQLite built into Node 22.18+ on the 22.x line and Node
+24+, through the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module.
+It requires no separate SQLite installation or native build.
+fsqlite and direct `node:sqlite` calls use the same SQLite library; the `f1.0` commit
+protocol is language-independent.
 
 > **Alpha phase:** `0.1.0` defines the first public API and draft `f1.0` format.
 > Both may change before 1.0. Local POSIX multi-process behavior has extensive automated
@@ -196,8 +199,33 @@ the required filesystem evidence and deployment choices in detail.
 
 ## Architecture
 
-An fsqlite store is a directory containing immutable SQLite generations, a `current`
-pointer, and optional transaction envelopes:
+A typical `SnapshotStore` directory looks like this:
+
+```text
+knowledge.fsqlite/
+├── fsqlite.json                         # format and store identity
+├── current                              # contains "1"; atomic commit point
+├── snapshots/
+│   ├── 000000000000.fsqlite.sqlite      # retained prior generation
+│   └── 000000000001.fsqlite.sqlite      # generation named by current
+├── tx/
+│   ├── pending/
+│   │   └── <txid>.txn/
+│   │       ├── manifest.json
+│   │       ├── changeset.bin
+│   │       └── COMMITTED
+│   ├── applied/
+│   └── quarantine/
+└── leases/                              # temporary pins for copying and GC
+```
+
+The `.fsqlite.sqlite` files are the data: each is a complete standard SQLite database,
+closed and published without `-wal` or `-shm` side files.
+`fsqlite.json`, `current`, `tx/`, and `leases/` are the coordination layer.
+During work or recovery, short-lived `publish.lock/`, `.build-*`, `.direct-*`,
+`.work-*`, and `*.tmp` paths may also appear.
+
+The two write paths publish the same layout:
 
 ```mermaid
 flowchart TB
@@ -303,16 +331,19 @@ contract, conflict policies, schema replacement, CLI operations, and limitations
 
 ## Portable Sharing and Replication
 
-The live store is a directory, but each published head is a complete ordinary SQLite
-file. `seal()` pins a generation and creates an integrity-checked standalone SQLite copy
-for handoff, archival, upload, or import into another environment.
-Readers need no fsqlite extension.
+Each published head is an immutable standard SQLite file.
+`seal()` pins one head and creates an integrity-checked point-in-time copy while writers
+continue. A successful export is one complete database.
+Writes still pending, or published after the head was selected, are outside that export.
 
 fsqlite provides a stable file boundary that an application can move with its own
 transport. Remote transport, consensus, and automatic bidirectional replication remain
 application responsibilities.
-Reconcile the desired pending work before sealing when the exported artifact must
-include the complete accepted tail.
+Readers need no fsqlite extension.
+Quiesce writers and reconcile the pending tail first when an export must include every
+accepted write.
+Use `seal()` or pin a generation with `readLease()` before copying it; an
+arbitrary recursive copy of the changing store directory is not a supported backup.
 The [backup and copying design](docs/fsqlite-design.md#backup-and-copying) describes the
 supported live-store and standalone-file workflows.
 
@@ -328,8 +359,6 @@ supported live-store and standalone-file workflows.
   It does not infer range, aggregate, predicate, or arbitrary cross-row invariants.
   `f1.0` also requires every reconciler to receive the same effective conflict policy;
   the store does not yet verify policy identity.
-- Published snapshots are immutable and recoverable, but arbitrary recursive copying of
-  a live store is not a supported backup contract.
 - Multi-host NFS/SMB behavior, Windows publication races, schema migration, bounded
   ledger growth, a formal Worker Thread contract, and stronger isolation remain pre-1.0
   work.
