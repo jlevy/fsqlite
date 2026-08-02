@@ -1,7 +1,7 @@
 # fsqlite Documentation
 
-For the project thesis, agent use case, strategy choice, and quick start, begin with the
-[root README](../README.md).
+For the project thesis, agent use case, architecture, strategy choice, and quick start,
+begin with the [root README](../README.md).
 For the complete npm installation and API guide, use the
 [package README](../packages/fsqlite/README.md).
 The documents here define the store format, explain the design, preserve its technical
@@ -11,10 +11,10 @@ basis, and track validation and future work.
 
 | Need | Document | Role |
 | --- | --- | --- |
-| Understand the project, its agent use case, and its main tradeoffs | [Project README](../README.md) | Primary project landing page, conceptual guide, quick start, and documentation entry point |
+| Understand the project, its agent use case, and its main tradeoffs | [Project README](../README.md) | Primary project landing page, architecture overview, strategy guide, quick start, and documentation entry point |
 | Install and operate the Node package | [Package README](../packages/fsqlite/README.md) | Self-contained npm consumer guide, API contract, CLI reference, and limitations |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
-| Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | First-principles comparison with ordinary SQLite, system constraints, strategy choice, trust boundary, and tradeoffs |
+| Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | First-principles comparison with ordinary SQLite, implementation boundary, system constraints, strategy choice, trust boundary, and tradeoffs |
 | Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Official SQLite evidence, current measurements, mitigation guidance, severity, and adoption boundaries |
 | Review the evidence and alternatives | [Portable Concurrent SQLite Research](research/README.md) | Technical research on SQLite sessions, coordination, filesystems, bindings, prior art, and validation gaps |
 | Reproduce source-level SQLite and Node claims | [Upstream Source Confirmations](upstream-source-confirmations.md) | Pinned public sources and file-level evidence |

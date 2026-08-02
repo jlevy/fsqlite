@@ -29,6 +29,7 @@ function filesBelow(dir, accept) {
     if (
       entry.name === '.git' ||
       entry.name === '.tbd' ||
+      entry.name === 'attic' ||
       entry.name === 'dist' ||
       entry.name === 'node_modules'
     ) {

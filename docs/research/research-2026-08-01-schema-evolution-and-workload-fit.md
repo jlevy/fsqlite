@@ -10,19 +10,19 @@ fsqlite still fits its intended use: several cooperative local processes and age
 record modest metadata transactions, can accept reconciliation-based visibility, and
 value portable SQLite snapshots without a required service.
 
-This is a narrower goal than “make SQLite concurrent,” but it is not distinguished by
-host count. One computer may run many independent agent clients against a shared
-knowledge base.
-Ordinary SQLite should remain the first choice for one embedded owner and
-for writers that can queue on one live database with immediate serializable commits.
+Independent writer clients, rather than host count, distinguish this narrower goal from
+“make SQLite concurrent.”
+One computer may run many agent clients against a shared knowledge base.
+Ordinary SQLite should remain the first choice for one embedded owner and for writers
+that can queue on one live database with immediate serializable commits.
 SnapshotStore is justified when independent file-native capture and immutable published
 generations matter enough to pay for full-head copying, delayed visibility, and weaker
 multi-writer isolation.
 DirectStore is the serialized fsqlite lane when immediate immutable publication matters;
-it is not the default wrapper for an otherwise ordinary single-client SQLite database.
+ordinary SQLite remains the simpler wrapper for a single-client embedded database.
 
-The review does not justify a format redesign or reduce the core value of the approach.
-It does narrow the useful operating envelope:
+The evidence supports the current format and core value while narrowing the useful
+operating envelope:
 
 - `f1.0` has one immutable caller-schema identity.
   It detects incompatible schemas but does not migrate them.
@@ -404,9 +404,9 @@ pressure, and durability latency can move the result substantially.
 ### Independent Local Agents
 
 An agent is one independently running process.
-The important workload is not the label “agent” or the process count by itself.
-It is the number of captures multiplied by the published bytes, plus how tightly those
-captures bunch together.
+Published bytes multiplied by capture count, plus how tightly those captures bunch
+together, determine the workload more directly than the “agent” label or process count
+alone.
 
 As an inferred planning example, 12 agents each recording one change against a 5 MiB
 head cause about 60 MiB of source-copy traffic and can create about 60 MiB of writer
@@ -530,8 +530,8 @@ Applications that need immediate power-loss durability can reconcile immediately
 cost of another full-head build; use DirectStore for a serialized synchronous lane; or
 use ordinary SQLite.
 An optional durable-envelope receipt is roadmap work.
-This boundary is not silent data corruption: the last published snapshot remains the
-store commit point.
+Power-loss exposure is bounded to unpublished accepted envelopes; the last published
+snapshot remains the store commit point.
 
 ### Filesystem Evidence
 
@@ -540,9 +540,9 @@ close-to-open visibility, and working file and directory fsync barriers.
 The reference implementation now fails when a required directory fsync is unavailable,
 and `fsinspect` includes that barrier in its safe verdict.
 
-A one-host probe cannot prove multi-host behavior.
-NFS, SMB, managed shared filesystems, and mount options need real two-host contention
-and failure tests. Consumer sync folders can reorder, duplicate, merge, or partially
+Multi-host safety requires real two-host contention and failure tests for NFS, SMB,
+managed shared filesystems, and the exact mount options; a one-host probe is diagnostic
+evidence only. Consumer sync folders can reorder, duplicate, merge, or partially
 synchronize directories and are not treated as conforming shared filesystems.
 
 ### Disk Capacity and Retention

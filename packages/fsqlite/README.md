@@ -27,7 +27,9 @@ task graph, document catalog, or cache.
 Those writers may have substantial contention even though every process is local, and
 running a database server beside every workspace is often disproportionate.
 
-fsqlite targets the gap between a shared live SQLite file and a database service:
+fsqlite targets the gap between a shared live SQLite file and a database service.
+
+## Core Properties
 
 - **Portable SQLite files:** Every published generation is a complete database in the
   standard SQLite format.
@@ -54,20 +56,41 @@ fsqlite targets the gap between a shared live SQLite file and a database service
 - **Language-independent protocol:** The on-disk format and commit protocol can be
   implemented in any language; Node.js is the first reference implementation.
 
+## What fsqlite Adds to SQLite
+
+fsqlite keeps SQLite intact and adds a file-level coordination layer:
+
+| Layer | Supplied by | Role |
+| --- | --- | --- |
+| Database engine and file format | SQLite | SQL, transactions, schemas, constraints, queries, and complete portable database files |
+| Logical change capture | SQLite session extension | Records row changes and applies them later with conflict detection |
+| Store and commit protocol | [`f1.0`](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md) | Transaction envelopes, immutable generations, `current`, fencing, validation, an exactly-once ledger, and quarantine |
+| Reference package | TypeScript on built-in `node:sqlite` | A convenient npm library and CLI that implements the protocol for Node applications and agents |
+
+The durable artifact is a standard SQLite database plus the surrounding `f1.0` directory
+protocol. fsqlite defines no new storage engine or SQL dialect.
+Ordinary readers open the published SQLite file directly; cooperative writers use
+fsqlite to coordinate which complete file is current and how independent changes reach
+it.
+
+### Why This Is Practical Now
+
+SQLite’s session extension has been upstream since 2016, but it is compile-time optional
+and remains absent from many common bindings.
+That kept logical changesets less visible than WAL and page replication.
+Node’s built-in `node:sqlite` now exposes sessions, changeset application, backup, and
+ordinary SQLite access together, which makes a small zero-dependency package practical.
+
+Most distributed SQLite systems chose a different deployment model: WAL or page
+replication, a primary or daemon, consensus, a storage service, or custom readers.
+fsqlite combines SQLite’s row-level changesets with immutable generations and an atomic
+filesystem commit point.
+The individual pieces are established; the `f1.0` protocol and their server-free
+integration are the new contribution.
 The
-[portable concurrent SQLite research](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
-surveys WAL, external locks, distributed SQLite systems, SQLite changeset sync, CRDTs,
-and server-backed approaches.
-Its
-[landscape review](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md#e-the-prior-art-landscape-and-the-gap),
-[key insights](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md#key-insights),
-and
-[comparison matrix](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md#comparison-matrix)
-explain why SQLite session changesets, immutable snapshots, and atomic publication fit
-the server-free agent use case.
-As of the report’s 2026-08-01 update, fsqlite occupies a distinct position among the
-surveyed alternatives by combining direct server-free access, independent cooperative
-capture, filesystem publication, and stock SQLite snapshots for unmodified readers.
+[research report](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
+contains the source analysis, prior-art review, and comparison matrix behind this
+design.
 
 ## Should You Use fsqlite?
 
@@ -94,12 +117,19 @@ file-native handoff.
 publication enough to serialize every complete callback.
 Ordinary SQLite remains the simpler choice for a single embedded owner.
 
+The
+[coordination-model design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#choose-by-coordination-model)
+develops this decision from visibility, isolation, snapshot size, and writer
+independence.
+
 fsqlite buys immutable published states, explicit recovery points, and file-native
 coordination without a required service.
 It pays for those properties with a full-head copy for every write, delayed cross-writer
 visibility, more transient disk use, and a multi-writer merge model that is not
 serializable. Agent count alone does not determine fit: snapshot bytes multiplied by
 write rate and burst size determine most of the cost.
+
+### Shared Filesystems and Cloud Agents
 
 Safety on shared network storage depends on the capabilities of the exact mount.
 Both fsqlite strategies require correct exclusive directory creation, atomic
@@ -121,6 +151,61 @@ files; it does not make arbitrary SQLite clients safe on a network drive.
 See [Appropriate Uses For SQLite](https://sqlite.org/whentouse.html),
 [Isolation In SQLite](https://sqlite.org/isolation.html), and
 [Write-Ahead Logging](https://sqlite.org/wal.html).
+The
+[shared-path design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#shared-paths-and-cloud-agents)
+explains the required filesystem evidence and deployment choices in detail.
+
+## Architecture
+
+An fsqlite store is a directory containing immutable SQLite generations, a `current`
+pointer, and optional transaction envelopes:
+
+```mermaid
+flowchart LR
+  A["Agent A"] -->|"SnapshotStore capture"| E["Committed session changesets"]
+  B["Agent B"] -->|"SnapshotStore capture"| E
+  E --> R["Reconcile"]
+  R --> U["Fenced publication"]
+  D["Serialized caller"] -->|"DirectStore"| U
+  U -->|"write and fsync"| G[("Immutable SQLite files")]
+  U -->|"atomic replace"| P["current"]
+  P -.->|"names the head"| G
+  Q["Ordinary SQLite readers"] -->|"open named generation"| G
+```
+
+`SnapshotStore.write()` runs a normal SQLite transaction on a private copy and records
+the result with SQLite’s session extension.
+It commits that changeset as a uniquely named envelope, so independent captures can
+overlap. `reconcile()` applies accepted envelopes to another private copy, validates the
+result, and publishes the next generation.
+`DirectStore` skips the envelope step and serializes the complete copy-mutate-publish
+path.
+
+Replacing `current` is the store commit point.
+The snapshot is written and fsynced first, so readers see either the previous complete
+SQLite database or the next one.
+Fencing, optimistic checks on `current`, and an in-snapshot transaction ledger protect
+publication from racing publishers, stale leases, duplicate application, and process
+crashes. The
+[architecture design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#architecture)
+covers the complete store layout, publication races, and consistency boundaries.
+
+### Reference Implementation
+
+This package is a small set of TypeScript modules built for npm.
+It has zero runtime dependencies and runs on Node’s built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html), filesystem, and cryptography APIs.
+`node:sqlite` supplies SQLite, session changesets, and online backup without a native
+add-on or prebuilt binary.
+
+The `f1.0` format is language-independent, with Node serving as the first
+implementation. Any SQLite binding can read a published generation.
+A `SnapshotStore` implementation in another language needs SQLite session and changeset
+support; a `DirectStore` implementation needs ordinary SQLite.
+Either can implement the same filesystem protocol and interoperate through the same
+store. The
+[upstream source confirmations](https://github.com/jlevy/fsqlite/blob/main/docs/upstream-source-confirmations.md)
+record the exact SQLite and Node capabilities behind the reference package.
 
 ## Install
 
@@ -196,6 +281,9 @@ It still copies and fsyncs the complete published snapshot for each write, so it
 semantic simplification rather than a large-database performance optimization.
 Its callback may run more than once after a fencing or publication race, so keep
 external side effects outside the callback or make them idempotent.
+The
+[write-strategy design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#two-write-strategies)
+details each strategy’s lifecycle and guarantees.
 
 ## Changing an Application Schema
 
@@ -228,8 +316,12 @@ migration or an atomic cross-process cutover supplied by this package.
 The application must prevent old writers from continuing on the old path.
 Even a normally compatible change such as adding a column starts a new epoch in `f1.0`.
 
-SQLite documents its directly supported alterations and its general create-copy-drop-
-rename procedure in [ALTER TABLE](https://sqlite.org/lang_altertable.html).
+The
+[schema-change design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#schema-changes-in-practice)
+explains the fsqlite protocol requirements.
+SQLite documents its directly supported alterations and its general
+create-copy-drop-rename procedure in
+[ALTER TABLE](https://sqlite.org/lang_altertable.html).
 A future fsqlite migration protocol must add writer admission, pending-envelope
 treatment, validation, rollback, and cutover around those ordinary SQLite steps.
 
@@ -265,10 +357,9 @@ Opening a store never upgrades it.
 Future format upgrades will be explicit, side-by-side operations that preserve
 `store_id` and leave the source untouched until cutover.
 
-See the
-[format specification](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md)
-and [design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md) for the
-complete protocol.
+The
+[store-layout specification](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md#2-store-layout)
+defines the complete directory identity and structure.
 
 ## CLI
 
@@ -293,7 +384,9 @@ corrupt `3`, unsupported `4`, and not an fsqlite store `64`.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
 Its safe verdict requires working directory fsync as well as the coordination
-primitives.
+primitives. The QA runbook includes a
+[manual CLI walkthrough](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md#b3-cli-walkthrough-on-a-real-store)
+and filesystem capability check.
 
 ## Correctness Model
 
@@ -375,11 +468,8 @@ is the normative protocol authority.
   Caller-schema migration, including admission of old writers and handling old pending
   envelopes, is post-alpha work.
 
-The [QA runbook](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md) maps
-tests to guarantees.
-The [roadmap](https://github.com/jlevy/fsqlite/blob/main/docs/roadmap.md) tracks the
-evidence and portability work still required for 1.0. The
-[schema and workload assessment](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md)
+The
+[schema and workload assessment](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-08-01-schema-evolution-and-workload-fit.md#practical-operating-envelope)
 gives detailed severity, measurements, and adoption guidance.
 
 ## License
