@@ -88,7 +88,9 @@ coordination primitive and instead specifies `mkdir`/`rename` publication semant
 (contrast better-sqlite3, C0). `packages/fsqlite/src/driver.ts` imports `node:sqlite`
 directly, so the reference package and application calls to `node:sqlite` use the same
 SQLite library embedded in the running Node binary.
-The npm package does not link or ship another SQLite binary.
+Node supplies that database engine as part of the runtime.
+Installing the npm package adds the TypeScript protocol implementation and CLI, with no
+separate SQLite installation or native build.
 
 ### B1. The Conflict Handler Receives Only the Integer Type
 

@@ -87,10 +87,12 @@ offline-first caches, content-addressed metadata catalogs, build/CI artifacts, a
 The design takes a caller-supplied schema and merge policy and is independent of the
 application domain.
 
-The local reference implementation was validated with dependency-free `node:sqlite` code
-and source-level review of SQLite, Node, alternative bindings, and filesystem-locking
-prior art. The npm package imports `node:sqlite` directly and ships no SQLite binary, so
-it executes against the exact SQLite library embedded in the running Node binary.
+The local reference implementation was validated with code using only Node built-ins and
+source-level review of SQLite, Node, alternative bindings, and filesystem-locking prior
+art. Supported Node releases include SQLite, and the npm package accesses it directly
+through the built-in `node:sqlite` module.
+It therefore executes against the same SQLite library supplied by Node that direct
+application calls use, with no separate SQLite installation or native build.
 Current test counts and validation status live in the QA runbook so they have one
 maintained source.
 
@@ -129,10 +131,11 @@ Even the writer’s changeset envelope is a SQLite-defined binary blob that any
 *session-capable* binding can produce or consume.
 Only the **SnapshotStore writer/reconcile** role needs such a binding.
 `DirectStore` writers and all readers need ordinary SQLite.
-Node `node:sqlite` is the natural **first reference implementation**: it exposes
-sessions while using the SQLite library embedded in Node, with no packaged native add-on
-or second SQLite binary (Finding G2). Python (APSW) and Rust (`rusqlite`) can implement
-the *same* format later.
+Node `node:sqlite` is the natural **first reference implementation**: Node supplies the
+SQLite library as part of the runtime, and the built-in module exposes sessions to
+application code. Installing fsqlite adds the TypeScript protocol implementation rather
+than a separate SQLite installation or native build (Finding G2). Python (APSW) and Rust
+(`rusqlite`) can implement the *same* format later.
 
 The **format/protocol is the primary artifact**. Its root `fsqlite.json`, `f1.0`
 version, fixed fsqlite `application_id`, caller-owned `user_version`, manifest schema,
@@ -177,9 +180,10 @@ The result is a mature engine feature that remains absent from many mainstream b
 and less visible than WAL or page replication.
 
 **Why it is newly relevant.** Its visibility is rising because a first-class runtime
-finally exposes it by default: **Node’s built-in `node:sqlite` ships with SESSION
-compiled in** (confirmed: `node/deps/sqlite/sqlite.gyp:24,27`), and **Python’s APSW**
-and **Rust’s `rusqlite` (`session` feature)** expose it too.
+finally exposes it by default: **Node includes SQLite with SESSION compiled in and
+exposes it through the built-in `node:sqlite` module** (confirmed:
+`node/deps/sqlite/sqlite.gyp:24,27`), and **Python’s APSW** and **Rust’s `rusqlite`
+(`session` feature)** expose it too.
 That matters here because a changeset is the file-native, server-free, optimistic
 commit-log this problem needs: writers each emit a uniquely-named changeset **file**
 (free of shared-path contention when the target filesystem provides the required create

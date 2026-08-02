@@ -12,10 +12,13 @@ schema, constraints, tools, and file format.
 Complete databases become immutable generations that writers can update without sharing
 one live writable SQLite file.
 
-The package calls the built-in `node:sqlite` module and ships no SQLite binary.
-fsqlite and direct `node:sqlite` code in the same runtime use the exact SQLite library
-embedded in Node. This package is the first implementation of the language-independent
-`f1.0` commit protocol, and it has no install-time scripts.
+Supported Node releases already include SQLite: Node 22.18+ on the 22.x line, or Node
+24+. The package accesses that included SQLite library through the built-in
+`node:sqlite` module.
+Installing fsqlite therefore requires no separate SQLite installation or native build,
+and fsqlite and direct `node:sqlite` calls use the same SQLite library supplied by Node.
+This package is the first implementation of the language-independent `f1.0` commit
+protocol.
 
 > **Alpha phase:** `0.1.0` defines the first public API and the draft `f1.0` store
 > format. Both may change before 1.0. The multi-process suite is extensive, but the real
@@ -65,10 +68,10 @@ with in-process SQL and no database server.
   project [plans support through 2050](https://sqlite.org/lts.html).
   fsqlite retains SQLite’s [widely deployed](https://sqlite.org/mostdeployed.html)
   engine, SQL, transactions, schema, constraints, tooling, and file ecosystem.
-- **Same SQLite engine:** The Node package calls built-in `node:sqlite` directly.
-  Application code and fsqlite use the exact SQLite library embedded in the running Node
-  binary; the npm package supplies coordination code rather than a second database
-  engine.
+- **SQLite included with Node:** Supported Node releases supply SQLite as part of the
+  runtime and expose it through the built-in `node:sqlite` module.
+  Application code and fsqlite use that same library.
+  The npm package adds the coordination layer around it.
 - **SQLite-native change capture:** `SnapshotStore` uses SQLite’s official
   [session extension](https://sqlite.org/sessionintro.html) to record row transactions
   in private copies and apply them with SQLite’s conflict-aware changeset API. Sessions
@@ -96,7 +99,7 @@ fsqlite keeps SQLite intact and adds a file-level coordination layer:
 | Database engine and file format | SQLite | SQL, transactions, schemas, constraints, queries, and complete portable database files |
 | Logical change capture | SQLite session extension | Records row changes and applies them later with conflict detection |
 | Store and commit protocol | [`f1.0`](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md) | Transaction envelopes, immutable generations, `current`, fencing, validation, an exactly-once ledger, and quarantine |
-| Reference package | TypeScript on Node’s built-in SQLite library | A convenient npm library and CLI that implements the protocol without packaging another database engine or SQLite binary |
+| Reference package | TypeScript and Node built-ins | Uses Node’s included SQLite and implements the protocol as a convenient npm library and CLI |
 
 The durable artifact is a standard SQLite database plus the surrounding `f1.0` directory
 protocol. fsqlite defines no new storage engine or SQL dialect.
@@ -111,11 +114,12 @@ calls use.
 SQLite’s session extension has been upstream since 2016, but it is compile-time optional
 and remains absent from many common bindings.
 That kept logical changesets less visible than WAL and page replication.
-Node’s built-in `node:sqlite` compiles SQLite with `SQLITE_ENABLE_SESSION` and
-`SQLITE_ENABLE_PREUPDATE_HOOK`, and exposes sessions, changeset application, backup, and
-ordinary SQLite access together.
-That makes a small zero-dependency package practical without compiling or distributing
-another SQLite binary.
+Node releases supported by fsqlite include SQLite compiled with `SQLITE_ENABLE_SESSION`
+and `SQLITE_ENABLE_PREUPDATE_HOOK`. The built-in `node:sqlite` module exposes sessions,
+changeset application, backup, and ordinary SQLite access together.
+Node supplies the database engine and native integration; fsqlite supplies the
+TypeScript coordination layer.
+That division makes a small zero-runtime-dependency npm package practical.
 
 Most distributed SQLite systems chose a different deployment model: WAL or page
 replication, a primary or daemon, consensus, a storage service, or custom readers.
@@ -242,20 +246,22 @@ covers the complete store layout, publication races, and consistency boundaries.
 ## Reference Implementation
 
 This package is a small set of TypeScript modules built for npm.
-It has zero runtime dependencies and runs on Node’s built-in
-[`node:sqlite`](https://nodejs.org/api/sqlite.html), filesystem, and cryptography APIs.
-Every database operation uses the SQLite library embedded in the running Node binary,
-exactly as a direct `node:sqlite` call does.
-The package contains no native add-on, prebuilt SQLite binary, or replacement database
-engine.
+It uses only Node built-ins and has zero runtime dependencies.
+Supported Node releases include SQLite and expose it through the built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html) module; fsqlite uses that module
+with Node’s filesystem and cryptography APIs.
+Node supplies the database engine and native integration, while the npm package supplies
+the `f1.0` protocol implementation and CLI. Installing it requires no separate SQLite
+installation, native add-on, or install-time build.
 
 The `f1.0` format is language-independent, with Node serving as the first
 implementation. Any SQLite binding can read a published generation.
 A `SnapshotStore` implementation in another language needs a SQLite build compiled with
 `SQLITE_ENABLE_SESSION` and `SQLITE_ENABLE_PREUPDATE_HOOK`, plus a binding that exposes
 the session and changeset APIs.
-Supported Node versions already supply that capability.
-A `DirectStore` implementation and every reader need ordinary SQLite only.
+Supported Node releases include SQLite with both options enabled and expose the session
+and changeset APIs through `node:sqlite`. A `DirectStore` implementation and every
+reader need ordinary SQLite only.
 Either can implement the same filesystem protocol and interoperate through the same
 store. The
 [upstream source confirmations](https://github.com/jlevy/fsqlite/blob/main/docs/upstream-source-confirmations.md)

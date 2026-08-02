@@ -3,9 +3,10 @@
 // SnapshotStore's only optional SQLite build requirement is the session/changeset
 // extension (sqlite3session_create / sqlite3changeset_apply), compiled with
 // SQLITE_ENABLE_SESSION and SQLITE_ENABLE_PREUPDATE_HOOK, which most bindings lack.
-// `node:sqlite` enables and exposes it without a runtime dependency, native build, or
-// prebuild. This keeps the package portable. `better-sqlite3`'s bundled build does not
-// enable SQLITE_ENABLE_SESSION. Any session-enabled SQLite build with a binding that
+// Supported Node releases include SQLite with both options enabled and expose it through
+// `node:sqlite`. This gives the package session support without a third-party runtime
+// dependency or native build and keeps it portable. `better-sqlite3`'s bundled build does
+// not enable SQLITE_ENABLE_SESSION. Any session-enabled SQLite build with a binding that
 // exposes these APIs can in principle host a SnapshotStore writer against the same
 // format.
 //

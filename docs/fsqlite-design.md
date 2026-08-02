@@ -116,13 +116,13 @@ SQLite baseline behind this comparison.
 
 fsqlite has two artifacts: the language-independent `f1.0` format and coordination
 protocol, and a small TypeScript reference library and CLI packaged for npm.
-The reference package uses only Node built-ins.
-It imports `node:sqlite` directly, so every database operation uses the same SQLite
-library embedded in the running Node binary that application code reaches through a
-direct `node:sqlite` call.
+Node releases supported by the reference package include SQLite and expose it through
+the built-in `node:sqlite` module.
+Every database operation therefore uses the same SQLite library supplied by Node that
+application code reaches through a direct `node:sqlite` call.
 Node’s filesystem and cryptography APIs supply the surrounding directory protocol.
-The package ships no SQLite binary, has zero runtime dependencies, and has no
-install-time scripts.
+The package has zero runtime dependencies and no install-time scripts; installing it
+requires no separate SQLite installation or native build.
 
 The `f1.0` format and conformance rules are language-independent.
 Any SQLite binding can read a published generation.
