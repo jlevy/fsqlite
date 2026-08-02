@@ -247,7 +247,8 @@ covers the complete store layout, publication races, and consistency boundaries.
 
 ## Reference Implementation
 
-This package is a small set of TypeScript modules built for npm.
+This package’s reference implementation is 2,581 lines of TypeScript code, including the
+CLI and excluding tests and generated output.
 It uses only Node built-ins and has zero runtime dependencies.
 Supported Node releases include SQLite and expose it through the built-in
 [`node:sqlite`](https://nodejs.org/api/sqlite.html) module; fsqlite uses that module

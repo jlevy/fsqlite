@@ -235,9 +235,10 @@ layout, publication races, and consistency boundaries.
 
 ## Reference Implementation
 
-The reference implementation is a small set of TypeScript modules packaged for npm as
-`fsqlite`. It uses only Node built-ins and has zero runtime dependencies.
-Supported Node releases include SQLite and expose it through the built-in
+The reference implementation is 2,581 lines of TypeScript code, including the CLI and
+excluding tests and generated output.
+It is packaged for npm as `fsqlite`, uses only Node built-ins, and has zero runtime
+dependencies. Supported Node releases include SQLite and expose it through the built-in
 [`node:sqlite`](https://nodejs.org/api/sqlite.html) module; fsqlite uses that module
 with Node’s filesystem and cryptography APIs.
 Node supplies the database engine and native integration, while the npm package supplies
