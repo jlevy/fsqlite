@@ -58,6 +58,10 @@ Ordinary local SQLite remains the simpler and more efficient default when writer
 take turns on one reliable local filesystem.
 The design below is justified only when independent file-native capture and immutable
 publication solve a requirement that ordinary SQLite does not.
+A single host can still have substantial contention: several coding, research, indexing,
+and automation agents may independently update one shared knowledge base.
+The relevant boundary is whether those writer clients can queue on one live database,
+not whether the path happens to be local.
 
 `fsqlite` allows **writer captures to overlap without letting two of them touch one
 *live* SQLite file.** Each writer records its change as its own uniquely-named changeset
@@ -72,10 +76,11 @@ any SQLite file.
 Readers need only SQLite: they open the standard published snapshot with
 any tool, in any language.
 
-Potential uses include durable local agent state, local data tools, offline-first
-caches, content-addressed metadata catalogs, build/CI artifacts, and “zip-and-go”
-datasets. The design takes a caller-supplied schema and merge policy and is independent
-of the application domain.
+Potential uses include shared local-agent knowledge and task state, local data tools,
+offline-first caches, content-addressed metadata catalogs, build/CI artifacts, and
+“zip-and-go” datasets.
+The design takes a caller-supplied schema and merge policy and is independent of the
+application domain.
 
 The local reference implementation was validated with dependency-free `node:sqlite` code
 and source-level review of SQLite, Node, alternative bindings, and filesystem-locking
@@ -752,20 +757,25 @@ A stale-lock break or a process killed mid-publish therefore cannot corrupt or
 double-apply. This is what makes a *portable* design feasible where a perfect
 cross-platform lock is not.
 
-### I. The local single-writer variant (same format and any binding)
+### I. The serialized-writer variant (same format and any binding)
 
-For the common single-writer-on-local-disk case, the same immutable-snapshot format
-supports a **direct** strategy: one writer holds the publish lock and does **copy →
-mutate → publish** synchronously: *no changesets, no envelopes, no reconcile, and no
-session extension even for the writer*, so it runs on **any** SQLite binding
-(`better-sqlite3`, `bun:sqlite`). It is a coarse local single-writer serializer (the
-lock is held across the complete write) and remains immutable-snapshot-safe (R-DURABLE).
-Because it writes the identical on-disk shape, a store can be written directly when
-alone and read/operated by the concurrent engine later: **two write strategies, one
-format.** This is the simpler, easier-locking-locally option alongside the full
-concurrent engine.
+When every cooperative caller can queue across its complete transaction, the same
+immutable-snapshot format supports a **direct** strategy: the active writer holds the
+publish lock and performs **copy → mutate → publish** synchronously.
+There are *no changesets, envelopes, or reconcile step, and no session extension even
+for the writer*, so it runs on **any** SQLite binding (`better-sqlite3`, `bun:sqlite`).
+Several processes may call the strategy, but the lock makes it a coarse serialized lane
+and is held across the complete write.
+It remains immutable-snapshot-safe (R-DURABLE). Because it writes the identical on-disk
+shape, a store can move between direct writes and the concurrent engine without changing
+its reader path: **two write strategies, one format.**
 
-Its single-writer transaction uses the conservative, WAL-free recipe that the whole
+For one embedded application on a reliable local filesystem, ordinary SQLite is usually
+simpler and more efficient.
+The direct strategy is justified when immutable generations, fsqlite recovery and
+identity, synchronous publication, or format interoperability are themselves required.
+
+Its serialized transaction uses the conservative, WAL-free recipe that the whole
 document argues for:
 
 ```sql
@@ -904,7 +914,7 @@ write-set conflict detection and read-your-own-writes within a session”**, not
 serializable isolation.
 Applications that need a cross-row invariant must put those rows under a `strict` policy
 and use retry (below), or accept last-writer-wins semantics, or keep that invariant in a
-single-writer (`DirectStore`) lane.
+serialized (`DirectStore`) lane.
 
 *Placed in standard theory:* this is the difference between **write-set validation** and
 **read-set validation**. The classic optimistic-concurrency method (Kung and Robinson,
@@ -999,9 +1009,9 @@ This meets R-FS, R-DURABLE, and R-CONCURRENCY at the cost of serializability.
    binding-level; the C API is richer.
    This shapes v1 (filter-based per-table policy; constrained writable surface so no
    rebaser is needed) and gives a clean upstream ask.
-6. **Two write strategies, one format** serves both “many agents on a validated shared
-   path” and “one local tool with simple coordination” without forking the on-disk
-   format or the reader path.
+6. **Two write strategies, one format** serves both “independent agents capture and
+   reconcile” and “cooperative callers queue through synchronous publication” without
+   forking the on-disk format or the reader path.
 
 ## Comparison Matrix
 
@@ -1046,17 +1056,18 @@ The full landscape of these alternatives is catalogued in [Related Work](#relate
 
 ## Options Considered
 
-### Option A: Direct single-writer publication
+### Option A: Direct serialized publication
 
 A cross-process `mkdir` lease with `BEGIN IMMEDIATE` and rollback-journal open-fresh
 behavior around each transaction on a capability-validated filesystem.
 
 **Pros:** small (~40 lines over an existing lock); appropriate for modest local writes
 and validated shared filesystems; keeps one standard SQLite file.
-**Cons:** it is the **coarse one-writer-at-a-time** model the requirements want to
-avoid; the lease-break/coherence hazards on NFS are *managed, not eliminated*; no
+**Cons:** every caller queues through the **coarse one-writer-at-a-time** lane; the
+lease-break/coherence hazards on NFS are *managed, not eliminated*; there is no
 per-session optimism.
-Good as a fallback or the “direct mode” floor, not as the primary concurrency story.
+Good as the synchronous fsqlite lane or format floor, not as the primary independent
+agent concurrency story and not as a default wrapper around ordinary embedded SQLite.
 
 ### Option B: Ephemeral elected coordinator (LiteFS pattern)
 

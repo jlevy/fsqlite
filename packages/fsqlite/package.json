@@ -1,7 +1,7 @@
 {
   "name": "fsqlite",
   "version": "0.1.0",
-  "description": "Filesystem-friendly concurrent SQLite with immutable snapshot publication, transaction-envelope changesets, a fenced mkdir lease, and a local single-writer DirectStore over plain SQLite files",
+  "description": "SQLite packaged for concurrent local agents, retaining its portable, stable file format with session changesets and server-free publication",
   "type": "module",
   "license": "MIT",
   "author": "Joshua Levy",
@@ -77,7 +77,10 @@
   "keywords": [
     "sqlite",
     "node:sqlite",
+    "agents",
     "concurrency",
+    "file-first",
+    "local-first",
     "nfs",
     "changeset",
     "session",

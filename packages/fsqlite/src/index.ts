@@ -1,6 +1,6 @@
 // fsqlite provides filesystem-friendly concurrent SQLite through immutable snapshot
 // publication, transaction-envelope changesets, a fenced mkdir lease, and an
-// idempotent ledger. DirectStore provides a local single-writer strategy over the same
+// idempotent ledger. DirectStore provides a serialized-writer strategy over the same
 // format.
 //
 // See README.md for the rationale and the correctness model.

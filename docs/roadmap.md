@@ -49,6 +49,8 @@ stable release, not a promise that unsupported environments work today.
   workflow. Cover quiescence, writer admission, old pending envelopes, ordinary SQLite
   DDL and data transformation, policy transition, validation, rollback, and cutover.
   Keep the application-managed replacement procedure as the documented fallback.
+- Bind the normalized conflict policy to a store or schema epoch, or add an equivalent
+  admission check, so reconcilers cannot silently use different merge semantics.
 - Design declared read-set validation for point-key invariants; document stronger
   patterns for range, predicate, aggregate, and cross-row invariants.
 - Design a crash-safe checkpoint for the lifetime `applied_tx` ledger so reconcile time,

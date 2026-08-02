@@ -373,6 +373,11 @@ the corresponding policy transition.
 | `omit` (`union`) | Existing row wins (first-writer-wins / set-union); the conflicting incoming change is dropped |
 | `strict` | The *entire envelope* is rejected (quarantined); none of its changes land |
 
+For multiple conflicting envelopes, `lww` therefore means the row from the later
+byte-sorted envelope wins.
+The timestamp prefix makes that order approximately chronological; it is not a causal or
+globally clock-ordered guarantee across hosts.
+
 NOTFOUND, CONSTRAINT, and FOREIGN_KEY conflicts are not replaceable.
 Every action MUST reject and quarantine the entire envelope for those conflict types.
 An implementation MUST NOT omit a nonreplaceable change and then record its envelope in
@@ -470,10 +475,12 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 
 ## 9. The DirectStore Strategy
 
-DirectStore is the local single-writer strategy **over the same format**. Snapshots
-produced by either strategy share the same `fsqlite.json` identity marker and can be
-read by the other strategy or plain `sqlite3`. No on-disk field records which strategy
-produced a snapshot.
+DirectStore is the serialized-writer strategy **over the same format**. Multiple
+cooperative callers MAY contend for it, but the publish lease admits only one complete
+copy, callback, validation, and publication path at a time.
+Snapshots produced by either strategy share the same `fsqlite.json` identity marker and
+can be read by the other strategy or plain `sqlite3`. No on-disk field records which
+strategy produced a snapshot.
 
 Protocol (per write): acquire the publish lock → read `current` → base → copy the base
 snapshot to a `.direct-*` transient → mutate it in one transaction → reassert the
@@ -685,6 +692,11 @@ The same artifacts test every implementation.
   intentionally ignores it (cross-version merge is policy-resolved).
   This specification treats it only as provenance.
   A future version could instead define semantics such as staleness warnings.
+- **O5: conflict-policy identity is not stamped.** All reconcilers in one caller-schema
+  epoch must use the same effective policy, but `f1.0` relies on deployment
+  configuration to enforce that rule.
+  A future revision should bind the normalized policy to the store or schema epoch, or
+  define an equivalent admission check and policy-transition protocol.
 
 ## 15. References
 
