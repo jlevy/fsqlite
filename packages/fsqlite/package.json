@@ -1,7 +1,7 @@
 {
   "name": "fsqlite",
   "version": "0.1.0",
-  "description": "Server-free concurrent SQLite for local agents, with independent transaction capture, immutable portable snapshots, and atomic filesystem publication",
+  "description": "SQLite packaged for concurrent local agents, retaining its portable, stable file format with session changesets and server-free publication",
   "type": "module",
   "license": "MIT",
   "author": "Joshua Levy",
