@@ -216,16 +216,16 @@ An fsqlite store is a directory containing immutable SQLite generations, a `curr
 pointer, and optional transaction envelopes:
 
 ```mermaid
-flowchart LR
-  A["Agent A"] -->|"SnapshotStore capture"| E["Committed session changesets"]
-  B["Agent B"] -->|"SnapshotStore capture"| E
-  E --> R["Reconcile"]
+flowchart TB
+  W["Cooperative agents and applications"]
+  W -->|"SnapshotStore"| C["Capture private SQLite transactions"]
+  C --> E["Commit session changesets"]
+  E --> R["Reconcile pending changesets"]
   R --> U["Fenced publication"]
-  D["Serialized caller"] -->|"DirectStore"| U
-  U -->|"write and fsync"| G[("Immutable SQLite files")]
-  U -->|"atomic replace"| P["current"]
-  P -.->|"names the head"| G
-  Q["Ordinary SQLite readers"] -->|"open named generation"| G
+  W -.->|"DirectStore<br/>serialized path"| U
+  U --> G[("Write and fsync<br/>an immutable SQLite generation")]
+  G --> P["Atomically replace<br/>current"]
+  P --> Q["Ordinary SQLite readers open<br/>the named generation"]
 ```
 
 `SnapshotStore.write()` runs a normal SQLite transaction on a private copy and records
