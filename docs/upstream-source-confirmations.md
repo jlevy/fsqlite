@@ -60,7 +60,8 @@ does not expose it (see B3).
 
 ### A4. WAL Requires Shared Memory and Does Not Support Network Filesystems
 
-`src/wal.c:129-133` (SQLite’s own source comment):
+[`src/wal.c:129-133`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/wal.c#L129-L133)
+(SQLite’s own source comment):
 
 > “Conceptually, the wal-index is shared memory … Because the wal-index is shared
 > memory, **SQLite does not support journal_mode=WAL on a network filesystem.** All
@@ -72,12 +73,40 @@ storage.
 
 ### A5. POSIX Advisory Locks Can Be Unreliable, Especially on NFS
 
-`src/os_unix.c:1191`: *“POSIX advisory locks are broken by design.”* (with NFS-specific
-retry handling at `:1036` and a BSD/macOS NFS `lockd` bug worked around at
-`:2118-2172`). SQLite’s default Unix VFS normally uses `fcntl()` byte-range advisory
-locks; `flock()` is an alternative locking style, not the default mechanism.
+[`src/os_unix.c:1188-1210`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1188-L1210)
+calls POSIX advisory locks “broken by design.”
+The same file documents a BSD/macOS NFS `lockd` bug and its workaround at
+[`src/os_unix.c:2118-2172`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L2118-L2172).
+SQLite’s default Unix VFS normally uses `fcntl()` byte-range advisory locks; `flock()`
+is an alternative locking style, not the default mechanism.
 This confirms why fsqlite does not depend on either style as its cross-client
 coordination primitive and instead specifies `mkdir`/`rename` publication semantics.
+
+The NFS-to-error path is explicit in the source:
+
+- [`src/os_unix.c:1014-1038`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1014-L1038)
+  maps retryable POSIX lock errors to `SQLITE_BUSY`, including `ENOLCK`, which its
+  comment calls a “random NFS retry error.”
+- [`src/os_unix.c:1973-1986`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1973-L1986)
+  shows the Unix lock call passing its `errno` through that mapping.
+- [`src/sqlite.h.in:449-456`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/sqlite.h.in#L449-L456)
+  defines `SQLITE_BUSY` as result code 5, and
+  [`src/main.c:1649-1657`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1649-L1657)
+  maps it to `database is locked`.
+- [`src/main.c:1710-1769`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1710-L1769)
+  and
+  [`src/main.c:1840-1857`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1840-L1857)
+  implement the busy timeout by sleeping and retrying the same lock until the timeout,
+  then returning `SQLITE_BUSY`.
+
+A two-connection `node:sqlite` probe on Node v24.13.0 with SQLite 3.50.4 surfaced
+`database is locked` with result code 5. SQLite’s
+[result-code documentation](https://sqlite.org/rescode.html#busy) and
+[network-filesystem guidance](https://sqlite.org/useovernet.html) support the same
+interpretation. A busy timeout can wait for a working lock; it cannot supply missing
+filesystem semantics.
+Some broken network locks instead appear to work and risk corruption, so the explicit
+error is a typical symptom rather than a complete NFS diagnostic.
 
 ## B. The `node:sqlite` Binding (`nodejs/node` v22.22.2, SQLite 3.51.2)
 

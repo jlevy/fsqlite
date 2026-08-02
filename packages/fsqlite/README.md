@@ -26,35 +26,37 @@ protocol.
 
 ## Why fsqlite Exists
 
-A single computer can run many independent database clients.
-A local workspace may have an interactive application, coding agents, background
-indexers, research agents, and automation processes updating the same knowledge base,
-task graph, document catalog, or cache.
-Those writers may have substantial contention even though every process is local, and
-running a database server beside every workspace is often disproportionate.
+A common agent setup puts one shared SQLite knowledge base on an NFS-backed workspace.
+Several agents open the same path and write from separate processes.
 
-Ordinary SQLite coordinates those clients through one live database file.
-On Unix, its default VFS uses POSIX advisory byte-range locks, normally through
-`fcntl()`; WAL also uses a `-shm` shared-memory wal-index.
-That design is robust and efficient on a reliable local filesystem.
-It is the natural choice when one embedded application owns the database, and it also
-works well when local processes can take turns writing.
+Standard SQLite coordinates those writes with POSIX byte-range locks on one live
+database file.
+SQLite’s [network-filesystem guidance](https://sqlite.org/useovernet.html)
+warns that exclusive locks can operate incorrectly on some network filesystems.
+When the mount cannot provide the lock SQLite expects, the
+[Unix VFS maps `ENOLCK` to `SQLITE_BUSY`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1014-L1038)
+and calls it a “random NFS retry error.”
+In Node, a failed write looks like this:
 
-Cloud agents and shared workspaces introduce another common filesystem contract.
-A path that looks local may be network-backed or virtualized and may not provide
-coherent advisory locks or shared memory across clients.
-`busy_timeout` can wait for a valid SQLite lock; it cannot supply lock semantics that
-the filesystem lacks.
+> `Error: database is locked`
+> ([`SQLITE_BUSY` (5)](https://sqlite.org/rescode.html#busy);
+> [SQLite source](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1649-L1657))
 
-fsqlite changes the unit of coordination.
-Agents read immutable SQLite generations, while cooperative writers mutate private
-copies and publish complete successors.
-Cross-client correctness therefore does not depend on several processes locking one
-writable SQLite file.
-It depends on a smaller publication contract: exclusive directory creation, atomic
-rename-replace, close-to-open visibility, and durable fsync ordering.
-For a filesystem that supplies that contract, the result is shared, evolving SQLite data
-with in-process SQL and no database server.
+Waiting longer does not fix this: the NFS mount cannot supply the lock SQLite needs.
+[A busy timeout](https://sqlite.org/pragma.html#pragma_busy_timeout) helps when another
+process owns a working lock and will release it; it cannot make unavailable or
+unreliable NFS locking work.
+WAL is not a workaround because
+[SQLite does not support WAL across a network filesystem](https://sqlite.org/wal.html#overview).
+Some broken network locks can appear to work without coordinating clients correctly,
+which risks database corruption.
+
+fsqlite avoids the shared writable file.
+Each agent works in a private SQLite file, and cooperative publishers expose complete
+immutable generations through directory creation and atomic rename.
+On a mount that meets the
+[`f1.0` publication contract](#shared-filesystems-and-cloud-agents), agents can share
+and update ordinary SQLite data without a database server.
 
 ## Core Properties
 

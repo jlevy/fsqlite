@@ -422,19 +422,50 @@ buys us anything, so we **decline** them deliberately rather than from ignorance
 
 Two live-file assumptions can fail on network or synchronized storage.
 First, **WAL is unsupported on a network filesystem because the `-shm` wal-index is
-shared *memory***: SQLite’s own source is explicit (“all users of the database must be
-able to share memory”; `src/wal.c:129-133`). The precise failure is a
-**cache-coherency** one, not data loss: the `-shm` file is rebuildable by rescanning the
-WAL, but multiple hosts cannot share a coherent view of it, and NFS/AFP only offer
-*close-to-open* coherency, which `src/os_unix.c:7298-7312` notes “does not effectively
-[satisfy] concurrent database access by multiple readers and writers.”
+shared *memory***: SQLite’s own
+[`src/wal.c:129-133`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/wal.c#L129-L133)
+is explicit that every user must share memory.
+The underlying incompatibility is **cache coherence**: the `-shm` file is rebuildable by
+rescanning the WAL, but multiple hosts cannot share a coherent view of it, and NFS/AFP
+only offer *close-to-open* coherency.
+Unsafe network-filesystem use can still lead to corruption.
+SQLite’s
+[`src/os_unix.c:7298-7312`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L7298-L7312)
+explains why that does not meet concurrent database access requirements.
 Second, **POSIX `fcntl()` byte-range locks and alternative `flock()` locking can be
-unreliable** on network mounts (`src/os_unix.c:1191` calls POSIX advisory locks “broken
-by design”; `flock`-on-NFS is notably flaky on macOS, and `O_EXCL` over NFS has a
-documented race: see [LWN](https://lwn.net/Articles/251004/) and `open(2)`). Consumer
-cloud-sync folders (Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly
-hazardous: the sync client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`,
-corrupting it (concrete reports on the SQLite and mORMot forums).
+unreliable** on network mounts.
+SQLite’s
+[`src/os_unix.c:1188-1210`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1188-L1210)
+calls POSIX advisory locks “broken by design”; its
+[`src/os_unix.c:2118-2124`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L2118-L2124)
+documents a BSD/macOS NFS `lockd` bug.
+`flock`-on-NFS is notably flaky on macOS, and `O_EXCL` over NFS has a documented race:
+see [LWN](https://lwn.net/Articles/251004/) and `open(2)`. Consumer cloud-sync folders
+(Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly hazardous: the sync
+client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`, corrupting it (concrete
+reports on the SQLite and mORMot forums).
+
+The visible NFS lock failure is explicit in the Unix VFS.
+[`src/os_unix.c:1014-1038`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1014-L1038)
+maps retryable POSIX errors to `SQLITE_BUSY`, including `ENOLCK`, which the source calls
+a “random NFS retry error.”
+The lock path performs that translation at
+[`src/os_unix.c:1973-1986`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/os_unix.c#L1973-L1986),
+and
+[`src/main.c:1649-1657`](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1649-L1657)
+maps `SQLITE_BUSY` to `database is locked`. A Node binding therefore commonly surfaces
+`Error: database is locked`; bindings format the prefix differently.
+
+The
+[`busy_timeout` implementation](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1710-L1769)
+and its
+[`sqlite3_busy_timeout()` entry point](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1840-L1857)
+sleep and retry the same lock acquisition until its deadline, then return `SQLITE_BUSY`.
+They can wait for another connection to release a valid lock, but they cannot repair
+unavailable or unreliable NFS lock semantics.
+The explicit error is the safer failure mode: SQLite’s
+[network-filesystem guidance](https://sqlite.org/useovernet.html) also warns that broken
+locks can appear to succeed without coordinating clients correctly, risking corruption.
 
 Cloud-agent sandboxes provide a concrete reason to inspect the mount rather than infer
 its behavior from the pathname.
@@ -1492,7 +1523,7 @@ the repo-relative source paths below.
 
 | Repo | Commit | Read for |
 | --- | --- | --- |
-| `sqlite/sqlite` | `002d33d` | session semantics (`ext/session/sqlite3session.{h,c}`), WAL/network-FS (`src/wal.c:129-133`), locking (`src/os_unix.c:1191`, `:7298-7312`), backup (`src/backup.c`), `tool/sqlite3_rsync.c`, VFS modes, `os_win.c` `LockFileEx` |
+| `sqlite/sqlite` | `002d33d` | session semantics (`ext/session/sqlite3session.{h,c}`), WAL/network-FS (`src/wal.c:129-133`), lock errors and retry (`src/main.c:1649-1857`; `src/os_unix.c:1014-1038`, `:1973-1986`), NFS locking and coherence (`src/os_unix.c:1188-1210`, `:2118-2124`, `:7298-7312`), backup (`src/backup.c`), `tool/sqlite3_rsync.c`, VFS modes, `os_win.c` `LockFileEx` |
 | `nodejs/node` | `v22.22.2` (and a current `main` re-read) | the binding (`src/node_sqlite.cc` `conflictCallback`; ABORT-as-`false`; MISUSE rules), `deps/sqlite/sqlite.gyp:24,27` (SESSION/PREUPDATE on), open flags |
 | `WiseLibs/better-sqlite3` | `f93f490` | `deps/defines.gypi` (`THREADSAFE=2`; `USE_URI=0`; SESSION **off**; `OMIT_SHARED_CACHE`); no changeset API; standard on-disk format |
 | `moxystudio/node-proper-lockfile` | `9f8c303` | `mkdir` lease, mtime heartbeat, precision probe, realpath, and compromised-lock check (`lib/lockfile.js`, `lib/mtime-precision.js`, `README`) |
