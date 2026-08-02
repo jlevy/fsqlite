@@ -118,7 +118,7 @@ it.
 In Node, both paths execute against the same SQLite library that direct `node:sqlite`
 calls use.
 
-### Why This Is Practical Now
+## Why fsqlite Is Practical Now
 
 SQLite’s session extension has been upstream since 2016, but it is compile-time optional
 and remains absent from many common bindings.
@@ -172,7 +172,7 @@ The [coordination-model guide](docs/fsqlite-design.md#choose-by-coordination-mod
 develops this decision from visibility, isolation, snapshot size, and writer
 independence.
 
-### Shared Filesystems and Cloud Agents
+## Shared Filesystems and Cloud Agents
 
 fsqlite targets shared paths that cannot provide SQLite’s live-file locking contract but
 can provide the `f1.0` publication contract.
@@ -238,7 +238,7 @@ serializability across independently captured transactions.
 The [architecture design](docs/fsqlite-design.md#architecture) covers the complete store
 layout, publication races, and consistency boundaries.
 
-### Reference Implementation
+## Reference Implementation
 
 The reference implementation is a small set of TypeScript modules packaged for npm as
 `fsqlite`. It has zero runtime dependencies and runs on Node’s built-in
