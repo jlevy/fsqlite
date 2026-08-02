@@ -70,20 +70,25 @@ This confirms that WAL does not support network filesystems.
 It supports the design rule that writers and reconciliation never rely on WAL on shared
 storage.
 
-### A5. POSIX Advisory Locks Are Unreliable, Especially on NFS
+### A5. POSIX Advisory Locks Can Be Unreliable, Especially on NFS
 
 `src/os_unix.c:1191`: *“POSIX advisory locks are broken by design.”* (with NFS-specific
 retry handling at `:1036` and a BSD/macOS NFS `lockd` bug worked around at
-`:2118-2172`). Confirms why the design avoids `fcntl`/`flock` and uses `mkdir`/`rename`
-instead.
+`:2118-2172`). SQLite’s default Unix VFS normally uses `fcntl()` byte-range advisory
+locks; `flock()` is an alternative locking style, not the default mechanism.
+This confirms why fsqlite does not depend on either style as its cross-client
+coordination primitive and instead specifies `mkdir`/`rename` publication semantics.
 
 ## B. The `node:sqlite` Binding (`nodejs/node` v22.22.2, SQLite 3.51.2)
 
-### B0. Node Ships SQLite with SESSION Enabled
+### B0. Node Ships SQLite with SESSION and PREUPDATE_HOOK Enabled
 
 `deps/sqlite/sqlite.gyp:24,27` defines `SQLITE_ENABLE_PREUPDATE_HOOK` and
 `SQLITE_ENABLE_SESSION`. So `node:sqlite`’s session and changeset support is compiled-in
-(contrast better-sqlite3, C0).
+(contrast better-sqlite3, C0). `packages/fsqlite/src/driver.ts` imports `node:sqlite`
+directly, so the reference package and application calls to `node:sqlite` use the same
+SQLite library embedded in the running Node binary.
+The npm package does not link or ship another SQLite binary.
 
 ### B1. The Conflict Handler Receives Only the Integer Type
 
@@ -181,8 +186,8 @@ release is `rmdir` (`:90`). No `flock`/`fcntl`/`O_EXCL`/`symlink` anywhere.
 > even network based ones**.” / “`O_EXCL` is broken on NFS file systems …
 > `proper-lockfile` uses `mkdir` which doesn’t have this issue.”
 
-This source supports the lock choice and explains why fsqlite avoids `flock` and
-`O_EXCL`.
+This source supports using `mkdir` rather than `flock` or `O_EXCL` for fsqlite’s store
+lease. The mount-specific validation limits in the design still apply.
 
 ### D2. mtime Lease, Heartbeat, and Compromise Threshold
 

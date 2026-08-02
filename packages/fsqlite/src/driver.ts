@@ -1,16 +1,18 @@
 // driver.ts: thin SQLite binding wrapper for fsqlite.
 //
-// fsqlite depends on exactly one capability that most SQLite bindings lack: the
-// session/changeset extension (sqlite3session_create / sqlite3changeset_apply).
-// `node:sqlite` ships it built-in and needs no runtime dependency, native build, or
-// prebuild. This keeps the package portable. `better-sqlite3`'s bundled
-// build does not enable SQLITE_ENABLE_SESSION. Deno exposes the same `node:sqlite` with
-// sessions; Bun does not implement `node:sqlite` yet. Any session-enabled SQLite build can
-// in principle host a writer against the same format.
+// SnapshotStore's only optional SQLite build requirement is the session/changeset
+// extension (sqlite3session_create / sqlite3changeset_apply), compiled with
+// SQLITE_ENABLE_SESSION and SQLITE_ENABLE_PREUPDATE_HOOK, which most bindings lack.
+// `node:sqlite` enables and exposes it without a runtime dependency, native build, or
+// prebuild. This keeps the package portable. `better-sqlite3`'s bundled build does not
+// enable SQLITE_ENABLE_SESSION. Any session-enabled SQLite build with a binding that
+// exposes these APIs can in principle host a SnapshotStore writer against the same
+// format.
 //
-// Readers need none of this: a published snapshot is a plain SQLite file openable by any
-// binding in any language. Only the writer (record a session) and reconcile (apply a
-// changeset) need the extension, so the session requirement is confined here.
+// Readers and DirectStore need none of this: a published snapshot is a plain SQLite file
+// openable by any binding in any language. Only a SnapshotStore writer (record a session)
+// and reconcile (apply a changeset) need the extension, so the session requirement is
+// confined here.
 
 import { DatabaseSync, constants, backup } from 'node:sqlite'
 import type { WorkFn, Capabilities } from './types.ts'

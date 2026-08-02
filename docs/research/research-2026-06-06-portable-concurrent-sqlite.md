@@ -31,11 +31,11 @@ measurements, severity, and adoption boundary.
 
 A domain-agnostic reference that asks:
 
-> How can a **SQLite database** support safe, convenient **concurrent** use from **local
-> applications**, with **no database server**, on local storage and capability-validated
-> shared filesystems, while keeping the file a **portable, durable, tool-compatible
-> artifact**, never damaging a previously published state, and making any unpublished
-> loss boundary explicit?
+> How can a **SQLite database** support safe, convenient **concurrent** use from
+> **applications and agents**, with **no database server**, on local storage and
+> capability-validated shared filesystems, while keeping the file a **portable, durable,
+> tool-compatible artifact**, never damaging a previously published state, and making
+> any unpublished loss boundary explicit?
 
 NFS and SMB are targets that require mount-specific evidence.
 Consumer synchronization folders have a different replication model and are not assumed
@@ -43,16 +43,20 @@ to satisfy the protocol.
 
 SQLite is a strong archival and interchange format: a single public-domain file readable
 by nearly every language and tool.
-But its built-in concurrency story (one writer at a time; WAL needing shared memory;
-`fcntl`/`flock` locks unreliable on network mounts) is a poor fit for “many local agents
-and processes write one file, sometimes on a network drive, with no daemon.”
+Its live-file concurrency story coordinates one active writer through filesystem
+semantics: the default Unix VFS normally uses `fcntl()` advisory byte-range locks, and
+WAL adds a shared-memory wal-index.
+Those mechanisms are efficient on a reliable local filesystem.
+They are a poor fit for “many agents and processes share evolving data on a
+network-backed or virtualized path, with no daemon” when that path cannot provide
+coherent locks or shared memory across clients.
 The gap between *“great file format”* and *“safe concurrent local access with no
 server”* motivates this research.
 It ends with a concrete, test-validated design for closing it: **`fsqlite`**
 (Filesystem-Friendly SQLite), delivered as **two things**: a language-independent
-**format and commit protocol** over ordinary SQLite files (the primary, durable
-artifact), and a **Node reference implementation** (library and CLI) that serves as its
-first proving ground.
+**store format and packaging/commit strategy** over ordinary SQLite files (the primary,
+durable artifact), and a **Node reference implementation** (library and CLI) that serves
+as its first proving ground.
 
 Ordinary local SQLite remains the simpler and more efficient default when writers can
 take turns on one reliable local filesystem.
@@ -60,8 +64,9 @@ The design below is justified only when independent file-native capture and immu
 publication solve a requirement that ordinary SQLite does not.
 A single host can still have substantial contention: several coding, research, indexing,
 and automation agents may independently update one shared knowledge base.
-The relevant boundary is whether those writer clients can queue on one live database,
-not whether the path happens to be local.
+The relevant boundaries are whether those writer clients can queue on one live database
+and whether the path can provide SQLite’s live-file locking contract, not simply whether
+the agents appear to be on one computer.
 
 `fsqlite` allows **writer captures to overlap without letting two of them touch one
 *live* SQLite file.** Each writer records its change as its own uniquely-named changeset
@@ -84,16 +89,19 @@ application domain.
 
 The local reference implementation was validated with dependency-free `node:sqlite` code
 and source-level review of SQLite, Node, alternative bindings, and filesystem-locking
-prior art. Current test counts and validation status live in the QA runbook so they have
-one maintained source.
+prior art. The npm package imports `node:sqlite` directly and ships no SQLite binary, so
+it executes against the exact SQLite library embedded in the running Node binary.
+Current test counts and validation status live in the QA runbook so they have one
+maintained source.
 
 ## What Kind of Artifact This Is
 
-The deliverable is **a storage format and commit protocol: conventions over standard
-SQLite files, with per-language reference libraries.** It is neither a wrapper nor a new
-engine. Concretely, the durable core is (a) an on-disk **layout** (immutable versioned
-snapshots, a `current` pointer, changeset transaction envelopes, an `applied_tx` ledger,
-and a `mkdir` lease) and (b) the **protocol** for writing, reconciling, and reading it.
+The deliverable is **a storage format and packaging/commit strategy: conventions over
+standard SQLite files, with per-language reference libraries.** Concretely, the durable
+core is (a) an on-disk **layout** (immutable versioned snapshots, a `current` pointer,
+changeset transaction envelopes, an `applied_tx` ledger, and a `mkdir` lease) and (b)
+the **protocol** for writing, reconciling, and reading it.
+It is neither a wrapper nor a new engine.
 The library code is one *implementation* of that protocol, not the thing itself.
 The closest precedents are **Apache Iceberg and Delta Lake**: table formats and commit
 protocols layered over Parquet files, with multiple engine implementations: nobody calls
@@ -119,10 +127,12 @@ No.** The **format and reader path are language-independent**: a reader opens th
 standard SQLite file named by `current` without special support in any language or tool.
 Even the writer’s changeset envelope is a SQLite-defined binary blob that any
 *session-capable* binding can produce or consume.
-Only the **writer/reconcile** role needs such a binding: Node `node:sqlite` is the
-natural **first reference implementation** (it ships sessions with zero native deps;
-Finding G2), with Python (APSW) and Rust (`rusqlite`) able to implement the *same*
-format later.
+Only the **SnapshotStore writer/reconcile** role needs such a binding.
+`DirectStore` writers and all readers need ordinary SQLite.
+Node `node:sqlite` is the natural **first reference implementation**: it exposes
+sessions while using the SQLite library embedded in Node, with no packaged native add-on
+or second SQLite binary (Finding G2). Python (APSW) and Rust (`rusqlite`) can implement
+the *same* format later.
 
 The **format/protocol is the primary artifact**. Its root `fsqlite.json`, `f1.0`
 version, fixed fsqlite `application_id`, caller-owned `user_version`, manifest schema,
@@ -131,7 +141,8 @@ Any package in any language is a reference implementation of it.
 
 ## SQLite Sessions: A Mature but Underused Primitive
 
-The design depends on one specific SQLite feature: the **session/changeset extension**.
+The `SnapshotStore` design depends on one specific SQLite feature: the
+**session/changeset extension**. `DirectStore` and readers do not.
 Finding F describes the mechanism in detail.
 
 **What it is.** The session extension lets a connection *record* the exact row-level
@@ -150,17 +161,18 @@ maintained by the core SQLite team, with a documented C API
 It was built for the natural “session” use case: capture what changed here, carry it
 elsewhere, merge it: i.e. database sync.
 
-**Why bindings often omit it.** It is **disabled by default**. The feature only compiles
-in when SQLite is built with `-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK`,
-and most distributions and bindings ship without those flags, as confirmed by the source
-review: **macOS system SQLite, the default `better-sqlite3` build (`deps/defines.gypi`),
-Python’s stdlib `sqlite3`, and Go’s `mattn/go-sqlite3`** all omit it.
-So for years the feature was *present in the amalgamation but invisible at the
-application layer*. Several “distributed SQLite” projects chose **other** mechanisms:
-LiteFS and Litestream replicate the **WAL byte stream**; rqlite and dqlite use **Raft
-over SQL statements**. The changeset (logical, row-level) lane stayed in the **mobile /
-offline-first sync** corner (e.g. `SQLiteChangesetSync`, `sqlite-sync`, Tencent WCDB,
-Bloomberg comdb2), out of the server-infrastructure conversation.
+**Why bindings often omit it.** It is **disabled by default**. The only
+SQLite-build-specific requirement for `SnapshotStore` is compiling with
+`-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK`, plus a binding that exposes
+the resulting APIs. Most distributions and bindings ship without those flags, as
+confirmed by the source review: **macOS system SQLite, the default `better-sqlite3`
+build (`deps/defines.gypi`), Python’s stdlib `sqlite3`, and Go’s `mattn/go-sqlite3`**
+all omit it. So for years the feature was *present in the amalgamation but invisible at
+the application layer*. Several “distributed SQLite” projects chose **other**
+mechanisms: LiteFS and Litestream replicate the **WAL byte stream**; rqlite and dqlite
+use **Raft over SQL statements**. The changeset (logical, row-level) lane stayed in the
+**mobile / offline-first sync** corner (e.g. `SQLiteChangesetSync`, `sqlite-sync`,
+Tencent WCDB, Bloomberg comdb2), out of the server-infrastructure conversation.
 The result is a mature engine feature that remains absent from many mainstream bindings
 and less visible than WAL or page replication.
 
@@ -402,9 +414,9 @@ buys us anything, so we **decline** them deliberately rather than from ignorance
 | Apple `afp`/`nfs`/proxy locking | **Dismiss** | Apple-network-FS specific; gated off in stock builds; single-host-at-a-time (Finding D). |
 | Shared-cache mode | **Dismiss** | SQLite calls it obsolete; connection-scoped; still one write transaction per cache; `SQLITE_OMIT_SHARED_CACHE` is set in `better-sqlite3`. |
 
-### D. Why NFS/SMB/FUSE/sync folders break SQLite: a proven pitfall
+### D. Why NFS/SMB/FUSE/sync folders can break live SQLite
 
-Two layers fail on network/sync storage.
+Two live-file assumptions can fail on network or synchronized storage.
 First, **WAL is unsupported on a network filesystem because the `-shm` wal-index is
 shared *memory***: SQLite’s own source is explicit (“all users of the database must be
 able to share memory”; `src/wal.c:129-133`). The precise failure is a
@@ -412,13 +424,24 @@ able to share memory”; `src/wal.c:129-133`). The precise failure is a
 WAL, but multiple hosts cannot share a coherent view of it, and NFS/AFP only offer
 *close-to-open* coherency, which `src/os_unix.c:7298-7312` notes “does not effectively
 [satisfy] concurrent database access by multiple readers and writers.”
-Second, **`fcntl`/`flock` byte-range locks are unreliable** on network mounts
-(`src/os_unix.c:1191` calls POSIX advisory locks “broken by design”; `flock`-on-NFS is
-notably flaky on macOS, and `O_EXCL` over NFS has a documented race: see
-[LWN](https://lwn.net/Articles/251004/) and `open(2)`). Consumer cloud-sync folders
-(Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly hazardous: the sync
-client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`, corrupting it (concrete
-reports on the SQLite and mORMot forums).
+Second, **POSIX `fcntl()` byte-range locks and alternative `flock()` locking can be
+unreliable** on network mounts (`src/os_unix.c:1191` calls POSIX advisory locks “broken
+by design”; `flock`-on-NFS is notably flaky on macOS, and `O_EXCL` over NFS has a
+documented race: see [LWN](https://lwn.net/Articles/251004/) and `open(2)`). Consumer
+cloud-sync folders (Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly
+hazardous: the sync client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`,
+corrupting it (concrete reports on the SQLite and mORMot forums).
+
+Cloud-agent sandboxes provide a concrete reason to inspect the mount rather than infer
+its behavior from the pathname.
+Anthropic [documents](https://code.claude.com/docs/en/claude-code-on-the-web) Claude
+Code on the web as running each session in an isolated, Anthropic-managed VM. An
+independent
+[October 2025 inspection](https://cw00h.github.io/posts/2025/10/claude-code-web-sandbox/)
+observed its root filesystem mounted through 9p with remote caching.
+That observation is evidence for one environment at one time, not a stable Anthropic
+filesystem guarantee; it motivates capability-testing cloud workspaces and does not
+establish that a particular path satisfies fsqlite’s publication contract.
 NFSv4 specifies an atomic exclusive create (the `EXCLUSIVE4` verifier) and atomic
 `RENAME` ([RFC 7530](https://datatracker.ietf.org/doc/html/rfc7530) /
 [RFC 8881](https://www.rfc-editor.org/info/rfc8881/)), which is why the design leans on
@@ -543,7 +566,7 @@ the changeset iterator: the capability `node:sqlite` lacks); does it expose the
 | **`sqlite-wasm`** (official) | ✓ | ✓ | **✓** | **✓** | Raw C session API compiled in; a browser-side writer is feasible. |
 | **`rusqlite`** (Rust, `session`) | ✓ (bundled) | ✓ | **✓** (`Operation::table_name`) | ✗ (raw FFI only) | Richer than Node, but no *safe* rebaser. |
 | **`zombiezen.com/go/sqlite`** | ✓ | ✓ | **✓** | ✗ | Go *can* host the writer, with table name; no rebaser. |
-| Python stdlib `sqlite3`, `mattn/go-sqlite3`, `sqlite-jdbc`, .NET `e_sqlite3` | ✗ | ✗ | , | , | SESSION not compiled in; readers only without a custom build. |
+| Python stdlib `sqlite3`, `mattn/go-sqlite3`, `sqlite-jdbc`, .NET `e_sqlite3` | ✗ | ✗ | , | , | SESSION not compiled in; readers or `DirectStore` writers without a custom build. |
 
 So a **richer** writer (in-handler per-table policy) is achievable in Python/Rust/Go
 today, and a **rebaser-capable** writer is APSW/wasm-only.
@@ -742,7 +765,8 @@ commit-log, with immutable published snapshots selected by an atomic pointer.** 
   atomic rename. The protocol requires those operations, close-to-open visibility, and
   fsync barriers to pass capability validation.
   Local behavior is tested; multi-host NFS and SMB evidence is pending.
-  No WAL `-shm`, no `fcntl`, no daemon.
+  Cross-client coordination uses no WAL `-shm`, no shared live-file advisory lock, and
+  no daemon. Private working SQLite files still use the ordinary SQLite VFS internally.
 - **R-FORMAT / R-LOCAL / R-XPLAT.** Every published snapshot is a standard SQLite file;
   readers are universal; `node:sqlite` avoids a native add-on.
   Operating-system support still requires platform-specific publication and packaging
@@ -1000,10 +1024,10 @@ This meets R-FS, R-DURABLE, and R-CONCURRENCY at the cost of serializability.
    heads never mutate, a pinned head is byte-stable while publication continues.
    R-DURABLE falls out of the data model and the atomic pointer commit, not out of
    careful SQLite locking.
-4. **Readers are universal; only writers/merge need the extension.** This keeps the
-   tri-language and tool-compatibility goal intact: Python/Rust/`sqlite3` read a
-   published snapshot today; the session requirement is confined to the writer/reconcile
-   runtime.
+4. **Readers are universal; only SnapshotStore capture/reconcile needs the extension.**
+   This keeps the tri-language and tool-compatibility goal intact: Python/Rust/`sqlite3`
+   read a published snapshot today, and ordinary SQLite can implement `DirectStore`; the
+   session requirement is confined to SnapshotStore’s capture and reconcile runtime.
 5. **The constraints are in the binding, not SQLite.** `node:sqlite`’s missing
    table-name in the conflict handler, ABORT-as-`false`, and missing rebaser are all
    binding-level; the C API is richer.
@@ -1093,8 +1117,8 @@ server, capability-validated filesystem operations, immutable-snapshot backup, c
 safety, and standard-SQLite readers.
 The QA suite validates the disclosed local alpha scope, and correctness does not depend
 solely on lease perfection.
-**Cons:** writers/reconcile need the session extension (Node `node:sqlite` / Python APSW
-/ Rust `rusqlite` / Go `zombiezen-go` / Deno).
+**Cons:** `SnapshotStore` writers/reconcile need the session extension (Node
+`node:sqlite` / Python APSW / Rust `rusqlite` / Go `zombiezen-go` / Deno).
 The Node package enforces the tested runtime floor.
 Reader visibility lags the pending tail until reconcile; per-write snapshot-seed cost
 grows with database size and needs a future safe overlay or shared-base optimization; no
@@ -1377,6 +1401,13 @@ Point-in-time version and maturity facts should be re-verified before relying on
   [`proper-lockfile`](https://github.com/moxystudio/node-proper-lockfile) (source pass:
   `moxystudio/node-proper-lockfile` `lib/lockfile.js`: `mkdir` lease and mtime
   heartbeat; `README`: “`O_EXCL` is broken on NFS, `mkdir` is not”)
+
+**Cloud agent environments (point-in-time example):**
+
+- [Claude Code on the web documentation](https://code.claude.com/docs/en/claude-code-on-the-web)
+  (official description of isolated Anthropic-managed VMs) ·
+  [independent October 2025 sandbox inspection](https://cw00h.github.io/posts/2025/10/claude-code-web-sandbox/)
+  (observed 9p root mount with remote caching; not a product contract)
 
 **Prior art: distributed/concurrent/replicated SQLite:**
 
