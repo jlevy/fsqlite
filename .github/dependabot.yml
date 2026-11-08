@@ -1,0 +1,45 @@
+# Version updates only propose pull requests; CI's frozen install re-verifies every
+# proposed lockfile against minimumReleaseAge and trustPolicy. See
+# SUPPLY-CHAIN-SECURITY.md for the cool-off and the held upgrades ignored below.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    versioning-strategy: increase
+    groups:
+      development-tools:
+        dependency-type: development
+        patterns: ['*']
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # Types track the engines floor (Node 22).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # TypeScript 7 waits for typescript-eslint support and the 7.1 compiler API.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # Published without the provenance earlier releases carry.
+      - dependency-name: lefthook
+        versions: ['2.2.2']
+      # Requires a prerelease rolldown-plugin-dts.
+      - dependency-name: tsdown
+        versions: ['0.23.2']

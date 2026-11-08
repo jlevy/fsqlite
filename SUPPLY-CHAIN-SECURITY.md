@@ -14,6 +14,10 @@ for at least 14 days before they can enter the lockfile.
   float to a release inside the cool-off.
 - GitHub Actions are pinned to full commit SHAs, with the release tag in a trailing
   comment. Pin only a release that has itself cleared the cool-off.
+- Dependabot (`.github/dependabot.yml`) proposes action and npm updates as pull requests
+  after a 14-day cooldown and skips the held upgrades below.
+  The cooldown governs only version updates; the frozen install in CI re-verifies any
+  proposed lockfile against `minimumReleaseAge` and `trustPolicy`, whoever proposed it.
 - Every workflow checks out without persisting credentials and installs with
   `--frozen-lockfile --ignore-scripts`.
 
