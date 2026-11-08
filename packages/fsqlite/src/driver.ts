@@ -24,15 +24,14 @@ export type DB = DatabaseSync
 /** Bounded wait for a transient SQLite file lock held by another local connection. */
 const WRITER_BUSY_TIMEOUT_MS = 5_000
 
-/** Open a read-write database (used for writer working copies and reconcile temps). */
-export function open(path: string): DatabaseSync {
+/** Open a read-write database with fsqlite's connection settings plus `pragmas`. */
+function openWritable(path: string, pragmas: string): DatabaseSync {
   const db = new DatabaseSync(path)
   try {
     db.exec(`
       PRAGMA journal_mode = DELETE;
-      PRAGMA synchronous = FULL;
-      PRAGMA foreign_keys = ON;
       PRAGMA busy_timeout = ${WRITER_BUSY_TIMEOUT_MS};
+      ${pragmas}
     `)
     return db
   } catch (error) {
@@ -43,6 +42,27 @@ export function open(path: string): DatabaseSync {
     }
     throw error
   }
+}
+
+/**
+ * Open a read-write database for a writer working copy, a DirectStore build, or init's
+ * snapshot-0 build. Foreign keys are enforced, so a callback observes declared constraints
+ * and its foreign-key actions run, which records their effects in the changeset.
+ */
+export function open(path: string): DatabaseSync {
+  return openWritable(path, 'PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;')
+}
+
+/**
+ * Open a reconcile build. Foreign-key enforcement stays off for the connection's life: a
+ * changeset already carries every row the writer's foreign-key actions changed, so running
+ * those actions again during apply would delete, null, or rewrite rows twice and conflict
+ * with the recorded changes (spec F3). The explicit `foreign_key_check` after each envelope
+ * and at the publication gate keeps constraint closure. The pragma is set here, outside any
+ * transaction, because SQLite ignores it inside one.
+ */
+export function openBuild(path: string): DatabaseSync {
+  return openWritable(path, 'PRAGMA synchronous = FULL; PRAGMA foreign_keys = OFF;')
 }
 
 /** Open an immutable published snapshot read-only. Needs no session support. */

@@ -15,9 +15,14 @@
 //     return value from `applyChangeset`, not a throw, so a strict conflict is detected by
 //     `=== false`.
 //   - `REPLACE` is legal only for DATA and CONFLICT conflicts; returning it for
-//     NOTFOUND/CONSTRAINT/FOREIGN_KEY is SQLITE_MISUSE and throws. NOTFOUND and
-//     CONSTRAINT abort immediately. An intermediate FOREIGN_KEY report is ignored until
-//     the complete envelope is checked, because its parent may land in a later pass.
+//     NOTFOUND/CONSTRAINT/FOREIGN_KEY is SQLITE_MISUSE and throws. Every nonreplaceable
+//     conflict aborts.
+//
+// Apply executes ordinary statements on the target, so foreign-key actions and triggers
+// there would fire again on rows the changeset already changed. Apply therefore runs with
+// foreign-key enforcement off, and one explicit `foreign_key_check` after the last pass
+// closes the envelope, so a parent may still land in a later pass than its child.
+// node:sqlite cannot disable triggers, so SnapshotStore rejects trigger schemas instead.
 
 import type { DatabaseSync } from 'node:sqlite'
 import { constants, foreignKeyCheck } from './driver.ts'
@@ -136,9 +141,6 @@ function conflictResult(
   strict: number[],
   permanent: number[],
 ): number {
-  if (type === CHANGESET_FOREIGN_KEY) {
-    return CHANGESET_OMIT
-  }
   if (!replaceable(type)) {
     permanent.push(type)
     return CHANGESET_ABORT
@@ -158,6 +160,10 @@ function conflictResult(
  * pass back); we then roll back the WHOLE tx and raise a typed conflict error so the
  * caller quarantines the envelope atomically. Nonreplaceable conflict types are permanent,
  * even when their table policy would otherwise be retryable.
+ *
+ * Foreign-key enforcement is off for the transaction, so the changeset's recorded
+ * foreign-key action effects land exactly once; `foreign_key_check` then runs before
+ * `beforeCommit`. A connection opened with enforcement on has it restored afterward.
  */
 export function applyWithPolicy(
   db: DatabaseSync,
@@ -177,11 +183,30 @@ export function applyWithPolicy(
   // these applies every table. Without the fallback, a hand-built policy lacking '*' would
   // skip unlisted tables silently while the envelope is ledgered as applied.
   const used = new Set([...Object.values(policy), ownAction(policy, '*') ?? 'strict'])
+  // SQLite ignores this pragma inside a transaction, so it is set before BEGIN.
+  const enforced =
+    (db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }).foreign_keys === 1
+  if (enforced) {
+    db.exec('PRAGMA foreign_keys = OFF')
+  }
+  try {
+    applyInTransaction(db, changeset, policy, used, beforeCommit)
+  } finally {
+    if (enforced) {
+      db.exec('PRAGMA foreign_keys = ON')
+    }
+  }
+}
+
+function applyInTransaction(
+  db: DatabaseSync,
+  changeset: Uint8Array,
+  policy: NormalizedPolicy,
+  used: ReadonlySet<Action>,
+  beforeCommit: () => void,
+): void {
   db.exec('BEGIN IMMEDIATE')
   try {
-    // A single envelope may span several filtered policy passes. Defer enforcement until
-    // every pass has landed so internally valid parent-and-child changes stay atomic.
-    db.exec('PRAGMA defer_foreign_keys = ON')
     for (const action of ACTIONS) {
       if (!used.has(action)) {
         continue

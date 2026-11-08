@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **159 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
+Current status: **163 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -38,8 +38,8 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | Suite | Constraints | Guarantee it protects |
 | --- | --- | --- |
 | `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, malformed-manifest, wrong-schema admission, quarantine-write, NOTFOUND quarantine, validation-state, envelope-size handling, and seal/GC pinning; a reconcile that fails before publication removes its build |
-| `merge-constraints.test.ts` | `C7` | Fixed filtered-pass order, UNIQUE and foreign-key closure at envelope and publication boundaries, and policy routing by own keys only, so tables or actions named like `Object.prototype` members never drop changes |
-| `init.test.ts` | `C5-C8` | Non-null primary-key contract; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
+| `merge-constraints.test.ts` | `C7` | Fixed filtered-pass order, UNIQUE and foreign-key closure at envelope and publication boundaries, foreign-key actions applied once from their recorded effects, a merge-created dangling reference quarantined, and policy routing by own keys only, so tables or actions named like `Object.prototype` members never drop changes |
+| `init.test.ts` | `C5-C8` | Non-null primary-key contract, including the nullable `INTEGER PRIMARY KEY DESC` quirk; SnapshotStore trigger rejection; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
 | `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, and read-lease protection from concurrent GC |
 | `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, torn-read-free readers, and serialized DirectStore writers with zero loss |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
@@ -53,7 +53,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
-| `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
+| `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, trigger support that SnapshotStore refuses to open, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
 | `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes plus integrity-clean online backup |
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
@@ -98,7 +98,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 159` / `# fail 0`; goldens `27 passed`; build
+- **Expect:** node:test reports `# pass 163` / `# fail 0`; goldens `27 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.

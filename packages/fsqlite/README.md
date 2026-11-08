@@ -339,8 +339,11 @@ console.log(row)
 
 Every table must have a non-null primary key.
 The `f1.0` writer contract does not support virtual tables or DDL inside write
-callbacks. Conflict actions are `lww` (replace), `union` (keep the existing row), and
-`strict` (quarantine the conflicting envelope).
+callbacks. `SnapshotStore` also rejects a schema that declares triggers, because
+reconciliation would fire them a second time; use `DirectStore` for such a schema.
+Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
+Conflict actions are `lww` (replace), `union` (keep the existing row), and `strict`
+(quarantine the conflicting envelope).
 The `'*'` default is `strict` when omitted.
 The policy is deployment configuration rather than stamped `f1.0` store metadata, so
 every reconciler for one store epoch must use the same effective policy.

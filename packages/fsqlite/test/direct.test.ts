@@ -104,6 +104,40 @@ test('direct writer with divergent schema fails before invoking its callback', (
   }
 })
 
+test('DirectStore supports triggers, and SnapshotStore refuses to open that store', () => {
+  const { dir, cleanup } = tmpStore()
+  const options = {
+    schema: `
+      CREATE TABLE doc (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TABLE audit (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TRIGGER doc_audit AFTER INSERT ON doc BEGIN INSERT INTO audit VALUES (NEW.id); END;
+    `,
+    schemaVersion: 1,
+  }
+  try {
+    const direct = new DirectStore(dir, options).init()
+    direct.write((db) => {
+      db.prepare('INSERT INTO doc VALUES (?)').run('d1')
+    })
+    assert.deepEqual(
+      direct.read((db) =>
+        db
+          .prepare('SELECT id FROM audit')
+          .all()
+          .map((row) => ({ ...row })),
+      ),
+      [{ id: 'd1' }],
+    )
+
+    const engine = new SnapshotStore(dir, options)
+    for (const open of [() => engine.init(), () => engine.write('w', () => undefined)]) {
+      assert.throws(open, /SnapshotStore does not support triggers/)
+    }
+  } finally {
+    cleanup()
+  }
+})
+
 test('direct mode never records a session (so it runs on session-less bindings)', () => {
   const { dir, cleanup } = tmpStore()
   try {

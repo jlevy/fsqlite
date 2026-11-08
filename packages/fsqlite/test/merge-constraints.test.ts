@@ -16,6 +16,30 @@ const FOREIGN_KEY_SCHEMA = `
   );
 `
 
+// Every SQLite foreign-key action that writes rows: the writer runs it during capture, so
+// its effects are already in the changeset as ordinary row changes.
+const FOREIGN_KEY_ACTION_SCHEMA = `
+  CREATE TABLE parent (id TEXT PRIMARY KEY NOT NULL);
+  CREATE TABLE child (
+    id TEXT PRIMARY KEY NOT NULL,
+    parent_id TEXT NOT NULL REFERENCES parent(id) ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  CREATE TABLE tag (
+    id TEXT PRIMARY KEY NOT NULL,
+    parent_id TEXT REFERENCES parent(id) ON DELETE SET NULL
+  );
+`
+
+const rowsOf = (store: SnapshotStore, table: string): Record<string, unknown>[] =>
+  store.read((db) =>
+    (db.prepare(`SELECT * FROM ${table} ORDER BY id`).all() as Record<string, unknown>[]).map(
+      (row) => ({ ...row }),
+    ),
+  )
+
+const foreignKeyViolations = (store: SnapshotStore): unknown[] =>
+  store.read((db) => db.prepare('PRAGMA foreign_key_check').all())
+
 test('the normative filtered-pass order cannot be mutated by consumers', () => {
   assert.deepEqual(ACTIONS, ['replace', 'omit', 'strict'])
   assert.equal(Object.isFrozen(ACTIONS), true)
@@ -210,6 +234,8 @@ test('applyWithPolicy rejects a dangling foreign key without a caller-supplied c
       (target.prepare('SELECT COUNT(*) count FROM child').get() as { count: number }).count,
       0,
     )
+    // Apply turns enforcement off for its own transaction only.
+    assert.equal(target.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1)
   } finally {
     writer.close()
     target.close()
@@ -298,5 +324,82 @@ test('applyWithPolicy applies tables a hand-built policy leaves to the strict de
     writer.close()
     target.close()
     fixture.cleanup()
+  }
+})
+
+test('foreign-key actions reconcile with the effects the writer recorded', () => {
+  const { dir, cleanup } = tmpStore()
+  const store = new SnapshotStore(dir, {
+    schema: FOREIGN_KEY_ACTION_SCHEMA,
+    schemaVersion: 1,
+  }).init()
+  try {
+    store.write('seed', (db) => {
+      db.exec(`
+        INSERT INTO parent VALUES ('p'), ('q');
+        INSERT INTO child VALUES ('c1', 'p'), ('c2', 'p'), ('c3', 'q');
+        INSERT INTO tag VALUES ('t1', 'p');
+      `)
+    })
+    assert.equal(store.reconcile().applied, 1)
+    store.write('A', (db) => {
+      db.exec(`DELETE FROM parent WHERE id = 'p'; UPDATE parent SET id = 'r' WHERE id = 'q'`)
+    })
+
+    const result = store.reconcile()
+
+    assert.deepEqual(
+      { applied: result.applied, quarantined: result.quarantined },
+      { applied: 1, quarantined: 0 },
+    )
+    assert.deepEqual(rowsOf(store, 'parent'), [{ id: 'r' }])
+    assert.deepEqual(rowsOf(store, 'child'), [{ id: 'c3', parent_id: 'r' }])
+    assert.deepEqual(rowsOf(store, 'tag'), [{ id: 't1', parent_id: null }])
+    assert.deepEqual(foreignKeyViolations(store), [])
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('a recorded cascade that a merge leaves dangling quarantines its envelope', () => {
+  const { dir, cleanup } = tmpStore()
+  const store = new SnapshotStore(dir, {
+    schema: FOREIGN_KEY_ACTION_SCHEMA,
+    schemaVersion: 1,
+  }).init()
+  try {
+    store.write('seed', (db) => {
+      db.exec(`INSERT INTO parent VALUES ('p'); INSERT INTO child VALUES ('c1', 'p');`)
+    })
+    store.reconcile()
+    // Both writers start from the same head. B's new child sorts first and lands; A's
+    // cascade recorded only c1, so applying A would leave c2 pointing at a missing parent.
+    store.write('B', (db) => {
+      db.prepare('INSERT INTO child VALUES (?, ?)').run('c2', 'p')
+    })
+    const deleteTx = store.write('A', (db) => {
+      db.prepare('DELETE FROM parent WHERE id = ?').run('p')
+    })
+    assert.ok(deleteTx)
+
+    const result = store.reconcile()
+
+    assert.deepEqual(
+      { applied: result.applied, quarantined: result.quarantined },
+      { applied: 1, quarantined: 1 },
+    )
+    assert.match(
+      readFileSync(join(store.txQuarantine, `${deleteTx}.txn`, 'QUARANTINE'), 'utf8'),
+      /^apply-failed: foreign_key_check/,
+    )
+    assert.deepEqual(rowsOf(store, 'parent'), [{ id: 'p' }])
+    assert.deepEqual(rowsOf(store, 'child'), [
+      { id: 'c1', parent_id: 'p' },
+      { id: 'c2', parent_id: 'p' },
+    ])
+    assert.deepEqual(foreignKeyViolations(store), [])
+  } finally {
+    cleanup()
   }
 })

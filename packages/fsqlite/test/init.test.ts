@@ -38,6 +38,24 @@ test('init enforces the NON-NULL primary key contract', () => {
   }
 })
 
+test('SnapshotStore init rejects a caller schema that declares a trigger', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const schema = `
+      CREATE TABLE doc (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TABLE audit (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TRIGGER doc_audit AFTER INSERT ON doc BEGIN INSERT INTO audit VALUES (NEW.id); END;
+    `
+    assert.throws(
+      () => new SnapshotStore(dir, { schema, schemaVersion: 1 }).init(),
+      /SnapshotStore does not support triggers: .*"doc_audit" on table "doc".*DirectStore/,
+    )
+    assert.equal(existsSync(join(dir, 'current')), false)
+  } finally {
+    cleanup()
+  }
+})
+
 test('init rejects reopening a store with an incompatible schema version', () => {
   const { dir, cleanup } = tmpStore()
   const schema = 'CREATE TABLE t (k TEXT PRIMARY KEY NOT NULL);'

@@ -193,10 +193,23 @@ Requirements:
   column declared `INTEGER PRIMARY KEY DESC` is not a rowid alias (a documented SQLite
   quirk), so it too MUST be `NOT NULL`; the table-constraint form
   `PRIMARY KEY (id DESC)` remains an alias.
-  The `f1.0` Writer role does not support virtual tables: SQLite sessions do not capture
-  them, and their implementation-owned shadow tables do not satisfy this caller-table
-  contract. Derived indexes that use virtual tables belong outside the envelope writer
-  path and must be rebuildable from published data.
+  A caller schema used by the SnapshotStore Writer or Reconciler role MUST NOT declare
+  triggers. `sqlite3changeset_apply` executes ordinary statements, so a trigger fires
+  again during reconcile, and the rows it already wrote at capture then conflict with
+  that second firing (an `AFTER INSERT` audit row hits CONFLICT, a counter update hits
+  DATA), quarantining valid envelopes.
+  SQLite can disable triggers per connection (`SQLITE_DBCONFIG_ENABLE_TRIGGER`), but
+  node:sqlite does not expose it, so `f1.0` forbids them: initialization and every open
+  by a Writer or Reconciler MUST reject a schema whose `sqlite_schema` holds a trigger,
+  naming it. The DirectStore strategy (§9) applies no changeset, so its triggers fire
+  once and are permitted.
+  Foreign-key actions (`ON DELETE`/`ON UPDATE` `CASCADE`, `SET NULL`, `SET DEFAULT`) are
+  permitted for both strategies; F3 applies their recorded effects without running them
+  again. The `f1.0` Writer role does not support virtual tables: SQLite sessions do not
+  capture them, and their implementation-owned shadow tables do not satisfy this
+  caller-table contract.
+  Derived indexes that use virtual tables belong outside the envelope writer path and
+  must be rebuildable from published data.
 
 - **S5.** A published snapshot MUST NOT have live `-wal`/`-shm` side files.
   (Snapshots are built and committed in rollback-journal mode and are closed before
@@ -292,6 +305,11 @@ chronological.
    Temporary schema objects include the callback-protection triggers installed by the
    implementation. A writer MUST reject such an attempt rather than silently discard or
    publish it. An empty changeset means the write is a no-op: produce no envelope.
+   The working copy MUST enforce foreign keys (`PRAGMA foreign_keys = ON`), so the
+   callback observes declared constraints and its foreign-key actions run during
+   capture: the session records every row an action deletes, nulls, or rewrites as an
+   ordinary change, and the envelope is complete without reconcile running the action
+   again.
 4. **W4.** Create `<txid>.txn/`, write `changeset.bin`, write `manifest.json`, and
    **write the zero-byte `COMMITTED` marker last**. An envelope without `COMMITTED` MUST
    be ignored by reconcile (it is an aborted/in-progress capture) and is quarantined by
@@ -332,9 +350,11 @@ Protocol:
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
    - otherwise **apply** the changeset under the per-table merge policy (below), with
-     foreign-key enforcement deferred across filtered passes until the complete envelope
-     has landed; an envelope that names `applied_tx` or `fsqlite_meta` MUST be
-     quarantined; then run `PRAGMA foreign_key_check` and record `tx_id` in
+     foreign-key enforcement off on the build (`PRAGMA foreign_keys = OFF`, set outside
+     any transaction), so the recorded effects of the writer’s foreign-key actions land
+     exactly once instead of the actions running again; an envelope that names
+     `applied_tx` or `fsqlite_meta` MUST be quarantined; then run
+     `PRAGMA foreign_key_check` (which works with enforcement off) and record `tx_id` in
      `applied_tx`; all three operations occur in one transaction in the build snapshot
      before publication; if the apply or foreign key check aborts → **quarantine** with
      the reason; continue with the next envelope.
@@ -446,9 +466,15 @@ constraints at each envelope boundary:
 - PRIMARY KEY DATA and CONFLICT cases use the table policy when replaceable.
 - NOT NULL, UNIQUE, and CHECK failures surface as nonreplaceable CONSTRAINT outcomes and
   quarantine the complete envelope.
-- Foreign-key enforcement is deferred across all filtered passes for one envelope, then
-  `foreign_key_check` runs before the ledger row is written.
-  A persistent violation quarantines the complete envelope.
+- Foreign-key enforcement is off while an envelope’s filtered passes run, so a parent
+  may land in a later pass than its child and no action fires twice; `foreign_key_check`
+  then runs before the ledger row is written.
+  A violation quarantines the complete envelope.
+  Actions are evaluated once, at capture: a recorded cascade covers only the rows that
+  existed in the writer’s copy, so a merge that leaves another envelope’s new child
+  pointing at a deleted parent quarantines whichever envelope completes the violation.
+  (SQLite’s `SQLITE_CHANGESETAPPLY_FKNOACTION` apply flag suppresses actions with
+  enforcement on, but node:sqlite exposes no apply flags.)
 - The pre-publication integrity gate repeats `foreign_key_check` over the complete
   build.
 
@@ -615,6 +641,8 @@ The post-swap identity check means a successful return always names a
 snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
+The callback runs on the build with foreign keys enforced, so its triggers and
+foreign-key actions fire exactly once; S4’s trigger prohibition does not apply.
 The writer **does not require the session extension**, so the strategy runs on any
 SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
 composes safely with SnapshotStore reconcilers publishing into the same store.

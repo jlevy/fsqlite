@@ -35,6 +35,14 @@ import type {
 const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
 
+/** The shared store engine under DirectStore's caller-schema rules. */
+class DirectStrategyStore extends SnapshotStore {
+  protected override assertStrategySchema(): void {
+    // DirectStore never applies a changeset: a trigger fires once, inside the callback's own
+    // transaction on the build, so trigger schemas are supported.
+  }
+}
+
 /**
  * The serialized-writer strategy. Cooperative callers may contend for `write`, but the
  * publish lease admits one complete copy, callback, validation, and publication path at
@@ -44,7 +52,7 @@ export class DirectStore {
   private base: SnapshotStore
 
   constructor(dir: string, opts: StoreOptions = {}) {
-    this.base = new SnapshotStore(dir, opts)
+    this.base = new DirectStrategyStore(dir, opts)
   }
 
   init(): this {

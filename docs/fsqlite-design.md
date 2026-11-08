@@ -229,7 +229,8 @@ can reject an entire envelope across keys or tables.
 | --- | --- |
 | Primary key | Required and non-null for every caller table. Same-key replaceable conflicts use the table policy. |
 | `NOT NULL`, `UNIQUE`, and `CHECK` | SQLite enforces them during apply. A `CONSTRAINT` outcome quarantines the complete envelope. |
-| Foreign key | Enforcement is deferred across the fixed filtered passes, then `foreign_key_check` runs before the ledger entry and again before publication. A persistent violation quarantines the envelope. |
+| Foreign key | The writer enforces foreign keys, so actions such as `ON DELETE CASCADE` or `SET NULL` run at capture and the changeset records their effects. Reconcile applies with enforcement off, so those effects land once instead of the action running again, then `foreign_key_check` runs before the ledger entry and again before publication. A violation, including one a merge creates by adding a child under a parent another envelope’s cascade deleted, quarantines the envelope. |
+| Trigger | `SnapshotStore` rejects a schema that declares one, at `init()` and on every open, naming the trigger. Changeset apply runs ordinary statements, so a trigger would fire again and its recorded effects would conflict, and `node:sqlite` cannot disable triggers. `DirectStore` runs callbacks directly and supports triggers. |
 | Cross-row application invariant | Not inferred. Use a version-stamped guard row, a `strict` point-row compare-and-retry pattern, or `DirectStore`. Range, predicate, and aggregate invariants are not protected by ordinary merge policy. |
 
 DDL is not a transaction-envelope operation.

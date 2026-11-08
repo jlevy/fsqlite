@@ -207,6 +207,28 @@ function validatePrimaryKeys(db: driver.DB): void {
   }
 }
 
+/**
+ * Refuse a caller schema that declares a trigger (spec S4). Reconcile applies a changeset
+ * with ordinary statements, so a trigger would fire again on the build and collide with the
+ * rows it already wrote at capture, quarantining valid envelopes. node:sqlite exposes no way
+ * to disable triggers for a connection.
+ */
+function rejectCallerTriggers(db: driver.DB): void {
+  const triggers = db
+    .prepare("SELECT name, tbl_name FROM main.sqlite_schema WHERE type = 'trigger' ORDER BY name")
+    .all() as { name: string; tbl_name: string }[]
+  if (triggers.length === 0) {
+    return
+  }
+  const named = triggers.map((t) => `"${t.name}" on table "${t.tbl_name}"`).join(', ')
+  throw new Error(
+    `SnapshotStore does not support triggers: the caller schema declares trigger ${named}. ` +
+      'Reconcile applies changesets with ordinary statements, so a trigger would fire again ' +
+      'and conflict with the rows it already wrote; remove the trigger, or use DirectStore, ' +
+      'which runs callbacks directly and supports triggers',
+  )
+}
+
 // applied_tx is the per-snapshot idempotency ledger fsqlite manages on the caller's
 // behalf; fsqlite_meta stamps the store's own identity (schema hash, tool version) so a
 // reopen with a divergent schema is rejected loudly. These are the only two tables fsqlite
@@ -446,6 +468,7 @@ export class SnapshotStore {
           stamp.run('store_id', marker.store_id)
           db.exec(this.schema)
           validatePrimaryKeys(db)
+          this.assertStrategySchema(db)
         } finally {
           db.close()
         }
@@ -522,9 +545,19 @@ export class SnapshotStore {
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
+      this.assertStrategySchema(db)
     } finally {
       db.close()
     }
+  }
+
+  /**
+   * Reject caller-schema features this write strategy cannot carry (spec S4). Changeset
+   * apply fires triggers again, so a SnapshotStore schema may not declare any; DirectStore,
+   * which runs its callback on the build directly, overrides this.
+   */
+  protected assertStrategySchema(db: driver.DB): void {
+    rejectCallerTriggers(db)
   }
 
   private _verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
@@ -864,7 +897,7 @@ export class SnapshotStore {
     const applied: string[] = []
     const archivable: string[] = []
     const quarantined: [string, string][] = []
-    const db = driver.open(tmp)
+    const db = driver.openBuild(tmp)
     try {
       const seen = new Set(
         (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>

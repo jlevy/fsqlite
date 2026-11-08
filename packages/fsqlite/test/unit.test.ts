@@ -12,7 +12,8 @@ import {
 import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { SnapshotStore } from '../src/index.ts'
+import { SnapshotStore, applyWithPolicy, normalize } from '../src/index.ts'
+import * as driver from '../src/driver.ts'
 import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -385,39 +386,33 @@ test('a strict-table conflict quarantines the whole tx', () => {
 })
 
 test('changeset data rolls back when its applied_tx ledger insert fails', () => {
+  // Reconcile inserts the ledger row in applyWithPolicy's beforeCommit step, inside the
+  // apply transaction. A trigger cannot inject the failure: SnapshotStore rejects them.
   const { dir, cleanup } = tmpStore()
-  const store = new SnapshotStore(dir, {
-    ...STORE_OPTS,
-    schema:
-      (STORE_OPTS.schema ?? '') +
-      `\nCREATE TRIGGER fail_second_ledger_insert
-       BEFORE INSERT ON applied_tx
-       WHEN (SELECT COUNT(*) FROM applied_tx) >= 1
-       BEGIN SELECT RAISE(FAIL, 'ledger insert failed'); END;`,
-  }).init()
+  const writer = driver.open(join(dir, 'writer.sqlite'))
+  const target = driver.open(join(dir, 'target.sqlite'))
   try {
-    store.write('A', (db) => {
+    for (const db of [writer, target]) {
+      db.exec(STORE_OPTS.schema ?? '')
+    }
+    const changeset = driver.recordChangeset(writer, (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('first', 'First', 't')
     })
-    store.write('B', (db) => {
-      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('second', 'Second', 't')
-    })
+    assert.ok(changeset)
 
-    const result = store.reconcile()
-    assert.equal(result.applied, 1)
-    assert.equal(result.quarantined, 1)
-    assert.deepEqual(
-      store.read((db) =>
-        (
-          db.prepare('SELECT artifact_id FROM artifacts ORDER BY artifact_id').all() as {
-            artifact_id: string
-          }[]
-        ).map(({ artifact_id }) => artifact_id),
-      ),
-      ['first'],
+    assert.throws(() => {
+      applyWithPolicy(target, changeset, normalize(STORE_OPTS.conflictPolicy), () => {
+        throw new Error('ledger insert failed')
+      })
+    }, /ledger insert failed/)
+    assert.equal(
+      (target.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c,
+      0,
       'the failed ledger insert and its changeset data must share one rollback boundary',
     )
   } finally {
+    writer.close()
+    target.close()
     cleanup()
   }
 })
