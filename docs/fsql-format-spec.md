@@ -55,8 +55,8 @@ Three structural properties deliver them:
    reduces wasted work.
    Exactly-once application is guaranteed by recording each applied transaction ID
    inside its snapshot and by publishing only from the still-current base (§6). Lock
-   holders can overlap after a stale-lock break, but they cannot double-apply or corrupt
-   a conforming store.
+   holders can overlap after a stale-lock break; L5 states exactly what overlap can and
+   cannot do to a conforming store.
 
 Each published snapshot remains an ordinary SQLite file: any SQLite binding in any
 language can open it with no fsqlite code at all.
@@ -75,11 +75,13 @@ paths below are relative to it.
   fsqlite.json.<uuid>.tmp          # transient: marker creation (§3)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
+  publish.lock.<hex10>.tmp/        # transient: lock moved aside by a break or release (§7)
   snapshots/
     000000000000.fsqlite.sqlite    # immutable published snapshot, version 0 (§3)
     000000000001.fsqlite.sqlite
     .build-<hex10>.sqlite          # transient: reconcile build (§6)
     .direct-<hex10>.sqlite         # transient: DirectStore build (§9)
+    .gc-<version>-<hex10>.tmp      # transient: snapshot tombstoned by GC (§8 G2)
     *.tmp                          # transient: init's snapshot-0 build (§3)
   tx/
     pending/
@@ -128,10 +130,11 @@ Naming grammar:
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
   Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
-- **Transients** are exactly the files matching: prefix `.build-`, prefix `.direct-`,
-  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. Transients are never part of
-  store state; a *fresh* transient indicates work in flight, an *old* one indicates a
-  crash (§11).
+- **Transients** are exactly the entries matching: prefix `.build-`, prefix `.direct-`,
+  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. All are files except
+  `publish.lock.<hex10>.tmp/`, a directory, so removing a transient MUST handle both.
+  Transients are never part of store state; a *fresh* transient indicates work in
+  flight, an *old* one indicates a crash (§11).
 - **Envelope dir**: `<txid>.txn` (§5 defines `<txid>`).
 - **Hex tokens** (`<hex10>` etc.)
   are lowercase hex from a cryptographically random source; their only requirement is
@@ -203,11 +206,18 @@ Requirements:
 Snapshot 0 is the empty initial snapshot created by `init` (empty caller tables, both
 reserved tables, identity stamped).
 First-open MUST be fenced: build under the publish lock through a uniquely-named
-transient, rename into place, and then publish the pointer so concurrent initializers
-converge on one snapshot 0. After init (and on every reopen), an implementation MUST
-verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
-equals its `schema_version`, `application_id` equals `0x4653514C`, and
-`fsqlite_meta.schema_hash` equals the hash of its exact supplied DDL string.
+transient, commit it as snapshot 0 without replacing (as in F5c), and then publish the
+pointer so concurrent initializers converge on one snapshot 0. When `fsqlite.json`
+exists but `current` does not, initialization MUST refuse if `snapshots/` holds any
+snapshot (including snapshot 0) and MUST direct the operator to repair (§11): the store
+has a lineage whose pointer was lost, and building a new snapshot 0 would roll every
+reader back to an empty store, after which repair would delete the newer snapshots as
+orphans. Only a marked store with no snapshot (a first-open that crashed before its
+commit) may be initialized again.
+After init (and on every reopen), an implementation MUST verify compatibility: the
+snapshot identity matches `fsqlite.json`, `user_version` equals its `schema_version`,
+`application_id` equals `0x4653514C`, and `fsqlite_meta.schema_hash` equals the hash of
+its exact supplied DDL string.
 The last check rejects a *divergent schema at the same version*, which the integer alone
 cannot catch.
 
@@ -337,14 +347,44 @@ Protocol:
      and retry from F1 (**optimistic concurrency**).
    - **F5b.** Re-validate lock ownership by token (**fencing**, §7); on loss, discard
      and retry.
-   - **F5c.** fsync the build → `rename()` it to `snapshots/<base+1>...` (the rename
-     MUST replace any orphan left at that name by a previously crashed publish) → fsync
-     the directory → swap the pointer per P2/P3.
-6. **F6.** After publish (outside the lock), move applied and archivable envelopes to
-   `tx/applied/` and quarantined ones to `tx/quarantine/`, writing each quarantined
-   envelope a `QUARANTINE` file containing the reason.
+   - **F5c.** fsync the build (this MAY happen before the lock is taken), then **commit
+     it without replacing** to `snapshots/<base+1>.fsqlite.sqlite`: touch the build’s
+     mtime, record its identity (device, inode, size, and mtime), hard-link it to the
+     snapshot name (`link(2)`, which fails with `EEXIST` rather than replace), remove
+     the build name, and fsync `snapshots/`. A replacing `rename()` MUST NOT be used for
+     this step, because an overlapping holder (L5) may already have committed or
+     published that name.
+     If the name exists: re-read `current`, and if it is ≥ base+1 a peer published
+     first, so discard and retry from F1. Otherwise the entry is another holder’s commit
+     in flight or an orphan of a crashed one.
+     An entry whose mtime is older than the lock’s stale window (L2) is an orphan:
+     remove it and link again.
+     A younger entry MUST NOT be removed; wait, re-checking `current` and fencing, until
+     it is published, removed, or stale, and fail loudly at the acquisition timeout.
+     Immediately before the pointer swap, re-check `current` == base, fencing (L3), and
+     that the snapshot name still has the recorded identity.
+     On any mismatch, remove the entry only while it is still this holder’s build and
+     `current` < base+1, then retry.
+     Swap the pointer per P2/P3. Then re-check the identity once more: if the name no
+     longer holds this build, `current` names another holder’s snapshot, so the attempt
+     published nothing of its own and MUST retry rather than report success.
+     A conforming target filesystem MUST support hard links with these semantics.
+6. **F6.** After publish (outside the lock), or after a build that applied nothing, open
+   the snapshot that `current` names *now* and read its ledger.
+   Move to `tx/applied/` only envelopes whose `tx_id` that ledger contains.
+   If it contains every envelope the build applied or found archivable, the published
+   lineage is the build’s own: move the build’s quarantined envelopes that the ledger
+   does not contain to `tx/quarantine/`, writing each a `QUARANTINE` file containing the
+   reason. Otherwise an overlapping holder moved `current` to a lineage the build never
+   saw (L5); every remaining envelope MUST stay in `tx/pending/` for the next reconcile
+   to classify against that lineage.
+   An implementation MUST NOT archive an envelope because its own build applied it.
    The reason MUST be written before the move; if it cannot be persisted, leave that
    envelope in place and fail loudly.
+   A failure after the pointer swap (here, or a directory fsync after the pointer
+   rename) MUST be reported as distinct from a failure before it, because a caller that
+   reruns a write whose version is already published applies it twice.
+   The Node implementation sets a numeric `published` property on such errors.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
    archivable on the next run.
 
@@ -355,6 +395,8 @@ both build, but only one can publish a given version; the loser rebuilds from th
 winner’s snapshot, where the winner’s ledger makes already-folded envelopes no-ops.
 A crash before F5c publishes nothing (the build is a transient); a crash after F5c loses
 only the F6 moves, which are recovered by the ledger-skip.
+Because F6 consults the ledger of the head `current` names rather than the build’s own
+belief, an envelope leaves `tx/pending/` only once it is in the published lineage.
 **`base_version` in the manifest is informational.
 An envelope seeded from version N may be folded into version N+k.** The per-table policy
 resolves cross-version merges; the base does not pin them.
@@ -425,21 +467,69 @@ build.
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
-- **L2.** Liveness is the lock dir’s **mtime**; a live long holder SHOULD touch it
-  (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window, by
-  removing the dir and retrying acquisition.
+
+- **L2.** Liveness is the lock dir’s **mtime**. A holder whose critical section has
+  several long steps (copying a head, running an application callback, an fsync,
+  scanning snapshots) SHOULD heartbeat at each step boundary by touching the dir once
+  its age reaches a fraction of the stale window (Node: a quarter), and SHOULD abandon
+  the attempt as soon as a heartbeat finds that it lost ownership.
+  A single step that outlasts the stale window can still be broken; the stale window
+  MUST exceed the longest single step, not the whole section.
+  A waiter MAY break a lock whose mtime is older than the stale window.
+  It MUST break it in three steps, because two waiters can judge the same lock stale and
+  a check-then-delete on `publish.lock` would remove a successor that re-acquired the
+  name in between: (1) read `owner.json` and the mtime and judge the lock stale; (2)
+  `rename()` the dir aside to `publish.lock.<hex10>.tmp`, which is atomic, so a second
+  breaker gets `ENOENT` and the holder can no longer refresh the moved dir; (3) remove
+  the moved dir only if it still carries the token read in step 1 and is still older
+  than the stale window.
+  Otherwise the moved dir is a successor’s live lock: the waiter MUST rename it back,
+  or, if another acquirer has completed a new lock in the meantime, remove it (its
+  former holder then fails every fencing check).
+  Then retry acquisition.
   (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
   An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
   lock it could have waited for.
+
 - **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
-  holder MUST re-read `owner.json` and verify its own token immediately before the
-  destructive publish step (F5b), and MUST abandon the publish on a mismatch.
+  holder MUST re-read `owner.json` and verify its own token immediately before each
+  destructive step (F5b, every repair and GC deletion), and MUST abandon the step on a
+  mismatch. The Node implementation fences by verify, touch, verify: it checks its token,
+  refreshes the dir’s mtime, and checks the token again, so a fenced step begins with a
+  full stale window in which no conforming breaker (L2 step 3) can remove the lock.
+
 - **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
-  `owner.json` still carries its token.
+  `owner.json` still carries its token, and MUST remove it through the same
+  rename-aside-and-recheck step as L2, so a successor that acquires between the token
+  check and the removal is restored rather than deleted.
   A stale-broken holder must not delete a successor’s live lock because doing so would
   admit a third concurrent holder.
-- **L5.** Correctness MUST NOT depend on L1-L4 (see §1): even two overlapping holders
-  cannot double-publish a version (F5a) or double-apply an envelope (the ledger).
+
+- **L5.** Correctness MUST NOT depend on L1-L4 (see §1). Two holders can overlap after a
+  stale-lock break, for example when a holder pauses past the stale window and later
+  resumes mid-operation.
+  With F5c and F6 as specified, overlapping holders cannot:
+  - replace a snapshot another holder committed or published, because F5c commits
+    without replacing and reclaims only an entry older than the stale window;
+  - report another holder’s build as their own publication, because of the identity
+    checks around the pointer swap, so a DirectStore write that returns names a snapshot
+    that carries its callback;
+  - publish a version from a superseded base (F5a, and fencing before each step);
+  - apply an envelope twice (the ledger), or archive an envelope that the head `current`
+    names does not contain (F6).
+
+  Overlap can still waste work: a fenced-out attempt rebuilds, and a DirectStore attempt
+  reruns its callback.
+  One window remains in `f1.0`. The pointer swap is a blind `rename()`, so a holder that
+  stalls longer than the stale window after its final pre-swap checks but before its
+  pointer rename, while at least two later versions are published, can on resuming
+  rename its older version over `current`. `current` then still names a complete,
+  integrity-gated snapshot, and envelopes not yet settled stay pending (F6), but
+  envelopes the newer versions’ publishers already archived, and DirectStore writes they
+  already returned, are absent from the restored lineage, and a later publisher reclaims
+  the newer snapshot as a stale orphan.
+  Step-boundary heartbeats (L2) mean such a stall needs a frozen process, not a slow
+  step. Open issue O6 tracks the structural fix.
   Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
   and OCC, not staleness precision, carry correctness.
   (See Open issue O3.)
@@ -452,8 +542,8 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - **RL1.** To take a lease: read `current` → v; write `leases/<token>.lease` containing
   `{version: v, pid, host, at}`; **then verify the snapshot file still exists**. If it
   does not, the lease lost a race with GC: remove the lease file and retry from a fresh
-  pointer read. (Publish-then-verify closes the check-then-act race from the reader’s
-  side.)
+  pointer read. (Publish-then-verify is the reader’s half of the race closure; G2’s
+  tombstone is GC’s half.)
 - **RL2.** Lease liveness is the lease file’s mtime; holders of long leases SHOULD
   heartbeat by touching the file.
   GC MAY treat leases older than its staleness window (Node default 60 s) as abandoned
@@ -461,12 +551,34 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - A conforming `seal` or equivalent export that reads a selected snapshot while GC may
   run MUST hold a read lease for that version until the standalone artifact is complete
   and validated.
+- **G0.** GC is destructive maintenance and MUST fail closed.
+  It MUST reject invalid parameters before touching the store (Node: `retain` a
+  non-negative integer; `leaseStaleMs` and `transientStaleMs` positive integers, so a
+  zero or negative window cannot turn every live lease or fresh transient into debris).
+  It MUST validate the store (§11) and refuse unless the head passed identity and
+  integrity validation (`sealed`, `live`, or `in-flight-capture`, whose tells are
+  routine on a live store and are never touched by GC): with a corrupt head, the older
+  snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
+  the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
+  `current` under the lock; if `current` moved backward since validation, repair
+  re-pointed the store and GC MUST refuse.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
-- **G2.** GC MUST re-scan the lease directory **immediately before each individual
-  snapshot unlink**. A lease may have been published after GC’s initial scan (this is
-  the GC-side half of the race closure; RL1 is the reader-side half).
-  The newest `retain` versions are never collected, which bounds RL1’s retries.
+- **G2.** GC MUST delete each snapshot in two phases.
+  It re-scans the lease directory, then `rename()`s the snapshot to a
+  `snapshots/.gc-<version>-<hex10>.tmp` tombstone, then **re-scans the lease directory
+  again**. If a live lease now names the version, GC MUST restore the tombstone to its
+  snapshot name (without replacing) and keep it; otherwise it unlinks the tombstone.
+  If the second scan fails (for example on an unreadable fresh lease), GC MUST restore
+  the snapshot before failing.
+  A single re-scan followed by an unlink does not close the race: a reader can publish
+  its lease and pass its existence check between them.
+  With the tombstone, every interleaving is safe: a reader whose existence check runs
+  after the rename fails it and retries (RL1), and a lease published before the rename
+  is visible to the second scan.
+  A lease that lands just before the rename can see its snapshot vanish briefly, until
+  the second scan restores it; the newest `retain` versions are never collected, which
+  bounds RL1’s retries.
 - **G3.** GC MAY also sweep *stale* transients at the store root, in `snapshots/`, and
   in `tx/pending/` (`.build-*`, `.direct-*`, `.work-*`, and `*.tmp`), but MUST NOT sweep
   *fresh* ones, which may belong to a live initializer, reconcile, DirectStore write, or
@@ -487,10 +599,15 @@ snapshot to a `.direct-*` transient → mutate it in one transaction → reasser
 callback boundary from W3 and the candidate’s application ID, reserved tables, marker
 identity, schema version, and schema hash → integrity-gate (`quick_check` and
 `foreign_key_check`) → fsync → re-check `current` == base (OCC) and lock token (fencing)
-→ rename to `snapshots/<base+1>` → fsync the snapshot directory → re-check OCC and
-fencing → pointer swap (P2/P3) → release.
-On an OCC or fencing failure, discard or leave the unpublished snapshot as a recoverable
-orphan, then retry.
+→ commit to `snapshots/<base+1>` without replacing, with the identity checks and pointer
+swap of F5c → release.
+On an OCC, fencing, or identity failure, discard the build, removing a committed entry
+only while it is still this writer’s build and ahead of `current`, then retry.
+A retry MUST NOT leave its committed build behind: if the pointer were later torn,
+repair could select that orphan as the newest clean snapshot and expose a write whose
+caller saw it fail.
+The post-swap identity check means a successful return always names a
+snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
 The writer **does not require the session extension**, so the strategy runs on any
@@ -507,17 +624,34 @@ The required barriers:
 
 | Step | Required barriers |
 | --- | --- |
-| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → rename → fsync `snapshots/` dir → then pointer swap |
+| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → no-replace hard link → fsync `snapshots/` dir → then pointer swap |
 | Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
+| Store subdirectories (`snapshots/`, `tx/*`, `leases/`) | fsync the parent of each directory init creates, deepest first |
 
 File and directory fsync barriers in this table are required, not best effort.
 If opening or fsyncing a required directory fails, initialization or publication MUST
 fail loudly and MUST NOT report a power-loss-durable success.
 A capability probe used to declare a target safe MUST include directory fsync.
-A platform or filesystem without that capability is unsupported for `f1.0` mutation
-rather than silently downgraded.
+A file barrier MUST be issued through a handle that can flush on the platform: Windows
+`FlushFileBuffers` fails on a read-only handle, so the Node implementation opens every
+file it syncs read-write on every platform (POSIX `fsync` flushes the same either way).
+Directory barriers open the directory read-only and are POSIX-only (O1). A platform or
+filesystem without that capability is unsupported for `f1.0` mutation rather than
+silently downgraded.
+
+**Barrier mechanics.** Every barrier in the table is an fsync the implementation issues
+itself, on the file or directory, after the SQLite connection that wrote the file has
+closed. SQLite’s own syncs while it writes a transient build, working copy, or
+`VACUUM INTO` output are not barriers in this protocol, so SQLite’s `synchronous` and
+`fullfsync` settings do not affect publication durability.
+On Apple platforms `fsync(2)` flushes only to the drive’s cache; an implementation there
+MUST issue `fcntl(F_FULLFSYNC)` for each barrier, using the strongest weaker barrier
+only where the filesystem rejects it.
+Node’s `fs.fsyncSync` already does this: libuv’s `uv__fs_fsync` tries `F_FULLFSYNC`,
+then `F_BARRIERFSYNC`, then `fsync`, so the Node implementation’s barriers are full
+flushes on macOS without any SQLite pragma.
 
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss
@@ -530,15 +664,24 @@ accepted-but-unpublished writes (see Open issue O2); callers needing a hard dura
 receipt run `reconcile()` after `write()`.
 
 Published snapshots, once the pointer swap’s barriers complete, MUST survive power loss.
-A torn publish (power loss between snapshot rename and pointer swap) leaves an orphan
-snapshot ahead of a valid pointer.
+A torn publish (power loss between the snapshot commit and the pointer swap) leaves an
+orphan snapshot ahead of a valid pointer.
 Repair restores this `in-flight-capture` state (§11), and the previous head remains
 intact (R1).
 
 A conforming backup of a live store MUST pin or otherwise retain one published snapshot
 and copy that immutable SQLite file, or use SQLite’s online backup or `VACUUM INTO`
-facilities. This specification makes no guarantee about an arbitrary recursive directory
-copy racing publication, garbage collection, or interruption.
+facilities.
+A `seal` or export MUST publish its output like a completed file: write it to
+a uniquely-named temp in the destination directory, validate it, fsync it, `rename()` it
+over the destination, and fsync that directory.
+`VACUUM INTO` writes in place and does not fsync its output, so it MUST target the temp,
+never the final path; a reader of the destination then sees the previous file or the
+complete export, and an interrupted seal leaves only its temp.
+The destination MUST NOT be a store-owned path (`current`, `fsqlite.json`,
+`publish.lock`, or anything under the store’s subdirectories).
+This specification makes no guarantee about an arbitrary recursive directory copy racing
+publication, garbage collection, or interruption.
 
 ## 11. Validation States and Repair
 
@@ -586,8 +729,14 @@ published snapshot was integrity-gated at publish and never modified (S6):
    valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
-4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
-   reason file).
+4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
+   transient stale window (G3), preserving evidence with a `QUARANTINE` reason file.
+   A younger one may be a live capture and MUST be left in place.
+   A writer’s `COMMITTED` write can land between repair’s check and its move, so repair
+   MUST check for `COMMITTED` again after moving the envelope and, if it is there,
+   remove the reason file and move the envelope back to `tx/pending/`. The writer’s
+   write either lands in the moved dir, where that check sees it, or fails, so the
+   writer never reports success for an envelope repair quarantined.
 
 Repair MUST NOT delete committed pending envelopes because the next reconcile folds this
 unpublished work. Repair also MUST NOT modify any snapshot in place.
@@ -666,7 +815,7 @@ A reconciler MUST NOT apply an envelope outside the deterministic order, MUST NO
 publish a build whose integrity gate failed, and MUST NOT mutate a published snapshot.
 
 **Operator tool**: MUST implement `validate` per §11 before any destructive operation;
-`repair` MUST follow §11’s rules; GC MUST follow G1-G3.
+`repair` MUST follow §11’s rules; GC MUST follow G0-G3.
 
 **Conformance fixtures** (post-alpha): a directory of sealed, live, in-flight
 (orphan-ahead), corrupt-pointer, corrupt-head, and quarantined-envelope golden stores,
@@ -675,28 +824,43 @@ The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O1: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
-  semantics; Win32 `rename` fails on an existing target.
+- **O1: Windows rename-replace.** P2 requires POSIX rename-over-existing semantics;
+  Win32 `rename` fails on an existing target.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
-  semantics. The cross-platform CI matrix gates the claim.
+  semantics for the pointer, and `CreateHardLink` for the F5c no-replace commit.
+  The cross-platform CI matrix gates the claim.
+
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
+
 - **O3: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
   Correctness never depends on these (L5), but liveness tuning on skewed clusters is
   undocumented; the planned real-NFS gate and protocol model both probe this.
+
 - **O4: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
   This specification treats it only as provenance.
   A future version could instead define semantics such as staleness warnings.
+
 - **O5: conflict-policy identity is not stamped.** All reconcilers in one caller-schema
   epoch must use the same effective policy, but `f1.0` relies on deployment
   configuration to enforce that rule.
   A future revision should bind the normalized policy to the store or schema epoch, or
   define an equivalent admission check and policy-transition protocol.
+
+- **O6: Shared snapshot names and a blind pointer swap.** Every publisher of version N+1
+  competes for the one path `snapshots/<N+1>`, and the pointer swap cannot fail on a
+  changed `current`. F5c and F6 make overlapping holders safe except for the
+  late-pointer window in L5. A future `f1.x` revision should publish builds under unique
+  names (for example `<version>-<hex10>.fsqlite.sqlite`) with `current` naming the file,
+  gated by a `required_features` entry, so builds never share a path and the pointer
+  identifies the exact build.
+  Closing the late-pointer window additionally needs a pointer protocol that cannot move
+  `current` backward, such as a no-replace commit of a per-version pointer record.
 
 ## 15. References
 

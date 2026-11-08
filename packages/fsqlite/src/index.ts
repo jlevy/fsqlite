@@ -31,7 +31,7 @@ export {
 } from './storeFormat.ts'
 
 export type * from './types.ts'
-export type { LockOptions, OwnerMeta } from './lock.ts'
+export type { LockLease, LockOptions, OwnerMeta } from './lock.ts'
 export type { InspectReport, ProbeResult, FsType } from './fsinspect.ts'
 export type { SqliteFacts } from './sqliteFacts.ts'
 export type { BackupDatabaseOptions } from './driver.ts'

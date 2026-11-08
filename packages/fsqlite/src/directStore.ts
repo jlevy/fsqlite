@@ -10,12 +10,14 @@
 // Both strategies produce the same snapshots and current pointer, so readers and writers
 // can use either strategy without changing the store format.
 
-import { copyFileSync, rmSync, renameSync } from 'node:fs'
+import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { withLock, ownerOf } from './lock.ts'
+import { fsyncPath } from './fsutil.ts'
+import { commitSnapshot } from './publication.ts'
+import type { CommitOutcome } from './publication.ts'
+import { withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
@@ -24,6 +26,7 @@ import type {
   WorkFn,
   ReadFn,
   ValidateResult,
+  GcOptions,
   GcResult,
   ReadLease,
   RepairResult,
@@ -60,7 +63,7 @@ export class DirectStore {
   seal(dest: string): string {
     return this.base.seal(dest)
   }
-  gc(opts?: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number }): GcResult {
+  gc(opts?: GcOptions): GcResult {
     return this.base.gc(opts)
   }
   repair(opts?: { lockOpts?: LockOptions }): RepairResult {
@@ -76,7 +79,12 @@ export class DirectStore {
   /**
    * Synchronous copy, mutate, publish under the publish lock, with OCC on the
    * `current` pointer (so it also composes safely with a SnapshotStore reconcile
-   * publishing into the same store). Retries internally on a lost race.
+   * publishing into the same store). Retries internally on a lost race, rerunning `fn`.
+   * Returns the published version, which always carries this call's mutation.
+   *
+   * An error with a numeric `published` property (`PostPublishError`) was raised after
+   * that version became current (for example a failed directory fsync after the pointer
+   * rename): the write is visible and must not be re-run. Any other error published nothing.
    */
   write(
     fn: WorkFn,
@@ -92,11 +100,18 @@ export class DirectStore {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const out = withLock(
         this.base.publishLock,
-        (token): number | 'retry' => {
+        (_token, lease): number | 'retry' => {
           const base = this.base.currentVersion()
           const next = base + 1
           const tmp = join(this.base.snapDir, `.direct-${rand()}.sqlite`)
+          const abandon = (): 'retry' => {
+            rmSync(tmp, { force: true })
+            return 'retry'
+          }
           copyFileSync(this.base.snapshotPath(base), tmp)
+          if (!lease.heartbeat()) {
+            return abandon()
+          }
           const db = driver.open(tmp)
           try {
             driver.protectOwnedTables(db)
@@ -123,27 +138,33 @@ export class DirectStore {
             throw e
           }
           db.close()
-          // Revalidate fencing and optimistic concurrency before publication.
-          if (this.base.currentVersion() !== base) {
-            rmSync(tmp, { force: true })
-            return 'retry'
-          }
-          if (ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          // Revalidate fencing and optimistic concurrency before publication. The fence
+          // also renews the lease the callback and checks may have run down.
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
           fsyncPath(tmp) // durable snapshot before it can be named by current
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
-          renameSync(tmp, this.base.snapshotPath(next))
-          fsyncDir(this.base.snapDir)
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
-            return 'retry'
+          let outcome: CommitOutcome
+          try {
+            outcome = commitSnapshot({
+              storeDir: this.base.dir,
+              currentPath: this.base.currentPath,
+              snapDir: this.base.snapDir,
+              build: tmp,
+              dest: this.base.snapshotPath(next),
+              base,
+              next,
+              readCurrent: () => this.base.currentVersion(),
+              lease,
+            })
+          } catch (error) {
+            abandon() // removes only the uncommitted `.direct-` name, never a committed entry
+            throw error
           }
-          publishPointer(this.base.dir, this.base.currentPath, next)
-          return next
+          return outcome === 'published' ? next : abandon()
         },
         lockOpts,
       )

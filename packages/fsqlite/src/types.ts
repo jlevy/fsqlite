@@ -1,6 +1,7 @@
 // Public types for fsqlite.
 
 import type { DatabaseSync } from 'node:sqlite'
+import type { LockOptions } from './lock.ts'
 
 /** A unit of work run against a writable connection. */
 export type WorkFn = (db: DatabaseSync) => void
@@ -86,6 +87,29 @@ export interface WriteWithRetryResult {
   txId: string | null
   attempts: number
   conflicted: boolean
+}
+
+/**
+ * An error raised after the `current` pointer already named a newly published version,
+ * for example a post-publish envelope move (spec F6) or a directory fsync that failed after
+ * the pointer rename. The version is visible to readers, so the write it carries must not
+ * be re-run; `published` is that version. Every error without this property was raised
+ * before publication, and the attempt published nothing.
+ */
+export interface PostPublishError extends Error {
+  readonly published: number
+}
+
+/** Options for `gc()`. Invalid values throw a `TypeError` before anything is deleted. */
+export interface GcOptions {
+  /** Predecessors of `current` to keep (spec G1). A non-negative integer; default 3. */
+  retain?: number
+  /** Age in ms after which a lease counts as abandoned. A positive integer; default 60 s. */
+  leaseStaleMs?: number
+  /** Age in ms after which a transient counts as crash debris. A positive integer; default 60 s. */
+  transientStaleMs?: number
+  /** Publish-lock options; gc holds the lock for every deletion. */
+  lockOpts?: LockOptions
 }
 
 /** Result of `gc()`: snapshots removed, snapshots kept, and the versions a lease pinned. */

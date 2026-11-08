@@ -141,6 +141,28 @@ $ fsqlite gc store --retain 1
 ? 0
 ```
 
+# Test: GC Refuses a Store Whose Head Fails Integrity Validation (Exit 3)
+
+```console
+$ fsqlite-seed damaged corrupt-head
+seeded damaged (corrupt head v2)
+? 0
+```
+
+```console
+$ fsqlite gc damaged --retain 0 2>&1
+fsqlite: gc refused: store is corrupt: snapshot 2 failed integrity validation: [..]
+? 3
+```
+
+```console
+$ ls damaged/snapshots
+000000000000.fsqlite.sqlite
+000000000001.fsqlite.sqlite
+000000000002.fsqlite.sqlite
+? 0
+```
+
 # Test: Seal Writes a Standalone Single-File SQLite Export
 
 ```console

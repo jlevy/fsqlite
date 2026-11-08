@@ -81,7 +81,7 @@ test('a reconciler SIGKILLed mid-build orphans only a temp; recovery is exactly-
     assert.equal(artifactCount(store), 24, 'exactly-once after a mid-build kill')
 
     // gc sweeps any orphan .build- temp the kill left behind.
-    store.gc({ retain: 0, transientStaleMs: 0 })
+    store.gc({ retain: 0, transientStaleMs: 1 }) // older than 1 ms: everything the kill left
     const orphans = existsSync(store.snapDir)
       ? readdirSync(store.snapDir).filter((f) => f.startsWith('.build-') || f.endsWith('.tmp'))
       : []

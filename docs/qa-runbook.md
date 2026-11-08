@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **127 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **154 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -38,15 +38,17 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | Suite | Constraints | Guarantee it protects |
 | --- | --- | --- |
 | `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, wrong-schema admission, quarantine-write, NOTFOUND quarantine, validation-state, envelope-size handling, and seal/GC pinning |
-| `init.test.ts` | `C6-C8` | Non-null primary-key contract; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open |
+| `init.test.ts` | `C5-C8` | Non-null primary-key contract; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
 | `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, and read-lease protection from concurrent GC |
 | `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, torn-read-free readers, and serialized DirectStore writers with zero loss |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
 | `fencing.test.ts` | `C3`, `C5` | Lease acquisition, stale break, token fencing, heartbeat loss, and owner-write cleanup |
-| `gc-lease.test.ts` | `C4`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep |
-| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, and transient cleanup |
+| `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
+| `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, and refuses store-owned destinations |
+| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving |
+| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup, and never quarantining a live or just-committed envelope |
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
@@ -55,7 +57,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states, feature/version gating, marker fencing, and mixed-store quarantine |
-| `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required directory fsync, and WAL negative control |
+| `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required hard links and directory fsync, and WAL negative control |
 | `fsutil.test.ts` | `C3`, `C5` | Pointer-temp cleanup and fail-closed directory fsync behavior |
 
 ### Multiprocess Worker Harness (`workers/`)
@@ -94,7 +96,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 127` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 154` / `# fail 0`; goldens `27 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -256,17 +258,19 @@ use.
    run B9 against the target filesystem and confirm `fsqlite-safe`.
 2. **Power-Loss Durability.** Publication uses fsync barriers for the snapshot, pointer,
    and their directories, and a missing directory fsync capability fails closed.
-   There is **no fault-injected block-device test** simulating real power loss in CI.
-   **Manual check:** reason about B7 (process-crash) as the closest reproducible proxy.
+   fsqlite issues each barrier through Node after SQLite closes the file; on macOS that
+   is `F_FULLFSYNC` (via libuv), not a cache-only `fsync(2)`. There is **no
+   fault-injected block-device test** simulating real power loss in CI. **Manual
+   check:** reason about B7 (process-crash) as the closest reproducible proxy.
 3. **Cross-Language Writers.** Readers work across bindings; non-Node *writers*
    (Python/APSW and Rust/rusqlite) against the format are **future work**. **Manual
    check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.
 4. **Long Publish Leases.** DirectStore and repair can hold the publish lease across
    synchronous O(snapshot size) work.
-   The engine fences a stale-broken holder, which preserves safety, but it does not yet
-   heartbeat during those sections.
-   **Manual check:** set `staleMs` above the measured worst-case operation and keep
-   `timeoutMs > staleMs`.
+   They renew the lease at step boundaries and fence before each destructive step, but a
+   single synchronous step (one head copy, one callback, one fsync) cannot be renewed
+   while it runs. **Manual check:** set `staleMs` above the measured worst-case single
+   step and keep `timeoutMs > staleMs`.
 5. **Platform and Thread Matrix.** POSIX publication is covered on macOS and Linux.
    Windows rename-replace races and the formal Worker Thread coordination contract are
    future gates. **Manual check:** do not extend the support claim beyond the published

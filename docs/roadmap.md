@@ -28,8 +28,9 @@ stable release, not a promise that unsupported environments work today.
   unless a separate replication and consistency protocol is validated.
 - Decide from the evidence whether a monotonic fence or single-host proxy lock is
   necessary.
-- Add a heartbeat or shorter optimistic critical section for DirectStore and repair so
-  operations longer than the lease stale window do not livelock.
+- Shorten the DirectStore critical section with an optimistic protocol (copy and
+  callback outside the lease) so a single step longer than the lease stale window does
+  not livelock; step-boundary heartbeats already cover multi-step operations.
 
 ### Platform and Runtime Portability
 
