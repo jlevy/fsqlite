@@ -25,6 +25,26 @@ Review this exception by 2026-12-08, or earlier when an ESLint release depends o
 patched `minimatch`. Remove the ignore once the resolved graph contains no affected
 version.
 
+## Held Upgrades
+
+These newer releases clear the cool-off but are deliberately not taken:
+
+- **TypeScript 7.** TypeScript stays on 6.0.3. TypeScript 7.0 type-checks this
+  repository cleanly, but it ships no compiler API (that returns in 7.1),
+  typescript-eslint 8.72 accepts only `typescript <6.1.0`, and tsdown generates
+  declarations through the TypeScript API. Revisit when typescript-eslint accepts
+  TypeScript 7 and 7.1 ships its API.
+- **lefthook 2.2.2.** Every release through 2.2.1 was published from GitHub Actions with
+  provenance; 2.2.2 was published from a personal account without it, which pnpm’s
+  `trustPolicy: no-downgrade` reports as a possible package takeover.
+  Stay on 2.2.1 until a later release restores provenance.
+- **tsdown 0.23.2.** It requires `rolldown-plugin-dts ^0.29.0-beta.2`, which resolves to
+  a prerelease under the cool-off.
+  Stay on 0.23.1.
+- **pnpm 12.** The Rust rewrite rewrites `pnpm-lock.yaml` even under `--frozen-lockfile`
+  and validates workspace settings more strictly.
+  Adopting it is a separate review; the pnpm 11 line is still maintained.
+
 ## Resolved Exceptions
 
 - `brace-expansion@5.0.8` was pinned on 2026-07-31 inside the cool-off to patch

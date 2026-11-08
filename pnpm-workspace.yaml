@@ -7,6 +7,9 @@ engineStrict: true
 minimumReleaseAge: 20160
 blockExoticSubdeps: true
 allowBuilds:
+  # Both ship their platform binary as an optional dependency, so neither needs its
+  # install script. esbuild arrives through tsx (tryscript) and tsdown.
+  esbuild: false
   lefthook: false
 # Time-limited, maintainer-approved audit exception; see SUPPLY-CHAIN-SECURITY.md.
 # Review by 2026-12-08.
