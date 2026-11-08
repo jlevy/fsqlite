@@ -75,6 +75,7 @@ paths below are relative to it.
   fsqlite.json.<uuid>.tmp          # transient: marker creation (§3)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
+  publish.lock.<hex10>.tmp/        # transient: lock moved aside by a break or release (§7)
   snapshots/
     000000000000.fsqlite.sqlite    # immutable published snapshot, version 0 (§3)
     000000000001.fsqlite.sqlite
@@ -128,10 +129,11 @@ Naming grammar:
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
   Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
-- **Transients** are exactly the files matching: prefix `.build-`, prefix `.direct-`,
-  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. Transients are never part of
-  store state; a *fresh* transient indicates work in flight, an *old* one indicates a
-  crash (§11).
+- **Transients** are exactly the entries matching: prefix `.build-`, prefix `.direct-`,
+  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. All are files except
+  `publish.lock.<hex10>.tmp/`, a directory, so removing a transient MUST handle both.
+  Transients are never part of store state; a *fresh* transient indicates work in
+  flight, an *old* one indicates a crash (§11).
 - **Envelope dir**: `<txid>.txn` (§5 defines `<txid>`).
 - **Hex tokens** (`<hex10>` etc.)
   are lowercase hex from a cryptographically random source; their only requirement is
@@ -426,8 +428,18 @@ build.
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
 - **L2.** Liveness is the lock dir’s **mtime**; a live long holder SHOULD touch it
-  (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window, by
-  removing the dir and retrying acquisition.
+  (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window.
+  It MUST break it in three steps, because two waiters can judge the same lock stale and
+  a check-then-delete on `publish.lock` would remove a successor that re-acquired the
+  name in between: (1) read `owner.json` and the mtime and judge the lock stale; (2)
+  `rename()` the dir aside to `publish.lock.<hex10>.tmp`, which is atomic, so a second
+  breaker gets `ENOENT` and the holder can no longer refresh the moved dir; (3) remove
+  the moved dir only if it still carries the token read in step 1 and is still older
+  than the stale window.
+  Otherwise the moved dir is a successor’s live lock: the waiter MUST rename it back,
+  or, if another acquirer has completed a new lock in the meantime, remove it (its
+  former holder then fails every fencing check).
+  Then retry acquisition.
   (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
   An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
   lock it could have waited for.
@@ -435,7 +447,9 @@ build.
   holder MUST re-read `owner.json` and verify its own token immediately before the
   destructive publish step (F5b), and MUST abandon the publish on a mismatch.
 - **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
-  `owner.json` still carries its token.
+  `owner.json` still carries its token, and MUST remove it through the same
+  rename-aside-and-recheck step as L2, so a successor that acquires between the token
+  check and the removal is restored rather than deleted.
   A stale-broken holder must not delete a successor’s live lock because doing so would
   admit a third concurrent holder.
 - **L5.** Correctness MUST NOT depend on L1-L4 (see §1): even two overlapping holders

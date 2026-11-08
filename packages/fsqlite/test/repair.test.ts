@@ -197,8 +197,12 @@ test('root pointer transients are surfaced, swept by gc, and removed by repair',
 
     const fresh = join(store.dir, 'fsqlite.json.deadbeef.tmp')
     writeFileSync(fresh, '{}')
+    const grave = join(store.dir, 'publish.lock.deadbeef00.tmp')
+    mkdirSync(grave)
+    writeFileSync(join(grave, 'owner.json'), JSON.stringify({ token: 'broken' }))
     store.repair()
     assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
+    assert.equal(existsSync(grave), false, 'repair removes a lock moved aside by a crashed break')
     assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()

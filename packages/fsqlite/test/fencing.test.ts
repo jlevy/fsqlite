@@ -8,11 +8,19 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
-import { SnapshotStore, withLock, ownerOf, heartbeat } from '../src/index.ts'
+import { SnapshotStore, withLock, ownerOf, heartbeat, LockTimeoutError } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
-import { setOwnerWriterForTest, setStaleLockRemoverForTest } from '../src/lock.ts'
+import { setOwnerWriterForTest, setStaleLockMoverForTest } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
@@ -90,7 +98,7 @@ test('a failed stale-lock removal backs off until timeout', () => {
   const oldTime = new Date(Date.now() - 10_000)
   utimesSync(lockPath, oldTime, oldTime)
   let attempts = 0
-  setStaleLockRemoverForTest(() => {
+  setStaleLockMoverForTest(() => {
     attempts++
     const error = new Error('injected stale removal failure') as NodeJS.ErrnoException
     error.code = 'EPERM'
@@ -102,7 +110,42 @@ test('a failed stale-lock removal backs off until timeout', () => {
     }, /could not acquire/)
     assert.ok(attempts <= 5, `stale removal should poll rather than spin; attempts=${attempts}`)
   } finally {
-    setStaleLockRemoverForTest(null)
+    setStaleLockMoverForTest(null)
+    cleanup()
+  }
+})
+
+test('a stale-lock break never deletes a successor that re-acquired the lock first', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  mkdirSync(lockPath)
+  writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'dead-holder' }))
+  const oldTime = new Date(Date.now() - 10_000)
+  utimesSync(lockPath, oldTime, oldTime)
+  setStaleLockMoverForTest((from, to) => {
+    setStaleLockMoverForTest(null)
+    // A second waiter judged the same lock stale, broke it first, and now holds a fresh
+    // lock (its mtime is in the future so it stays fresh for the whole test)...
+    rmSync(from, { recursive: true, force: true })
+    mkdirSync(from)
+    writeFileSync(join(from, 'owner.json'), JSON.stringify({ token: 'successor' }))
+    const fresh = new Date(Date.now() + 60_000)
+    utimesSync(from, fresh, fresh)
+    // ...and only then does this waiter's own break land.
+    renameSync(from, to)
+  })
+  try {
+    assert.throws(() => {
+      withLock(lockPath, () => undefined, { timeoutMs: 150, staleMs: 100, pollMs: 5 })
+    }, LockTimeoutError)
+    assert.equal(ownerOf(lockPath), 'successor', "the successor's live lock survives the break")
+    assert.deepEqual(
+      readdirSync(dir).filter((entry) => entry !== 'publish.lock'),
+      [],
+      'no lock grave is left behind',
+    )
+  } finally {
+    setStaleLockMoverForTest(null)
     cleanup()
   }
 })

@@ -8,7 +8,15 @@
 // ledger. The lease reduces redundant work. Its owner token lets a holder revalidate
 // ownership immediately before publication and abort if it lost the lease.
 
-import { mkdirSync, rmSync, statSync, writeFileSync, readFileSync, utimesSync } from 'node:fs'
+import {
+  mkdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  readFileSync,
+  utimesSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
@@ -46,20 +54,17 @@ const sleepSync = (ms: number): void => {
 
 type OwnerWriter = (path: string, data: string) => void
 let writeOwner: OwnerWriter = writeFileSync
-type StaleLockRemover = (path: string) => void
-const removeLockDirectory: StaleLockRemover = (path) => {
-  rmSync(path, { recursive: true, force: true })
-}
-let removeStaleLock = removeLockDirectory
+type StaleLockMover = (lockPath: string, gravePath: string) => void
+let moveStaleLock: StaleLockMover = renameSync
 
 /** Internal fault-injection seam; pass null to restore the filesystem writer. */
 export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
   writeOwner = writer ?? writeFileSync
 }
 
-/** Internal fault-injection seam; pass null to restore stale-lock removal. */
-export function setStaleLockRemoverForTest(remover: StaleLockRemover | null): void {
-  removeStaleLock = remover ?? removeLockDirectory
+/** Internal fault-injection seam; pass null to restore the rename that moves a stale lock aside. */
+export function setStaleLockMoverForTest(mover: StaleLockMover | null): void {
+  moveStaleLock = mover ?? renameSync
 }
 
 /**
@@ -104,24 +109,32 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
       // under it. The defense is `ownerOf()` revalidation in `fn` and a staleMs value
       // well above the maximum critical section, not aggressive breaking.
       try {
-        const st = statSync(lockPath)
-        if (Date.now() - st.mtimeMs > staleMs) {
-          if (onStaleBreak) {
-            try {
-              onStaleBreak(readOwner(lockPath))
-            } catch {
-              /* ignore */
+        const seen = observeLock(lockPath)
+        if (seen === null) {
+          continue // lock vanished between mkdir and stat: retry immediately
+        }
+        if (Date.now() - seen.mtimeMs > staleMs) {
+          // Two waiters can judge the same lock stale. Only the directory that was judged
+          // stale may be removed, never a successor that re-acquired the name in between.
+          const broken = removeLockIf(
+            lockPath,
+            (moved) =>
+              moved.meta?.token === seen.meta?.token && Date.now() - moved.mtimeMs > staleMs,
+          )
+          if (broken !== null) {
+            if (onStaleBreak) {
+              try {
+                onStaleBreak(broken.meta)
+              } catch {
+                /* a diagnostic callback must not change lock acquisition */
+              }
             }
+            continue
           }
-          removeStaleLock(lockPath)
-          continue
         }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          continue // lock vanished between exists-check and stat: retry immediately
-        }
-        sleepSync(pollMs)
-        continue
+      } catch {
+        // An unreadable or unremovable lock is treated as held: back off and retry until
+        // the acquisition deadline rather than spinning.
       }
       sleepSync(pollMs)
     }
@@ -137,9 +150,70 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
     // a successor's live lock (which would let a third holder acquire concurrently). If we
     // lost ownership, leave the successor's lock alone; staleMs reclaims any true orphan.
     if (ownerOf(lockPath) === token) {
-      rmSync(lockPath, { recursive: true, force: true })
+      removeLockIf(lockPath, (moved) => moved.meta?.token === token)
     }
   }
+}
+
+interface LockObservation {
+  meta: OwnerMeta | null
+  mtimeMs: number
+}
+
+/** The owner metadata and liveness mtime of a lock directory, or null if it is absent. */
+function observeLock(path: string): LockObservation | null {
+  const meta = readOwner(path)
+  try {
+    return { meta, mtimeMs: statSync(path).mtimeMs }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
+  }
+}
+
+/**
+ * Remove the lock directory only while it is still the one the caller judged removable,
+ * and return what was removed (null when nothing was).
+ *
+ * The directory is first renamed aside to a `.tmp` transient name. The rename is atomic, so
+ * two breakers cannot both take the same directory, and once it is aside its holder can no
+ * longer refresh it and no acquirer can reuse it. The moved directory is then judged again;
+ * a check-then-delete on the lock path itself would race with a successor that re-acquires
+ * the name between the check and the delete. If the moved directory no longer qualifies, it
+ * is a successor's live lock and is renamed back. The rename back fails rather than replace
+ * a lock another acquirer has since completed; that directory then belongs to no one (its
+ * former holder fails every ownership check) and is removed.
+ */
+function removeLockIf(
+  lockPath: string,
+  accept: (moved: LockObservation) => boolean,
+): LockObservation | null {
+  const grave = `${lockPath}.${randomBytes(5).toString('hex')}.tmp`
+  try {
+    moveStaleLock(lockPath, grave)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null // another breaker or releaser moved it first
+    }
+    throw error
+  }
+  const moved = observeLock(grave)
+  if (moved !== null && accept(moved)) {
+    rmSync(grave, { recursive: true, force: true })
+    return moved
+  }
+  try {
+    renameSync(grave, lockPath)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== 'ENOTEMPTY' && code !== 'EEXIST') {
+      throw error
+    }
+    rmSync(grave, { recursive: true, force: true })
+  }
+  return null
 }
 
 /** Touch the lock dir mtime so a slow-but-alive holder is not considered stale. */

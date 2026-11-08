@@ -93,9 +93,10 @@ function validateSchemaVersion(value: unknown = 1): number {
   return value
 }
 
-// Transient (never-store-state) files, per fsql-format-spec.md §2: reconcile builds,
-// DirectStore builds, init's snapshot-0 temp, and writer working copies. A fresh one is
-// work in flight; an old one is crash debris.
+// Transient (never-store-state) entries, per fsql-format-spec.md §2: reconcile builds,
+// DirectStore builds, init's snapshot-0 temp, writer working copies, and lock directories
+// moved aside by a break or release (`publish.lock.<hex>.tmp/`, the only directory). A fresh
+// one is work in flight; an old one is crash debris. Removal is recursive for that reason.
 const isTransientFile = (f: string): boolean =>
   f.startsWith('.build-') ||
   f.startsWith('.direct-') ||
@@ -855,7 +856,7 @@ export class SnapshotStore {
         const p = join(dir, f)
         try {
           if (Date.now() - statSync(p).mtimeMs > transientStaleMs) {
-            rmSync(p, { force: true })
+            rmSync(p, { recursive: true, force: true })
           }
         } catch {
           /* ignore */
@@ -1147,7 +1148,7 @@ export class SnapshotStore {
       for (const f of readdirSync(dir)) {
         if (isTransientFile(f)) {
           assertOwnership()
-          rmSync(join(dir, f), { force: true })
+          rmSync(join(dir, f), { recursive: true, force: true })
           actions.push(`removed transient ${f}`)
         }
       }
