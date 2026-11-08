@@ -110,7 +110,16 @@ export interface GcResult {
   leased: number[]
 }
 
-/** Result of `repair()`: the actions taken and the resulting {@link StoreState}. */
+/** Options for `repair()` and `planRepair()`. */
+export interface RepairOptions {
+  /** Publish-lock options; `staleMs` also decides whether an existing lock is live. */
+  lockOpts?: LockOptions
+}
+
+/**
+ * Result of `repair()`: the actions taken and the resulting {@link StoreState}. For
+ * `planRepair()`, the actions repair would take and the state now.
+ */
 export interface RepairResult {
   actions: string[]
   state: StoreState

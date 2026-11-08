@@ -75,7 +75,9 @@ import type {
   WriteWithRetryResult,
   GcOptions,
   GcResult,
+  RepairOptions,
   RepairResult,
+  StoreState,
   StoreValidationState,
   ReadLease,
 } from './types.ts'
@@ -380,6 +382,13 @@ interface Manifest {
   changeset: string
   changeset_sha256: string
   tool_version: string
+}
+
+/** One repair step: how a plan names it, and the fenced action that takes it. */
+interface RepairStep {
+  planned: string
+  /** Take the step; it calls `assertOwnership` before each mutation. Returns what it did. */
+  apply: (assertOwnership: () => void) => string
 }
 
 /** What one reconcile build did with each committed pending envelope (spec F3). */
@@ -1653,46 +1662,74 @@ export class SnapshotStore {
 
   /**
    * doctor/repair: restore the last consistent point. Principled because every published
-   * snapshot is immutable and was quick_check-validated at publish (R1).
+   * snapshot is immutable and was quick_check-validated at publish (R1). Use
+   * {@link planRepair} to see the steps without taking them.
    */
-  repair({ lockOpts = {} }: { lockOpts?: LockOptions } = {}): RepairResult {
+  repair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
-    if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
-      throw new FsqliteError(
-        'in-flight',
-        'repair refused: publish.lock is present and held by a live publisher',
-      )
-    }
+    this._refuseRepairUnderLiveLock(lockOpts)
     const actions = withLock(
       this.publishLock,
       (_token, lease) => {
         if (!lease.fence()) {
           throw repairLostOwnership()
         }
-        return this._repairLocked(marker, lease)
+        const assertOwnership = (): void => {
+          if (!lease.fence()) {
+            throw repairLostOwnership()
+          }
+        }
+        // Scanning every snapshot can outlast the stale window, so renew after each one.
+        const renew = (): void => {
+          if (!lease.heartbeat()) {
+            throw repairLostOwnership()
+          }
+        }
+        return this._planRepair(marker, renew).map((step) => step.apply(assertOwnership))
       },
       lockOpts,
     )
-    const state = this.validate().state
-    if (isRecognitionFailure(state)) {
-      throw new StoreFormatError(state, `repair ended with an unrecognized store: ${state}`)
-    }
-    return { actions, state }
+    return { actions, state: this._recognizedState('repair ended with') }
   }
 
-  private _repairLocked(marker: StoreMarker, lease: LockLease): string[] {
-    const actions: string[] = []
-    const assertOwnership = (): void => {
-      if (!lease.fence()) {
-        throw repairLostOwnership()
-      }
+  /**
+   * Report what {@link repair} would do now, without taking the publish lock or changing
+   * any file: a dry run. It refuses exactly when repair would (an unrecognized store, a
+   * live publisher lock, no clean recovery point), `actions` names each step repair would
+   * take, and `state` is the store's state now. The store can change before a later repair.
+   */
+  planRepair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
+    const marker = readStoreMarker(this.dir)
+    this._refuseRepairUnderLiveLock(lockOpts)
+    const actions = this._planRepair(marker, () => undefined).map((step) => step.planned)
+    return { actions, state: this._recognizedState('repair plan found') }
+  }
+
+  private _refuseRepairUnderLiveLock(lockOpts: LockOptions): void {
+    if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
+      throw new FsqliteError(
+        'in-flight',
+        'repair refused: publish.lock is present and held by a live publisher',
+      )
     }
-    // Scanning every snapshot can outlast the stale window, so renew after each one.
-    const renew = (): void => {
-      if (!lease.heartbeat()) {
-        throw repairLostOwnership()
-      }
+  }
+
+  /** The store's validated state, which repair and its plan require to be recognized. */
+  private _recognizedState(context: string): StoreState {
+    const state = this.validate().state
+    if (isRecognitionFailure(state)) {
+      throw new StoreFormatError(state, `${context} an unrecognized store: ${state}`)
     }
+    return state
+  }
+
+  /**
+   * Scan the store without modifying it and list the steps that restore its last
+   * consistent point (spec section 11). `renew` runs after each snapshot scan; each step's
+   * `apply` revalidates ownership through the callback it is given before it mutates.
+   */
+  private _planRepair(marker: StoreMarker, renew: () => void): RepairStep[] {
+    const steps: RepairStep[] = []
     const versions = this.snapshotVersions()
     const identityMatches = (v: number): boolean => {
       try {
@@ -1735,11 +1772,8 @@ export class SnapshotStore {
     let cur: number | null = null
     try {
       cur = this.currentVersion()
-      if (!Number.isInteger(cur)) {
-        cur = null
-      }
     } catch {
-      /* ignore */
+      // A torn or unreadable pointer is what repair restores.
     }
     let good: number | null = null
     if (cur !== null && versions.includes(cur) && integrityOk(cur)) {
@@ -1757,18 +1791,29 @@ export class SnapshotStore {
           'repair: no integrity-clean snapshot exists; every snapshot was left in place',
         )
       }
-      assertOwnership()
-      publishPointer(this.dir, this.currentPath, good)
-      actions.push(`re-published current -> ${good}`)
+      const head = good
+      steps.push({
+        planned: `re-publish current -> ${head}`,
+        apply: (assertOwnership) => {
+          assertOwnership()
+          publishPointer(this.dir, this.currentPath, head)
+          return `re-published current -> ${head}`
+        },
+      })
     }
 
     // Delete snapshots ahead of the restored pointer (rolled-back orphans) and transients.
-    for (const v of this.snapshotVersions()) {
+    for (const v of versions) {
       if (v > good) {
-        const wasIntegrityClean = integrityOk(v)
-        assertOwnership()
-        rmSync(this.snapshotPath(v), { force: true })
-        actions.push(`removed ${wasIntegrityClean ? 'orphan' : 'corrupt'} snapshot ${v}`)
+        const kind = integrityOk(v) ? 'orphan' : 'corrupt'
+        steps.push({
+          planned: `remove ${kind} snapshot ${v}`,
+          apply: (assertOwnership) => {
+            assertOwnership()
+            rmSync(this.snapshotPath(v), { force: true })
+            return `removed ${kind} snapshot ${v}`
+          },
+        })
       }
     }
     for (const dir of this._transientDirs()) {
@@ -1777,9 +1822,14 @@ export class SnapshotStore {
       }
       for (const f of readdirSync(dir)) {
         if (isTransientFile(f)) {
-          assertOwnership()
-          rmSync(join(dir, f), { recursive: true, force: true })
-          actions.push(`removed transient ${f}`)
+          steps.push({
+            planned: `remove transient ${f}`,
+            apply: (assertOwnership) => {
+              assertOwnership()
+              rmSync(join(dir, f), { recursive: true, force: true })
+              return `removed transient ${f}`
+            },
+          })
         }
       }
     }
@@ -1795,28 +1845,36 @@ export class SnapshotStore {
           continue
         }
         if (Date.now() - statSync(pendingDir).mtimeMs <= DEFAULT_TRANSIENT_STALE_MS) {
-          actions.push(`left fresh uncommitted ${d} (possibly a live capture)`)
+          const left = `fresh uncommitted ${d} (possibly a live capture)`
+          steps.push({ planned: `leave ${left}`, apply: () => `left ${left}` })
           continue
         }
-        assertOwnership()
-        writeFileSync(join(pendingDir, 'QUARANTINE'), 'uncommitted-at-repair')
-        assertOwnership()
-        this._move([d], this.txQuarantine)
-        // A writer can still write COMMITTED between the check above and the move. Its write
-        // either landed in the moved dir, seen here, or failed with ENOENT and the writer
-        // reported failure, so this check after the move has no race window.
-        const movedDir = join(this.txQuarantine, d)
-        if (existsSync(join(movedDir, 'COMMITTED'))) {
-          rmSync(join(movedDir, 'QUARANTINE'), { force: true })
-          renameSync(movedDir, pendingDir)
-          actions.push(`kept ${d}, which committed during repair`)
-          continue
-        }
-        actions.push(`quarantined uncommitted ${d}`)
+        steps.push({
+          planned: `quarantine uncommitted ${d}`,
+          apply: (assertOwnership) => this._quarantineUncommitted(d, assertOwnership),
+        })
       }
     }
+    return steps
+  }
 
-    return actions
+  /** Move abandoned uncommitted envelope `d` to quarantine; returns the action taken. */
+  private _quarantineUncommitted(d: string, assertOwnership: () => void): string {
+    const pendingDir = join(this.txPending, d)
+    assertOwnership()
+    writeFileSync(join(pendingDir, 'QUARANTINE'), 'uncommitted-at-repair')
+    assertOwnership()
+    this._move([d], this.txQuarantine)
+    // A writer can still write COMMITTED between the plan's check and the move. Its write
+    // either landed in the moved dir, seen here, or failed with ENOENT and the writer
+    // reported failure, so this check after the move has no race window.
+    const movedDir = join(this.txQuarantine, d)
+    if (existsSync(join(movedDir, 'COMMITTED'))) {
+      rmSync(join(movedDir, 'QUARANTINE'), { force: true })
+      renameSync(movedDir, pendingDir)
+      return `kept ${d}, which committed during repair`
+    }
+    return `quarantined uncommitted ${d}`
   }
 
   /** Every directory that can hold transients (spec section 2), for validate, gc, and repair. */

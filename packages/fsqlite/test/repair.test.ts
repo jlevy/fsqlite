@@ -2,9 +2,18 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, join } from 'node:path'
-import { SnapshotStore } from '../src/index.ts'
+import { FsqliteError, SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
@@ -43,6 +52,63 @@ test('repair clears an in-flight capture (orphan snapshot, transient, and uncomm
     assert.ok(
       existsSync(join(store.txQuarantine, '999-uncommitted.txn')),
       'uncommitted tx quarantined',
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+/** Every path below `dir` with its size and mtime, to prove a dry run changed nothing. */
+function tree(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .sort()
+    .map((entry) => {
+      const st = statSync(join(dir, entry))
+      return `${entry} ${st.isDirectory() ? 'dir' : String(st.size)} ${st.mtimeMs}`
+    })
+}
+
+test('planRepair reports the steps repair would take and changes nothing', () => {
+  const { store, dir, cleanup } = storeAt(1)
+  try {
+    copyFileSync(store.snapshotPath(1), store.snapshotPath(2)) // orphan ahead of pointer
+    writeFileSync(join(store.snapDir, '.build-xyz.sqlite'), 'x')
+    const txn = join(store.txPending, '999-uncommitted.txn')
+    mkdirSync(txn, { recursive: true })
+    const abandoned = new Date(Date.now() - 120_000)
+    utimesSync(txn, abandoned, abandoned)
+    writeFileSync(store.currentPath, 'torn')
+    const before = tree(dir)
+
+    const plan = store.planRepair()
+    assert.equal(plan.state, 'corrupt')
+    assert.deepEqual(plan.actions, [
+      're-publish current -> 2',
+      'remove transient .build-xyz.sqlite',
+      'quarantine uncommitted 999-uncommitted.txn',
+    ])
+    assert.deepEqual(tree(dir), before, 'a plan takes no lock and changes no file')
+    assert.equal(readFileSync(store.currentPath, 'utf8'), 'torn')
+
+    assert.deepEqual(store.repair().actions, [
+      're-published current -> 2',
+      'removed transient .build-xyz.sqlite',
+      'quarantined uncommitted 999-uncommitted.txn',
+    ])
+    assert.deepEqual(store.planRepair(), { actions: [], state: 'sealed' })
+  } finally {
+    cleanup()
+  }
+})
+
+test('planRepair refuses whenever repair would', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    mkdirSync(store.publishLock)
+    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    assert.throws(
+      () => store.planRepair(),
+      (error: unknown) => error instanceof FsqliteError && error.code === 'in-flight',
     )
   } finally {
     cleanup()
@@ -134,17 +200,17 @@ test('repair revalidates its fence before every destructive step', () => {
   const { store, cleanup } = storeAt(1)
   try {
     copyFileSync(store.snapshotPath(1), store.snapshotPath(2))
-    const snapshotVersions = store.snapshotVersions.bind(store)
-    let calls = 0
-    store.snapshotVersions = (): number[] => {
-      calls += 1
-      if (calls === 2) {
-        writeFileSync(
-          join(store.publishLock, 'owner.json'),
-          JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
-        )
-      }
-      return snapshotVersions()
+    // A successor takes the lock after repair's last snapshot scan (and heartbeat) but
+    // before its first mutation: listing the transient directories is the plan's last
+    // read-only step.
+    const internal = store as unknown as { _transientDirs: () => string[] }
+    const transientDirs = internal._transientDirs.bind(store)
+    internal._transientDirs = (): string[] => {
+      writeFileSync(
+        join(store.publishLock, 'owner.json'),
+        JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
+      )
+      return transientDirs()
     }
 
     assert.throws(() => store.repair(), /repair lost ownership of publish\.lock before mutation/)

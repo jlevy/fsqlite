@@ -30,6 +30,7 @@ import type {
   GcOptions,
   GcResult,
   ReadLease,
+  RepairOptions,
   RepairResult,
 } from './types.ts'
 
@@ -79,8 +80,11 @@ export class DirectStore {
   gc(opts?: GcOptions): GcResult {
     return this.base.gc(opts)
   }
-  repair(opts?: { lockOpts?: LockOptions }): RepairResult {
+  repair(opts?: RepairOptions): RepairResult {
     return this.base.repair(opts)
+  }
+  planRepair(opts?: RepairOptions): RepairResult {
+    return this.base.planRepair(opts)
   }
   readLease(): ReadLease {
     return this.base.readLease()
