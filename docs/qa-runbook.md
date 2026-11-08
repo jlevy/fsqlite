@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **128 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **129 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -94,7 +94,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 128` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 129` / `# fail 0`; goldens `24 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -263,10 +263,10 @@ use.
    check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.
 4. **Long Publish Leases.** DirectStore and repair can hold the publish lease across
    synchronous O(snapshot size) work.
-   The engine fences a stale-broken holder, which preserves safety, but it does not yet
-   heartbeat during those sections.
-   **Manual check:** set `staleMs` above the measured worst-case operation and keep
-   `timeoutMs > staleMs`.
+   They renew the lease at step boundaries and fence before each destructive step, but a
+   single synchronous step (one head copy, one callback, one fsync) cannot be renewed
+   while it runs. **Manual check:** set `staleMs` above the measured worst-case single
+   step and keep `timeoutMs > staleMs`.
 5. **Platform and Thread Matrix.** POSIX publication is covered on macOS and Linux.
    Windows rename-replace races and the formal Worker Thread coordination contract are
    future gates. **Manual check:** do not extend the support claim beyond the published

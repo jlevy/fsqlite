@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync }
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
+import { isLockFresh } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 test('direct write → read round-trips and increments the version synchronously', () => {
@@ -313,3 +314,43 @@ for (const scenario of [
     }
   })
 }
+
+test('a DirectStore write renews its publish lease at step boundaries', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  const staleMs = 1_000
+  // Age the lock as if the step that just ran took twice the stale window. A waiter would
+  // break any lock still this old, so each later step boundary must have renewed it.
+  const ageLock = (): void => {
+    const past = new Date(Date.now() - 2 * staleMs)
+    utimesSync(lockPath, past, past)
+  }
+  const observed: string[] = []
+  try {
+    const store = new DirectStore(dir, STORE_OPTS).init()
+    setAfterFsyncPathForTest((path) => {
+      if (path.includes('.direct-')) {
+        observed.push(`after callback: fresh=${isLockFresh(lockPath, staleMs)}`)
+        ageLock() // a slow snapshot fsync
+      }
+    })
+    setAfterFsyncDirForTest((path) => {
+      if (path === join(dir, 'snapshots')) {
+        observed.push(`after fsync: fresh=${isLockFresh(lockPath, staleMs)}`)
+      }
+    })
+    const version = store.write(
+      (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+        ageLock() // a slow callback
+      },
+      { lockOpts: { staleMs, timeoutMs: 2 * staleMs, pollMs: 5 } },
+    )
+    assert.equal(version, 1)
+    assert.deepEqual(observed, ['after callback: fresh=true', 'after fsync: fresh=true'])
+  } finally {
+    setAfterFsyncPathForTest(null)
+    setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})

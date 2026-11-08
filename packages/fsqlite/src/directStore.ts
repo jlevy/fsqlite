@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
 import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { withLock, ownerOf } from './lock.ts'
+import { withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
@@ -92,11 +92,18 @@ export class DirectStore {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const out = withLock(
         this.base.publishLock,
-        (token): number | 'retry' => {
+        (_token, lease): number | 'retry' => {
           const base = this.base.currentVersion()
           const next = base + 1
           const tmp = join(this.base.snapDir, `.direct-${rand()}.sqlite`)
+          const abandon = (): 'retry' => {
+            rmSync(tmp, { force: true })
+            return 'retry'
+          }
           copyFileSync(this.base.snapshotPath(base), tmp)
+          if (!lease.heartbeat()) {
+            return abandon()
+          }
           const db = driver.open(tmp)
           try {
             driver.protectOwnedTables(db)
@@ -123,23 +130,18 @@ export class DirectStore {
             throw e
           }
           db.close()
-          // Revalidate fencing and optimistic concurrency before publication.
-          if (this.base.currentVersion() !== base) {
-            rmSync(tmp, { force: true })
-            return 'retry'
-          }
-          if (ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          // Revalidate fencing and optimistic concurrency before publication. The fence
+          // also renews the lease the callback and checks may have run down.
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
           fsyncPath(tmp) // durable snapshot before it can be named by current
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
           renameSync(tmp, this.base.snapshotPath(next))
           fsyncDir(this.base.snapDir)
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
+          if (this.base.currentVersion() !== base || !lease.fence()) {
             return 'retry'
           }
           publishPointer(this.base.dir, this.base.currentPath, next)

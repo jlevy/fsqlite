@@ -348,11 +348,15 @@ shared path can look local.
 
 The lease covers the copy, callback, checks, fsync, and publication.
 With the Node defaults, `staleMs` is 20 seconds and `timeoutMs` is 30 seconds.
-A deployment must set a stale window longer than its worst-case DirectStore operation or
-accept a fenced retry.
-The callback can run more than once after an OCC or fencing loss, so it must keep
+The writer renews the lease at each step boundary (after the copy, after the callback
+and checks, after the fsync) and fences before each destructive step, so the stale
+window must exceed the longest single step rather than the whole operation.
+Repair renews it after scanning each snapshot.
+A step that outlasts the window can still be broken, which costs a fenced retry, not
+data. The callback can run more than once after an OCC or fencing loss, so it must keep
 external side effects outside the retryable function or make them idempotent.
-Periodic heartbeat support for long synchronous critical sections remains tracked work.
+An optimistic DirectStore that runs the copy and callback outside the lease remains a
+roadmap option.
 
 ## Operating Envelope
 
@@ -577,9 +581,9 @@ The CLI provides `info`, `validate`, `gc`, `seal`, `repair`, `stats`, `doctor`, 
 The [QA runbook](qa-runbook.md) is the evidence index for `C1` through `C12`. The
 [roadmap](roadmap.md) records the unresolved work without weakening the alpha contract.
 The most important remaining constraints are real cross-host filesystem validation,
-Windows publication races, long-operation lease heartbeat strategy, independent format
-conformance fixtures, explicit upgrades, Worker Thread coordination, stronger isolation
-patterns, and large-store seeding efficiency.
+Windows publication races, single steps longer than the lease stale window, independent
+format conformance fixtures, explicit upgrades, Worker Thread coordination, stronger
+isolation patterns, and large-store seeding efficiency.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

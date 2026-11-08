@@ -39,7 +39,7 @@ import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
 import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { isLockFresh, withLock, ownerOf } from './lock.ts'
+import { isLockFresh, withLock } from './lock.ts'
 import {
   createStoreMarker,
   hasStoreMarker,
@@ -50,7 +50,7 @@ import {
   FSQLITE_APPLICATION_ID,
 } from './storeFormat.ts'
 import type { StoreMarker } from './storeFormat.ts'
-import type { LockOptions } from './lock.ts'
+import type { LockLease, LockOptions } from './lock.ts'
 import type {
   StoreOptions,
   NormalizedPolicy,
@@ -340,7 +340,7 @@ export class SnapshotStore {
    */
   init(): this {
     mkdirSync(this.dir, { recursive: true })
-    withLock(this.publishLock, (token) => {
+    withLock(this.publishLock, (_token, lease) => {
       let marker: StoreMarker
       if (hasStoreMarker(this.dir)) {
         marker = readStoreMarker(this.dir)
@@ -390,12 +390,12 @@ export class SnapshotStore {
           rmSync(tmp, { force: true })
           return
         }
-        if (ownerOf(this.publishLock) !== token) {
+        if (!lease.fence()) {
           throw new Error('init lost ownership of publish.lock before snapshot publication')
         }
         renameSync(tmp, this.snapshotPath(0))
         fsyncDir(this.snapDir)
-        if (ownerOf(this.publishLock) !== token) {
+        if (!lease.fence()) {
           throw new Error('init lost ownership of publish.lock before pointer publication')
         }
         publishPointer(this.dir, this.currentPath, 0)
@@ -767,11 +767,11 @@ export class SnapshotStore {
       fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
       const result = withLock(
         this.publishLock,
-        (token): 'retry' | 'published' => {
+        (_token, lease): 'retry' | 'published' => {
           if (this.currentVersion() !== base) {
             return 'retry'
           } // someone published while we built
-          if (ownerOf(this.publishLock) !== token) {
+          if (!lease.fence()) {
             return 'retry'
           } // lost ownership (stale break): fencing
           renameSync(tmp, this.snapshotPath(next)) // overwrites any orphan from a crashed publish
@@ -779,7 +779,7 @@ export class SnapshotStore {
           if (crashAt === 'after-snapshot') {
             throw new Error('CRASH after-snapshot')
           }
-          if (this.currentVersion() !== base || ownerOf(this.publishLock) !== token) {
+          if (this.currentVersion() !== base || !lease.fence()) {
             return 'retry'
           } // a holder that lost its lease must not publish the pointer
           publishPointer(this.dir, this.currentPath, next)
@@ -1051,11 +1051,11 @@ export class SnapshotStore {
     }
     const actions = withLock(
       this.publishLock,
-      (token) => {
-        if (ownerOf(this.publishLock) !== token) {
+      (_token, lease) => {
+        if (!lease.fence()) {
           throw new Error('repair lost ownership of publish.lock before mutation')
         }
-        return this._repairLocked(marker, token)
+        return this._repairLocked(marker, lease)
       },
       lockOpts,
     )
@@ -1066,11 +1066,18 @@ export class SnapshotStore {
     return { actions, state }
   }
 
-  private _repairLocked(marker: StoreMarker, token: string): string[] {
+  private _repairLocked(marker: StoreMarker, lease: LockLease): string[] {
     const actions: string[] = []
+    const lost = (): Error => new Error('repair lost ownership of publish.lock before mutation')
     const assertOwnership = (): void => {
-      if (ownerOf(this.publishLock) !== token) {
-        throw new Error('repair lost ownership of publish.lock before mutation')
+      if (!lease.fence()) {
+        throw lost()
+      }
+    }
+    // Scanning every snapshot can outlast the stale window, so renew after each one.
+    const renew = (): void => {
+      if (!lease.heartbeat()) {
+        throw lost()
       }
     }
     const versions = this.snapshotVersions()
@@ -1085,6 +1092,8 @@ export class SnapshotStore {
         }
       } catch {
         return false
+      } finally {
+        renew()
       }
     }
     if (!versions.some(identityMatches)) {
@@ -1101,6 +1110,8 @@ export class SnapshotStore {
         }
       } catch {
         return false // a file that won't even open as SQLite is corrupt
+      } finally {
+        renew()
       }
     }
 

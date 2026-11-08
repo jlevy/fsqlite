@@ -35,6 +35,35 @@ export interface OwnerMeta {
   at: number
 }
 
+/**
+ * A holder's handle on an acquired lock, passed to the `withLock` callback.
+ *
+ * Correctness never depends on the lock (spec L5), but a live holder keeps it fresh so
+ * waiters do not break it during a long critical section, and it re-verifies ownership
+ * immediately before every destructive step so a holder that was broken anyway backs off.
+ * The callback runs synchronously, so renewal happens at step boundaries: a single step
+ * (one copy, one application callback, one fsync) must still finish within `staleMs`.
+ */
+export interface LockLease {
+  /** The random owner token this holder wrote to `owner.json`. */
+  readonly token: string
+  /** The resolved stale window, acquisition timeout, and poll interval of this lock. */
+  readonly staleMs: number
+  readonly timeoutMs: number
+  readonly pollMs: number
+  /**
+   * Renew at a step boundary: refresh the lock's mtime once it is older than
+   * {@link LEASE_RENEW_FRACTION} of `staleMs`. Returns false once this holder has lost the
+   * lock, so long work can stop early instead of finishing a doomed attempt.
+   */
+  heartbeat: () => boolean
+  /**
+   * Refresh the lock and re-verify ownership immediately before a destructive step (spec
+   * L3). Returns false when this holder no longer owns the lock and must abandon the step.
+   */
+  fence: () => boolean
+}
+
 export class LockTimeoutError extends Error {
   constructor(p: string, ms: number) {
     super(`could not acquire ${p} within ${ms}ms`)
@@ -45,10 +74,16 @@ export class LockTimeoutError extends Error {
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_POLL_MS = 25
 export const DEFAULT_LOCK_STALE_MS = 20_000
+/**
+ * A step-boundary heartbeat refreshes the lock once its age reaches this fraction of the
+ * stale window. Renewing at a quarter keeps a holder at least three quarters of a window
+ * away from any waiter's stale judgment, while a run of quick steps costs one stat each.
+ */
+export const LEASE_RENEW_FRACTION = 0.25
 
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.
-const sleepSync = (ms: number): void => {
+export const sleepSync = (ms: number): void => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
@@ -68,14 +103,18 @@ export function setStaleLockMoverForTest(mover: StaleLockMover | null): void {
 }
 
 /**
- * Acquire the lock dir, run fn(token), release. `fn` receives the owner token so it
- * can revalidate ownership via `ownerOf(lockPath) === token` immediately before a
- * destructive publish.
+ * Acquire the lock dir, run fn(token, lease), release. `fn` receives the owner token and a
+ * {@link LockLease}: it calls `lease.heartbeat()` between long steps and `lease.fence()`
+ * immediately before each destructive step, abandoning the step when fencing fails.
  *
  * Invariant: timeoutMs > staleMs (you must be able to wait longer than the stale
  * window, or you would break a lock you could otherwise have waited for).
  */
-export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: LockOptions = {}): T {
+export function withLock<T>(
+  lockPath: string,
+  fn: (token: string, lease: LockLease) => T,
+  opts: LockOptions = {},
+): T {
   const {
     timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
     pollMs = DEFAULT_LOCK_POLL_MS,
@@ -142,8 +181,40 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
   if (!held) {
     throw new LockTimeoutError(lockPath, timeoutMs)
   }
+  // Verify, touch, verify: the first check avoids refreshing a successor's lock; the
+  // second proves the touched directory is still ours. A breaker re-checks staleness after
+  // moving a lock aside (L2), so a lock refreshed here cannot be broken for staleMs.
+  const refresh = (): boolean => {
+    if (ownerOf(lockPath) !== token) {
+      return false
+    }
+    try {
+      const now = new Date()
+      utimesSync(lockPath, now, now)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false
+      }
+      throw error
+    }
+    return ownerOf(lockPath) === token
+  }
+  const lease: LockLease = {
+    token,
+    staleMs,
+    timeoutMs,
+    pollMs,
+    heartbeat: () => {
+      const seen = observeLock(lockPath)
+      if (seen?.meta?.token !== token) {
+        return false
+      }
+      return Date.now() - seen.mtimeMs < staleMs * LEASE_RENEW_FRACTION || refresh()
+    },
+    fence: refresh,
+  }
   try {
-    return fn(token)
+    return fn(token, lease)
   } finally {
     // Fence the release the same way as publication: remove the directory only if we
     // still own it. A holder that stalled past staleMs and was stale-broken must not delete

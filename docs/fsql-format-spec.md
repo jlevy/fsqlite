@@ -427,8 +427,14 @@ build.
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
-- **L2.** Liveness is the lock dir’s **mtime**; a live long holder SHOULD touch it
-  (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window.
+- **L2.** Liveness is the lock dir’s **mtime**. A holder whose critical section has
+  several long steps (copying a head, running an application callback, an fsync,
+  scanning snapshots) SHOULD heartbeat at each step boundary by touching the dir once
+  its age reaches a fraction of the stale window (Node: a quarter), and SHOULD abandon
+  the attempt as soon as a heartbeat finds that it lost ownership.
+  A single step that outlasts the stale window can still be broken; the stale window
+  MUST exceed the longest single step, not the whole section.
+  A waiter MAY break a lock whose mtime is older than the stale window.
   It MUST break it in three steps, because two waiters can judge the same lock stale and
   a check-then-delete on `publish.lock` would remove a successor that re-acquired the
   name in between: (1) read `owner.json` and the mtime and judge the lock stale; (2)
@@ -444,8 +450,11 @@ build.
   An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
   lock it could have waited for.
 - **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
-  holder MUST re-read `owner.json` and verify its own token immediately before the
-  destructive publish step (F5b), and MUST abandon the publish on a mismatch.
+  holder MUST re-read `owner.json` and verify its own token immediately before each
+  destructive step (F5b, every repair and GC deletion), and MUST abandon the step on a
+  mismatch. The Node implementation fences by verify, touch, verify: it checks its token,
+  refreshes the dir’s mtime, and checks the token again, so a fenced step begins with a
+  full stale window in which no conforming breaker (L2 step 3) can remove the lock.
 - **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
   `owner.json` still carries its token, and MUST remove it through the same
   rename-aside-and-recheck step as L2, so a successor that acquires between the token
