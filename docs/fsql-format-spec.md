@@ -703,8 +703,14 @@ published snapshot was integrity-gated at publish and never modified (S6):
    valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
-4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
-   reason file).
+4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
+   transient stale window (G3), preserving evidence with a `QUARANTINE` reason file.
+   A younger one may be a live capture and MUST be left in place.
+   A writer’s `COMMITTED` write can land between repair’s check and its move, so repair
+   MUST check for `COMMITTED` again after moving the envelope and, if it is there,
+   remove the reason file and move the envelope back to `tx/pending/`. The writer’s
+   write either lands in the moved dir, where that check sees it, or fails, so the
+   writer never reports success for an envelope repair quarantined.
 
 Repair MUST NOT delete committed pending envelopes because the next reconcile folds this
 unpublished work. Repair also MUST NOT modify any snapshot in place.

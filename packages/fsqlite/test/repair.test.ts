@@ -30,6 +30,8 @@ test('repair clears an in-flight capture (orphan snapshot, transient, and uncomm
     const txn = join(store.txPending, '999-uncommitted.txn')
     mkdirSync(txn, { recursive: true })
     writeFileSync(join(txn, 'changeset.bin'), 'partial') // no COMMITTED marker
+    const abandoned = new Date(Date.now() - 120_000) // a capture that died long ago
+    utimesSync(txn, abandoned, abandoned)
 
     assert.equal(store.validate().state, 'in-flight-capture')
     const res = store.repair()
@@ -204,6 +206,58 @@ test('root pointer transients are surfaced, swept by gc, and removed by repair',
     assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
     assert.equal(existsSync(grave), false, 'repair removes a lock moved aside by a crashed break')
     assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+/** An envelope dir a writer began but has not committed, `ageMs` after its last write. */
+function uncommittedEnvelope(store: SnapshotStore, ageMs: number): string {
+  const txn = '000001762600000000-000000000000-w-deadbeef00.txn'
+  const txDir = join(store.txPending, txn)
+  mkdirSync(txDir)
+  writeFileSync(join(txDir, 'changeset.bin'), 'partial')
+  writeFileSync(join(txDir, 'manifest.json'), '{}')
+  const at = new Date(Date.now() - ageMs)
+  utimesSync(txDir, at, at)
+  return txn
+}
+
+test('repair keeps an envelope that commits between its check and its quarantine move', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const txn = uncommittedEnvelope(store, 120_000)
+    const move = (store as unknown as { _move: (txns: string[], dest: string) => void })._move.bind(
+      store,
+    )
+    Object.assign(store, {
+      _move: (txns: string[], dest: string): void => {
+        writeFileSync(join(store.txPending, txn, 'COMMITTED'), '') // the writer finishes here
+        move(txns, dest)
+      },
+    })
+
+    const result = store.repair()
+
+    assert.equal(existsSync(join(store.txPending, txn, 'COMMITTED')), true, 'still pending')
+    assert.equal(existsSync(join(store.txPending, txn, 'QUARANTINE')), false)
+    assert.equal(existsSync(join(store.txQuarantine, txn)), false)
+    assert.ok(result.actions.some((action) => action.includes(`kept ${txn}`)))
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair leaves a fresh uncommitted envelope to its possibly live writer', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const txn = uncommittedEnvelope(store, 0)
+
+    const result = store.repair()
+
+    assert.equal(existsSync(join(store.txPending, txn)), true)
+    assert.equal(existsSync(join(store.txQuarantine, txn)), false)
+    assert.equal(result.state, 'in-flight-capture', 'the capture in progress is still reported')
   } finally {
     cleanup()
   }

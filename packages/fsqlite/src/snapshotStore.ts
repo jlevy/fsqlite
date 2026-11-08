@@ -1339,16 +1339,35 @@ export class SnapshotStore {
       }
     }
 
-    // Quarantine uncommitted pending envelopes (evidence kept).
+    // Quarantine abandoned uncommitted envelopes (evidence kept). A writer adds
+    // changeset.bin, manifest.json, and COMMITTED last (W4), so the envelope dir's mtime
+    // marks its latest step; one younger than the transient stale window (G3's rule) may be
+    // a live capture and is left alone.
     if (existsSync(this.txPending)) {
       for (const d of readdirSync(this.txPending)) {
-        if (d.endsWith('.txn') && !existsSync(join(this.txPending, d, 'COMMITTED'))) {
-          assertOwnership()
-          writeFileSync(join(this.txPending, d, 'QUARANTINE'), 'uncommitted-at-repair')
-          assertOwnership()
-          this._move([d], this.txQuarantine)
-          actions.push(`quarantined uncommitted ${d}`)
+        const pendingDir = join(this.txPending, d)
+        if (!d.endsWith('.txn') || existsSync(join(pendingDir, 'COMMITTED'))) {
+          continue
         }
+        if (Date.now() - statSync(pendingDir).mtimeMs <= DEFAULT_TRANSIENT_STALE_MS) {
+          actions.push(`left fresh uncommitted ${d} (possibly a live capture)`)
+          continue
+        }
+        assertOwnership()
+        writeFileSync(join(pendingDir, 'QUARANTINE'), 'uncommitted-at-repair')
+        assertOwnership()
+        this._move([d], this.txQuarantine)
+        // A writer can still write COMMITTED between the check above and the move. Its write
+        // either landed in the moved dir, seen here, or failed with ENOENT and the writer
+        // reported failure, so this check after the move has no race window.
+        const movedDir = join(this.txQuarantine, d)
+        if (existsSync(join(movedDir, 'COMMITTED'))) {
+          rmSync(join(movedDir, 'QUARANTINE'), { force: true })
+          renameSync(movedDir, pendingDir)
+          actions.push(`kept ${d}, which committed during repair`)
+          continue
+        }
+        actions.push(`quarantined uncommitted ${d}`)
       }
     }
 
