@@ -15,9 +15,10 @@ fsqlite adds concurrency-safe publication for cooperative writers.
 `seal()` can make a consistent point-in-time copy while publication continues; a
 successful copy contains one complete version, and later work is outside that copy.
 
-This zero-runtime-dependency package uses SQLite built into Node 22.18+ on the 22.x line
-and Node 24+, through the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html)
-module. It requires no separate SQLite installation or native build.
+This zero-runtime-dependency package uses SQLite built into Node 22.18+ on 22.x, Node
+24, or Node 26 and later, through the built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html) module.
+It requires no separate SQLite installation or native build.
 fsqlite and direct `node:sqlite` calls use the same SQLite library; this package is the
 first implementation of the language-independent `f1.0` commit protocol.
 
@@ -273,8 +274,8 @@ covers the complete store layout, publication races, and consistency boundaries.
 
 ## Reference Implementation
 
-This package’s reference implementation is 2,581 lines of TypeScript code, including the
-CLI and excluding tests and generated output.
+This package’s reference implementation is roughly 2,600 lines of TypeScript code
+(November 2026), including the CLI and excluding tests and generated output.
 It uses only Node built-ins and has zero runtime dependencies.
 Supported Node releases include SQLite and expose it through the built-in
 [`node:sqlite`](https://nodejs.org/api/sqlite.html) module; fsqlite uses that module

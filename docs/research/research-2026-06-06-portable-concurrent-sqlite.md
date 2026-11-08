@@ -183,8 +183,10 @@ all omit it. So for years the feature was *present in the amalgamation but invis
 the application layer*. Several “distributed SQLite” projects chose **other**
 mechanisms: LiteFS and Litestream replicate the **WAL byte stream**; rqlite and dqlite
 use **Raft over SQL statements**. The changeset (logical, row-level) lane stayed in the
-**mobile / offline-first sync** corner (e.g. `SQLiteChangesetSync`, `sqlite-sync`,
-Tencent WCDB, Bloomberg comdb2), out of the server-infrastructure conversation.
+**mobile / offline-first sync** corner (e.g. `SQLiteChangesetSync`, Tencent WCDB,
+Bloomberg comdb2), out of the server-infrastructure conversation.
+*2026-11 update:* sqliteai’s `sqlite-sync`, listed here in June, is CRDT-based rather
+than changeset-based; Finding E and Related Work describe it as CRDT sync.
 The result is a mature engine feature that remains absent from many mainstream bindings
 and less visible than WAL or page replication.
 
