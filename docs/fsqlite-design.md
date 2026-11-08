@@ -523,7 +523,7 @@ Known platform behavior shapes that boundary:
   minute after another host’s rename; on NFSv4 the `cto` option governs directory
   caching only. This costs liveness, not safety, but `retain` must exceed the staleness
   window, and a reader should treat a collected snapshot as a stale pointer to re-read
-  (spec section 13); the reference reader fails loudly instead.
+  (spec section 13), as the reference reader does, a bounded number of times.
 - **macOS.** Node’s `fs.fsyncSync` uses `F_FULLFSYNC`, which is stronger than SQLite’s
   default (`PRAGMA fullfsync` off).
   Because fsqlite’s own fsync runs after the SQLite connection closes, it supplies the

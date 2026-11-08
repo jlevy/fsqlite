@@ -877,7 +877,8 @@ upgrade implementation is post-alpha work.
   corruption, and SHOULD re-read the pointer and retry: GC may have collected it after a
   stale read. On network mounts, directory-entry and attribute caching can delay
   visibility of a new `current` (Linux NFS: up to `acdirmax`, default 60 s), which
-  widens that window. The Node reader currently fails loudly instead of retrying.
+  widens that window. The Node reader re-reads the pointer and retries a bounded number of
+  times, and reports a pointer that still names a missing snapshot as corruption.
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
 **Writer**: W1-W4, S2-S4 callback and schema validation, the compatibility check of §3,

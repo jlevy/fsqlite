@@ -89,6 +89,12 @@ const nowIso = (): string => new Date().toISOString()
 const CHANGESET_FILENAME = 'changeset.bin'
 const DEFAULT_TOOL_VERSION = 'fsqlite'
 const DEFAULT_READ_LEASE_RETRIES = 8
+/**
+ * Pointer re-reads a reader makes when the snapshot `current` named was collected before it
+ * could open it (spec section 13). Each retry follows a newer publication, and gc never
+ * collects the newest snapshots, so contention, not corruption, exhausts this.
+ */
+const COLLECTED_SNAPSHOT_RETRIES = 8
 const DEFAULT_WRITE_RETRIES = 5
 const DEFAULT_RECONCILE_RETRIES = 8
 const DEFAULT_RETAINED_SNAPSHOTS = 3
@@ -341,6 +347,18 @@ const META_DDL = `CREATE TABLE IF NOT EXISTS fsqlite_meta (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
 );`
+
+type BeforeSnapshotOpenHook = (version: number) => void
+let beforeSnapshotOpenHook: BeforeSnapshotOpenHook | null = null
+
+/**
+ * Internal fault-injection seam: runs after a reader parsed `current` and before it opens
+ * or copies the snapshot that pointer names, the window in which gc can collect it. Pass
+ * null to remove it.
+ */
+export function setBeforeSnapshotOpenForTest(hook: BeforeSnapshotOpenHook | null): void {
+  beforeSnapshotOpenHook = hook
+}
 
 type CrashAt = 'after-build' | 'after-snapshot' | 'after-pointer' | null
 let reconcileCrashAtForTest: CrashAt = null
@@ -649,7 +667,7 @@ export class SnapshotStore {
    */
   private _verifyCompatible(): void {
     const marker = readStoreMarker(this.dir)
-    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const db = this._openCurrent()
     try {
       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
       this.assertStrategySchema(db)
@@ -672,7 +690,7 @@ export class SnapshotStore {
   /** Refuse store operations if the marker and published snapshot do not identify the same store. */
   private assertStoreIdentity(): void {
     const marker = readStoreMarker(this.dir)
-    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const db = this._openCurrent()
     try {
       verifySnapshotIdentity(db, marker)
     } finally {
@@ -682,6 +700,45 @@ export class SnapshotStore {
 
   snapshotPath(v: number): string {
     return join(this.snapDir, `${pad(v)}.fsqlite.sqlite`)
+  }
+
+  /** Open the snapshot `current` names read-only; see {@link _withCurrentSnapshot}. */
+  private _openCurrent(): driver.DB {
+    return this._withCurrentSnapshot((path) => driver.openReadonly(path)).result
+  }
+
+  /**
+   * Run `step` on the snapshot `current` names. When the step fails because that snapshot
+   * no longer exists and `current` has moved, gc collected it after a newer publication,
+   * so the pointer is read again (spec section 13). A pointer that still names a missing
+   * snapshot is corruption.
+   */
+  private _withCurrentSnapshot<R>(step: (path: string) => R): { version: number; result: R } {
+    for (let attempt = 0; ; attempt++) {
+      const version = this.currentVersion()
+      beforeSnapshotOpenHook?.(version)
+      const path = this.snapshotPath(version)
+      try {
+        return { version, result: step(path) }
+      } catch (error) {
+        if (existsSync(path)) {
+          throw error
+        }
+        if (this.currentVersion() === version) {
+          throw new FsqliteError('corrupt', `current points at missing snapshot ${version}`, {
+            cause: error,
+          })
+        }
+        if (attempt >= COLLECTED_SNAPSHOT_RETRIES) {
+          throw new FsqliteError(
+            'retryable',
+            `the snapshot current named was collected before it could be opened ` +
+              `${attempt + 1} times in a row (excessive publish and gc contention)`,
+            { cause: error },
+          )
+        }
+      }
+    }
   }
 
   /**
@@ -701,11 +758,14 @@ export class SnapshotStore {
   /**
    * Run `fn` against the immutable snapshot named by `current`, opened read-only on a fresh
    * connection (close-to-open, so a concurrent publish is observed and never torn). Needs no
-   * session extension; any SQLite binding can read the same file.
+   * session extension; any SQLite binding can read the same file. A snapshot gc collects
+   * between the pointer read and the open is retried against the newer head (spec section
+   * 13). The connection closes when `fn` returns, so `fn` must not return a lazy handle
+   * such as a `stmt.iterate()` iterator.
    */
   read<T>(fn: ReadFn<T>): T {
     const marker = readStoreMarker(this.dir)
-    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const db = this._openCurrent()
     try {
       verifySnapshotIdentity(db, marker)
       return fn(db)
@@ -794,9 +854,11 @@ export class SnapshotStore {
     this._verifyCompatible()
     driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
     const marker = readStoreMarker(this.dir)
-    const base = this.currentVersion()
     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
-    copyFileSync(this.snapshotPath(base), work) // SAFE: source snapshot is immutable
+    // SAFE: the source snapshot is immutable.
+    const base = this._withCurrentSnapshot((path) => {
+      copyFileSync(path, work)
+    }).version
     let changeset: Uint8Array | null
     const db = driver.open(work)
     try {
@@ -1747,7 +1809,7 @@ export class SnapshotStore {
     archivable: string[],
     quarantined: [string, string][],
   ): { applied: number; quarantined: number } {
-    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const db = this._openCurrent()
     const ledgered = new Set<string>()
     try {
       const inLedger = db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?')
