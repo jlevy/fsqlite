@@ -12,7 +12,7 @@ related:
 ---
 # Research: Portable, Server-Free, Concurrent SQLite for Local Applications
 
-**Date:** 2026-06-06 (last updated 2026-08-01)
+**Date:** 2026-06-06 (last updated 2026-11-08)
 
 **Author:** Joshua Levy, with LLM assistance
 
@@ -26,6 +26,15 @@ documents. The focused
 [schema and workload assessment](research-2026-08-01-schema-evolution-and-workload-fit.md)
 contains the current ordinary-SQLite comparison, schema-maintenance procedure,
 measurements, severity, and adoption boundary.
+
+**2026-11 update:** Ecosystem, version, and link facts were re-checked on 2026-11-08.
+Current releases are SQLite 3.54.1; Node 22.23.4 (bundling SQLite 3.53.4), 24.22.2
+(3.53.4), and 26.13.0 (3.54.0); Node `main` is v28-pre (3.54.1). The v22.22.2 baseline
+used throughout this report bundled SQLite 3.51.2, which predates the WAL-reset
+corruption fix (3.51.3) and the 2026 FTS5 CVE fixes (3.53.2). Neither affects fsqlite’s
+`DELETE`-journal store files, but both matter for the ordinary-SQLite comparison.
+Passages marked “2026-11 update” record what changed; the original observations remain
+as dated evidence.
 
 ## Overview
 
@@ -364,6 +373,12 @@ row-level capture without the publish lease rather than one writer at a time.
   concurrent readers and one writer with much less blocking.
   Per SQLite’s own WAL docs, the **`-shm` wal-index does not work on a network
   filesystem**, so every participant must share wal-index memory on one host.
+  *2026-11 update:* SQLite’s [WAL-reset bug](https://www.sqlite.org/wal.html) (a race
+  between a checkpoint and a committing writer that can corrupt the database) was
+  present from 3.7.0 through 3.51.2 and is fixed in 3.51.3 and later, with backports in
+  3.44.6 and 3.50.7. It affects only WAL mode with two or more connections.
+  fsqlite never runs WAL on store files, but an ordinary-SQLite-with-WAL baseline should
+  use SQLite ≥ 3.51.3 (Node ≥ 22.22.3, ≥ 24.15.0, or any 26).
 - **`busy_timeout`, `BEGIN IMMEDIATE`, and retry** let multiple *local* processes write
   one WAL DB safely with brief contention.
   On a supported same-host filesystem, this usually works with brief contention.
@@ -414,13 +429,23 @@ WAL, but multiple hosts cannot share a coherent view of it, and NFS/AFP only off
 [satisfy] concurrent database access by multiple readers and writers.”
 Second, **`fcntl`/`flock` byte-range locks are unreliable** on network mounts
 (`src/os_unix.c:1191` calls POSIX advisory locks “broken by design”; `flock`-on-NFS is
-notably flaky on macOS, and `O_EXCL` over NFS has a documented race: see
-[LWN](https://lwn.net/Articles/251004/) and `open(2)`). Consumer cloud-sync folders
-(Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly hazardous: the sync
-client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`, corrupting it (concrete
-reports on the SQLite and mORMot forums).
-NFSv4 specifies an atomic exclusive create (the `EXCLUSIVE4` verifier) and atomic
-`RENAME` ([RFC 7530](https://datatracker.ietf.org/doc/html/rfc7530) /
+notably flaky on macOS). `O_EXCL` is reliable only where the NFS client and server
+implement it: [`open(2)`](https://man7.org/linux/man-pages/man2/open.2.html) says it is
+“supported only when using NFSv3 or later on kernel 2.6 or later,” and that elsewhere
+programs relying on it “will contain a race condition.”
+That is why the design uses `mkdir` and does not depend on `O_EXCL`. Consumer cloud-sync
+folders (Dropbox, iCloud Drive, OneDrive, Google Drive) can be particularly hazardous:
+the sync client copies the `.sqlite` mid-write and ignores `-wal`/`-shm`, corrupting it
+(concrete reports on the SQLite and mORMot forums).
+Zotero’s
+[cloud-storage guidance](https://www.zotero.org/support/kb/data_directory_in_cloud_storage_folder)
+says a cloud storage folder “is extremely likely to corrupt your database” because such
+services “generally don’t honor” file locks, and SQLite’s
+[How to Corrupt](https://www.sqlite.org/howtocorrupt.html) §1.2 covers backup or restore
+while a transaction is active.
+No first-party Dropbox, Apple, or Microsoft statement about SQLite was found (checked
+2026-11-08). NFSv4 specifies an atomic exclusive create (the `EXCLUSIVE4` verifier) and
+atomic `RENAME` ([RFC 7530](https://datatracker.ietf.org/doc/html/rfc7530) /
 [RFC 8881](https://www.rfc-editor.org/info/rfc8881/)), which is why the design leans on
 `mkdir`/`rename` and not on byte-range locks (and treats lease *staleness* as
 [Kleppmann](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
@@ -441,16 +466,20 @@ without a server:
 | Project / approach | What it is | Where it sits |
 | --- | --- | --- |
 | **WAL with `busy_timeout` and retry** | SQLite’s built-in local concurrency | one host; network filesystems unsupported; one writer |
-| **libSQL `BEGIN CONCURRENT`** | **page-level** OCC multi-writer, still a SQLite file | same `-shm` restriction; experimental; one host |
-| **Turso / limbo** (Rust rewrite) | **row-level MVCC** (`journal_mode=mvcc`), in-memory version index | beta (v0.5.0); in-process/local; a new engine, not a SQLite-file format |
-| **LiteFS** (Fly.io) | FUSE FS replicating SQLite; **lease-based single primary** | ephemeral elected coordinator (a server, productized) |
+| **`BEGIN CONCURRENT`** (SQLite’s `begin-concurrent` branch; also offered by libSQL and Turso) | optimistic **page-level** locking, still a SQLite file; requires WAL or WAL2; COMMIT still serialized; conflicts fail with `SQLITE_BUSY_SNAPSHOT` | not in the SQLite release; same `-shm` restriction; one host. libSQL’s README now says new features go to Turso and that libSQL “inherits SQLite’s fundamental limitations such as the single-writer model” |
+| **SQLite HC-tree** (experimental prototype) | optimistic **row-level** locking for “dozens of concurrent writers” | new file header (`hctree`, not `SQLite format 3`) and a `-pagemap` sidecar; POSIX only; all clients in one OS process; no recovery from power failure or OS crash |
+| **Turso Database** (Rust rewrite, formerly Limbo) | **row-level MVCC**: `PRAGMA journal_mode = 'mvcc'` and `BEGIN CONCURRENT`, in-memory version index; no longer labeled experimental since 0.8.0 | v0.8.3 (2026-10-12) with 0.9.0 pre-releases; “not yet reached 1.0”; claims file-format compatibility with SQLite 3.50.4 for ordinary databases, but the MVCC mode’s on-disk representation is not documented; experimental multi-process WAL coordination (`.tshm` sidecar); in-process, one host |
+| **LiteFS** (Fly.io) | FUSE FS replicating SQLite; **lease-based single primary** | ephemeral elected coordinator (a server, productized); still “beta” per its README; last release v0.5.14 (April, inferred 2024) |
 | **rqlite / dqlite** | HTTP/Raft (rqlite) or embeddable C Raft (dqlite) over SQLite | long-lived consensus server |
 | **mvSQLite** | SQLite storage swapped onto FoundationDB; distributed MVCC | replace the storage layer (a cluster) |
-| **Litestream** | single local writer and streaming WAL replication to object store | durability/replication, not concurrency |
-| **cr-sqlite (Vlcn)** | CRDT loadable extension on SQLite | slowed since ~2024-10; a merge layer (reader needs the extension), not a store |
-| **Mobile changeset sync** (`SQLiteChangesetSync`, `sqlite-sync`, WCDB) | offline-first device sync via the session extension | closest analogue, but app/device-specific and without conflict resolution |
+| **Litestream** | single local writer and streaming WAL replication to object store | durability/replication, not concurrency; 0.5.x (v0.5.18, 2026-11-03) uses the LTX format; its VFS read-replica extension is experimental; Windows unsupported |
+| **CRDT sync** (cr-sqlite (Vlcn); sqliteai `sqlite-sync`) | CRDT layer on SQLite; `sqlite-sync` syncs through SQLite Cloud, PostgreSQL, or Supabase | a merge layer (reader needs the extension), not a store; cr-sqlite has maintenance-level activity (build and platform fixes through 2026-08-10, no releases listed); `sqlite-sync` is server-backed |
+| **Session-changeset sync** (`SQLiteChangesetSync`, Tencent WCDB) | offline-first device sync via the session extension | closest analogue; SQLiteChangesetSync detects but ignores conflicts and has had no commits since 2023-12-15; WCDB uses sessions for backup and repair |
 | **DIY `proper-lockfile` and write queue** | a generic cross-process lock around a SQLite file | the thin end; folk knowledge, not a marquee package |
 
+Project status in this table was refreshed on 2026-11-08. SQLite’s own multi-writer work
+does not close the gap: HC-tree gives up the standard file format and crash recovery,
+and `begin-concurrent` stays outside the release and on one host.
 The serious multi-node efforts all **centralize the writer** (LiteFS lease,
 rqlite/dqlite Raft) or **replace the storage layer** (mvSQLite).
 The thin “external lock around a shared/NFS SQLite file” is **DIY folk knowledge: there
@@ -481,6 +510,14 @@ binary blob that can be stored as a file.
 - `sqlite3changegroup` / `changeset_concat` combine; `changeset_invert` undoes; the
   **rebaser** (`sqlite3rebaser_*`, EXPERIMENTAL) rebases one writer’s changeset onto
   another’s already-resolved conflicts.
+- *2026-11 update:* SQLite 3.51.0 added `sqlite3changeset_apply_v3()`, whose per-change
+  `xFilter` receives the changeset iterator (table, operation, and values) instead of
+  only the table name; 3.53.0 added per-change changegroup builders
+  (`sqlite3changegroup_change_begin()` and related calls).
+  Neither changes the changeset blob format.
+  Node’s binding still calls `sqlite3changeset_apply()` (v1); exposing `_v3`’s
+  per-change filter is the smallest upstream change that would give fsqlite the table
+  name without touching `onConflict`.
 
 **Conflict types** the handler sees: `DATA` (target row changed out from under the
 writer), `NOTFOUND` (no row with that PK), `CONFLICT` (PK/UNIQUE violation on insert),
@@ -536,10 +573,10 @@ the changeset iterator: the capability `node:sqlite` lacks); does it expose the
 | Binding / runtime | SESSION by default | Changeset API | Table name in conflict handler | Rebaser | Notes |
 | --- | --- | --- | --- | --- | --- |
 | **`node:sqlite`** (Node ≥ 22.5) | ✓ | ✓ | ✗ (only the integer type) | ✗ | The first-class zero-native-dep host; constraints are the binding’s, not SQLite’s (Finding G). |
-| **Bun 1.3.13** (`node:sqlite`) | ✗ | ✗ | , | , | Cannot resolve `node:sqlite`; not a writer runtime for this release. |
+| **Bun ≥ 1.4.0** (`node:sqlite`, implemented 2026-08-20) | ✓ on Linux (bundled SQLite); probe on macOS (Bun uses the system `libsqlite3.dylib`; its docs say sessions need a full SQLite build on older macOS releases) | ✓ | ✗ | ✗ | Passes Node’s 18 `node:sqlite` tests; `backup()` is synchronous in Bun. Not a tested fsqlite runtime; `capabilities()` must gate it. (Bun 1.3.13, checked in June, could not resolve `node:sqlite`.) |
 | **Deno** (`node:sqlite`, ≥ 2.2) | ✓ | ✓ | ✗ | ✗ | Same surface and limits as Node. |
 | **`better-sqlite3`** | ✗ | ✗ | , | , | SESSION `#if`-compiled-out; usable only as a **reader** / `DirectStore` writer. |
-| **APSW** (Python) | ✓ | ✓ | **✓** | **✓** | Fullest surface: table name *and* a `Rebaser` class. |
+| **APSW** (Python) | ✓ | ✓ | **✓** | **✓** | Fullest surface: table name *and* a `Rebaser` class. APSW 3.54.1.0 also exposes the per-change `sqlite3changeset_apply_v3` filter (`filter_change=`) and `ChangesetBuilder` (changegroup, including the 3.53.0 per-change builders). |
 | **`sqlite-wasm`** (official) | ✓ | ✓ | **✓** | **✓** | Raw C session API compiled in; a browser-side writer is feasible. |
 | **`rusqlite`** (Rust, `session`) | ✓ (bundled) | ✓ | **✓** (`Operation::table_name`) | ✗ (raw FFI only) | Richer than Node, but no *safe* rebaser. |
 | **`zombiezen.com/go/sqlite`** | ✓ | ✓ | **✓** | ✗ | Go *can* host the writer, with table name; no rebaser. |
@@ -584,10 +621,15 @@ Verified empirically and confirmed against checkouts of `sqlite/sqlite` (`002d33
    expose it). So a v1 design must avoid *needing* a rebaser.
 5. **The session API works on the repo’s Node v22 baseline** (v22.22.2), and
    **`node:sqlite` is not flag-gated**: `--experimental-sqlite` was removed in
-   **v22.13.0 / v23.4.0** (so even the v22.22.2 baseline is past it), and the module is
-   **Stability 1.2 (Release candidate)** as of v25.7.0 and in current docs (it still
-   prints an `ExperimentalWarning`). A *conservative* public release should still gate
-   on it reaching Stable, but it is not behind a flag.
+   **v22.13.0 / v23.4.0** (so even the v22.22.2 baseline is past it).
+   *2026-11 update:* the module is **Stability 1.2 (Release candidate)** in the v24 and
+   v26 docs. PR #61262 marked it release candidate *and removed the
+   `ExperimentalWarning`*; it shipped in v25.7.0 and v24.15.0 (2026-04-15). On the v22
+   line the docs still say Stability 1.1 (Active development) and `lib/sqlite.js` still
+   emits `ExperimentalWarning: SQLite`, so users on the 22.18 floor see the warning and
+   users on ≥ 24.15 do not.
+   A *conservative* public release should still gate on it reaching Stable, but it is
+   not behind a flag.
 
 The package has a higher load-time floor than the session API alone: Node’s static
 `backup` named export was added in v22.16.0 and v23.8.0. Because fsqlite imports it at
@@ -596,17 +638,21 @@ can intercept the failure.
 The alpha declares `>=22.18.0 <23 || >=24.0.0`; 22.18 is also the unflagged TypeScript
 type-stripping floor used by the source test loop.
 
-> **Re-verified against current Node.** All five constraints above hold on `nodejs/node`
-> `main` (v27-pre): the conflict handler drops the iterator, ABORT is `false`, `REPLACE`
-> is DATA/CONFLICT-only, and there is no rebaser.
-> Deno (≥ 2.2) exposes the same `node:sqlite` surface; Bun 1.3.13 cannot resolve the
-> module and is not a supported runtime.
-> One caveat to track: Node issue **#63180** (a segfault when `db.close()` is called
-> from inside a user-defined-function callback) reproduces on our v22.22.2 baseline;
-> `fsqlite`’s hot path uses no UDFs, but confirm before adding any.
-> The two clean upstream fixes: forward the changeset iterator/table name into the
-> conflict handler, and expose the rebaser: remain **un-filed** and are tracked as
-> research follow-ups.
+> **Re-verified against current Node (2026-11-08).** All five constraints above hold on
+> `nodejs/node` `main` (v28-pre, SQLite 3.54.1): the conflict handler still drops the
+> iterator, the binding still calls `sqlite3changeset_apply()` (not `_v2` or `_v3`),
+> ABORT is `false`, `REPLACE` is DATA/CONFLICT-only, and there is no rebaser or
+> changegroup. Deno (≥ 2.2) exposes the same `node:sqlite` surface.
+> Bun implemented `node:sqlite` in 1.4.0 (2026-08-20); it is not a tested fsqlite
+> runtime (see F1). Node issue **#63180** (a segfault when `db.close()` is called from
+> inside a user-defined-function callback) reproduced on the v22.22.2 baseline.
+> PR #64743 (“prevent database close during callbacks”) fixed it in v24.22.0 and
+> v26.8.0, where such a close now throws `ERR_INVALID_STATE`. The v22 line has not
+> received that fix, nor the 2026 use-after-free fix in `Exec()` and `ApplyChangeset()`
+> (#64535). `fsqlite`’s hot path uses no UDFs, but confirm before adding any on v22. The
+> two clean upstream fixes: forward the changeset iterator/table name into the conflict
+> handler, and expose the rebaser: remain **un-filed** (no matching `nodejs/node` issue
+> as of 2026-11-08) and are tracked as research follow-ups.
 
 All five are pinned to C source in
 [`upstream-source-confirmations.md`](../upstream-source-confirmations.md) (SQLite
@@ -621,7 +667,10 @@ All five are pinned to C source in
 
 A second source pass checked two other relevant building blocks:
 
-**`better-sqlite3` (v12.10.0, bundles SQLite 3.53.2).** Its actual compile flags
+**`better-sqlite3` (v12.10.0, bundles SQLite 3.53.2).** *2026-11 update:* the current
+release is v13.0.3 (2026-08-05, bundling SQLite 3.53.4); v13.0.0 moved to N-API with
+prebuilt binaries shipped in the package, and `deps/defines.gypi` is unchanged on
+SESSION, PREUPDATE, `USE_URI=0`, and `THREADSAFE=2`. Its actual compile flags
 (`deps/defines.gypi`) enable FTS5/JSON1/`DESERIALIZE`/`THREADSAFE=2`/`USE_URI=0` but
 **neither `SQLITE_ENABLE_SESSION` nor `SQLITE_ENABLE_PREUPDATE_HOOK`**: the session code
 is `#if`-compiled out, and it exposes **no** session/changeset/rebaser JS API (only
@@ -864,6 +913,8 @@ one host and SQLite does not support it on a network filesystem.
 A live database file copy is not safe (R-FS and R-DURABLE both fail).
 WAL provides serializable isolation with one writer when participants can share the
 wal-index.
+A fair WAL baseline also needs SQLite ≥ 3.51.3, which fixes the 2026 WAL-reset
+corruption bug (Finding C).
 
 **The snapshot-publish design, stated precisely.** A “write” has capture and publication
 phases with distinct concurrency and durability boundaries:
@@ -1023,8 +1074,9 @@ the **isolation** each provides (see Finding K for the precise definitions and c
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Rollback journal (default) | many readers; a writer briefly excludes readers while writing the database | **1 writer** | whole-DB | serializable | ✓ | conditional on reliable SQLite locks and sync | ✗ |
 | **WAL** with `busy_timeout` | **many concurrent** (snapshot) | **1 writer** (global) | **whole-DB write lock** | writer serializable; readers snapshot | ✓ | ✗ (`-shm`) | ✗ |
-| libSQL `BEGIN CONCURRENT` | many | **many** (commit-time check) | **page-level** | snapshot isolation and OCC | ✓ | ✗ (`-shm`) | ✗ |
-| Turso/limbo (`journal_mode=mvcc`) | many (MVCC snapshot) | **many** (commit-time check) | **row-level** | snapshot isolation and row OCC | ✓ (embedded) | ✗ (in-process/local; in-memory versions) | ✗ |
+| `BEGIN CONCURRENT` (SQLite `begin-concurrent` branch; libSQL) | many | **many** (commit-time check; COMMIT serialized) | **page-level** | snapshot isolation and OCC | ✓ | ✗ (`-shm`) | ✗ |
+| SQLite HC-tree (experimental) | many | **many** (commit-time check) | **row-level** | optimistic row-level validation | ✓ (one OS process) | ✗ (POSIX, single process, no crash recovery) | ✗ |
+| Turso Database (`journal_mode = 'mvcc'`) | many (MVCC snapshot) | **many** (commit-time check) | **row-level** | snapshot isolation and row OCC | ✓ (embedded) | ✗ (in-process/local; in-memory versions) | ✗ |
 | Wrapper `mkdir`-lock with rollback (≈ **DirectStore**) | **many** (immutable snapshots) | **1 writer** (lease) | whole-DB | serializable for a DirectStore-only stream | ✓ | local recommended; conditional on validated primitives | ✓ |
 | Elected coordinator (LiteFS) | many | **1 primary** (replicas read-only) | engine-level | serializable | ✗ (FUSE daemon and lease) | n/a: own FUSE FS and replication | n/a (replicated) |
 | Raft server (rqlite/dqlite) | many | many | engine-level | serializable | ✗ (cluster) | n/a: replicates over the network | n/a (replicated) |
@@ -1047,11 +1099,13 @@ concurrency-vs-isolation trade, and the right pick depends on whether you need
 serializability or concurrent capture and server-free filesystem publication.
 (`DirectStore` is the middle: WAL’s single-writer simplicity with immutable publication
 and any SQLite binding.)
-Of the in-engine efforts, **Turso/limbo’s row-level MVCC is the closest external
+Of the in-engine efforts, **Turso Database’s row-level MVCC is the closest external
 analogue to this design’s row-level optimism**: it is a same-host, in-memory-versioned,
-new-engine approach (no shared-filesystem or immutable-snapshot backup story, not a
-standard SQLite file).
-`fsqlite` instead uses a file-native, protocol-defined approach.
+new-engine approach (no shared-filesystem or immutable-snapshot backup story).
+Turso targets SQLite file-format compatibility for ordinary databases, but the MVCC
+mode’s on-disk representation is not documented.
+SQLite’s experimental HC-tree also offers row-level optimism, with a new file header and
+no crash recovery. `fsqlite` instead uses a file-native, protocol-defined approach.
 The full landscape of these alternatives is catalogued in [Related Work](#related-work).
 
 ## Options Considered
@@ -1111,18 +1165,23 @@ auto-rebase merge exists in v1 (constrained writable surface instead).
 
 - **Raft servers (rqlite/dqlite), mvSQLite/FoundationDB:** violate R-NOSERVER; cluster-
   scale answers to a local-scale problem.
-- **CRDT layer (cr-sqlite):** slowed since ~2024-10; a *loadable-extension* merge layer
-  (a stock reader that touches its virtual table fails: breaks R-FORMAT), not a store;
+- **CRDT layer (cr-sqlite):** maintenance-level activity (build and platform fixes
+  through 2026-08-10, no releases listed); a *loadable-extension* merge layer (a stock
+  reader that touches its virtual table fails: breaks R-FORMAT), not a store;
   over-general for our conflict needs.
-- **Turso/limbo and libSQL `BEGIN CONCURRENT`:** real multi-writer, but **same-host
-  only** (still WAL/`-shm` or in-memory version state) and, for Turso, a non-standard
-  engine/file; fails R-FS and the standard-artifact goal.
+- **Turso Database, `BEGIN CONCURRENT`, and HC-tree:** real multi-writer, but
+  **same-host only** (still WAL/`-shm`, in-memory version state, or one OS process);
+  Turso is a new engine whose MVCC on-disk representation is undocumented, and HC-tree
+  uses a new file header without crash recovery; they fail R-FS and the
+  standard-artifact goal.
 - **Shared-cache mode:** SQLite calls it obsolete; it is connection-scoped and still
   allows only one write transaction per cache: it solves none of the cross-process /
   weak-FS problem.
 - **DuckDB:** analytical/columnar engine, but not a multi-process OLTP app store;
   concurrent writers still need a server/protocol.
   (Covered in the prior embeddable-databases survey.)
+  DuckLake 1.0 (April 2026; see Related Work) adds concurrent multi-table ACID writes,
+  but through a SQL catalog database rather than file-native publication.
 - **Pure-KV engines (LMDB/RocksDB/redb) for the interchange artifact:** fail R-FORMAT
   (engine-specific, poor external tooling); fine only as a rebuildable local cache.
 - **A custom VFS that intercepts `xLock`/`xShmMap`:** native C, large build, and the
@@ -1138,30 +1197,34 @@ the session-based entries were reviewed at the commits in [Source Map](#source-m
 
 | Project | Mechanism | Session-based? | Server-free? | Relation to `fsqlite` |
 | --- | --- | --- | --- | --- |
-| **SQLiteChangesetSync** | session changesets in a **git-like DAG**; `mergeAll()` | **Yes** | Yes (peer/file) | Closest cousin; conflicts are **detected and *skipped***, with no resolution; mobile/offline. |
-| **`sqlite-sync` (sqliteai)** | **CRDT** (causal-length sets, LWW) and cloud sync | No (CRDT) | No (cloud/PG) | Different lane (auto-merge, server-backed). |
-| **cr-sqlite (Vlcn)** | **CRDT** loadable extension (`crsql_changes` vtable, Lamport clocks) | No (CRDT) | Yes (peer) | Merge *layer*; a stock reader touching its vtable fails → breaks R-FORMAT; slowed since ~2024-10. |
+| **SQLiteChangesetSync** | session changesets in a **git-like DAG**; `mergeAll()` | **Yes** | Yes (peer/file) | Closest cousin; conflicts are **detected and *skipped***, with no resolution; mobile/offline. Dormant: last commit 2023-12-15; its README still lists application-defined conflict resolution as future work. |
+| **`sqlite-sync` (sqliteai)** | **CRDT** (causal-length sets, LWW) and cloud sync through SQLite Cloud, PostgreSQL, or Supabase | No (CRDT) | No (cloud/PG) | Different lane (auto-merge, server-backed). |
+| **cr-sqlite (Vlcn)** | **CRDT** loadable extension (`crsql_changes` vtable, Lamport clocks) | No (CRDT) | Yes (peer) | Merge *layer*; a stock reader touching its vtable fails → breaks R-FORMAT; maintenance-level activity (build and platform fixes through 2026-08-10, no releases listed). |
 | **GRDB.swift** | none built-in; raw C session via `db.sqliteConnection` | (raw) | n/a | Confirms sessions live in the mobile corner behind custom builds. |
 | **Tencent WCDB** | session/changeset for backup/repair | Yes | Yes (local) | Session use, mobile. |
 | **Bloomberg comdb2** | clustered SQL database | No | No (cluster) | Server lane. |
-| **LiteFS** (Fly.io) | FUSE replicates **WAL/tx frames**; lease single primary | No | No (FUSE daemon and lease) | Replication, not file-share. |
-| **Litestream** | streams **WAL** to object storage | No | Single-writer and remote | Durability, not concurrency. |
+| **LiteFS** (Fly.io) | FUSE replicates **WAL/tx frames**; lease single primary | No | No (FUSE daemon and lease) | Replication, not file-share; still “beta” per its README; last release v0.5.14 (April, inferred 2024). |
+| **Litestream** | streams **WAL** to object storage | No | Single-writer and remote | Durability, not concurrency. 0.5.x (v0.5.18, 2026-11-03) uses the LTX log format; the experimental VFS read-replica extension ships via pip, npm, and RubyGems; Windows unsupported. |
 | **Verneuil** (Backtrace) | async **WAL/page** snapshot replication to S3; read replicas | No | No (S3) | Read-scaling. |
 | **marmot** | trigger CDC → **NATS** broadcast | No | No (NATS) | Trigger-CDC, not session. |
 | **Bedrock** (Expensify) | **Paxos** over SQL on a server | No | No | Server/consensus lane. |
 | **rqlite** | **Raft** over SQL statements (HTTP) | No | No (cluster) | Eliminated (R-NOSERVER). |
 | **dqlite** | embeddable C **Raft** over SQLite | No | No (cluster) | Eliminated. |
 | **mvSQLite** | SQLite storage on **FoundationDB** | No | No (FDB) | Eliminated. |
-| **libSQL `BEGIN CONCURRENT`** | in-engine **page-level OCC** (WAL) | No | Yes but `-shm` **local-only** | Fails R-FS. |
-| **Turso / limbo** | in-engine **row-level MVCC** (`journal_mode=mvcc`) | No | Yes (in-process) | Closest *optimism* analogue; same-host, in-memory versions, non-standard engine. |
-| **PowerSync / ElectricSQL** | server CDC / Postgres logical replication → client; LWW/CRDT | No | No (sync service) | Server-centric Postgres↔SQLite sync. |
-| **SQLSync** (orbitinghail) | **page-capture VFS** with deterministic **reducer** and **rebase** | **No** (page-level, *not* changeset) | No (coordinator) | Borrows the *rebase* idea conceptually; commonly mis-cited as changeset-based. |
+| **`BEGIN CONCURRENT`** (SQLite `begin-concurrent` branch; libSQL) | in-engine **page-level OCC** (WAL or WAL2; COMMIT serialized; `SQLITE_BUSY_SNAPSHOT` on conflict) | No | Yes but `-shm` **local-only** | Fails R-FS; not in the SQLite release. libSQL now directs new features to Turso Database. |
+| **SQLite HC-tree** | experimental in-engine **row-level** optimistic locking; leader/follower replication | No | Yes (one OS process) | New `hctree` file header and `-pagemap` sidecar; POSIX only; no recovery from power failure or OS crash. |
+| **Turso Database** (formerly Limbo) | in-engine **row-level MVCC** (`journal_mode = 'mvcc'` and `BEGIN CONCURRENT`) | No | Yes (in-process) | Closest *optimism* analogue; same-host, in-memory versions, new engine (v0.8.3, not yet 1.0). |
+| **PowerSync** | server-side sync of Postgres, MongoDB, MySQL, or SQL Server into client SQLite; writes via an upload queue | No | No (sync service) | Server-centric sync. |
+| **Electric** | read-path Postgres sync engine (HTTP “shapes” into PGlite, TanStack DB, and others); writes go through the application’s API; no CRDT | No | No (sync service) | Not SQLite-centric; different lane. |
+| **Cloudflare Durable Objects and D1** | hosted SQLite: SQLite-backed Durable Objects GA 2025-04-07 (up to 10 GB per object); D1 read replication in public beta since 2025-04-10 | No | No (hosted) | Server-side, single writer per object; a different deployment lane. |
+| **SQLSync** (orbitinghail) | **page-capture VFS** with deterministic **reducer** and **rebase** | **No** (page-level, *not* changeset) | No (coordinator) | Borrows the *rebase* idea conceptually; commonly mis-cited as changeset-based. Low activity (last commit 2025-11-19); the maintainer’s newer Graft (“Alpha quality software”) is a transactional storage engine for lazy, partial replication, exposed as a SQLite extension. |
 
 **What this shows.** The “distributed SQLite” infrastructure tier (LiteFS, Litestream,
 Verneuil, marmot, Bedrock, rqlite, dqlite, mvSQLite) **avoids the session extension
 entirely**: it replicates **WAL/pages** or runs **consensus on a server**. The in-engine
-concurrency tier (libSQL, Turso) achieves multi-writer but only **within one host** and
-(Turso) in a **non-standard engine**. The CRDT/sync tier targets **device/server** sync.
+concurrency tier (`BEGIN CONCURRENT`, HC-tree, Turso) achieves multi-writer but only
+**within one host**, and HC-tree and Turso do so in a **new engine or file format**. The
+CRDT/sync tier targets **device/server** sync.
 The **session/changeset-based** projects all sit in the **mobile/offline-first** corner
 and are app/device-specific.
 Even the closest, SQLiteChangesetSync, **does not resolve conflicts.** No surveyed
@@ -1181,6 +1244,12 @@ patterns used by data-lake formats:
   serializable isolation,” with multiple engine implementations against one spec
   (Iceberg spec). This is the “format and commit protocol, many implementations” framing
   of [What Kind of Artifact This Is](#what-kind-of-artifact-this-is).
+- **DuckLake** (1.0 published April 2026) is a lakehouse format that stores all metadata
+  and its commit protocol in a SQL catalog database (PostgreSQL, MySQL, SQLite, or
+  DuckDB) and offers “concurrent access with ACID transactional guarantees over
+  multi-table operations.”
+  It is the catalog-service branch of the same design space, and it can use a SQLite
+  file as the catalog: the mirror image of fsqlite’s filesystem-only commit.
 
 The one deliberate divergence: Iceberg/Delta increasingly lean on a **catalog service**
 for the atomic put-if-absent (the hard part on object stores); `fsqlite` takes the
@@ -1232,6 +1301,12 @@ The boundary is explicit:
 
 - safety against **raw writers that bypass the protocol** (the cooperative boundary: a
   rogue process writing the tree can corrupt it, as it could any SQLite file);
+- safety against a **malformed envelope from a process with store access**: the
+  `changeset_sha256` check detects accidental corruption, not a buggy or hostile writer,
+  and SQLite’s session module received 2026 memory-safety fixes for corrupt changesets
+  (CVE-2026-50812, a NULL dereference when applying one; CVE-2026-50813, an over-read in
+  the changegroup and concat merge path), so such an envelope can crash a reconciler on
+  SQLite releases that predate those fixes;
 - correctness on a filesystem that **lies** about atomic `mkdir`/`rename`, `mtime`,
   writes, or `fsync` (must be *validated* per environment: see `fsinspect` below);
 - no loss if a user **copies the live store with arbitrary backup software** mid-write
@@ -1259,6 +1334,8 @@ Every remaining row below names the evidence still needed; this is the checklist
 | Backup | backup during writes; `integrity_check`; restore-and-read *(automated ✓)* |
 | URI modes | normal, `immutable=1`, `nolock=1` where supported |
 | Filesystems | APFS, ext4, NTFS, **NFSv4.1/EFS/Filestore**, SMB; consumer sync products are a separate unsupported model until tested |
+| Container filesystems | overlayfs, including directory renames (`EXDEV` for a lower or merged directory unless `redirect_dir` is enabled) and the `volatile` option (omits all sync calls to the upper filesystem); tmpfs (never persists); `fsinspect` fingerprinting of both |
+| Windows publication | fail closed when directory fsync is unavailable (Node’s `fs.fsync` on a directory returns `EPERM`, nodejs/node#4760); rename-over and unlink of a snapshot SQLite holds open |
 | Cross-language | Node writer and Python/Rust/Go readers; later multi-language writers |
 | Path handling | symlinks, spaces, Unicode, Windows drive paths |
 | Dependency policy | frozen lockfile, install-script policy, package cool-off *(alpha ✓)* |
@@ -1282,7 +1359,13 @@ plan:
    explicit side-by-side whole-format upgrades.
 2. **Real shared-filesystem behavior:** multi-host NFS/SMB tests, clock skew, attribute
    caching, lease breaks, monotonic-fence evidence, and expanded `fsinspect`
-   diagnostics.
+   diagnostics. With Linux NFS defaults (`acdirmin` 30 s, `acdirmax` 60 s,
+   `lookupcache=all`), a client may resolve `current` to the previous snapshot for up to
+   a minute after another host’s rename, and for NFSv4 `cto` applies only to directories
+   ([`nfs(5)`](https://man7.org/linux/man-pages/man5/nfs.5.html)). This is a liveness
+   issue, not a safety one, but `retain` must exceed the staleness window and readers
+   must treat `ENOENT` on a collected snapshot as “re-read the pointer.”
+   Container overlayfs and tmpfs need the same capability evidence.
 3. **Windows publication and path portability:** atomic rename-replace under racing
    publishers, URI modes, path edge cases, and a packed package matrix on supported
    architectures.
@@ -1327,6 +1410,9 @@ APSW, `rusqlite`, and SQLSync were also reviewed for cross-language session supp
 mechanism comparison.
 The full citation set is in the [Source Map](#source-map).
 Point-in-time version and maturity facts should be re-verified before relying on them.
+They were last re-checked on 2026-11-08 against release notes, project READMEs,
+`nodejs/node` release-line changelogs and `main` source, and an HTTP check of every
+external link (see the 2026-11 update under Status).
 
 ## References
 
@@ -1360,8 +1446,9 @@ Point-in-time version and maturity facts should be re-verified before relying on
   `WiseLibs/better-sqlite3` `deps/defines.gypi`, SESSION **off**; `lib/`, no changeset
   API; standard on-disk format) ·
   [APSW session (Python)](https://rogerbinns.github.io/apsw/session.html) ·
-  [`rusqlite` `session` feature](https://docs.rs/rusqlite/latest/rusqlite/session/index.html)
-  · [`mattn/go-sqlite3` session request](https://github.com/mattn/go-sqlite3/issues/825)
+  [`rusqlite` `session` feature](https://github.com/rusqlite/rusqlite/blob/master/src/session.rs)
+  (the `session` Cargo feature; `Operation::table_name()`) ·
+  [`mattn/go-sqlite3` session request](https://github.com/mattn/go-sqlite3/issues/825)
 
 **Concurrency / locking mechanisms (background):**
 
@@ -1387,7 +1474,15 @@ Point-in-time version and maturity facts should be re-verified before relying on
   [cr-sqlite (Vlcn)](https://github.com/vlcn-io/cr-sqlite)
 - [libSQL](https://github.com/tursodatabase/libsql) ·
   [Turso `BEGIN CONCURRENT`](https://turso.tech/blog/beyond-the-single-writer-limitation-with-tursos-concurrent-writes)
-  · [Turso Database (pure-Rust rewrite, beta)](https://github.com/tursodatabase/turso)
+  · [Turso Database (pure-Rust rewrite, beta)](https://github.com/tursodatabase/turso) ·
+  [Turso releases](https://github.com/tursodatabase/turso/releases) ·
+  [Turso concurrent writes](https://docs.turso.tech/tursodb/concurrent-writes)
+- SQLite’s own multi-writer work:
+  [`BEGIN CONCURRENT` branch](https://sqlite.org/src/doc/begin-concurrent/doc/begin_concurrent.md)
+  · [HC-tree](https://sqlite.org/hctree/doc/hctree/doc/hctree/index.html)
+- Hosted SQLite:
+  [Durable Objects SQLite GA](https://developers.cloudflare.com/changelog/2025-04-07-sqlite-in-durable-objects-ga)
+  · [D1 release notes](https://developers.cloudflare.com/d1/platform/release-notes/)
 - Changeset-sync prior art:
   [SQLiteChangesetSync](https://github.com/gerdemb/SQLiteChangesetSync) ·
   [sqliteai/sqlite-sync](https://github.com/sqliteai/sqlite-sync) ·
@@ -1405,9 +1500,12 @@ Point-in-time version and maturity facts should be re-verified before relying on
 
 - [APSW session](https://rogerbinns.github.io/apsw/session.html) (table name and
   `Rebaser`) ·
-  [`rusqlite` `session`](https://docs.rs/rusqlite/latest/rusqlite/session/index.html) ·
+  [`rusqlite` `session`](https://github.com/rusqlite/rusqlite/blob/master/src/session.rs)
+  ·
   [`zombiezen.com/go/sqlite` session](https://github.com/zombiezen/go-sqlite/blob/v1.4.2/session.go)
   · [Bun `node:sqlite` Session](https://bun.com/reference/node/sqlite/Session) ·
+  [Bun 1.4 release](https://bun.com/blog/bun-v1.4) ·
+  [Bun Node.js API status](https://bun.com/docs/runtime/nodejs-apis) ·
   [Deno `node:sqlite`](https://docs.deno.com/api/node/sqlite/) ·
   [official `sqlite-wasm`](https://www.npmjs.com/package/@sqlite.org/sqlite-wasm)
 
@@ -1417,13 +1515,23 @@ Point-in-time version and maturity facts should be re-verified before relying on
   3.47.0+) · [threadsafe modes](https://sqlite.org/threadsafe.html) ·
   [shared-cache (obsolete)](https://sqlite.org/sharedcache.html) ·
   [Node `node:sqlite` (current)](https://nodejs.org/api/sqlite.html) ·
-  [Turso v0.5.0 (`journal_mode=mvcc`)](https://turso.tech/blog/turso-0.5.0)
+  [Turso v0.5.0 (`journal_mode=mvcc`)](https://turso.tech/blog/turso-0.5.0) ·
+  [Turso v0.8.x releases](https://github.com/tursodatabase/turso/releases) ·
+  [Node `node:sqlite` release candidate (PR #61262)](https://github.com/nodejs/node/pull/61262)
+  ·
+  [Node close-during-callback fix (PR #64743)](https://github.com/nodejs/node/pull/64743)
+  · [`better-sqlite3` releases](https://github.com/WiseLibs/better-sqlite3/releases) ·
+  [Litestream releases](https://github.com/benbjohnson/litestream/releases)
 
 **Filesystem semantics and distributed locking (Findings B, D):**
 
 - [NFSv4 RFC 7530](https://datatracker.ietf.org/doc/html/rfc7530) ·
   [NFSv4.1 RFC 8881](https://www.rfc-editor.org/info/rfc8881/) ·
-  [LWN: O_EXCL over NFS](https://lwn.net/Articles/251004/) ·
+  [`open(2)`: `O_EXCL` on NFS](https://man7.org/linux/man-pages/man2/open.2.html) ·
+  [`nfs(5)`](https://man7.org/linux/man-pages/man5/nfs.5.html) ·
+  [overlayfs](https://docs.kernel.org/filesystems/overlayfs.html) ·
+  [Zotero: cloud storage folders](https://www.zotero.org/support/kb/data_directory_in_cloud_storage_folder)
+  ·
   [Kleppmann: how to do distributed locking (fencing tokens)](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
 
 **Isolation theory (Finding K):**
@@ -1431,16 +1539,18 @@ Point-in-time version and maturity facts should be re-verified before relying on
 - Kung and Robinson, *On Optimistic Methods for Concurrency Control* (ACM TODS, 1981) ·
   Berenson et al., *A Critique of ANSI SQL Isolation Levels* (SIGMOD 1995) · Cahill,
   Röhm and Fekete, *Serializable Isolation for Snapshot Databases*
-  ([SIGMOD 2008](https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F13/handouts/papers/p729-cahill.pdf))
+  ([SIGMOD 2008](https://doi.org/10.1145/1376616.1376690);
+  [open copy](https://courses.cs.washington.edu/courses/cse444/08au/544M/READING-LIST/fekete-sigmod2008.pdf))
   · Fekete et al., *Making Snapshot Isolation Serializable* (ACM TODS, 2005)
 
 **Other workarounds surveyed (Related Work):**
 
 - [SQLSync](https://github.com/orbitinghail/sqlsync) (page-VFS and reducer) ·
+  [Graft](https://github.com/orbitinghail/graft) ·
   [Verneuil](https://github.com/backtrace-labs/verneuil) ·
   [marmot](https://github.com/maxpert/marmot) ·
   [PowerSync](https://docs.powersync.com/architecture/powersync-protocol) ·
-  [ElectricSQL](https://electric-sql.com/) ·
+  [Electric](https://electric.ax/) · [DuckLake](https://ducklake.select/) ·
   [Tencent WCDB](https://github.com/Tencent/wcdb)
 
 **Implementation evidence:**

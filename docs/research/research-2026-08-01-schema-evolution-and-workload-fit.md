@@ -1,6 +1,6 @@
 # fsqlite Schema Evolution and Workload Fit
 
-**Date:** 2026-08-01
+**Date:** 2026-08-01 (last updated 2026-11-08)
 
 **Status:** Current design assessment for the `0.1.0` alpha
 
@@ -267,6 +267,9 @@ For a real schema change, the available mitigation is a planned, quiescent repla
    Copy or transform data from the pinned source, using SQLite’s directly supported
    `ALTER TABLE` operations or its documented create-copy-drop-rename procedure on a
    working copy where appropriate.
+   *2026-11 update:* SQLite 3.53.0 (Node 22.23.4 and later, 24.16 and later, and 26.1
+   and later) extends the direct operations to adding and dropping `NOT NULL` and
+   `CHECK` constraints; create-copy-drop-rename remains the general procedure.
 5. Check SQLite integrity, foreign keys, caller constraints, and application invariants,
    then validate the complete fsqlite destination.
 6. Switch every process to the destination and prevent old binaries from continuing to
@@ -487,6 +490,11 @@ The following changes reduce cost without weakening the documented contract:
   local database and writers can queue.
   This removes fsqlite’s full-copy publication cost and restores ordinary SQLite
   transaction semantics.
+  *2026-11 update:* use SQLite 3.51.3 or later for WAL (Node 22.22.3 and later, 24.15.0
+  and later, or any 26). Earlier releases back to 3.7.0 have the
+  [WAL-reset bug](https://sqlite.org/wal.html), a rare corruption race between a
+  checkpoint and a committing writer that needs two or more connections.
+  fsqlite never runs WAL on store files.
 - Use a client/server database when many writers need low-latency commits, data access
   crosses a network, or serializable cross-row invariants dominate the workload.
 
