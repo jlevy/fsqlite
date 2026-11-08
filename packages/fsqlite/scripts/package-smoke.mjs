@@ -108,6 +108,20 @@ try {
     )
     process.stdout.write(run('node', ['use-lib.mjs'], { cwd: proj }))
 
+    // The `default` export condition also serves CommonJS consumers through require(esm).
+    writeFileSync(
+      join(proj, 'use-require.cjs'),
+      [
+        "const assert = require('node:assert/strict')",
+        "const { SnapshotStore, DirectStore, inspect } = require('fsqlite')",
+        "assert.equal(typeof SnapshotStore, 'function')",
+        "assert.equal(typeof DirectStore, 'function')",
+        "assert.equal(typeof inspect, 'function')",
+        "console.log('  library require OK')",
+      ].join('\n'),
+    )
+    process.stdout.write(run('node', ['use-require.cjs'], { cwd: proj }))
+
     // Exercise the installed CLI to verify its bin entry and shebang.
     const bin = join(proj, 'node_modules', '.bin', 'fsqlite')
     assert.match(run(bin, ['--help'], { cwd: proj }), /usage: fsqlite/, 'CLI --help')
