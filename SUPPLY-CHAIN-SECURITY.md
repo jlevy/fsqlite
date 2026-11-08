@@ -25,6 +25,25 @@ Review this exception by 2026-12-08, or earlier when an ESLint release depends o
 patched `minimatch`. Remove the ignore once the resolved graph contains no affected
 version.
 
+## Trust Policy and Build Scripts
+
+`pnpm-workspace.yaml` sets `trustPolicy: no-downgrade`, so pnpm rejects a release whose
+provenance or trusted-publisher evidence is weaker than an earlier release of the same
+package, both when resolving and when re-verifying the committed lockfile.
+Prefer the previous release over an exclusion.
+`strictDepBuilds: true` makes any dependency build script that `allowBuilds` does not
+decide fail the install; `esbuild` and `lefthook` are the only packages in the graph
+with install scripts, and both are denied because their platform binaries ship as
+optional dependencies.
+
+One exclusion is listed, and it needs maintainer sign-off before this policy change
+lands: `trustPolicyExclude` admits exactly `undici-types@6.21.0`. Every `@types/node`
+22.x release requires `undici-types ~6.21.0`, and 6.21.0 (2024-11-13) was published
+without provenance after earlier releases carried it.
+It is a types-only package that was already in the lockfile before the policy was
+enabled, so the exclusion admits nothing new.
+Review it when `@types/node` leaves the 22 line, and remove it then.
+
 ## Held Upgrades
 
 These newer releases clear the cool-off but are deliberately not taken:

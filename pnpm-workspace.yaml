@@ -6,6 +6,14 @@ packages:
 engineStrict: true
 minimumReleaseAge: 20160
 blockExoticSubdeps: true
+# Reject a release whose provenance or trusted-publisher evidence is weaker than an
+# earlier release of the same package. See SUPPLY-CHAIN-SECURITY.md before adding an
+# exclusion.
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  # Pending maintainer sign-off; see SUPPLY-CHAIN-SECURITY.md.
+  - undici-types@6.21.0
+strictDepBuilds: true
 allowBuilds:
   # Both ship their platform binary as an optional dependency, so neither needs its
   # install script. esbuild arrives through tsx (tryscript) and tsdown.
