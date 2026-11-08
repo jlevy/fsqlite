@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { backupDatabase, capabilities } from '../src/index.ts'
 import { open, openBuild, openReadonly, integrityCheck } from '../src/driver.ts'
 
@@ -54,6 +55,31 @@ test('a reconcile build skips SQLite syncs and runs no foreign-key actions', asy
       )
     } finally {
       db.close()
+    }
+  })
+})
+
+test('every connection fsqlite opens is defensive wherever node:sqlite has the flag', async () => {
+  // Node 24.12 added the option with enableDefensive(); Node 22 has neither.
+  const defensiveExists =
+    typeof (DatabaseSync.prototype as unknown as Record<string, unknown>).enableDefensive ===
+    'function'
+  await withTmp((dir) => {
+    const path = join(dir, 'probe.sqlite')
+    for (const [name, connect] of [
+      ['open', open],
+      ['openBuild', openBuild],
+      ['openReadonly', openReadonly],
+    ] as const) {
+      const db = connect(path)
+      try {
+        // SQLite's defensive flag silently ignores this pragma.
+        db.exec('PRAGMA writable_schema = ON')
+        const writable = db.prepare('PRAGMA writable_schema').get()?.writable_schema
+        assert.equal(writable, defensiveExists ? 0 : 1, `${name} defensive=${defensiveExists}`)
+      } finally {
+        db.close()
+      }
     }
   })
 })

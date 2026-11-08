@@ -16,6 +16,7 @@
 // confined here.
 
 import { DatabaseSync, constants, backup } from 'node:sqlite'
+import type { DatabaseSyncOptions } from 'node:sqlite'
 import type { WorkFn, Capabilities } from './types.ts'
 
 export { constants }
@@ -24,9 +25,37 @@ export type DB = DatabaseSync
 /** Bounded wait for a transient SQLite file lock held by another local connection. */
 const WRITER_BUSY_TIMEOUT_MS = 5_000
 
+/**
+ * Whether this node:sqlite has SQLite's defensive flag. Node 24.12 added the `defensive`
+ * option together with `enableDefensive()`, and 24.14 turned it on by default; Node 22 has
+ * neither, and its constructor ignores option names it does not know.
+ */
+const HAS_DEFENSIVE_OPTION =
+  typeof (DatabaseSync.prototype as unknown as Record<string, unknown>).enableDefensive ===
+  'function'
+
+/** `DatabaseSyncOptions` plus the `defensive` flag that `@types/node` 22 does not declare. */
+interface DefensiveOptions extends DatabaseSyncOptions {
+  defensive: true
+}
+
+/**
+ * Open every fsqlite connection through one place, with SQLite's defensive flag pinned on
+ * where the binding has it, so `writable_schema`, `journal_mode = OFF`, `schema_version`
+ * writes, and direct shadow-table writes are blocked the same way on every Node line that
+ * can block them, regardless of that line's default.
+ */
+export function connect(path: string, options: DatabaseSyncOptions = {}): DatabaseSync {
+  if (!HAS_DEFENSIVE_OPTION) {
+    return new DatabaseSync(path, options)
+  }
+  const pinned: DefensiveOptions = { ...options, defensive: true }
+  return new DatabaseSync(path, pinned)
+}
+
 /** Open a read-write database with fsqlite's connection settings plus `pragmas`. */
 function openWritable(path: string, pragmas: string): DatabaseSync {
-  const db = new DatabaseSync(path)
+  const db = connect(path)
   try {
     db.exec(`
       PRAGMA journal_mode = DELETE;
@@ -72,7 +101,7 @@ export function openBuild(path: string): DatabaseSync {
 
 /** Open an immutable published snapshot read-only. Needs no session support. */
 export function openReadonly(path: string): DatabaseSync {
-  return new DatabaseSync(path, { readOnly: true })
+  return connect(path, { readOnly: true })
 }
 
 /**
@@ -246,7 +275,7 @@ export function capabilities(): Capabilities {
   let session = false
   let probe: DatabaseSync | undefined
   try {
-    probe = new DatabaseSync(':memory:')
+    probe = connect(':memory:')
     probe.exec('CREATE TABLE t(x INTEGER PRIMARY KEY)')
     const s = probe.createSession()
     probe.exec('INSERT INTO t VALUES (1)')

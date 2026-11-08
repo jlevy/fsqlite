@@ -572,6 +572,13 @@ Conforming participants must:
 The reference implementation protects `applied_tx` and `fsqlite_meta` during callbacks,
 rejects persistent or temporary callback DDL and identity changes, and reasserts
 candidate identity before publication.
+It also opens every connection with SQLite’s defensive flag pinned on wherever
+`node:sqlite` offers it (the `defensive` option, Node 24.12 and later, on by default
+from 24.14), so `PRAGMA writable_schema`, `journal_mode = OFF`, `schema_version` writes,
+and direct shadow-table writes are refused identically on every such line whatever its
+default.
+Node 22 has no such option; there those statements stay available to a callback,
+and the checks above are the only guard.
 These checks prevent accidental protocol damage.
 They are not a security boundary against hostile code in the same process or an external
 writer with file access.

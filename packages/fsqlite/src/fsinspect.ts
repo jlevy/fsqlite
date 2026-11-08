@@ -23,7 +23,7 @@ import {
   realpathSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { connect } from './driver.ts'
 
 /** Network/remote/sync filesystem types where SQLite's own locking is unreliable. */
 const NETWORK_FS = new Set([
@@ -320,7 +320,7 @@ function probeFsyncDir(scratch: string): ProbeResult {
 function probeWalViable(scratch: string): ProbeResult {
   const dbPath = join(scratch, 'wal-probe.sqlite')
   try {
-    const db = new DatabaseSync(dbPath)
+    const db = connect(dbPath)
     const mode = db.prepare('PRAGMA journal_mode=WAL').get() as Record<string, unknown> | undefined
     const journalMode = (mode?.journal_mode ?? Object.values(mode ?? {})[0]) as string
     db.exec('CREATE TABLE t(x INTEGER PRIMARY KEY)')
