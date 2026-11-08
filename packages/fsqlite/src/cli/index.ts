@@ -272,8 +272,16 @@ function main(): void {
       if (!Number.isInteger(retain) || retain < 0) {
         fail('--retain must be a non-negative integer')
       }
-      const r = store.gc({ retain })
-      console.log(JSON.stringify(r))
+      try {
+        console.log(JSON.stringify(store.gc({ retain })))
+      } catch (error) {
+        // gc fails closed on a store that does not validate. Report the refusal with the
+        // validate exit code (3 invalid or corrupt, 4 unsupported); other failures exit 1.
+        console.error(`fsqlite: ${error instanceof Error ? error.message : String(error)}`)
+        const code = exitCodeForState(store.validate().state)
+        process.exitCode = code === 3 || code === 4 ? code : 1
+        return
+      }
       break
     }
     case 'seal': {

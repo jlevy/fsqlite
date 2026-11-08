@@ -543,6 +543,17 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - A conforming `seal` or equivalent export that reads a selected snapshot while GC may
   run MUST hold a read lease for that version until the standalone artifact is complete
   and validated.
+- **G0.** GC is destructive maintenance and MUST fail closed.
+  It MUST reject invalid parameters before touching the store (Node: `retain` a
+  non-negative integer; `leaseStaleMs` and `transientStaleMs` positive integers, so a
+  zero or negative window cannot turn every live lease or fresh transient into debris).
+  It MUST validate the store (§11) and refuse unless the head passed identity and
+  integrity validation (`sealed`, `live`, or `in-flight-capture`, whose tells are
+  routine on a live store and are never touched by GC): with a corrupt head, the older
+  snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
+  the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
+  `current` under the lock; if `current` moved backward since validation, repair
+  re-pointed the store and GC MUST refuse.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
 - **G2.** GC MUST re-scan the lease directory **immediately before each individual
@@ -753,7 +764,7 @@ A reconciler MUST NOT apply an envelope outside the deterministic order, MUST NO
 publish a build whose integrity gate failed, and MUST NOT mutate a published snapshot.
 
 **Operator tool**: MUST implement `validate` per §11 before any destructive operation;
-`repair` MUST follow §11’s rules; GC MUST follow G1-G3.
+`repair` MUST follow §11’s rules; GC MUST follow G0-G3.
 
 **Conformance fixtures** (post-alpha): a directory of sealed, live, in-flight
 (orphan-ahead), corrupt-pointer, corrupt-head, and quarantined-envelope golden stores,

@@ -3,7 +3,7 @@
 // (2 in-flight, 3 corrupt) can be exercised from the shell. The `plainfile`/`corrupt-sqlite`
 // modes instead write a plain SQLite file (no fsqlite layer) for the stats/doctor goldens.
 //
-//   fsqlite-seed <dir>  [orphan|corrupt]
+//   fsqlite-seed <dir>  [orphan|corrupt|corrupt-head]
 //   fsqlite-seed <file> [plainfile|corrupt-sqlite]
 
 import { copyFileSync, writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
@@ -46,6 +46,26 @@ if (fault === 'plainfile' || fault === 'corrupt-sqlite') {
 const store = new SnapshotStore(dir, STORE_OPTS).init()
 store.write('seed', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
 store.reconcile() // sealed v1
+
+if (fault === 'corrupt-head') {
+  // A head with a damaged page: identity rows stay readable but integrity_check fails, so
+  // the clean v1 is the only recovery point and gc must refuse to collect it.
+  store.write('seed', (db) => {
+    const ins = db.prepare('INSERT INTO artifacts VALUES (?,?,?)')
+    for (let i = 0; i < 400; i++) {
+      ins.run(`b${i}`, `t${i}`.repeat(8), 't')
+    }
+  })
+  store.reconcile() // v2
+  const fd = openSync(store.snapshotPath(2), 'r+')
+  try {
+    writeSync(fd, Buffer.alloc(2048, 0xff), 0, 2048, 4096)
+  } finally {
+    closeSync(fd)
+  }
+  console.log(`seeded ${dir} (corrupt head v2)`)
+  process.exit(0)
+}
 
 if (fault === 'orphan') {
   // An orphan snapshot ahead of `current` so in-flight-capture so validate exit 2.

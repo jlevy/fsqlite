@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **139 `node:test` cases**, **24 CLI golden cases**, `tsc` clean,
+Current status: **143 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -46,7 +46,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
 | `fencing.test.ts` | `C3`, `C5` | Lease acquisition, stale break, token fencing, heartbeat loss, and owner-write cleanup |
 | `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
-| `gc-lease.test.ts` | `C4`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep |
+| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation |
 | `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, and transient cleanup |
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
@@ -95,7 +95,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 139` / `# fail 0`; goldens `24 passed`; build
+- **Expect:** node:test reports `# pass 143` / `# fail 0`; goldens `27 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.

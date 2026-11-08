@@ -25,6 +25,7 @@ import type {
   WorkFn,
   ReadFn,
   ValidateResult,
+  GcOptions,
   GcResult,
   ReadLease,
   RepairResult,
@@ -61,7 +62,7 @@ export class DirectStore {
   seal(dest: string): string {
     return this.base.seal(dest)
   }
-  gc(opts?: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number }): GcResult {
+  gc(opts?: GcOptions): GcResult {
     return this.base.gc(opts)
   }
   repair(opts?: { lockOpts?: LockOptions }): RepairResult {

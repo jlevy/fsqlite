@@ -61,8 +61,10 @@ import type {
   ValidateResult,
   ReconcileResult,
   WriteWithRetryResult,
+  GcOptions,
   GcResult,
   RepairResult,
+  StoreValidationState,
   ReadLease,
 } from './types.ts'
 
@@ -95,6 +97,26 @@ function validateSchemaVersion(value: unknown = 1): number {
   }
   return value
 }
+
+/** Throw a TypeError unless `value` is a safe integer of at least `min`. */
+function requireSafeInteger(name: string, value: unknown, min: number): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min) {
+    throw new TypeError(`${name} must be a safe integer >= ${min}; received ${String(value)}`)
+  }
+  return value
+}
+
+/**
+ * Store states in which gc may delete: the head passed identity and full integrity
+ * validation. `in-flight-capture` qualifies because its tells (fresh transients, a held
+ * lock, uncommitted envelopes, an orphan ahead of `current`) are routine on a live store
+ * and gc never touches them; a corrupt or unrecognized store may need every snapshot.
+ */
+const GC_SAFE_STATES: ReadonlySet<StoreValidationState> = new Set([
+  'sealed',
+  'live',
+  'in-flight-capture',
+])
 
 // Transient (never-store-state) entries, per fsql-format-spec.md §2: reconcile builds,
 // DirectStore builds, init's snapshot-0 temp, writer working copies, and lock directories
@@ -857,14 +879,59 @@ export class SnapshotStore {
    * read-lease (leases past `leaseStaleMs` are treated as abandoned). Also sweeps *stale*
    * transients but never fresh ones, which may be a live reconcile or DirectStore build in
    * another process (spec G3); `transientStaleMs` gates that.
+   *
+   * gc is destructive maintenance, so it fails closed (spec G0): invalid options throw a
+   * TypeError, a store that does not validate with an integrity-clean head is refused (its
+   * older snapshots may be the only recovery points repair has), and every deletion runs
+   * under the publish lock with a fenced token, so gc never interleaves with repair.
    */
   gc({
     retain = DEFAULT_RETAINED_SNAPSHOTS,
     leaseStaleMs = DEFAULT_LEASE_STALE_MS,
     transientStaleMs = DEFAULT_TRANSIENT_STALE_MS,
-  }: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number } = {}): GcResult {
-    this.assertStoreIdentity()
+    lockOpts = {},
+  }: GcOptions = {}): GcResult {
+    requireSafeInteger('gc option retain', retain, 0)
+    requireSafeInteger('gc option leaseStaleMs', leaseStaleMs, 1)
+    requireSafeInteger('gc option transientStaleMs', transientStaleMs, 1)
+    // Validate outside the lock: the integrity check reads the whole head and must not
+    // stall publishers. A recognition failure is refused before the lock dir is created.
+    const health = this.validate()
+    if (!GC_SAFE_STATES.has(health.state) || health.current === undefined) {
+      throw new Error(
+        `gc refused: store is ${health.state}: ${health.issues.join('; ')}; ` +
+          'run validate and repair before collecting snapshots',
+      )
+    }
+    const validated = health.current
+    return withLock(
+      this.publishLock,
+      (_token, lease) => this._gcLocked(lease, validated, retain, leaseStaleMs, transientStaleMs),
+      lockOpts,
+    )
+  }
+
+  private _gcLocked(
+    lease: LockLease,
+    validated: number,
+    retain: number,
+    leaseStaleMs: number,
+    transientStaleMs: number,
+  ): GcResult {
+    const fence = (): void => {
+      if (!lease.fence()) {
+        throw new Error('gc lost ownership of publish.lock before deletion')
+      }
+    }
+    fence()
     const cur = this.currentVersion()
+    // A forward move is an ordinary integrity-gated publication. A backward move means
+    // repair re-pointed the store after validation, so the verdict no longer applies.
+    if (cur < validated) {
+      throw new Error(
+        `gc refused: current moved from ${validated} back to ${cur} after validation; run gc again`,
+      )
+    }
     const leased = this._activeLeasedVersions(leaseStaleMs)
     const versions = this.snapshotVersions()
     const keepFloor = cur - retain
@@ -879,6 +946,7 @@ export class SnapshotStore {
       if (this._activeLeasedVersions(leaseStaleMs).has(v)) {
         continue
       }
+      fence()
       try {
         rmSync(this.snapshotPath(v), { force: true })
         removed++
@@ -907,6 +975,7 @@ export class SnapshotStore {
         }
       }
     }
+    fence()
     sweepStaleTransients(this.dir)
     sweepStaleTransients(this.snapDir)
     sweepStaleTransients(this.txPending)
