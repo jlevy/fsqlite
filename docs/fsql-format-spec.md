@@ -634,8 +634,12 @@ File and directory fsync barriers in this table are required, not best effort.
 If opening or fsyncing a required directory fails, initialization or publication MUST
 fail loudly and MUST NOT report a power-loss-durable success.
 A capability probe used to declare a target safe MUST include directory fsync.
-A platform or filesystem without that capability is unsupported for `f1.0` mutation
-rather than silently downgraded.
+A file barrier MUST be issued through a handle that can flush on the platform: Windows
+`FlushFileBuffers` fails on a read-only handle, so the Node implementation opens every
+file it syncs read-write on every platform (POSIX `fsync` flushes the same either way).
+Directory barriers open the directory read-only and are POSIX-only (O1). A platform or
+filesystem without that capability is unsupported for `f1.0` mutation rather than
+silently downgraded.
 
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss

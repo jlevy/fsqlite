@@ -21,9 +21,16 @@ export function setAfterFsyncDirForTest(hook: AfterFsyncDirHook | null): void {
   afterFsyncDirHook = hook
 }
 
-/** fsync a file's contents to disk so a following rename is crash-durable. */
+/**
+ * fsync a regular file's contents to disk so a following rename is crash-durable.
+ *
+ * The file is opened read-write ('r+', which never truncates or creates). POSIX fsync
+ * flushes the same through any descriptor, but Windows `FlushFileBuffers`, which Node's
+ * fsync calls there, fails on a read-only handle. Every file fsqlite syncs is one it
+ * created, so it is writable. Directories go through {@link fsyncDir}.
+ */
 export function fsyncPath(p: string): void {
-  const fd = openSync(p, 'r')
+  const fd = openSync(p, 'r+')
   try {
     fsyncSync(fd)
   } finally {
@@ -32,7 +39,10 @@ export function fsyncPath(p: string): void {
   afterFsyncPathHook?.(p)
 }
 
-/** fsync a directory so a rename into it survives power loss. Fails if unsupported. */
+/**
+ * fsync a directory so a rename into it survives power loss. Fails if unsupported. A
+ * directory can only be opened read-only, and directory fsync is POSIX-only (spec O1).
+ */
 export function fsyncDir(p: string): void {
   const fd = openSync(p, 'r')
   try {
