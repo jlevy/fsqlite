@@ -20,7 +20,6 @@ test('the writer guard fails loudly when the binding lacks session support', () 
       session: false,
       applyChangeset: true,
       backup: true,
-      loadExtension: false,
       rebaser: false,
     }))
   }, /require the SQLite session extension/)

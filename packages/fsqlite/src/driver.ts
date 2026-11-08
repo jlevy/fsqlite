@@ -261,7 +261,6 @@ export function capabilities(): Capabilities {
     session,
     applyChangeset: typeof proto.applyChangeset === 'function',
     backup: typeof backup === 'function',
-    loadExtension: typeof proto.loadExtension === 'function',
     // node:sqlite has no rebaser binding; only APSW / sqlite-wasm expose it.
     rebaser: false,
   }

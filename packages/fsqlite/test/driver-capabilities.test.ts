@@ -31,6 +31,8 @@ test('capabilities() reports session support on node:sqlite', () => {
   assert.equal(caps.applyChangeset, true)
   assert.equal(caps.backup, true)
   assert.equal(caps.rebaser, false, 'node:sqlite exposes no rebaser binding')
+  // fsqlite opens no connection that may load extensions, so it reports no such capability.
+  assert.deepEqual(Object.keys(caps).sort(), ['applyChangeset', 'backup', 'rebaser', 'session'])
 })
 
 test('a reconcile build skips SQLite syncs and runs no foreign-key actions', async () => {

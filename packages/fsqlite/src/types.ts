@@ -136,11 +136,14 @@ export interface ReadLease {
   release: () => void
 }
 
-/** What the current SQLite binding can do (capability detection, research G2). */
+/**
+ * What the current SQLite binding can do (capability detection, research G2). Extension
+ * loading is deliberately absent: fsqlite opens every connection without `allowExtension`,
+ * so neither fsqlite nor a callback can load one, whatever the binding supports.
+ */
 export interface Capabilities {
   session: boolean
   applyChangeset: boolean
   backup: boolean
-  loadExtension: boolean
   rebaser: boolean
 }
