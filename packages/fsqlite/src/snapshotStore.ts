@@ -39,6 +39,8 @@ import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
 import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
+import { commitSnapshot } from './publication.ts'
+import type { CommitOutcome } from './publication.ts'
 import { isLockFresh, withLock } from './lock.ts'
 import {
   createStoreMarker,
@@ -767,23 +769,30 @@ export class SnapshotStore {
       fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
       const result = withLock(
         this.publishLock,
-        (_token, lease): 'retry' | 'published' => {
+        (_token, lease): CommitOutcome => {
           if (this.currentVersion() !== base) {
             return 'retry'
           } // someone published while we built
           if (!lease.fence()) {
             return 'retry'
           } // lost ownership (stale break): fencing
-          renameSync(tmp, this.snapshotPath(next)) // overwrites any orphan from a crashed publish
-          fsyncDir(this.snapDir)
-          if (crashAt === 'after-snapshot') {
-            throw new Error('CRASH after-snapshot')
-          }
-          if (this.currentVersion() !== base || !lease.fence()) {
-            return 'retry'
-          } // a holder that lost its lease must not publish the pointer
-          publishPointer(this.dir, this.currentPath, next)
-          return 'published'
+          return commitSnapshot({
+            storeDir: this.dir,
+            currentPath: this.currentPath,
+            snapDir: this.snapDir,
+            build: tmp,
+            dest: this.snapshotPath(next),
+            base,
+            next,
+            readCurrent: () => this.currentVersion(),
+            lease,
+            afterLink:
+              crashAt === 'after-snapshot'
+                ? () => {
+                    throw new Error('CRASH after-snapshot')
+                  }
+                : undefined,
+          })
         },
         lockOpts,
       )

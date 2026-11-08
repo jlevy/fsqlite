@@ -360,12 +360,14 @@ export function inspect(dir: string): InspectReport {
       fsyncDir: probeFsyncDir(scratch),
       walViable: probeWalViable(scratch),
     }
-    // fsqlite needs the coordination and durability primitives but not WAL or hard links.
+    // fsqlite needs the coordination and durability primitives but not WAL. Snapshot
+    // publication commits by hard link, which refuses to replace an existing entry.
     const required = [
       'mkdirAtomic',
       'renameReplace',
       'exclusiveCreate',
       'closeToOpen',
+      'hardlink',
       'fsyncDir',
     ] as const
     const missing = required.filter((k) => !probes[k].ok)

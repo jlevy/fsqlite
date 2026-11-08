@@ -136,7 +136,7 @@ of the promise.
 | --- | --- | --- | --- | --- |
 | `C1` | Published data stays portable and tool-readable. | Every head is a complete SQLite file. Readers need no fsqlite extension. | The live store is a directory, not one mutable database file. | Spec S1-S6; `portability.test.ts`; QA B4 |
 | `C2` | Ordinary operation needs no server or background service. | Processes coordinate through immutable files, envelopes, atomic rename, and a `mkdir` lease. | Applications schedule reconciliation themselves. | Spec F1-F6 and L1-L5; multiprocess suites |
-| `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, visibility after close, and durable fsync ordering. Publication fails if a required directory fsync is unavailable. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
+| `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, no-replace hard links, visibility after close, and durable fsync ordering. Publication fails if a required directory fsync is unavailable. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
 | `C4` | Readers do not take the publish lease, and independent writers can capture work concurrently. | Readers open immutable heads. `SnapshotStore` writers create unique transaction envelopes without the publish lease. | Cross-writer visibility occurs only after reconcile. | Spec W1-W4 and reader role; `concurrent.test.ts` |
 | `C5` | A crash cannot destroy a previously published state. | Immutable snapshots, durable snapshot-before-pointer ordering, atomic pointer replacement, fencing, OCC on `current`, and the in-snapshot ledger define one commit point. | Accepted envelopes are not power-loss durable until publication. Arbitrary recursive copies of a live store are outside the guarantee. | Spec R1, P1-P3, F5, and section 10; crash, kill, and fencing suites |
 | `C6` | Detectable inconsistencies fail closed and repair never guesses. | Recognition separates absent, invalid, unsupported, and corrupt stores. Identity, digests, integrity, foreign keys, reserved tables, and schema compatibility are checked before destructive work or publication. | Undetectable hardware or protocol-bypassing corruption remains possible. Repair needs a verified clean recovery point. | Spec R2 and section 11; hardening, store-format, and repair suites |
@@ -282,8 +282,9 @@ Real cross-host behavior is still a pre-1.0 evidence gate.
 
 The exact coordination requirements and measured mount capabilities select the strategy
 for a network drive.
-Both require correct exclusive directory creation, atomic rename-replace, close-to-open
-visibility, and file and directory fsync behavior from the exact mount.
+Both require correct exclusive directory creation, atomic rename-replace, no-replace
+hard links, close-to-open visibility, and file and directory fsync behavior from the
+exact mount.
 
 After those capabilities have real multi-host evidence:
 
@@ -438,9 +439,10 @@ does not remove storage-bandwidth, capacity, or serialized-publication limits.
 ### Filesystems
 
 The protocol requires correct exclusive directory creation, atomic rename-replace,
-close-to-open visibility, and fsync behavior.
-`fsinspect` probes these properties from one host, and local multiprocess tests simulate
-network-shaped visibility.
+no-replace hard links for snapshot commits, close-to-open visibility, and fsync
+behavior.
+`fsinspect` probes these properties from one host, and local multiprocess tests
+simulate network-shaped visibility.
 Directory fsync is part of the safe verdict and publication fails closed when it is
 unavailable. Neither is a substitute for the pending two-host NFS/SMB gate.
 The alpha supplies a protocol design, a reference implementation, and local evidence;

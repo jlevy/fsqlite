@@ -10,11 +10,12 @@
 // Both strategies produce the same snapshots and current pointer, so readers and writers
 // can use either strategy without changing the store format.
 
-import { copyFileSync, rmSync, renameSync } from 'node:fs'
+import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
+import { fsyncPath } from './fsutil.ts'
+import { commitSnapshot } from './publication.ts'
 import { withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
@@ -139,13 +140,18 @@ export class DirectStore {
           if (this.base.currentVersion() !== base || !lease.fence()) {
             return abandon()
           }
-          renameSync(tmp, this.base.snapshotPath(next))
-          fsyncDir(this.base.snapDir)
-          if (this.base.currentVersion() !== base || !lease.fence()) {
-            return 'retry'
-          }
-          publishPointer(this.base.dir, this.base.currentPath, next)
-          return next
+          const outcome = commitSnapshot({
+            storeDir: this.base.dir,
+            currentPath: this.base.currentPath,
+            snapDir: this.base.snapDir,
+            build: tmp,
+            dest: this.base.snapshotPath(next),
+            base,
+            next,
+            readCurrent: () => this.base.currentVersion(),
+            lease,
+          })
+          return outcome === 'published' ? next : abandon()
         },
         lockOpts,
       )

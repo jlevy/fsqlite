@@ -339,9 +339,28 @@ Protocol:
      and retry from F1 (**optimistic concurrency**).
    - **F5b.** Re-validate lock ownership by token (**fencing**, §7); on loss, discard
      and retry.
-   - **F5c.** fsync the build → `rename()` it to `snapshots/<base+1>...` (the rename
-     MUST replace any orphan left at that name by a previously crashed publish) → fsync
-     the directory → swap the pointer per P2/P3.
+   - **F5c.** fsync the build (this MAY happen before the lock is taken), then **commit
+     it without replacing** to `snapshots/<base+1>.fsqlite.sqlite`: touch the build’s
+     mtime, record its identity (device, inode, size, and mtime), hard-link it to the
+     snapshot name (`link(2)`, which fails with `EEXIST` rather than replace), remove
+     the build name, and fsync `snapshots/`. A replacing `rename()` MUST NOT be used for
+     this step, because an overlapping holder (L5) may already have committed or
+     published that name.
+     If the name exists: re-read `current`, and if it is ≥ base+1 a peer published
+     first, so discard and retry from F1. Otherwise the entry is another holder’s commit
+     in flight or an orphan of a crashed one.
+     An entry whose mtime is older than the lock’s stale window (L2) is an orphan:
+     remove it and link again.
+     A younger entry MUST NOT be removed; wait, re-checking `current` and fencing, until
+     it is published, removed, or stale, and fail loudly at the acquisition timeout.
+     Immediately before the pointer swap, re-check `current` == base, fencing (L3), and
+     that the snapshot name still has the recorded identity.
+     On any mismatch, remove the entry only while it is still this holder’s build and
+     `current` < base+1, then retry.
+     Swap the pointer per P2/P3. Then re-check the identity once more: if the name no
+     longer holds this build, `current` names another holder’s snapshot, so the attempt
+     published nothing of its own and MUST retry rather than report success.
+     A conforming target filesystem MUST support hard links with these semantics.
 6. **F6.** After publish (outside the lock), move applied and archivable envelopes to
    `tx/applied/` and quarantined ones to `tx/quarantine/`, writing each quarantined
    envelope a `QUARANTINE` file containing the reason.
@@ -510,10 +529,15 @@ snapshot to a `.direct-*` transient → mutate it in one transaction → reasser
 callback boundary from W3 and the candidate’s application ID, reserved tables, marker
 identity, schema version, and schema hash → integrity-gate (`quick_check` and
 `foreign_key_check`) → fsync → re-check `current` == base (OCC) and lock token (fencing)
-→ rename to `snapshots/<base+1>` → fsync the snapshot directory → re-check OCC and
-fencing → pointer swap (P2/P3) → release.
-On an OCC or fencing failure, discard or leave the unpublished snapshot as a recoverable
-orphan, then retry.
+→ commit to `snapshots/<base+1>` without replacing, with the identity checks and pointer
+swap of F5c → release.
+On an OCC, fencing, or identity failure, discard the build, removing a committed entry
+only while it is still this writer’s build and ahead of `current`, then retry.
+A retry MUST NOT leave its committed build behind: if the pointer were later torn,
+repair could select that orphan as the newest clean snapshot and expose a write whose
+caller saw it fail.
+The post-swap identity check means a successful return always names a
+snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
 The writer **does not require the session extension**, so the strategy runs on any
@@ -530,7 +554,7 @@ The required barriers:
 
 | Step | Required barriers |
 | --- | --- |
-| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → rename → fsync `snapshots/` dir → then pointer swap |
+| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → no-replace hard link → fsync `snapshots/` dir → then pointer swap |
 | Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
@@ -553,8 +577,8 @@ accepted-but-unpublished writes (see Open issue O2); callers needing a hard dura
 receipt run `reconcile()` after `write()`.
 
 Published snapshots, once the pointer swap’s barriers complete, MUST survive power loss.
-A torn publish (power loss between snapshot rename and pointer swap) leaves an orphan
-snapshot ahead of a valid pointer.
+A torn publish (power loss between the snapshot commit and the pointer swap) leaves an
+orphan snapshot ahead of a valid pointer.
 Repair restores this `in-flight-capture` state (§11), and the previous head remains
 intact (R1).
 
@@ -698,10 +722,11 @@ The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O1: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
-  semantics; Win32 `rename` fails on an existing target.
+- **O1: Windows rename-replace.** P2 requires POSIX rename-over-existing semantics;
+  Win32 `rename` fails on an existing target.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
-  semantics. The cross-platform CI matrix gates the claim.
+  semantics for the pointer, and `CreateHardLink` for the F5c no-replace commit.
+  The cross-platform CI matrix gates the claim.
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
