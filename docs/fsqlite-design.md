@@ -60,6 +60,11 @@ filesystem and remains a strong choice for several processes whose writers can q
 one live database.
 It provides immediate serializable transactions by making writers take
 turns. WAL mode lets readers continue during the one active write.
+That WAL baseline should run SQLite 3.51.3 or later (Node 22.22.3, 24.15.0, or any 26
+release): SQLite 3.7.0 through 3.51.2 has a WAL-reset race between a checkpoint and a
+committing writer that can corrupt a database used by two or more connections, fixed in
+3.51.3 with backports in 3.44.6 and 3.50.7. fsqlite never runs WAL on store files,
+because every build uses the `DELETE` journal.
 A small transaction normally updates only the affected database, journal, WAL, and index
 pages.
 
@@ -173,7 +178,7 @@ of the promise.
 | `C9` | The writable surface has an explicit cooperative trust boundary. | Writers use fsqlite APIs, callbacks cannot mutate fsqlite-owned rows, persistent or temporary SQLite schema state, or format identity state, and candidate snapshots are revalidated before publish. Runtime capabilities are probed rather than assumed. | A process with direct filesystem access can still violate the protocol. Callback functions that may be retried must not perform unrecoverable external side effects. | Spec S2-S4 and roles; direct, store-format, and capability suites |
 | `C10` | Consistency claims must be precise. | Reads are snapshot-isolated by published version. Merge is optimistic write-set reconciliation with per-table same-row policy. `DirectStore` serializes its write transaction. | `SnapshotStore` is not serializable and does not validate general read sets, ranges, predicates, or aggregates. | `retry.test.ts`; research Finding K |
 | `C11` | The format must be operable and recoverable without application schema code. | The CLI recognizes, validates, repairs, seals, collects, and diagnoses stores. Read leases pin snapshots during long reads or exports; `seal()` acquires one internally. | Staleness uses clocks and mtime, so tuning affects liveness. | Spec RL1-RL2, G0-G3, and section 11; CLI goldens and GC/lease suites |
-| `C12` | The reference package must remain easy to audit and adopt. | It uses `node:sqlite`, has zero runtime dependencies and no install scripts, retains `node:test`, and publishes a schema-agnostic CLI. | Snapshot writers require the SQLite session extension and the documented Node range. | Package smoke, minimum-Node CI, lint, typecheck, and supply-chain gate |
+| `C12` | The reference package must remain easy to audit and adopt. | It uses `node:sqlite`, has zero runtime dependencies and no install scripts, retains `node:test`, and publishes a schema-agnostic CLI. | Snapshot writers require the SQLite session extension and the documented Node range. | Package smoke on the Node 24.0.0 floor; CI on the Node 22.18.0 floor and the newest 22, 24, and 26 releases; lint, typecheck, and supply-chain gate |
 
 ## Architecture
 
@@ -255,6 +260,9 @@ bump or write callback.
 
 Ordinary SQLite supports several direct `ALTER TABLE` operations and documents a
 transactional create-copy-drop-rename procedure for more general changes.
+SQLite 3.53.0 (Node 22.23.4 and later, 24.16 and later, and 26.1 and later) extends the
+direct operations to adding and dropping `NOT NULL` and `CHECK` constraints; the
+create-copy-drop-rename procedure remains the general path.
 Those database-local steps remain useful, but they are not enough for SnapshotStore.
 SQLite session changesets describe row inserts, updates, and deletes against a
 compatible schema; they do not carry DDL or decide how old and new writers should
@@ -499,6 +507,30 @@ The alpha supplies a protocol design, a reference implementation, and local evid
 universal shared-filesystem certification remains outside that scope.
 Consumer synchronization folders are not conforming shared filesystems.
 
+Known platform behavior shapes that boundary:
+
+- **Containers and overlayfs.** Reconcile and repair move envelope directories with
+  `rename()`. overlayfs fails a rename of a lower-layer directory with `EXDEV` unless
+  its `redirect_dir` feature is enabled (by mount option, or by kernel config
+  `OVERLAY_FS_REDIRECT_DIR`), so a store whose envelopes came from an image layer can
+  fail to archive them on every reconcile (spec O7). The `volatile` mount option omits
+  every sync to the upper filesystem, so fsync normally succeeds without persisting,
+  surfacing an error only after an upper-filesystem writeback error; tmpfs never
+  persists. Neither meets the spec section 10 barriers.
+- **NFS staleness.** With default attribute caching (`acdirmin` 30 s, `acdirmax` 60 s)
+  and `lookupcache=all`, a client can resolve `current` to the previous file for up to a
+  minute after another host’s rename; on NFSv4 the `cto` option governs directory
+  caching only. This costs liveness, not safety, but `retain` must exceed the staleness
+  window, and a reader should treat a collected snapshot as a stale pointer to re-read
+  (spec section 13); the reference reader fails loudly instead.
+- **macOS.** Node’s `fs.fsyncSync` uses `F_FULLFSYNC`, which is stronger than SQLite’s
+  default (`PRAGMA fullfsync` off).
+  Because fsqlite’s own fsync runs after the SQLite connection closes, it supplies the
+  stronger barrier.
+- **Windows.** Directory fsync is unavailable from Node (`EPERM`), so publication fails
+  closed by design, and SQLite opens snapshots without `FILE_SHARE_DELETE`, so an open
+  snapshot cannot be renamed over or unlinked (spec O1).
+
 ### Backup and Copying
 
 Published snapshots are immutable.
@@ -516,6 +548,10 @@ its software, copy order, GC races, or interruption can omit a complete clean sn
 Operations open fresh connections and never share a connection across Worker Threads.
 The filesystem protocol coordinates processes at a store root.
 A formal Worker Thread coordination contract and dedicated tests remain roadmap work.
+fsqlite owns the connections it passes to callbacks, so a callback must not close one.
+Node 24.22, 26.8, and later reject `close()` from inside any SQLite callback with
+`ERR_INVALID_STATE`; earlier releases, including every 22.x, can crash the process
+(nodejs/node#63180).
 
 ## Identity and Evolution
 
@@ -591,6 +627,14 @@ These checks prevent accidental protocol damage.
 They are not a security boundary against hostile code in the same process or an external
 writer with file access.
 
+Reconcile applies changeset blobs that other processes produced.
+SQLite’s session module received memory-safety fixes for corrupt changesets in 2026
+(CVE-2026-50812, a NULL dereference, and CVE-2026-50813, a buffer over-read, with
+further rebaser and session over-read fixes in 3.53.3 and 3.53.4). The
+`changeset_sha256` check detects accidental corruption, not a hostile writer, so a
+malformed envelope from a process with store access remains outside the trust boundary
+and can crash a reconciler running a SQLite release that predates those fixes.
+
 ## Public Surface and Modules
 
 ```ts
@@ -642,9 +686,10 @@ The CLI provides `info`, `validate`, `gc`, `seal`, `repair`, `stats`, `doctor`, 
 The [QA runbook](qa-runbook.md) is the evidence index for `C1` through `C12`. The
 [roadmap](roadmap.md) records the unresolved work without weakening the alpha contract.
 The most important remaining constraints are real cross-host filesystem validation,
-Windows publication races, single steps longer than the lease stale window, independent
-format conformance fixtures, explicit upgrades, Worker Thread coordination, stronger
-isolation patterns, and large-store seeding efficiency.
+Windows mutation (blocked first by directory fsync and open-file rename and unlink, spec
+O1), single steps longer than the lease stale window, independent format conformance
+fixtures, explicit upgrades, Worker Thread coordination, stronger isolation patterns,
+and large-store seeding efficiency.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

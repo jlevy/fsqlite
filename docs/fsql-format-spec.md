@@ -498,7 +498,10 @@ exactly one racing creator.
 The environment must validate this capability rather than infer it from a filesystem
 label.
 The lease is held only around the publish step (F5), not around writer work or the
-build.
+build. (Informative: on NFSv4.1 and later the session reply cache gives non-idempotent
+operations such as `MKDIR` and `RENAME` exactly-once semantics, RFC 8881 §2.10.6, so a
+retransmitted `mkdir` is not misreported as `EEXIST`. NFSv3 relies on a best-effort
+duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
@@ -677,6 +680,11 @@ file it syncs read-write on every platform (POSIX `fsync` flushes the same eithe
 Directory barriers open the directory read-only and are POSIX-only (O1). A platform or
 filesystem without that capability is unsupported for `f1.0` mutation rather than
 silently downgraded.
+A filesystem whose fsync returns success without persisting cannot meet this table
+either: tmpfs never persists, and an overlayfs mount with the `volatile` option omits
+every sync to its upper filesystem, so fsync normally succeeds without persisting (it
+fails only after a writeback error on the upper filesystem).
+Such stores are process-crash safe only.
 
 **Barrier mechanics.** Every barrier in the table is an fsync the implementation issues
 itself, on the file or directory, after the SQLite connection that wrote the file has
@@ -825,6 +833,10 @@ unpublished work. Repair also MUST NOT modify any snapshot in place.
   Compatibility across SQLite releases and bindings is a conformance claim that an
   implementation MUST validate for every combination it supports; database-file
   compatibility alone does not prove changeset compatibility.
+  SQLite 3.51 through 3.54 changed only the apply and changegroup APIs, not the
+  serialized changeset format.
+  Conformance testing should include corrupt and truncated changeset inputs, because
+  SQLite’s session module received 2026 memory-safety fixes for malformed blobs.
 
 Normal open, read, write, reconcile, validation, GC, and repair operations MUST NOT
 upgrade a store. A whole-format upgrade is an explicit operator action and is
@@ -852,6 +864,11 @@ upgrade implementation is post-alpha work.
 - MUST open snapshots read-only; MUST NOT modify any store file.
 - MUST re-read the pointer to observe a newer publish (close-to-open: a fresh open per
   read batch); a snapshot already open stays consistent forever (immutability).
+- MUST NOT treat a snapshot that disappears between the pointer read and the open as
+  corruption, and SHOULD re-read the pointer and retry: GC may have collected it after a
+  stale read. On network mounts, directory-entry and attribute caching can delay
+  visibility of a new `current` (Linux NFS: up to `acdirmax`, default 60 s), which
+  widens that window. The Node reader currently fails loudly instead of retrying.
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
 **Writer**: W1-W4, S2-S4 callback and schema validation, the compatibility check of §3,
@@ -871,10 +888,19 @@ The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O1: Windows rename-replace.** P2 requires POSIX rename-over-existing semantics;
-  Win32 `rename` fails on an existing target.
-  A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
-  semantics for the pointer, and `CreateHardLink` for the F5c no-replace commit.
+- **O1: Windows mutation.** The pointer rename itself is not the blocker: Node’s
+  `fs.renameSync` already uses `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` on Windows, and
+  `CreateHardLink` can provide the F5c no-replace commit.
+  Two other gaps keep Windows unsupported for `f1.0` mutation.
+  First, §10’s directory fsync is unavailable from Node on Windows (`fs.fsync` on a
+  directory fails with `EPERM`, nodejs/node#4760), so publication fails closed.
+  Second, SQLite’s Windows VFS opens databases without `FILE_SHARE_DELETE`, so a
+  snapshot that any reader holds open cannot be renamed over or unlinked, and GC and
+  orphan reclamation then fail.
+  `MOVEFILE_REPLACE_EXISTING` is also not documented as atomic.
+  `FILE_RENAME_POSIX_SEMANTICS` (Windows 10 1607 and later) can replace an open target
+  but is not reachable from Node’s `fs`. A Windows implementation needs a native helper
+  for both, or a spec change that declares Windows reader-only.
   The cross-platform CI matrix gates the claim.
 
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
@@ -908,6 +934,14 @@ The same artifacts test every implementation.
   identifies the exact build.
   Closing the late-pointer window additionally needs a pointer protocol that cannot move
   `current` backward, such as a no-replace commit of a per-version pointer record.
+
+- **O7: Envelope moves on overlayfs.** F6 and repair move envelope *directories* with
+  `rename()`. overlayfs fails that with `EXDEV` for a directory in a lower layer unless
+  its `redirect_dir` feature is on (the mount option, or kernel config
+  `OVERLAY_FS_REDIRECT_DIR`), so a store whose envelopes came from a container image
+  layer can fail F6 on every reconcile.
+  A future `f1.x` revision could add a copy-then-remove fallback for `EXDEV` or store
+  each envelope as a single file.
 
 ## 15. References
 

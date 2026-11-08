@@ -15,6 +15,9 @@
 // and reconcile (apply a changeset) need the extension, so the session requirement is
 // confined here.
 
+// Node 26.11 renamed the class `Database` and kept `DatabaseSync` as an alias deprecated
+// in documentation only (DEP0210, no runtime warning). Only `DatabaseSync` exists on every
+// supported line, so fsqlite keeps that name until its Node floor reaches 26.11.
 import { DatabaseSync, constants, backup } from 'node:sqlite'
 import type { DatabaseSyncOptions } from 'node:sqlite'
 import type { WorkFn, Capabilities } from './types.ts'
