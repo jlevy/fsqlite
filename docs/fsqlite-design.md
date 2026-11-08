@@ -454,7 +454,8 @@ Consumer synchronization folders are not conforming shared filesystems.
 Published snapshots are immutable.
 A reader can pin one with `readLease()` and copy that file safely.
 `seal()` pins its selected source snapshot with an internal read lease and creates an
-integrity-checked standalone SQLite artifact.
+integrity-checked standalone SQLite artifact, published through an fsynced temp and an
+atomic rename so the destination never holds a partial export.
 
 Supported backup paths use a published snapshot, read lease, `seal()`, or the backup
 helpers. An arbitrary recursive live-store copy may include recoverable transients, and

@@ -31,11 +31,12 @@ import {
   writeFileSync,
   renameSync,
   existsSync,
+  realpathSync,
   rmSync,
   statSync,
   utimesSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
@@ -118,6 +119,13 @@ const GC_SAFE_STATES: ReadonlySet<StoreValidationState> = new Set([
   'sealed',
   'live',
   'in-flight-capture',
+])
+
+/** Store-root names a caller may never write: the marker, the pointer, and the lock. */
+const STORE_ROOT_ENTRIES: ReadonlySet<string> = new Set([
+  STORE_MARKER_FILENAME,
+  'current',
+  'publish.lock',
 ])
 
 // Transient (never-store-state) entries, per fsql-format-spec.md §2: reconcile builds,
@@ -1185,21 +1193,35 @@ export class SnapshotStore {
   /**
    * Finalize the current snapshot into a clean single-file at `destPath` via VACUUM INTO
    * (no -wal/-shm, integrity-checked). Requires an empty pending tail.
+   *
+   * The export is published like any completed file: VACUUM INTO writes a temp beside the
+   * destination (it writes in place and never fsyncs), which is integrity-checked, fsynced,
+   * renamed over `destPath`, and followed by a directory fsync. A reader of `destPath` sees
+   * the previous file or the complete export, and an interrupted seal leaves only its temp.
+   * The destination must not be a store-owned path: snapshots are never replaced (S6).
    */
   seal(destPath: string): string {
     this.assertStoreIdentity()
     if (this.pendingTxns().length > 0) {
       throw new Error('cannot seal: pending tx must be reconciled first')
     }
+    const destDir = dirname(resolve(destPath))
+    if (this._isStoreOwnedPath(join(realpathSync(destDir), basename(destPath)))) {
+      throw new Error(
+        `cannot seal into ${destPath}: the destination is a path inside the store that the ` +
+          'store owns; choose a path outside its subdirectories and reserved names',
+      )
+    }
+    const tmp = join(destDir, `.${basename(destPath)}.${rand()}.tmp`)
     const lease = this.readLease()
     try {
       const db = driver.openReadonly(this.snapshotPath(lease.version))
       try {
-        driver.vacuumInto(db, destPath)
+        driver.vacuumInto(db, tmp)
       } finally {
         db.close()
       }
-      const out = driver.openReadonly(destPath)
+      const out = driver.openReadonly(tmp)
       try {
         const problems = driver.integrityProblems(out)
         if (problems.length) {
@@ -1208,10 +1230,25 @@ export class SnapshotStore {
       } finally {
         out.close()
       }
+      fsyncPath(tmp)
+      renameSync(tmp, destPath)
+      fsyncDir(destDir)
       return destPath
+    } catch (error) {
+      rmSync(tmp, { force: true })
+      throw error
     } finally {
       lease.release()
     }
+  }
+
+  /** Whether `path` is a reserved root entry of this store or lies inside a subdirectory. */
+  private _isStoreOwnedPath(path: string): boolean {
+    const fromRoot = relative(realpathSync(this.dir), path)
+    if (fromRoot === '' || fromRoot === '..' || fromRoot.startsWith(`..${sep}`)) {
+      return fromRoot === ''
+    }
+    return fromRoot.includes(sep) || STORE_ROOT_ENTRIES.has(fromRoot)
   }
 
   /**

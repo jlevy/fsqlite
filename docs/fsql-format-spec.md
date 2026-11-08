@@ -654,8 +654,17 @@ intact (R1).
 
 A conforming backup of a live store MUST pin or otherwise retain one published snapshot
 and copy that immutable SQLite file, or use SQLite’s online backup or `VACUUM INTO`
-facilities. This specification makes no guarantee about an arbitrary recursive directory
-copy racing publication, garbage collection, or interruption.
+facilities.
+A `seal` or export MUST publish its output like a completed file: write it to
+a uniquely-named temp in the destination directory, validate it, fsync it, `rename()` it
+over the destination, and fsync that directory.
+`VACUUM INTO` writes in place and does not fsync its output, so it MUST target the temp,
+never the final path; a reader of the destination then sees the previous file or the
+complete export, and an interrupted seal leaves only its temp.
+The destination MUST NOT be a store-owned path (`current`, `fsqlite.json`,
+`publish.lock`, or anything under the store’s subdirectories).
+This specification makes no guarantee about an arbitrary recursive directory copy racing
+publication, garbage collection, or interruption.
 
 ## 11. Validation States and Repair
 
