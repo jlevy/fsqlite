@@ -875,37 +875,48 @@ export class SnapshotStore {
 
       const next = base + 1
       fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
-      const result = withLock(
-        this.publishLock,
-        (_token, lease): CommitOutcome => {
-          if (this.currentVersion() !== base) {
-            return 'retry'
-          } // someone published while we built
-          if (!lease.fence()) {
-            return 'retry'
-          } // lost ownership (stale break): fencing
-          return commitSnapshot({
-            storeDir: this.dir,
-            currentPath: this.currentPath,
-            snapDir: this.snapDir,
-            build: tmp,
-            dest: this.snapshotPath(next),
-            base,
-            next,
-            readCurrent: () => this.currentVersion(),
-            lease,
-            afterLink:
-              crashAt === 'after-snapshot'
-                ? () => {
-                    throw new Error('CRASH after-snapshot')
-                  }
-                : undefined,
-          })
-        },
-        lockOpts,
-      )
-      if (result === 'retry') {
+      // Once committed, the build has no `.build-` name left, so removing that name on any
+      // exit from the publish step only ever discards an uncommitted transient.
+      const discardBuild = (): void => {
         rmSync(tmp, { force: true })
+      }
+      let result: CommitOutcome
+      try {
+        result = withLock(
+          this.publishLock,
+          (_token, lease): CommitOutcome => {
+            if (this.currentVersion() !== base) {
+              return 'retry'
+            } // someone published while we built
+            if (!lease.fence()) {
+              return 'retry'
+            } // lost ownership (stale break): fencing
+            return commitSnapshot({
+              storeDir: this.dir,
+              currentPath: this.currentPath,
+              snapDir: this.snapDir,
+              build: tmp,
+              dest: this.snapshotPath(next),
+              base,
+              next,
+              readCurrent: () => this.currentVersion(),
+              lease,
+              afterLink:
+                crashAt === 'after-snapshot'
+                  ? () => {
+                      throw new Error('CRASH after-snapshot')
+                    }
+                  : undefined,
+            })
+          },
+          lockOpts,
+        )
+      } catch (error) {
+        discardBuild()
+        throw error
+      }
+      if (result === 'retry') {
+        discardBuild()
         continue
       }
       if (crashAt === 'after-pointer') {

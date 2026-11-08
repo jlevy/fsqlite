@@ -206,6 +206,11 @@ test("a publisher never reclaims a fresh entry inside another holder's link-to-s
     assert.deepEqual(rowsOf(store.snapshotPath(1)), ['foreign'], 'the live entry is untouched')
     assert.equal(store.currentVersion(), 0)
     assert.equal(txns(store.txPending).length, 1, 'the envelope stays pending')
+    assert.deepEqual(
+      readdirSync(store.snapDir).filter((f) => f.startsWith('.build-')),
+      [],
+      'the abandoned build is removed',
+    )
   } finally {
     cleanup()
   }

@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
 import { fsyncPath } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
+import type { CommitOutcome } from './publication.ts'
 import { withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
@@ -146,17 +147,23 @@ export class DirectStore {
           if (this.base.currentVersion() !== base || !lease.fence()) {
             return abandon()
           }
-          const outcome = commitSnapshot({
-            storeDir: this.base.dir,
-            currentPath: this.base.currentPath,
-            snapDir: this.base.snapDir,
-            build: tmp,
-            dest: this.base.snapshotPath(next),
-            base,
-            next,
-            readCurrent: () => this.base.currentVersion(),
-            lease,
-          })
+          let outcome: CommitOutcome
+          try {
+            outcome = commitSnapshot({
+              storeDir: this.base.dir,
+              currentPath: this.base.currentPath,
+              snapDir: this.base.snapDir,
+              build: tmp,
+              dest: this.base.snapshotPath(next),
+              base,
+              next,
+              readCurrent: () => this.base.currentVersion(),
+              lease,
+            })
+          } catch (error) {
+            abandon() // removes only the uncommitted `.direct-` name, never a committed entry
+            throw error
+          }
           return outcome === 'published' ? next : abandon()
         },
         lockOpts,
