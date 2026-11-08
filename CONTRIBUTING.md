@@ -50,7 +50,11 @@ The tbd hook scripts are project-maintained adaptations of the files `tbd setup 
 generates. `tbd-session.sh` and `tbd-closing-reminder.sh` locate the repository from
 their own path rather than through git, the closing hook detects pushes with
 `scripts/detect-git-push.mjs`, and both pass failures through instead of hiding them.
-The `.claude/` and `.codex/` copies of each script are byte-identical.
+Their pinned npx fallback passes the 14-day cool-off (`--before`), `--ignore-scripts`,
+and a dedicated `--cache` as command-line flags, and fails closed without a working
+`node`. The Codex `PostToolUse` wrapper in `.codex/hooks.json` searches upward only to
+the project boundary, the first directory containing `.git` or `.codex/hooks.json`. The
+`.claude/` and `.codex/` copies of each script are byte-identical.
 Setup overwrites these scripts and rewrites or duplicates their wiring, so after a tbd
 upgrade:
 

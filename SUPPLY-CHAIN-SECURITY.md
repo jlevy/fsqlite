@@ -25,8 +25,17 @@ the exception.
 Review this exception by 2026-12-08, or earlier when an ESLint release depends on a
 patched `minimatch`. Remove the ignore once the resolved graph contains no affected
 version.
-`pnpm verify` runs `scripts/check-supply-chain.mjs`, which fails when an ignored
-advisory has no review date here or its review date has passed.
+
+`pnpm verify`, which also gates the publish workflow, runs
+`scripts/check-supply-chain.mjs`. It finds every GHSA or CVE ID anywhere in
+`pnpm-workspace.yaml`, in any letter case or YAML form, and fails unless those IDs are
+exactly the ones `pnpm config get auditConfig --json` reports (it skips only this
+comparison, with a message, when pnpm is not installed).
+It also fails when `auditConfig` is present but names no ID. Each ID needs exactly one
+record under a “Time-Limited” heading in this document, with a single review date that
+is a real calendar date, not in the past, and no more than 90 days ahead.
+When a review date passes, re-run `pnpm audit`, then either remove the ignore or have
+the maintainer re-approve the exception with a new review date.
 
 ## Resolved Exceptions
 
