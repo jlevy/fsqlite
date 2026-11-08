@@ -6,8 +6,8 @@ adding a regression test that fails without the change.
 
 ## Development Setup
 
-Install Node `>=22.18.0 <23 || >=24.0.0`, pnpm 11.28.8, and `uv` (used to run the pinned
-Markdown formatter), then run:
+Install Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`, pnpm 11.28.8, and `uv` (used to run
+the pinned Markdown formatter), then run:
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
