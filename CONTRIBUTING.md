@@ -6,13 +6,21 @@ adding a regression test that fails without the change.
 
 ## Development Setup
 
-Install Node `>=22.18.0 <23 || >=24.0.0`, pnpm 11.14.0, and `uv` (used to run the pinned
+Install Node `>=22.18.0 <23 || >=24.0.0`, pnpm 11.28.8, and `uv` (used to run the pinned
 Markdown formatter), then run:
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec lefthook install
 pnpm verify
 ```
+
+`pnpm-workspace.yaml` sets `engineStrict`, so installing the development tools also
+enforces their own engines: development needs Node 22.18 or later on the 22 line, 24.11
+or later on the 24 line, or 26 and later.
+The published package keeps the wider runtime range.
+Installing with `--ignore-scripts` skips lefthook’s own installer, so
+`pnpm exec lefthook install` is what enables the Git hooks.
 
 Common focused commands:
 

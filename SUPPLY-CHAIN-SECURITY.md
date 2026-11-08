@@ -16,9 +16,10 @@ runtime dependencies, so the published package is unaffected.
 The only patched release, `minimatch@11.0.1`, was published on 2026-10-27, inside the
 14-day cool-off, and no ESLint release accepts `minimatch` 11. Forcing a major-version
 override under ESLint would run fresh, untested code in the lint gate, so the advisory
-is instead ignored by ID in `pnpm-workspace.yaml` (`auditConfig.ignoreGhsas`). The
-maintainer approved this exception on 2026-11-08. No other advisory is ignored, and the
-lockfile is unchanged by the exception.
+is instead ignored by ID in `pnpm-workspace.yaml` (`audit.ignore`; pnpm 11.16 renamed
+the deprecated `auditConfig.ignoreGhsas`). The maintainer approved this exception on
+2026-11-08. No other advisory is ignored, and the lockfile is unchanged by the
+exception.
 
 Review this exception by 2026-12-08, or earlier when an ESLint release depends on a
 patched `minimatch`. Remove the ignore once the resolved graph contains no affected

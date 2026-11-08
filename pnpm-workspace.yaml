@@ -1,12 +1,15 @@
 packages:
   - packages/*
 
+# pnpm 11 reads only auth, registry, and TLS settings from .npmrc; every other setting
+# belongs here.
+engineStrict: true
 minimumReleaseAge: 20160
 blockExoticSubdeps: true
 allowBuilds:
   lefthook: false
 # Time-limited, maintainer-approved audit exception; see SUPPLY-CHAIN-SECURITY.md.
 # Review by 2026-12-08.
-auditConfig:
-  ignoreGhsas:
+audit:
+  ignore:
     - GHSA-g3hv-75wg-m249
