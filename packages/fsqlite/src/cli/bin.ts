@@ -3,6 +3,28 @@
 
 import { main } from './main.ts'
 
+/**
+ * node:sqlite announces itself as experimental on Node 22 the first time it loads. The
+ * notice is not about fsqlite's behavior, and it would follow every CLI command on
+ * stderr, so the bin drops exactly that warning and prints every other one as Node would.
+ * Node emits warnings on a later tick, so this runs before the notice is delivered even
+ * though the static import above has already loaded node:sqlite.
+ */
+function quietSqliteExperimentalWarning(): void {
+  const printers = process.listeners('warning')
+  process.removeAllListeners('warning')
+  process.on('warning', (warning) => {
+    if (warning.name === 'ExperimentalWarning' && warning.message.startsWith('SQLite ')) {
+      return
+    }
+    for (const print of printers) {
+      print(warning)
+    }
+  })
+}
+
+quietSqliteExperimentalWarning()
+
 // A consumer that stops reading stdout early (`fsqlite info <dir> | head`) is the expected
 // end of the output, so its EPIPE is a quiet stop. It must never replace the command's
 // exit code, which is already set when the asynchronous error arrives, and the process

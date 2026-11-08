@@ -1,3 +1,6 @@
 #!/bin/sh
-# Wrapper: run the deterministic golden-test store seeder (sibling seed.ts).
-exec node "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/seed.ts" "$@"
+# Wrapper: run the deterministic golden-test store seeder (sibling seed.ts). The seeder is
+# test tooling, so it silences node:sqlite's experimental notice itself; the CLI under test
+# runs with Node's default warnings, which the goldens assert.
+exec node --disable-warning=ExperimentalWarning \
+  "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/seed.ts" "$@"

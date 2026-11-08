@@ -4,7 +4,6 @@ path:
   - $TRYSCRIPT_TEST_DIR/bin
 env:
   NO_COLOR: '1'
-  NODE_NO_WARNINGS: '1'
 timeout: 60000
 ---
 

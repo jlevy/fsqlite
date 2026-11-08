@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,6 +51,32 @@ test('a closed stderr never turns a failure into success', async () => {
   const { dir, cleanup } = tmpStore()
   try {
     assert.equal(await runWithClosed('stderr', ['validate', dir]), 64) // not a store
+  } finally {
+    cleanup()
+  }
+})
+
+test("the bin prints node:sqlite's experimental notice nowhere, but keeps other warnings", () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    new SnapshotStore(dir, STORE_OPTS).init()
+    const quiet = spawnSync(process.execPath, [BIN, 'validate', dir], {
+      encoding: 'utf8',
+      timeout: CHILD_TIMEOUT_MS,
+    })
+    assert.deepEqual([quiet.status, quiet.stdout, quiet.stderr], [0, 'sealed\n', ''])
+    const other = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'data:text/javascript,setTimeout(() => process.emitWarning("kept", "DeprecationWarning"))',
+        BIN,
+        '--help',
+      ],
+      { encoding: 'utf8', timeout: CHILD_TIMEOUT_MS },
+    )
+    assert.equal(other.status, 0)
+    assert.match(other.stderr, /DeprecationWarning: kept/)
   } finally {
     cleanup()
   }
