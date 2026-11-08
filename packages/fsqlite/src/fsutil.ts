@@ -4,7 +4,7 @@
 
 import { openSync, fsyncSync, closeSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
-import type { PostPublishError } from './types.ts'
+import { PostPublishError } from './errors.ts'
 
 type AfterFsyncPathHook = (path: string) => void
 let afterFsyncPathHook: AfterFsyncPathHook | null = null
@@ -53,24 +53,17 @@ export function fsyncDir(p: string): void {
   afterFsyncDirHook?.(p)
 }
 
-/** Wrap a failure that happened after `current` already named `version`. */
-export function postPublishError(version: number, cause: unknown): PostPublishError {
-  const reason = cause instanceof Error ? cause.message : String(cause)
-  return Object.assign(
-    new Error(
-      `version ${version} is published, but a later step failed (${reason}); ` +
-        'do not re-run the write it carries',
-      { cause },
-    ),
-    { published: version },
-  )
-}
-
-/** Whether `error` was raised after its operation had already published a version. */
-export function isPostPublishError(error: unknown): error is PostPublishError {
-  return (
-    error instanceof Error && typeof (error as Partial<PostPublishError>).published === 'number'
-  )
+/**
+ * Remove `path` (recursively) while another error is propagating. A failure here must not
+ * replace the error being reported, so it is dropped: whatever remains is a transient that
+ * validate reports and gc or repair removes.
+ */
+export function removeQuietly(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true })
+  } catch {
+    // Keep the original error; the leftover is ordinary transient debris.
+  }
 }
 
 /**
@@ -84,12 +77,12 @@ export function publishPointer(storeDir: string, currentPath: string, version: n
     fsyncPath(tempPath)
     renameSync(tempPath, currentPath)
   } catch (error) {
-    rmSync(tempPath, { force: true })
+    removeQuietly(tempPath)
     throw error
   }
   try {
     fsyncDir(storeDir)
   } catch (error) {
-    throw postPublishError(version, error)
+    throw new PostPublishError(version, error)
   }
 }

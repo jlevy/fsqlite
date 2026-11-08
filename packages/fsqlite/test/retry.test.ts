@@ -5,7 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SnapshotStore } from '../src/index.ts'
+import { SnapshotStore, TransactionError } from '../src/index.ts'
 import { tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
 import type { DatabaseSync } from 'node:sqlite'
@@ -114,7 +114,11 @@ test('writeWithRetry does not rerun caller code after a permanent UNIQUE conflic
           calls++
           db.prepare('INSERT INTO url_index VALUES (?,?)').run('b', 'https://example.com')
         }),
-      /permanently quarantined: apply-failed: permanent conflict \(CONSTRAINT\)/,
+      (error: unknown) =>
+        error instanceof TransactionError &&
+        error.code === 'conflict' &&
+        error.quarantineReason === 'permanent-conflict: CONSTRAINT' &&
+        error.message.includes('permanently quarantined: permanent-conflict: CONSTRAINT'),
     )
     assert.equal(calls, 1, 'a permanent changeset conflict must not rerun caller code')
   } finally {

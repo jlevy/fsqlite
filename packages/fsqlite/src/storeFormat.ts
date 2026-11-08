@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { fsyncDir, fsyncPath } from './fsutil.ts'
+import { FsqliteError, StoreFormatError } from './errors.ts'
+import { fsyncDir, fsyncPath, removeQuietly } from './fsutil.ts'
 
 export const STORE_MARKER_FILENAME = 'fsqlite.json'
 export const STORE_FORMAT_NAME = 'fsqlite'
@@ -30,16 +31,6 @@ export type StoreRecognition =
   | { state: 'supported'; marker: StoreMarker }
 
 export type StoreRecognitionFailure = Exclude<StoreRecognition['state'], 'supported'>
-
-export class StoreFormatError extends Error {
-  readonly state: StoreRecognitionFailure
-
-  constructor(state: StoreRecognitionFailure, message: string, options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'StoreFormatError'
-    this.state = state
-  }
-}
 
 export function storeMarkerPath(storeDir: string): string {
   return join(storeDir, STORE_MARKER_FILENAME)
@@ -160,8 +151,8 @@ export function createStoreMarker(storeDir: string): StoreMarker {
     renameSync(tmp, path)
     fsyncDir(storeDir)
   } catch (error) {
-    rmSync(tmp, { force: true })
-    throw new Error(`failed to create ${STORE_MARKER_FILENAME}`, { cause: error })
+    removeQuietly(tmp)
+    throw new FsqliteError('io', `failed to create ${storeMarkerPath(storeDir)}`, { cause: error })
   }
   return marker
 }

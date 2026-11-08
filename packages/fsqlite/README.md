@@ -491,6 +491,30 @@ primitives. The QA runbook includes a
 [manual CLI walkthrough](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md#b3-cli-walkthrough-on-a-real-store)
 and filesystem capability check.
 
+## Errors
+
+Every error fsqlite raises on purpose is an `FsqliteError` with a stable `code` and a
+`retryable` flag, so callers branch on those rather than on message text.
+Argument mistakes throw `TypeError`.
+
+| `code` | Meaning | What to do |
+| --- | --- | --- |
+| `not-a-store` | The path has no `fsqlite.json` | Check the path |
+| `invalid` | `fsqlite.json` is malformed | Inspect the marker; nothing may mutate the store |
+| `unsupported` | A newer format version or required feature | Use a newer fsqlite |
+| `corrupt` | Torn or dangling pointer, identity mismatch, or a head that fails integrity checks | Run `repair` |
+| `in-flight` | A live publisher holds the lock, or a captured write is still pending | Wait, then retry (see `TransactionError`) |
+| `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
+| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |
+| `post-publish` | A step failed after `current` named the new version (`PostPublishError.published`) | Do not re-run the write |
+| `incompatible` | The handle’s schema, schema version, or SQLite binding cannot serve the store | Fix the caller |
+| `refused` | A precondition failed, such as sealing a pending tail or a callback that changed the schema | Fix the call |
+| `io` | A required filesystem step failed; `cause` holds the system error | Fix the environment |
+
+`StoreFormatError` (the recognition codes, with `state`), `ConflictError` (with
+`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`), and
+`TransactionError` (with `txId` and `quarantineReason`) are subclasses.
+
 ## Correctness Model
 
 Published snapshots are immutable, `current` is the atomic commit pointer, and every

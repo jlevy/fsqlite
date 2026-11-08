@@ -25,32 +25,38 @@
 // node:sqlite cannot disable triggers, so SnapshotStore rejects trigger schemas instead.
 
 import type { DatabaseSync } from 'node:sqlite'
-import { constants, foreignKeyCheck } from './driver.ts'
+import { constants, foreignKeyCheck, OWNED_TABLES, rollbackQuietly } from './driver.ts'
+import { FsqliteError, PermanentConflictError, StrictConflictError } from './errors.ts'
 import type { ConflictPolicyInput, NormalizedPolicy } from './types.ts'
 
-const C = constants as unknown as Record<string, number>
+/**
+ * `@types/node` 22 omits `SQLITE_CHANGESET_CONSTRAINT`, which node:sqlite exports on every
+ * supported line; this widening covers only that one name.
+ */
+const constraintConstant = (
+  constants as typeof constants & { SQLITE_CHANGESET_CONSTRAINT?: number }
+).SQLITE_CHANGESET_CONSTRAINT
 
-function sqliteConstant(name: string): number {
-  const value = C[name]
+function requiredConstant(name: string, value: number | undefined): number {
   if (value === undefined) {
-    throw new Error(`node:sqlite is missing required constant ${name}`)
+    throw new FsqliteError('incompatible', `node:sqlite is missing required constant ${name}`)
   }
   return value
 }
 
-const CHANGESET_DATA = sqliteConstant('SQLITE_CHANGESET_DATA')
-const CHANGESET_NOTFOUND = sqliteConstant('SQLITE_CHANGESET_NOTFOUND')
-const CHANGESET_CONFLICT = sqliteConstant('SQLITE_CHANGESET_CONFLICT')
-const CHANGESET_CONSTRAINT = sqliteConstant('SQLITE_CHANGESET_CONSTRAINT')
-const CHANGESET_FOREIGN_KEY = sqliteConstant('SQLITE_CHANGESET_FOREIGN_KEY')
-const CHANGESET_REPLACE = sqliteConstant('SQLITE_CHANGESET_REPLACE')
-const CHANGESET_OMIT = sqliteConstant('SQLITE_CHANGESET_OMIT')
-const CHANGESET_ABORT = sqliteConstant('SQLITE_CHANGESET_ABORT')
+const CHANGESET_DATA = constants.SQLITE_CHANGESET_DATA
+const CHANGESET_NOTFOUND = constants.SQLITE_CHANGESET_NOTFOUND
+const CHANGESET_CONFLICT = constants.SQLITE_CHANGESET_CONFLICT
+const CHANGESET_CONSTRAINT = requiredConstant('SQLITE_CHANGESET_CONSTRAINT', constraintConstant)
+const CHANGESET_FOREIGN_KEY = constants.SQLITE_CHANGESET_FOREIGN_KEY
+const CHANGESET_REPLACE = constants.SQLITE_CHANGESET_REPLACE
+const CHANGESET_OMIT = constants.SQLITE_CHANGESET_OMIT
+const CHANGESET_ABORT = constants.SQLITE_CHANGESET_ABORT
 
 const replaceable = (type: number): boolean =>
   type === CHANGESET_DATA || type === CHANGESET_CONFLICT
 
-const FSQLITE_OWNED_TABLES = new Set(['applied_tx', 'fsqlite_meta'])
+const FSQLITE_OWNED_TABLES: ReadonlySet<string> = new Set(OWNED_TABLES)
 
 /** Action vocabulary and normative filtered-pass order. */
 export const ACTIONS = Object.freeze(['replace', 'omit', 'strict'] as const)
@@ -63,26 +69,6 @@ const NAME: Record<number, string> = {
   [CHANGESET_FOREIGN_KEY]: 'FOREIGN_KEY',
 }
 export const conflictName = (t: number): string => NAME[t] ?? `UNKNOWN(${t})`
-
-export class StrictConflictError extends Error {
-  constructor(types: (number | string)[], options?: ErrorOptions) {
-    super(
-      `strict conflict (${types.map((t) => (typeof t === 'number' ? conflictName(t) : t)).join(',')})`,
-      options,
-    )
-    this.name = 'StrictConflictError'
-  }
-}
-
-export class PermanentConflictError extends Error {
-  constructor(types: (number | string)[], options?: ErrorOptions) {
-    super(
-      `permanent conflict (${types.map((t) => (typeof t === 'number' ? conflictName(t) : t)).join(',')})`,
-      options,
-    )
-    this.name = 'PermanentConflictError'
-  }
-}
 
 type Action = (typeof ACTIONS)[number]
 
@@ -113,14 +99,14 @@ export function normalize(policy: ConflictPolicyInput = {}): NormalizedPolicy {
   for (const [table, value] of Object.entries(policy as Record<string, unknown>)) {
     const action = typeof value === 'string' ? ACTION_SPELLINGS.get(value) : undefined
     if (action === undefined) {
-      throw new Error(`unknown conflict action '${String(value)}' for table '${table}'`)
+      throw new TypeError(`unknown conflict action '${String(value)}' for table '${table}'`)
     }
     out[table] = action
   }
   if (!Object.hasOwn(out, '*')) {
     out['*'] = 'strict' // deny-by-default: never silently pick a winner
   }
-  return out
+  return Object.freeze(out)
 }
 
 const ownAction = (policy: NormalizedPolicy, key: string): Action | undefined =>
@@ -173,7 +159,7 @@ export function applyWithPolicy(
 ): void {
   for (const [table, action] of Object.entries(policy as Record<string, unknown>)) {
     if (typeof action !== 'string' || !(ACTIONS as readonly string[]).includes(action)) {
-      throw new Error(
+      throw new TypeError(
         `policy maps table '${table}' to '${String(action)}', which is not one of ` +
           `${ACTIONS.join(', ')}; pass the policy through normalize()`,
       )
@@ -229,10 +215,10 @@ function applyInTransaction(
         })
       } catch (error) {
         if (permanent.length > 0) {
-          throw new PermanentConflictError(permanent, { cause: error })
+          throw new PermanentConflictError(permanent.map(conflictName), { cause: error })
         }
         if (strict.length > 0) {
-          throw new StrictConflictError(strict, { cause: error })
+          throw new StrictConflictError(strict.map(conflictName), { cause: error })
         }
         throw error
       }
@@ -245,10 +231,10 @@ function applyInTransaction(
       // the caller can quarantine the envelope with an actionable reason.
       if (!ok) {
         if (permanent.length > 0) {
-          throw new PermanentConflictError(permanent)
+          throw new PermanentConflictError(permanent.map(conflictName))
         }
         if (strict.length > 0) {
-          throw new StrictConflictError(strict)
+          throw new StrictConflictError(strict.map(conflictName))
         }
         throw new PermanentConflictError([`unexpected-abort-on-${action}-pass`])
       }
@@ -257,11 +243,7 @@ function applyInTransaction(
     beforeCommit()
     db.exec('COMMIT')
   } catch (e) {
-    try {
-      db.exec('ROLLBACK')
-    } catch {
-      /* ignore */
-    }
+    rollbackQuietly(db)
     throw e
   }
 }

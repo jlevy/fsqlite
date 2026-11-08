@@ -16,7 +16,8 @@
 
 import { closeSync, fstatSync, linkSync, openSync, statSync, unlinkSync, utimesSync } from 'node:fs'
 import type { Stats } from 'node:fs'
-import { fsyncDir, isPostPublishError, postPublishError, publishPointer } from './fsutil.ts'
+import { FsqliteError, PostPublishError } from './errors.ts'
+import { fsyncDir, publishPointer } from './fsutil.ts'
 import { sleepSync } from './lock.ts'
 import type { LockLease } from './lock.ts'
 
@@ -128,7 +129,7 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
       }
       publishPointer(c.storeDir, c.currentPath, c.next)
     } catch (error) {
-      if (!isPostPublishError(error)) {
+      if (!(error instanceof PostPublishError)) {
         removeOwnOrphan(c, expected, error)
       }
       throw error
@@ -139,7 +140,7 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
     try {
       return namesBuild(c.dest, expected) ? 'published' : 'retry'
     } catch (error) {
-      throw postPublishError(c.next, error)
+      throw new PostPublishError(c.next, error)
     }
   } finally {
     closeSync(fd)
@@ -197,7 +198,8 @@ function linkBuild(c: SnapshotCommit, fd: number): BuildIdentity | null {
       continue
     }
     if (Date.now() >= deadline) {
-      throw new Error(
+      throw new FsqliteError(
+        'in-flight',
         `snapshot ${c.next} is held by a publication that neither finished nor went stale ` +
           `within ${c.lease.timeoutMs}ms; if no publisher is running, run repair`,
       )

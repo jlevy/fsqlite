@@ -20,6 +20,7 @@ import {
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
+import { LockTimeoutError } from './errors.ts'
 
 export interface LockOptions {
   timeoutMs?: number
@@ -62,13 +63,6 @@ export interface LockLease {
    * L3). Returns false when this holder no longer owns the lock and must abandon the step.
    */
   fence: () => boolean
-}
-
-export class LockTimeoutError extends Error {
-  constructor(p: string, ms: number) {
-    super(`could not acquire ${p} within ${ms}ms`)
-    this.name = 'LockTimeoutError'
-  }
 }
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
@@ -122,7 +116,9 @@ export function withLock<T>(
     onStaleBreak = null,
   } = opts
   if (timeoutMs <= staleMs) {
-    throw new Error('withLock requires timeoutMs > staleMs')
+    throw new TypeError(
+      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
+    )
   }
   const token = randomBytes(8).toString('hex')
   const meta = JSON.stringify({ token, pid: process.pid, host: hostname(), at: Date.now() })

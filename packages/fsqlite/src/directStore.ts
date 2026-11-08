@@ -14,7 +14,8 @@ import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath } from './fsutil.ts'
+import { FsqliteError } from './errors.ts'
+import { fsyncPath, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
 import { withLock } from './lock.ts'
@@ -136,13 +137,9 @@ export class DirectStore {
             db.exec('COMMIT')
             driver.quickCheck(db)
           } catch (e) {
-            try {
-              db.exec('ROLLBACK')
-            } catch {
-              /* ignore */
-            }
+            driver.rollbackQuietly(db)
             db.close()
-            rmSync(tmp, { force: true })
+            removeQuietly(tmp)
             throw e
           }
           db.close()
@@ -169,7 +166,7 @@ export class DirectStore {
               lease,
             })
           } catch (error) {
-            abandon() // removes only the uncommitted `.direct-` name, never a committed entry
+            removeQuietly(tmp) // only the uncommitted `.direct-` name, never a committed entry
             throw error
           }
           return outcome === 'published' ? next : abandon()
@@ -180,6 +177,9 @@ export class DirectStore {
         return out
       }
     }
-    throw new Error('DirectStore.write exceeded retries (excessive publish contention)')
+    throw new FsqliteError(
+      'retryable',
+      `DirectStore.write exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
+    )
   }
 }

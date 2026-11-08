@@ -7,16 +7,19 @@
 
 export { SnapshotStore } from './snapshotStore.ts'
 export { DirectStore } from './directStore.ts'
+export { ACTIONS, normalize, actionFor, applyWithPolicy, conflictName } from './conflictPolicy.ts'
 export {
-  ACTIONS,
-  normalize,
-  actionFor,
-  applyWithPolicy,
-  conflictName,
+  FsqliteError,
+  StoreFormatError,
+  ConflictError,
   StrictConflictError,
   PermanentConflictError,
-} from './conflictPolicy.ts'
-export { withLock, ownerOf, heartbeat, LockTimeoutError } from './lock.ts'
+  LockTimeoutError,
+  PostPublishError,
+  TransactionError,
+} from './errors.ts'
+export type { FsqliteErrorCode, StoreFormatErrorState } from './errors.ts'
+export { withLock, ownerOf, heartbeat } from './lock.ts'
 export { capabilities, backupDatabase } from './driver.ts'
 export { inspect, formatReport, detectFsType } from './fsinspect.ts'
 export { isSqliteFile, sqliteFacts, integrityReport } from './sqliteFacts.ts'
@@ -25,7 +28,6 @@ export {
   STORE_FORMAT_NAME,
   STORE_FORMAT_VERSION,
   STORE_MARKER_FILENAME,
-  StoreFormatError,
   recognizeStore,
   readStoreMarker,
 } from './storeFormat.ts'

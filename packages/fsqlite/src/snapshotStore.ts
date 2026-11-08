@@ -41,7 +41,15 @@ import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
-import { fsyncPath, fsyncDir, postPublishError, publishPointer } from './fsutil.ts'
+import {
+  FsqliteError,
+  PermanentConflictError,
+  PostPublishError,
+  StoreFormatError,
+  StrictConflictError,
+  TransactionError,
+} from './errors.ts'
+import { fsyncPath, fsyncDir, publishPointer, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
 import { isLockFresh, withLock } from './lock.ts'
@@ -121,6 +129,41 @@ const GC_SAFE_STATES: ReadonlySet<StoreValidationState> = new Set([
   'in-flight-capture',
 ])
 
+/** Whether `state` is a recognition failure, which no maintenance may act on. */
+const isRecognitionFailure = (
+  state: StoreValidationState,
+): state is 'not-a-store' | 'invalid' | 'unsupported' =>
+  state === 'not-a-store' || state === 'invalid' || state === 'unsupported'
+
+const repairLostOwnership = (): FsqliteError =>
+  new FsqliteError('retryable', 'repair lost ownership of publish.lock before mutation')
+
+/**
+ * Machine reason codes that open a `QUARANTINE` file for an envelope whose apply failed.
+ * The text after the colon is diagnostic detail; `writeWithRetry` reads only the code.
+ */
+type ApplyFailureCode = 'strict-conflict' | 'permanent-conflict' | 'apply-failed'
+
+/** The quarantine reason for an apply failure, classified by error type, not message. */
+function applyFailureReason(error: unknown): string {
+  const code: ApplyFailureCode =
+    error instanceof StrictConflictError
+      ? 'strict-conflict'
+      : error instanceof PermanentConflictError
+        ? 'permanent-conflict'
+        : 'apply-failed'
+  const detail =
+    error instanceof StrictConflictError || error instanceof PermanentConflictError
+      ? error.conflictTypes.join(',')
+      : error instanceof Error
+        ? error.message
+        : String(error)
+  return `${code}: ${detail}`
+}
+
+/** The machine code that opens a quarantine reason (`digest-mismatch`, `strict-conflict`). */
+const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]?.trim() ?? ''
+
 /** Store-root names a caller may never write: the marker, the pointer, and the lock. */
 const STORE_ROOT_ENTRIES: ReadonlySet<string> = new Set([
   STORE_MARKER_FILENAME,
@@ -129,8 +172,9 @@ const STORE_ROOT_ENTRIES: ReadonlySet<string> = new Set([
 ])
 
 /** init found a lineage without `current`; only repair may choose the head to restore. */
-const missingPointerError = (versions: number[]): Error =>
-  new Error(
+const missingPointerError = (versions: number[]): FsqliteError =>
+  new FsqliteError(
+    'corrupt',
     `refusing to initialize: ${STORE_MARKER_FILENAME} exists and snapshots/ holds snapshot(s) ` +
       `${versions.join(', ')}, but current is missing; run repair to restore current to the ` +
       'newest integrity-clean snapshot instead of re-creating snapshot 0',
@@ -183,7 +227,10 @@ function validatePrimaryKeys(db: driver.DB): void {
     }[]
     const pk = cols.filter((c) => c.pk > 0)
     if (pk.length === 0) {
-      throw new Error(`table "${t}" has no primary key; fsqlite requires a NON-NULL primary key`)
+      throw new FsqliteError(
+        'incompatible',
+        `table "${t}" has no primary key; fsqlite requires a NON-NULL primary key`,
+      )
     }
     const firstPk = pk[0]
     const integerKey =
@@ -197,13 +244,15 @@ function validatePrimaryKeys(db: driver.DB): void {
       continue
     }
     if (integerKey) {
-      throw new Error(
+      throw new FsqliteError(
+        'incompatible',
         `table "${t}" primary key column "${nullablePk.name}" is nullable: an INTEGER PRIMARY ` +
           'KEY declared DESC is not a rowid alias and admits NULL keys, which changesets omit; ' +
           'declare it NOT NULL or drop DESC',
       )
     }
-    throw new Error(
+    throw new FsqliteError(
+      'incompatible',
       `table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`,
     )
   }
@@ -223,7 +272,8 @@ function rejectCallerTriggers(db: driver.DB): void {
     return
   }
   const named = triggers.map((t) => `"${t.name}" on table "${t.tbl_name}"`).join(', ')
-  throw new Error(
+  throw new FsqliteError(
+    'incompatible',
     `SnapshotStore does not support triggers: the caller schema declares trigger ${named}. ` +
       'Reconcile applies changesets with ordinary statements, so a trigger would fire again ' +
       'and conflict with the rows it already wrote; remove the trigger, or use DirectStore, ' +
@@ -314,38 +364,39 @@ function verifyOwnedTableShapes(db: driver.DB): void {
       pk,
     }))
     if (JSON.stringify(normalized) !== JSON.stringify(expected)) {
-      throw new Error(`snapshot has invalid fsqlite-owned table ${table}`)
+      throw new FsqliteError('corrupt', `snapshot has invalid fsqlite-owned table ${table}`)
     }
   }
 }
 
 /** @internal Verify the format-owned identity and tables of a candidate snapshot. */
 export function verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
-  const applicationId = Number(
-    (db.prepare('PRAGMA application_id').get() as Record<string, unknown>).application_id,
-  )
+  const applicationId = driver.pragmaNumber(db, 'application_id')
   if (applicationId !== FSQLITE_APPLICATION_ID) {
-    throw new Error(
+    throw new FsqliteError(
+      'corrupt',
       `snapshot application_id ${applicationId} does not match fsqlite application_id ${FSQLITE_APPLICATION_ID}`,
     )
   }
   verifyOwnedTableShapes(db)
   const storedFormatVersion = metaValue(db, 'format_version')
   if (storedFormatVersion !== marker.format_version) {
-    throw new Error(
+    throw new FsqliteError(
+      'corrupt',
       `snapshot format version ${String(storedFormatVersion)} does not match ${STORE_MARKER_FILENAME} ` +
         marker.format_version,
     )
   }
   const storedStoreId = metaValue(db, 'store_id')
   if (storedStoreId !== marker.store_id) {
-    throw new Error(
+    throw new FsqliteError(
+      'corrupt',
       `snapshot store_id ${String(storedStoreId)} does not match ${STORE_MARKER_FILENAME} ${marker.store_id}`,
     )
   }
   for (const key of ['schema_hash', 'tool_version']) {
     if (metaValue(db, key) === undefined) {
-      throw new Error(`snapshot is missing required fsqlite_meta key ${key}`)
+      throw new FsqliteError('corrupt', `snapshot is missing required fsqlite_meta key ${key}`)
     }
   }
 }
@@ -358,17 +409,17 @@ export function verifySnapshotForPublish(
   schemaHash: string,
 ): void {
   verifySnapshotIdentity(db, marker)
-  const version = Number(
-    (db.prepare('PRAGMA user_version').get() as Record<string, unknown>).user_version,
-  )
+  const version = driver.pragmaNumber(db, 'user_version')
   if (version !== schemaVersion) {
-    throw new Error(
+    throw new FsqliteError(
+      'incompatible',
       `store schema version ${version} is incompatible with the requested ${schemaVersion}`,
     )
   }
   const storedHash = metaValue(db, 'schema_hash')
   if (storedHash !== schemaHash) {
-    throw new Error(
+    throw new FsqliteError(
+      'incompatible',
       `store schema is incompatible: stamped schema_hash ${storedHash} does not match the requested ` +
         `exact DDL hash ${schemaHash} at schemaVersion ${schemaVersion}`,
     )
@@ -437,7 +488,8 @@ export class SnapshotStore {
       } else {
         const unrelated = readdirSync(this.dir).filter((entry) => entry !== 'publish.lock')
         if (unrelated.length > 0) {
-          throw new Error(
+          throw new FsqliteError(
+            'refused',
             `refusing to initialize an unmarked non-empty directory: ${unrelated.join(', ')}; ` +
               `choose an empty directory or an existing store with ${STORE_MARKER_FILENAME}`,
           )
@@ -480,7 +532,10 @@ export class SnapshotStore {
           return
         }
         if (!lease.fence()) {
-          throw new Error('init lost ownership of publish.lock before snapshot publication')
+          throw new FsqliteError(
+            'retryable',
+            'init lost ownership of publish.lock before snapshot publication',
+          )
         }
         try {
           linkSync(tmp, this.snapshotPath(0)) // commit without replacing (spec F5c)
@@ -493,11 +548,14 @@ export class SnapshotStore {
         unlinkSync(tmp)
         fsyncDir(this.snapDir)
         if (!lease.fence()) {
-          throw new Error('init lost ownership of publish.lock before pointer publication')
+          throw new FsqliteError(
+            'retryable',
+            'init lost ownership of publish.lock before pointer publication',
+          )
         }
         publishPointer(this.dir, this.currentPath, 0)
       } catch (e) {
-        rmSync(tmp, { force: true })
+        removeQuietly(tmp)
         throw e
       }
     })
@@ -562,16 +620,12 @@ export class SnapshotStore {
     rejectCallerTriggers(db)
   }
 
-  private _verifySnapshotIdentity(db: driver.DB, marker: StoreMarker): void {
-    verifySnapshotIdentity(db, marker)
-  }
-
   /** Refuse store operations if the marker and published snapshot do not identify the same store. */
   private assertStoreIdentity(): void {
     const marker = readStoreMarker(this.dir)
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
-      this._verifySnapshotIdentity(db, marker)
+      verifySnapshotIdentity(db, marker)
     } finally {
       db.close()
     }
@@ -590,7 +644,7 @@ export class SnapshotStore {
     readStoreMarker(this.dir)
     const raw = readFileSync(this.currentPath, 'utf8').trim()
     if (!/^\d+$/.test(raw)) {
-      throw new Error(`corrupt current pointer: ${JSON.stringify(raw)}`)
+      throw new FsqliteError('corrupt', `corrupt current pointer: ${JSON.stringify(raw)}`)
     }
     return Number(raw)
   }
@@ -604,7 +658,7 @@ export class SnapshotStore {
     const marker = readStoreMarker(this.dir)
     const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
     try {
-      this._verifySnapshotIdentity(db, marker)
+      verifySnapshotIdentity(db, marker)
       return fn(db)
     } finally {
       db.close()
@@ -638,15 +692,18 @@ export class SnapshotStore {
         renameSync(tempPath, path)
         fsyncDir(this.leaseDir)
       } catch (error) {
-        rmSync(tempPath, { force: true })
-        throw new Error('readLease: failed to publish lease', { cause: error })
+        removeQuietly(tempPath)
+        throw new FsqliteError('io', `readLease: failed to publish lease ${path}`, {
+          cause: error,
+        })
       }
       if (existsSync(this.snapshotPath(version))) {
         return this._lease(version, path)
       }
       rmSync(path, { force: true }) // lost the race to gc; drop the stale lease and retry
       if (attempt >= maxRetries) {
-        throw new Error(
+        throw new FsqliteError(
+          'retryable',
           `readLease: snapshot ${version} was collected under contention after ${attempt} retries`,
         )
       }
@@ -681,7 +738,7 @@ export class SnapshotStore {
    */
   write(writerId: string, fn: WorkFn): string | null {
     if (!SAFE_WRITER_ID.test(writerId)) {
-      throw new Error(
+      throw new TypeError(
         `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
       )
     }
@@ -763,17 +820,29 @@ export class SnapshotStore {
       }
       const quarantinePath = join(this.txQuarantine, `${txId}.txn`, 'QUARANTINE')
       if (!existsSync(quarantinePath)) {
-        throw new Error(
+        throw new TransactionError(
+          'corrupt',
+          txId,
           `writeWithRetry: transaction ${txId} has no published or quarantined outcome`,
+          null,
         )
       }
       const reason = readFileSync(quarantinePath, 'utf8')
-      if (!reason.startsWith('apply-failed: strict conflict')) {
-        throw new Error(`writeWithRetry: transaction ${txId} permanently quarantined: ${reason}`)
+      const reasonCode = quarantineReasonCode(reason)
+      if (reasonCode !== 'strict-conflict') {
+        throw new TransactionError(
+          reasonCode === 'permanent-conflict' ? 'conflict' : 'refused',
+          txId,
+          `writeWithRetry: transaction ${txId} permanently quarantined: ${reason}`,
+          reason,
+        )
       }
       // A strict same-row conflict is retryable: re-seed and re-run fn.
     }
-    throw new Error('writeWithRetry: exceeded retries (persistent conflict)')
+    throw new FsqliteError(
+      'retryable',
+      `writeWithRetry: exceeded retries after ${maxRetries} attempts (persistent strict conflict)`,
+    )
   }
 
   /**
@@ -852,7 +921,7 @@ export class SnapshotStore {
         // the build has no `.build-` name left, so this only ever removes an uncommitted
         // transient, never a committed or published snapshot.
         if (!crashed) {
-          rmSync(tmp, { force: true })
+          removeQuietly(tmp)
         }
       }
       if (result === 'retry') {
@@ -876,7 +945,7 @@ export class SnapshotStore {
       try {
         settled = this._settle(fold.applied, fold.archivable, fold.quarantined)
       } catch (error) {
-        throw postPublishError(next, error)
+        throw new PostPublishError(next, error)
       }
       return {
         published: next,
@@ -885,7 +954,10 @@ export class SnapshotStore {
         attempts: attempt + 1,
       }
     }
-    throw new Error('reconcile exceeded retries (excessive publish contention)')
+    throw new FsqliteError(
+      'retryable',
+      `reconcile exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
+    )
   }
 
   /**
@@ -927,7 +999,7 @@ export class SnapshotStore {
         } catch (e) {
           // A genuine conflict aborted the apply (policy returned ABORT) or some other
           // apply error. Quarantine the tx; do not poison the whole batch.
-          quarantined.push([txn, `apply-failed: ${(e as Error).message}`])
+          quarantined.push([txn, applyFailureReason(e)])
         }
       }
       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
@@ -1062,10 +1134,12 @@ export class SnapshotStore {
     // stall publishers. A recognition failure is refused before the lock dir is created.
     const health = this.validate()
     if (!GC_SAFE_STATES.has(health.state) || health.current === undefined) {
-      throw new Error(
+      const message =
         `gc refused: store is ${health.state}: ${health.issues.join('; ')}; ` +
-          'run validate and repair before collecting snapshots',
-      )
+        'run validate and repair before collecting snapshots'
+      throw isRecognitionFailure(health.state)
+        ? new StoreFormatError(health.state, message)
+        : new FsqliteError('corrupt', message)
     }
     const validated = health.current
     return withLock(
@@ -1084,7 +1158,7 @@ export class SnapshotStore {
   ): GcResult {
     const fence = (): void => {
       if (!lease.fence()) {
-        throw new Error('gc lost ownership of publish.lock before deletion')
+        throw new FsqliteError('retryable', 'gc lost ownership of publish.lock before deletion')
       }
     }
     fence()
@@ -1092,7 +1166,8 @@ export class SnapshotStore {
     // A forward move is an ordinary integrity-gated publication. A backward move means
     // repair re-pointed the store after validation, so the verdict no longer applies.
     if (cur < validated) {
-      throw new Error(
+      throw new FsqliteError(
+        'retryable',
         `gc refused: current moved from ${validated} back to ${cur} after validation; run gc again`,
       )
     }
@@ -1162,7 +1237,9 @@ export class SnapshotStore {
     try {
       renameSync(path, tombstone)
     } catch (error) {
-      throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
+      throw new FsqliteError('io', `gc failed to remove snapshot ${v} (${path})`, {
+        cause: error,
+      })
     }
     let leasedNow: boolean
     try {
@@ -1178,7 +1255,9 @@ export class SnapshotStore {
     try {
       unlinkSync(tombstone)
     } catch (error) {
-      throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
+      throw new FsqliteError('io', `gc failed to remove snapshot ${v} (${path})`, {
+        cause: error,
+      })
     }
     return true
   }
@@ -1204,14 +1283,18 @@ export class SnapshotStore {
             ? value.version
             : undefined
         if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
-          throw new Error('lease version must be a non-negative safe integer')
+          throw new FsqliteError('corrupt', 'lease version must be a non-negative safe integer')
         }
         out.add(version)
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           continue
         }
-        throw new Error(`gc refused: fresh lease ${f} is unreadable`, { cause: error })
+        throw new FsqliteError(
+          'retryable',
+          `gc refused: fresh lease ${f} is unreadable (in ${this.leaseDir})`,
+          { cause: error },
+        )
       }
     }
     return out
@@ -1236,9 +1319,6 @@ export class SnapshotStore {
     let cur: number
     try {
       cur = this.currentVersion()
-      if (!Number.isInteger(cur)) {
-        throw new Error('nan')
-      }
     } catch {
       return { state: 'corrupt', issues: ['torn current pointer'] }
     }
@@ -1284,7 +1364,7 @@ export class SnapshotStore {
     let problems: string[]
     try {
       try {
-        this._verifySnapshotIdentity(db, marker)
+        verifySnapshotIdentity(db, marker)
       } catch (error) {
         return {
           state: 'corrupt',
@@ -1330,12 +1410,17 @@ export class SnapshotStore {
    */
   seal(destPath: string): string {
     this.assertStoreIdentity()
-    if (this.pendingTxns().length > 0) {
-      throw new Error('cannot seal: pending tx must be reconciled first')
+    const pending = this.pendingTxns().length
+    if (pending > 0) {
+      throw new FsqliteError(
+        'refused',
+        `cannot seal: ${pending} pending transaction(s) must be reconciled first`,
+      )
     }
     const destDir = dirname(resolve(destPath))
     if (this._isStoreOwnedPath(join(realpathSync(destDir), basename(destPath)))) {
-      throw new Error(
+      throw new FsqliteError(
+        'refused',
         `cannot seal into ${destPath}: the destination is a path inside the store that the ` +
           'store owns; choose a path outside its subdirectories and reserved names',
       )
@@ -1353,7 +1438,10 @@ export class SnapshotStore {
       try {
         const problems = driver.integrityProblems(out)
         if (problems.length) {
-          throw new Error(`sealed snapshot failed integrity validation: ${problems.join('; ')}`)
+          throw new FsqliteError(
+            'corrupt',
+            `sealed snapshot failed integrity validation: ${problems.join('; ')}`,
+          )
         }
       } finally {
         out.close()
@@ -1363,7 +1451,7 @@ export class SnapshotStore {
       fsyncDir(destDir)
       return destPath
     } catch (error) {
-      rmSync(tmp, { force: true })
+      removeQuietly(tmp)
       throw error
     } finally {
       lease.release()
@@ -1386,37 +1474,39 @@ export class SnapshotStore {
   repair({ lockOpts = {} }: { lockOpts?: LockOptions } = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
     if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
-      throw new Error('repair refused: publish.lock is present and held by a live publisher')
+      throw new FsqliteError(
+        'in-flight',
+        'repair refused: publish.lock is present and held by a live publisher',
+      )
     }
     const actions = withLock(
       this.publishLock,
       (_token, lease) => {
         if (!lease.fence()) {
-          throw new Error('repair lost ownership of publish.lock before mutation')
+          throw repairLostOwnership()
         }
         return this._repairLocked(marker, lease)
       },
       lockOpts,
     )
     const state = this.validate().state
-    if (state === 'not-a-store' || state === 'invalid' || state === 'unsupported') {
-      throw new Error(`repair ended with an unrecognized store: ${state}`)
+    if (isRecognitionFailure(state)) {
+      throw new StoreFormatError(state, `repair ended with an unrecognized store: ${state}`)
     }
     return { actions, state }
   }
 
   private _repairLocked(marker: StoreMarker, lease: LockLease): string[] {
     const actions: string[] = []
-    const lost = (): Error => new Error('repair lost ownership of publish.lock before mutation')
     const assertOwnership = (): void => {
       if (!lease.fence()) {
-        throw lost()
+        throw repairLostOwnership()
       }
     }
     // Scanning every snapshot can outlast the stale window, so renew after each one.
     const renew = (): void => {
       if (!lease.heartbeat()) {
-        throw lost()
+        throw repairLostOwnership()
       }
     }
     const versions = this.snapshotVersions()
@@ -1424,7 +1514,7 @@ export class SnapshotStore {
       try {
         const db = driver.openReadonly(this.snapshotPath(v))
         try {
-          this._verifySnapshotIdentity(db, marker)
+          verifySnapshotIdentity(db, marker)
           return true
         } finally {
           db.close()
@@ -1436,13 +1526,16 @@ export class SnapshotStore {
       }
     }
     if (!versions.some(identityMatches)) {
-      throw new Error(`repair: no snapshot matches the store identity in ${STORE_MARKER_FILENAME}`)
+      throw new FsqliteError(
+        'corrupt',
+        `repair: no snapshot matches the store identity in ${STORE_MARKER_FILENAME}`,
+      )
     }
     const integrityOk = (v: number): boolean => {
       try {
         const db = driver.openReadonly(this.snapshotPath(v))
         try {
-          this._verifySnapshotIdentity(db, marker)
+          verifySnapshotIdentity(db, marker)
           return driver.integrityCheck(db)
         } finally {
           db.close()
@@ -1475,7 +1568,10 @@ export class SnapshotStore {
         }
       }
       if (good === null) {
-        throw new Error('repair: no integrity-clean snapshot exists')
+        throw new FsqliteError(
+          'corrupt',
+          'repair: no integrity-clean snapshot exists; every snapshot was left in place',
+        )
       }
       assertOwnership()
       publishPointer(this.dir, this.currentPath, good)
