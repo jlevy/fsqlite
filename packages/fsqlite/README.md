@@ -340,7 +340,10 @@ console.log(row)
 Every table must have a non-null primary key.
 The `f1.0` writer contract does not support virtual tables or DDL inside write
 callbacks. `SnapshotStore` also rejects a schema that declares triggers, because
-reconciliation would fire them a second time; use `DirectStore` for such a schema.
+reconciliation would fire them a second time, and an `ON CONFLICT REPLACE` or `IGNORE`
+clause on a primary key or `UNIQUE` constraint, which would let reconciliation resolve
+a clash silently instead of applying the merge policy; use `DirectStore` for such a
+schema.
 Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
 Give tables that concurrent `SnapshotStore` writers insert into caller-generated keys,
 such as UUIDs: writers seeded from the same snapshot allocate the same next rowid or

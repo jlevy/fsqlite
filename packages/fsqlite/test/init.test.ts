@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SnapshotStore } from '../src/index.ts'
+import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 import { runAsync } from './spawn.ts'
 import { setOwnerWriterForTest } from '../src/lock.ts'
@@ -53,6 +53,59 @@ test('SnapshotStore init rejects a caller schema that declares a trigger', () =>
     assert.equal(existsSync(join(dir, 'current')), false)
   } finally {
     cleanup()
+  }
+})
+
+test('SnapshotStore rejects a key constraint whose ON CONFLICT clause hides apply conflicts', () => {
+  // A declared REPLACE or IGNORE resolution on a primary key or UNIQUE constraint resolves
+  // the changeset apply's own statements, so a clash never reaches the merge policy: rows
+  // are deleted or dropped while the envelope is ledgered as applied.
+  const cases: [string, boolean][] = [
+    ['CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT UNIQUE ON CONFLICT REPLACE);', false],
+    ['CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT UNIQUE ON CONFLICT IGNORE);', false],
+    ['CREATE TABLE t (id TEXT PRIMARY KEY ON CONFLICT REPLACE NOT NULL, u TEXT);', false],
+    ['CREATE TABLE t (id TEXT NOT NULL, u TEXT, PRIMARY KEY (id) ON CONFLICT IGNORE);', false],
+    [
+      'CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT, UNIQUE (u) ON  conflict\nreplace);',
+      false,
+    ],
+    // Clauses that abort still surface as conflicts, and a NOT NULL default is applied at capture.
+    ['CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT UNIQUE ON CONFLICT ROLLBACK);', true],
+    ['CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT UNIQUE ON CONFLICT FAIL);', true],
+    [
+      "CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'd');",
+      true,
+    ],
+    // The words inside a comment, a string, or a quoted identifier are not a clause.
+    [
+      "CREATE TABLE t (id TEXT PRIMARY KEY NOT NULL, u TEXT DEFAULT 'on conflict replace'); -- unique on conflict ignore",
+      true,
+    ],
+    [
+      'CREATE TABLE "on conflict replace" (id TEXT PRIMARY KEY NOT NULL /* unique on conflict replace */);',
+      true,
+    ],
+  ]
+  for (const [schema, accepted] of cases) {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const init = (): unknown => new SnapshotStore(dir, { schema, schemaVersion: 1 }).init()
+      if (accepted) {
+        assert.doesNotThrow(init, `should accept: ${schema}`)
+      } else {
+        assert.throws(
+          init,
+          /SnapshotStore does not support ON CONFLICT REPLACE or IGNORE on a primary key or UNIQUE constraint: table "t".*DirectStore/,
+          `should reject: ${schema}`,
+        )
+        assert.equal(existsSync(join(dir, 'current')), false)
+        // DirectStore runs callbacks directly, so SQLite resolves those clauses as declared.
+        rmSync(dir, { recursive: true, force: true })
+        assert.doesNotThrow(() => new DirectStore(dir, { schema, schemaVersion: 1 }).init())
+      }
+    } finally {
+      cleanup()
+    }
   }
 })
 

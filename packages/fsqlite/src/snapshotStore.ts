@@ -282,6 +282,52 @@ function rejectCallerTriggers(db: driver.DB): void {
   )
 }
 
+/** SQL text with comments, string literals, and quoted identifiers blanked out. */
+const sqlCodeOnly = (sql: string): string =>
+  sql.replace(
+    /--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]/g,
+    ' ',
+  )
+
+/**
+ * A conflict clause that resolves a clash instead of reporting it. Only a primary key or
+ * UNIQUE constraint can be at stake: a `NOT NULL ON CONFLICT` clause substitutes its
+ * default at capture, so the changeset already carries the resolved value.
+ */
+const KEY_CONFLICT_RESOLUTION = /\bON\s+CONFLICT\s+(?:REPLACE|IGNORE)\b/i
+const NOT_NULL_CONFLICT_CLAUSE = /\bNOT\s+NULL\s+ON\s+CONFLICT\s+\w+/gi
+
+/**
+ * Refuse a caller table whose primary key or UNIQUE constraint declares `ON CONFLICT
+ * REPLACE` or `IGNORE` (spec S4). Changeset apply runs ordinary statements, so SQLite
+ * would resolve a clash by that clause and never report it to the merge policy: REPLACE
+ * deletes the conflicting row and IGNORE drops the incoming one, both while the envelope
+ * is ledgered as applied, even under `strict`.
+ */
+function rejectKeyConflictResolution(db: driver.DB): void {
+  const tables = db
+    .prepare(
+      "SELECT name, sql FROM main.sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .all() as { name: string; sql: string | null }[]
+  const offending = tables
+    .filter(({ sql }) =>
+      KEY_CONFLICT_RESOLUTION.test(sqlCodeOnly(sql ?? '').replace(NOT_NULL_CONFLICT_CLAUSE, ' ')),
+    )
+    .map(({ name }) => `"${name}"`)
+  if (offending.length === 0) {
+    return
+  }
+  throw new FsqliteError(
+    'incompatible',
+    'SnapshotStore does not support ON CONFLICT REPLACE or IGNORE on a primary key or UNIQUE ' +
+      `constraint: table ${offending.join(', ')} declares one. Reconcile applies changesets ` +
+      'with ordinary statements, so SQLite would resolve a clash by that clause instead of ' +
+      'reporting it to the merge policy, deleting or dropping rows silently; remove the ' +
+      'clause, or use DirectStore, which runs callbacks directly',
+  )
+}
+
 // applied_tx is the per-snapshot idempotency ledger fsqlite manages on the caller's
 // behalf; fsqlite_meta stamps the store's own identity (schema hash, tool version) so a
 // reopen with a divergent schema is rejected loudly. These are the only two tables fsqlite
@@ -614,11 +660,13 @@ export class SnapshotStore {
 
   /**
    * Reject caller-schema features this write strategy cannot carry (spec S4). Changeset
-   * apply fires triggers again, so a SnapshotStore schema may not declare any; DirectStore,
-   * which runs its callback on the build directly, overrides this.
+   * apply fires triggers again and resolves key clashes by any declared REPLACE or IGNORE
+   * clause, so a SnapshotStore schema may declare neither; DirectStore, which runs its
+   * callback on the build directly, overrides this.
    */
   protected assertStrategySchema(db: driver.DB): void {
     rejectCallerTriggers(db)
+    rejectKeyConflictResolution(db)
   }
 
   /** Refuse store operations if the marker and published snapshot do not identify the same store. */

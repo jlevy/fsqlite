@@ -207,6 +207,14 @@ Requirements:
   by a Writer or Reconciler MUST reject a schema whose `sqlite_schema` holds a trigger,
   naming it. The DirectStore strategy (§9) applies no changeset, so its triggers fire
   once and are permitted.
+  For the same reason, such a schema MUST NOT declare an `ON CONFLICT REPLACE` or
+  `ON CONFLICT IGNORE` clause on a primary key or `UNIQUE` constraint: the apply
+  statements would resolve a clash by that clause instead of reporting it to the
+  conflict handler, so REPLACE deletes the existing row and IGNORE drops the incoming
+  change, both while the envelope is ledgered as applied and whatever the table’s
+  policy. Initialization and every open by a Writer or Reconciler MUST reject such a
+  schema, naming the table; DirectStore permits it. A `NOT NULL` conflict clause is
+  permitted, because capture already substituted its default.
   Foreign-key actions (`ON DELETE`/`ON UPDATE` `CASCADE`, `SET NULL`, `SET DEFAULT`) are
   permitted for both strategies; F3 applies their recorded effects without running them
   again. The `f1.0` Writer role does not support virtual tables: SQLite sessions do not
@@ -649,7 +657,8 @@ snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
 The callback runs on the build with foreign keys enforced, so its triggers and
-foreign-key actions fire exactly once; S4’s trigger prohibition does not apply.
+foreign-key actions fire exactly once; S4’s trigger and conflict-clause prohibitions
+do not apply.
 The writer **does not require the session extension**, so the strategy runs on any
 SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
 composes safely with SnapshotStore reconcilers publishing into the same store.
