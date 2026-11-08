@@ -81,6 +81,7 @@ paths below are relative to it.
     000000000001.fsqlite.sqlite
     .build-<hex10>.sqlite          # transient: reconcile build (§6)
     .direct-<hex10>.sqlite         # transient: DirectStore build (§9)
+    .gc-<version>-<hex10>.tmp      # transient: snapshot tombstoned by GC (§8 G2)
     *.tmp                          # transient: init's snapshot-0 build (§3)
   tx/
     pending/
@@ -534,8 +535,8 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - **RL1.** To take a lease: read `current` → v; write `leases/<token>.lease` containing
   `{version: v, pid, host, at}`; **then verify the snapshot file still exists**. If it
   does not, the lease lost a race with GC: remove the lease file and retry from a fresh
-  pointer read. (Publish-then-verify closes the check-then-act race from the reader’s
-  side.)
+  pointer read. (Publish-then-verify is the reader’s half of the race closure; G2’s
+  tombstone is GC’s half.)
 - **RL2.** Lease liveness is the lease file’s mtime; holders of long leases SHOULD
   heartbeat by touching the file.
   GC MAY treat leases older than its staleness window (Node default 60 s) as abandoned
@@ -556,10 +557,21 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   re-pointed the store and GC MUST refuse.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
-- **G2.** GC MUST re-scan the lease directory **immediately before each individual
-  snapshot unlink**. A lease may have been published after GC’s initial scan (this is
-  the GC-side half of the race closure; RL1 is the reader-side half).
-  The newest `retain` versions are never collected, which bounds RL1’s retries.
+- **G2.** GC MUST delete each snapshot in two phases.
+  It re-scans the lease directory, then `rename()`s the snapshot to a
+  `snapshots/.gc-<version>-<hex10>.tmp` tombstone, then **re-scans the lease directory
+  again**. If a live lease now names the version, GC MUST restore the tombstone to its
+  snapshot name (without replacing) and keep it; otherwise it unlinks the tombstone.
+  If the second scan fails (for example on an unreadable fresh lease), GC MUST restore
+  the snapshot before failing.
+  A single re-scan followed by an unlink does not close the race: a reader can publish
+  its lease and pass its existence check between them.
+  With the tombstone, every interleaving is safe: a reader whose existence check runs
+  after the rename fails it and retries (RL1), and a lease published before the rename
+  is visible to the second scan.
+  A lease that lands just before the rename can see its snapshot vanish briefly, until
+  the second scan restores it; the newest `retain` versions are never collected, which
+  bounds RL1’s retries.
 - **G3.** GC MAY also sweep *stale* transients at the store root, in `snapshots/`, and
   in `tx/pending/` (`.build-*`, `.direct-*`, `.work-*`, and `*.tmp`), but MUST NOT sweep
   *fresh* ones, which may belong to a live initializer, reconcile, DirectStore write, or

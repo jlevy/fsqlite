@@ -24,6 +24,8 @@
 import {
   mkdirSync,
   copyFileSync,
+  linkSync,
+  unlinkSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -940,18 +942,16 @@ export class SnapshotStore {
       if (v === cur || v >= keepFloor || leased.has(v)) {
         continue
       }
-      // Re-scan leases right before unlinking: a reader may have claimed v after we computed
-      // `leased` (readLease publishes the lease before reading), so this is the second half of
-      // the lease/gc race fix.
+      // Re-scan leases right before the tombstone: a reader may have claimed v after we
+      // computed `leased` (readLease publishes the lease before reading).
       if (this._activeLeasedVersions(leaseStaleMs).has(v)) {
         continue
       }
       fence()
-      try {
-        rmSync(this.snapshotPath(v), { force: true })
+      if (this._collectSnapshot(v, leaseStaleMs)) {
         removed++
-      } catch (error) {
-        throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
+      } else {
+        leased.add(v)
       }
     }
     // Sweep stale transients only. A fresh .build-/.direct-/.work- file may be
@@ -980,6 +980,45 @@ export class SnapshotStore {
     sweepStaleTransients(this.snapDir)
     sweepStaleTransients(this.txPending)
     return { removed, kept: versions.length - removed, leased: [...leased] }
+  }
+
+  /**
+   * Two-phase unlink (spec G2): rename snapshot `v` to a `.gc-` tombstone, re-scan leases,
+   * then either unlink the tombstone or, if a lease on `v` appeared, move it back. A check
+   * followed by an unlink cannot close the race with RL1, because a reader can publish its
+   * lease and pass its existence check between the two. After the rename the reader's check
+   * fails and it retries; a lease published before the rename is visible to the re-scan.
+   * Returns true if the snapshot was deleted, false if a lease kept it.
+   */
+  private _collectSnapshot(v: number, leaseStaleMs: number): boolean {
+    const path = this.snapshotPath(v)
+    const tombstone = join(this.snapDir, `.gc-${pad(v)}-${rand()}.tmp`)
+    const restore = (): void => {
+      linkSync(tombstone, path) // never replace a snapshot name
+      unlinkSync(tombstone)
+    }
+    try {
+      renameSync(path, tombstone)
+    } catch (error) {
+      throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
+    }
+    let leasedNow: boolean
+    try {
+      leasedNow = this._activeLeasedVersions(leaseStaleMs).has(v)
+    } catch (error) {
+      restore() // fail closed: an unreadable lease must not cost the snapshot it may pin
+      throw error
+    }
+    if (leasedNow) {
+      restore()
+      return false
+    }
+    try {
+      unlinkSync(tombstone)
+    } catch (error) {
+      throw new Error(`gc failed to remove snapshot ${v}`, { cause: error })
+    }
+    return true
   }
 
   private _activeLeasedVersions(staleMs: number): Set<number> {

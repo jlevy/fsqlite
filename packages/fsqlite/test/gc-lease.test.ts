@@ -282,3 +282,92 @@ test('gc rejects invalid options before deleting anything, even with a live leas
     cleanup()
   }
 })
+
+test('a lease published at any point during gc never pins a deleted snapshot', () => {
+  // A reader read `current` when it was 1, several publishes ago, and publishes its lease
+  // while gc runs (spec RL1). Inject that lease before and after every lease scan gc makes.
+  for (let scan = 1; ; scan++) {
+    let injected = false
+    for (const position of ['before', 'after'] as const) {
+      const { dir, cleanup } = tmpStore()
+      try {
+        const store = new SnapshotStore(dir, STORE_OPTS).init()
+        advance(store, 3)
+        const reader = new SnapshotStore(dir, STORE_OPTS)
+        const readCurrent = reader.currentVersion.bind(reader)
+        // A stale pointer read until that snapshot disappears; RL1's retry reads afresh.
+        reader.currentVersion = () => (existsSync(reader.snapshotPath(1)) ? 1 : readCurrent())
+        let lease: ReturnType<SnapshotStore['readLease']> | null = null
+        const scanLeases = (
+          store as unknown as { _activeLeasedVersions: (ms: number) => Set<number> }
+        )._activeLeasedVersions.bind(store)
+        let scans = 0
+        Object.assign(store, {
+          _activeLeasedVersions: (ms: number): Set<number> => {
+            scans++
+            const take = scans === scan && lease === null
+            if (take && position === 'before') {
+              lease = reader.readLease()
+            }
+            const result = scanLeases(ms)
+            if (take && position === 'after') {
+              lease = reader.readLease()
+            }
+            return result
+          },
+        })
+
+        store.gc({ retain: 0 })
+
+        const held = lease as ReturnType<SnapshotStore['readLease']> | null
+        if (held !== null) {
+          injected = true
+          assert.ok(
+            existsSync(store.snapshotPath(held.version)),
+            `lease on ${held.version} injected ${position} scan ${scan} must keep it`,
+          )
+          held.release()
+        }
+      } finally {
+        cleanup()
+      }
+    }
+    if (!injected) {
+      break // gc made fewer scans than this; every boundary has been covered
+    }
+  }
+})
+
+test('gc restores a tombstoned snapshot when the re-scan after the tombstone fails', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 3)
+    const scanLeases = (
+      store as unknown as { _activeLeasedVersions: (ms: number) => Set<number> }
+    )._activeLeasedVersions.bind(store)
+    Object.assign(store, {
+      _activeLeasedVersions: (ms: number): Set<number> => {
+        // Once snapshot 0 is tombstoned, a fresh lease that cannot be read appears.
+        if (!existsSync(store.snapshotPath(0))) {
+          writeFileSync(join(store.leaseDir, 'torn.lease'), '{')
+        }
+        return scanLeases(ms)
+      },
+    })
+
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      /gc refused: fresh lease torn\.lease is unreadable/,
+    )
+
+    assert.deepEqual(snapshotFiles(store), [0, 1, 2, 3], 'the tombstoned snapshot is back')
+    assert.deepEqual(
+      readdirSync(store.snapDir).filter((f) => f.startsWith('.gc-')),
+      [],
+      'no tombstone is left for a later sweep to delete',
+    )
+  } finally {
+    cleanup()
+  }
+})
