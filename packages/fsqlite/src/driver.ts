@@ -60,9 +60,14 @@ export function open(path: string): DatabaseSync {
  * with the recorded changes (spec F3). The explicit `foreign_key_check` after each envelope
  * and at the publication gate keeps constraint closure. The pragma is set here, outside any
  * transaction, because SQLite ignores it inside one.
+ *
+ * SQLite never syncs the build (`synchronous = OFF`): it is a transient no reader can reach
+ * until reconcile fsyncs it and its directory before naming it (spec section 10), and a
+ * rollback inside this process reads the journal back from the OS cache. FULL would add a
+ * file sync per applied envelope to a file that a crash discards anyway.
  */
 export function openBuild(path: string): DatabaseSync {
-  return openWritable(path, 'PRAGMA synchronous = FULL; PRAGMA foreign_keys = OFF;')
+  return openWritable(path, 'PRAGMA synchronous = OFF; PRAGMA foreign_keys = OFF;')
 }
 
 /** Open an immutable published snapshot read-only. Needs no session support. */

@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backupDatabase, capabilities } from '../src/index.ts'
-import { open, openReadonly, integrityCheck } from '../src/driver.ts'
+import { open, openBuild, openReadonly, integrityCheck } from '../src/driver.ts'
 
 function withTmp(fn: (dir: string) => unknown): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'driver-cap-'))
@@ -31,6 +31,29 @@ test('capabilities() reports session support on node:sqlite', () => {
   assert.equal(caps.applyChangeset, true)
   assert.equal(caps.backup, true)
   assert.equal(caps.rebaser, false, 'node:sqlite exposes no rebaser binding')
+})
+
+test('a reconcile build skips SQLite syncs and runs no foreign-key actions', async () => {
+  await withTmp((dir) => {
+    // The build is fsynced once before publication (spec section 10), so per-transaction
+    // syncs only slow reconcile; its recorded foreign-key action effects must not re-fire.
+    const db = openBuild(join(dir, '.build-probe.sqlite'))
+    try {
+      const pragma = (name: string): unknown =>
+        Object.values(db.prepare(`PRAGMA ${name}`).get() ?? {})[0]
+      assert.deepEqual(
+        {
+          journal: pragma('journal_mode'),
+          synchronous: pragma('synchronous'),
+          foreignKeys: pragma('foreign_keys'),
+          busyTimeout: pragma('busy_timeout'),
+        },
+        { journal: 'delete', synchronous: 0, foreignKeys: 0, busyTimeout: 5000 },
+      )
+    } finally {
+      db.close()
+    }
+  })
 })
 
 test('backupDatabase() makes an integrity-clean copy of a live database', async () => {

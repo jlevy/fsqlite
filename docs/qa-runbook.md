@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **163 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
+Current status: **164 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -54,7 +54,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
 | `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, trigger support that SnapshotStore refuses to open, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
-| `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes plus integrity-clean online backup |
+| `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes, reconcile-build connection settings, and integrity-clean online backup |
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states, feature/version gating, marker fencing, and mixed-store quarantine |
@@ -98,7 +98,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 163` / `# fail 0`; goldens `27 passed`; build
+- **Expect:** node:test reports `# pass 164` / `# fail 0`; goldens `27 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
