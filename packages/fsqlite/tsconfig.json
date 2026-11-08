@@ -10,7 +10,7 @@
     "allowJs": true,
     "checkJs": true,
     // Source uses explicit `.ts` import specifiers so Node's native type-stripping can
-    // resolve them at runtime (`node src/cli/index.ts`); tsc needs this to allow them.
+    // resolve them at runtime (`node src/cli/bin.ts`); tsc needs this to allow them.
     "allowImportingTsExtensions": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,

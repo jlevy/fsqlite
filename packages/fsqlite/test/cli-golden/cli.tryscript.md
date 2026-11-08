@@ -14,7 +14,7 @@ The maintenance commands (`info`, `validate`, `gc`, `seal`, `repair`, `doctor`) 
 on a store they did not create and need no knowledge of the caller’s schema or merge
 policy. This demonstrates the self-describing format.
 `fsqlite-seed` builds a deterministic store through the public API. Every other command
-uses the real CLI (`src/cli/index.ts`). The script runs in a temporary sandbox, so all
+uses the real CLI (`src/cli/bin.ts`). The script runs in a temporary sandbox, so all
 `store*` paths are isolated and removed automatically.
 
 ---

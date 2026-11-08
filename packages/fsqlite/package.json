@@ -17,7 +17,9 @@
   "engines": {
     "node": ">=22.18.0 <23 || ^24.0.0 || >=26.0.0"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/cli/bin.mjs"
+  ],
   "publishConfig": {
     "access": "public",
     "tag": "alpha"
@@ -28,15 +30,15 @@
       "default": "./dist/index.mjs"
     },
     "./cli": {
-      "types": "./dist/cli/index.d.mts",
-      "import": "./dist/cli/index.mjs"
+      "types": "./dist/cli/main.d.mts",
+      "default": "./dist/cli/main.mjs"
     }
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "fsqlite": "./dist/cli/index.mjs"
+    "fsqlite": "./dist/cli/bin.mjs"
   },
   "files": [
     "dist",
@@ -46,7 +48,7 @@
   "scripts": {
     "build": "tsdown",
     "prepublishOnly": "pnpm build",
-    "cli": "node src/cli/index.ts",
+    "cli": "node src/cli/bin.ts",
     "demo": "node examples/demo.ts",
     "benchmark:seed": "node benchmarks/seed.ts",
     "benchmark:workload-fit": "node benchmarks/workload-fit.ts",

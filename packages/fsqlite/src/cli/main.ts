@@ -1,5 +1,7 @@
-#!/usr/bin/env node
 // fsqlite CLI: operate a store from the shell with no server and no app code.
+//
+// This module has no import-time effects: `main(argv, io)` runs one invocation and
+// returns its exit code. The `fsqlite` bin (bin.ts) wires it to the process.
 //
 // The info, validate, gc, seal, and repair commands work on any fsqlite store without
 // knowing the caller's schema or merge policy. They operate on snapshots, pointers,
@@ -24,17 +26,18 @@ import { isSqliteFile, sqliteFacts, integrityReport, type SqliteFacts } from '..
 import { hasStoreMarker } from '../storeFormat.ts'
 import type { StoreValidationState } from '../types.ts'
 
-// Exit cleanly when output is piped to a closed reader (e.g. `fsqlite info <dir> | head`).
-for (const stream of [process.stdout, process.stderr]) {
-  stream.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EPIPE') {
-      process.exit(0)
-    }
-    throw err
-  })
+/** Where one CLI invocation writes its output, one line per call. */
+export interface CliIo {
+  out: (line: string) => void
+  err: (line: string) => void
 }
 
-const [cmd, dir, ...rest] = process.argv.slice(2)
+/** The process streams, for the bin. */
+export const processIo: CliIo = {
+  out: (line) => process.stdout.write(`${line}\n`),
+  err: (line) => process.stderr.write(`${line}\n`),
+}
+
 class CliExit extends Error {
   readonly code: number
 
@@ -43,24 +46,6 @@ class CliExit extends Error {
     this.code = code
   }
 }
-
-const fail = (msg: string): never => {
-  console.error(`fsqlite: ${msg}`)
-  throw new CliExit(64)
-}
-const flag = (name: string, dflt: string): string => {
-  const i = rest.indexOf(name)
-  if (i < 0) {
-    return dflt
-  }
-  const val = rest[i + 1]
-  // `--retain` with no value (or another flag as the value) must not silently become NaN.
-  if (val === undefined || val.startsWith('-')) {
-    return fail(`${name} requires a value`)
-  }
-  return val
-}
-const json = rest.includes('--json')
 
 const exitCodeForState = (state: StoreValidationState): number => {
   switch (state) {
@@ -90,26 +75,55 @@ function classifyPath(p: string): 'store' | 'sqlite-file' | 'unknown' {
 const countDir = (p: string, suffix: string): number =>
   existsSync(p) ? readdirSync(p).filter((f) => f.endsWith(suffix)).length : 0
 
-function printSqliteFacts(f: SqliteFacts, indent: string): void {
-  console.log(`${indent}sqlite_version: ${f.sqliteVersion}`)
-  console.log(`${indent}page_size: ${f.pageSize}`)
-  console.log(`${indent}page_count: ${f.pageCount}`)
-  console.log(`${indent}file_bytes: ${f.fileBytes}`)
-  console.log(`${indent}application_id: ${f.applicationId}`)
-  console.log(`${indent}user_version: ${f.userVersion}`)
-  console.log(`${indent}journal_mode: ${f.journalMode}`)
-  console.log(
-    `${indent}tables: ${f.tables.map((t) => `${t.name}=${t.rows}`).join(' ') || '(none)'}`,
-  )
+function printSqliteFacts(log: (line: string) => void, f: SqliteFacts, indent: string): void {
+  log(`${indent}sqlite_version: ${f.sqliteVersion}`)
+  log(`${indent}page_size: ${f.pageSize}`)
+  log(`${indent}page_count: ${f.pageCount}`)
+  log(`${indent}file_bytes: ${f.fileBytes}`)
+  log(`${indent}application_id: ${f.applicationId}`)
+  log(`${indent}user_version: ${f.userVersion}`)
+  log(`${indent}journal_mode: ${f.journalMode}`)
+  log(`${indent}tables: ${f.tables.map((t) => `${t.name}=${t.rows}`).join(' ') || '(none)'}`)
 }
 
-function main(): void {
+/** Run one CLI invocation (`argv` excludes the node and script paths). */
+export function main(argv: readonly string[], io: CliIo = processIo): number {
+  try {
+    return run(argv, io)
+  } catch (e: unknown) {
+    if (e instanceof CliExit) {
+      return e.code
+    }
+    io.err(`fsqlite: ${e instanceof Error ? e.message : String(e)}`)
+    return 1
+  }
+}
+
+function run(argv: readonly string[], io: CliIo): number {
+  const [cmd, dir, ...rest] = argv
+  const log = io.out
+  const fail = (msg: string): never => {
+    io.err(`fsqlite: ${msg}`)
+    throw new CliExit(64)
+  }
+  const flag = (name: string, dflt: string): string => {
+    const i = rest.indexOf(name)
+    if (i < 0) {
+      return dflt
+    }
+    const val = rest[i + 1]
+    // `--retain` with no value (or another flag as the value) must not silently become NaN.
+    if (val === undefined || val.startsWith('-')) {
+      return fail(`${name} requires a value`)
+    }
+    return val
+  }
+  const json = rest.includes('--json')
+  let exitCode = 0
   if (!cmd || cmd === '--help' || cmd === '-h') {
-    console.log(
-      'usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [args]',
-    )
-    process.exitCode = cmd ? 0 : 64
-    return
+    log('usage: fsqlite <info|validate|stats|gc|seal|repair|fsinspect|doctor> <path> [args]')
+    exitCode = cmd ? 0 : 64
+    return exitCode
   }
   if (!dir) {
     return fail(`'${cmd}' needs a <path>`)
@@ -118,9 +132,9 @@ function main(): void {
   // fsinspect works on any path (no store required), so handle it before constructing a store.
   if (cmd === 'fsinspect') {
     const report = inspect(dir)
-    console.log(rest.includes('--json') ? JSON.stringify(report, null, 2) : formatReport(report))
-    process.exitCode = report.verdict.fsqliteSafe ? 0 : 1
-    return
+    log(rest.includes('--json') ? JSON.stringify(report, null, 2) : formatReport(report))
+    exitCode = report.verdict.fsqliteSafe ? 0 : 1
+    return exitCode
   }
 
   // stats/doctor work on any SQLite path, so classify before assuming a store.
@@ -132,14 +146,14 @@ function main(): void {
     if (kind === 'sqlite-file') {
       const f = sqliteFacts(dir)
       if (json) {
-        console.log(JSON.stringify({ path: dir, kind: 'plain-sqlite', sqlite: f }, null, 2))
+        log(JSON.stringify({ path: dir, kind: 'plain-sqlite', sqlite: f }, null, 2))
       } else {
-        console.log(`fsqlite stats: ${dir}`)
-        console.log('  kind: plain-sqlite (no fsqlite layer)')
-        printSqliteFacts(f, '  ')
+        log(`fsqlite stats: ${dir}`)
+        log('  kind: plain-sqlite (no fsqlite layer)')
+        printSqliteFacts(log, f, '  ')
       }
-      process.exitCode = 0
-      return
+      exitCode = 0
+      return exitCode
     }
     const store = new SnapshotStore(dir)
     const v = store.validate()
@@ -163,24 +177,24 @@ function main(): void {
         ? sqliteFacts(store.snapshotPath(cur))
         : null
     if (json) {
-      console.log(JSON.stringify({ path: dir, kind: 'fsqlite-store', fsqlite, snapshot }, null, 2))
+      log(JSON.stringify({ path: dir, kind: 'fsqlite-store', fsqlite, snapshot }, null, 2))
     } else {
-      console.log(`fsqlite stats: ${dir}`)
-      console.log('  kind: fsqlite-store')
-      console.log(`  current: ${fsqlite.current ?? '(unreadable)'}`)
-      console.log(`  snapshots: ${fsqlite.snapshots}`)
-      console.log(
+      log(`fsqlite stats: ${dir}`)
+      log('  kind: fsqlite-store')
+      log(`  current: ${fsqlite.current ?? '(unreadable)'}`)
+      log(`  snapshots: ${fsqlite.snapshots}`)
+      log(
         `  pending: ${fsqlite.pending}  applied: ${fsqlite.applied}  quarantine: ${fsqlite.quarantine}`,
       )
-      console.log(`  leases: ${fsqlite.leases}`)
-      console.log(`  state: ${fsqlite.state}`)
+      log(`  leases: ${fsqlite.leases}`)
+      log(`  state: ${fsqlite.state}`)
       if (snapshot) {
-        console.log(`  current snapshot (SQLite):`)
-        printSqliteFacts(snapshot, '    ')
+        log(`  current snapshot (SQLite):`)
+        printSqliteFacts(log, snapshot, '    ')
       }
     }
-    process.exitCode = 0
-    return
+    exitCode = 0
+    return exitCode
   }
 
   if (cmd === 'doctor') {
@@ -192,7 +206,7 @@ function main(): void {
       const problems = integrityReport(dir)
       const ok = problems.length === 0
       if (json) {
-        console.log(
+        log(
           JSON.stringify(
             { path: dir, kind: 'plain-sqlite', integrity: ok ? 'ok' : problems },
             null,
@@ -200,12 +214,12 @@ function main(): void {
           ),
         )
       } else {
-        console.log(`fsqlite doctor: ${dir}`)
-        console.log('  kind: plain-sqlite (no fsqlite layer)')
-        console.log(`  integrity: ${ok ? 'ok' : problems.join('; ')}`)
+        log(`fsqlite doctor: ${dir}`)
+        log('  kind: plain-sqlite (no fsqlite layer)')
+        log(`  integrity: ${ok ? 'ok' : problems.join('; ')}`)
       }
-      process.exitCode = ok ? 0 : 3
-      return
+      exitCode = ok ? 0 : 3
+      return exitCode
     }
     const caps = capabilities()
     const store = new SnapshotStore(dir)
@@ -223,19 +237,17 @@ function main(): void {
       ...(actions.length ? { repaired: actions } : {}),
     }
     if (json) {
-      console.log(JSON.stringify(out, null, 2))
+      log(JSON.stringify(out, null, 2))
     } else {
-      console.log(`fsqlite doctor: ${dir}`)
-      console.log(
-        `  binding: session=${caps.session} backup=${caps.backup} rebaser=${caps.rebaser}`,
-      )
+      log(`fsqlite doctor: ${dir}`)
+      log(`  binding: session=${caps.session} backup=${caps.backup} rebaser=${caps.rebaser}`)
       if (actions.length) {
-        console.log(`  repaired: ${actions.join('; ')}`)
+        log(`  repaired: ${actions.join('; ')}`)
       }
-      console.log(`  store: ${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
+      log(`  store: ${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
     }
-    process.exitCode = exitCodeForState(v.state)
-    return
+    exitCode = exitCodeForState(v.state)
+    return exitCode
   }
 
   if (!hasStoreMarker(dir)) {
@@ -245,7 +257,7 @@ function main(): void {
   switch (cmd) {
     case 'info': {
       const v = store.validate()
-      console.log(
+      log(
         JSON.stringify(
           {
             dir,
@@ -263,9 +275,9 @@ function main(): void {
     }
     case 'validate': {
       const v = store.validate()
-      console.log(`${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
-      process.exitCode = exitCodeForState(v.state)
-      return
+      log(`${v.state}${v.issues.length ? ': ' + v.issues.join('; ') : ''}`)
+      exitCode = exitCodeForState(v.state)
+      return exitCode
     }
     case 'gc': {
       const retain = Number(flag('--retain', '3'))
@@ -273,14 +285,14 @@ function main(): void {
         fail('--retain must be a non-negative integer')
       }
       try {
-        console.log(JSON.stringify(store.gc({ retain })))
+        log(JSON.stringify(store.gc({ retain })))
       } catch (error) {
         // gc fails closed on a store that does not validate. Report the refusal with the
         // validate exit code (3 invalid or corrupt, 4 unsupported); other failures exit 1.
-        console.error(`fsqlite: ${error instanceof Error ? error.message : String(error)}`)
+        io.err(`fsqlite: ${error instanceof Error ? error.message : String(error)}`)
         const code = exitCodeForState(store.validate().state)
-        process.exitCode = code === 3 || code === 4 ? code : 1
-        return
+        exitCode = code === 3 || code === 4 ? code : 1
+        return exitCode
       }
       break
     }
@@ -290,25 +302,15 @@ function main(): void {
         return fail('seal needs <out.sqlite>')
       }
       store.seal(out)
-      console.log(`sealed → ${out}`)
+      log(`sealed → ${out}`)
       break
     }
     case 'repair': {
-      console.log(JSON.stringify(store.repair(), null, 2))
+      log(JSON.stringify(store.repair(), null, 2))
       break
     }
     default:
       fail(`unknown command '${cmd}'`)
   }
-}
-
-try {
-  main()
-} catch (e: unknown) {
-  if (e instanceof CliExit) {
-    process.exitCode = e.code
-  } else {
-    console.error(`fsqlite: ${e instanceof Error ? e.message : String(e)}`)
-    process.exitCode = 1
-  }
+  return exitCode
 }

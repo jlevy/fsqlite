@@ -123,6 +123,22 @@ try {
     )
     process.stdout.write(run('node', ['use-require.cjs'], { cwd: proj }))
 
+    // The `fsqlite/cli` export is importable: it runs no command and leaves the exit code.
+    writeFileSync(
+      join(proj, 'use-cli.mjs'),
+      [
+        "import { main } from 'fsqlite/cli'",
+        "import assert from 'node:assert/strict'",
+        "assert.equal(typeof main, 'function')",
+        'assert.equal(process.exitCode, undefined)',
+        'const out = []',
+        `assert.equal(main(['validate', ${JSON.stringify(storeDir)}], { out: (l) => out.push(l), err: () => {} }), 0)`,
+        "assert.deepEqual(out, ['sealed'])",
+        "console.log('  CLI module import and main() OK')",
+      ].join('\n'),
+    )
+    process.stdout.write(run('node', ['use-cli.mjs'], { cwd: proj }))
+
     // Exercise the installed CLI to verify its bin entry and shebang.
     const bin = join(proj, 'node_modules', '.bin', 'fsqlite')
     assert.match(run(bin, ['--help'], { cwd: proj }), /usage: fsqlite/, 'CLI --help')
