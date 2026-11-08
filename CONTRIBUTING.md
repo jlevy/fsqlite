@@ -44,6 +44,37 @@ Formatting is enforced by Prettier, flowmark, ESLint, and lefthook.
 CI verifies the declared Node floor on Linux plus the current Node LTS on Linux and
 macOS.
 
+## Upgrading tbd
+
+The tbd hook scripts are project-maintained adaptations of the files `tbd setup --auto`
+generates. `tbd-session.sh` and `tbd-closing-reminder.sh` locate the repository from
+their own path rather than through git, the closing hook detects pushes with
+`scripts/detect-git-push.mjs`, and both pass failures through instead of hiding them.
+Their pinned npx fallback passes the 14-day cool-off (`--before`), `--ignore-scripts`,
+and a dedicated `--cache` as command-line flags, and fails closed without a working
+`node`. The Codex `PostToolUse` wrapper in `.codex/hooks.json` searches upward only to
+the project boundary, the first directory containing `.git` or `.codex/hooks.json`. The
+`.claude/` and `.codex/` copies of each script are byte-identical.
+Setup overwrites these scripts and rewrites or duplicates their wiring, so after a tbd
+upgrade:
+
+1. Run `tbd setup --auto` and save its diff for reference (`git diff > tbd-setup.diff`).
+2. Restore the project versions:
+   `git restore .claude/settings.json .codex/hooks.json .claude/scripts/tbd-session.sh .claude/hooks/tbd-closing-reminder.sh .codex/tbd-session.sh .codex/tbd-closing-reminder.sh`.
+3. Port any upstream launcher changes from the saved diff into the `.claude/` copies,
+   keeping the project hardening, then copy them over the `.codex/` copies.
+4. Run `pnpm test:project-hooks`, then `tbd doctor`. A “user-owned” warning for Codex
+   hooks is expected.
+
+`.claude/agents/tbd-strong-max.md` is a project-owned override that runs the strong-max
+tier on Fable at `max`. Setup keeps it because its generated marker was removed, so it
+no longer receives upstream body changes; compare it with a freshly generated copy after
+each upgrade. `AGENTS.md` is excluded from flowmark because flowmark would rewrap the
+tbd-managed block, which `tbd doctor` then reports as stale; the repository dash,
+footer, and link checks still cover it.
+
+## Releasing
+
 Release maintainers should follow [the release runbook](docs/releasing.md).
 The first npm publication is a documented bootstrap case; later releases use trusted
 publishing.

@@ -6,7 +6,15 @@ const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoDir = resolve(packageDir, '../..')
 const realRepoDir = realpathSync(repoDir)
 const generatedMarkdown = new Set(['.agents/skills/tbd/SKILL.md', '.claude/skills/tbd/SKILL.md'])
-const generatedProse = new Set([...generatedMarkdown, 'pnpm-lock.yaml'])
+// Files tbd setup writes verbatim and the project does not adapt.
+const generatedProse = new Set([
+  ...generatedMarkdown,
+  '.claude/scripts/ensure-gh-cli.sh',
+  '.codex/ensure-gh-cli.sh',
+  'pnpm-lock.yaml',
+])
+// Sub-agent definitions are agent prompts, not docs, so they carry no doc footer.
+const agentPromptDirs = ['.claude/agents/']
 const executableMarkdown = new Set(['packages/fsqlite/test/cli-golden/cli.tryscript.md'])
 const proseExtensions = new Set([
   '.cjs',
@@ -127,6 +135,15 @@ function checkMarkdownSafety(path, source) {
   }
 }
 
+/**
+ * Remove the blocks tbd setup regenerates verbatim (for example in AGENTS.md); the
+ * surrounding project prose stays subject to the editorial rules.
+ * @param {string} source
+ */
+function withoutTbdManagedBlocks(source) {
+  return source.replace(/<!-- BEGIN TBD INTEGRATION\b[\s\S]*?<!-- END TBD INTEGRATION -->/gu, '')
+}
+
 function checkEditorialSafety() {
   const proseFiles = filesBelow(repoDir, (path) => proseExtensions.has(extname(path)))
   for (const path of proseFiles) {
@@ -136,12 +153,13 @@ function checkEditorialSafety() {
     }
 
     const source = readFileSync(path, 'utf8')
-    if (/[\u2013\u2014]/u.test(source)) {
+    if (/[\u2013\u2014]/u.test(withoutTbdManagedBlocks(source))) {
       throw new Error(`${path}: maintained prose contains an em dash or en dash`)
     }
     if (
       extname(path) === '.md' &&
       !executableMarkdown.has(repoPath) &&
+      !agentPromptDirs.some((dir) => repoPath.startsWith(dir)) &&
       !source.includes('This document follows common-doc-guidelines.md.')
     ) {
       throw new Error(`${path}: maintained Markdown is missing the common-doc-guidelines footer`)

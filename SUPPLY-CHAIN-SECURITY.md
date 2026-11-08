@@ -4,17 +4,49 @@ fsqlite has no runtime dependencies and allows no dependency lifecycle scripts.
 Development dependencies are locked with pnpm and ordinarily must have been published
 for at least 14 days before they can enter the lockfile.
 
-## Time-Limited Security Exception
+## Time-Limited Audit Exception
 
-`brace-expansion@5.0.8` is pinned as a transitive override even though it had not yet
-cleared the 14-day cool-off on 2026-07-31. It is the first release patched against
-[GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg), a
-high-severity denial-of-service vulnerability reported by `pnpm audit`. The exception is
-restricted to this exact version and does not relax the repository-wide age gate.
+`pnpm audit` reports
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), a
+moderate-severity denial of service in `minimatch` before 11.0.1 caused by amplified
+glob parts. Here `minimatch` 10.x is reachable only through ESLint and typescript-eslint
+(`@typescript-eslint/typescript-estree`), which expand glob patterns from this
+repository’s own configuration and command lines; fsqlite ships no runtime dependencies,
+so the published package is unaffected.
 
-Review this exception after 2026-08-06. Once the patched release has aged normally,
-remove it from `minimumReleaseAgeExclude`; keep the override only if the upstream
-dependency graph still resolves an affected version.
+The first patched release, `minimatch@11.0.1`, was published on 2026-10-27; it and the
+later 11.0.x releases are all inside the 14-day cool-off, and no ESLint or
+typescript-eslint release accepts `minimatch` 11. Forcing a major-version override under
+them would run fresh, untested code in the lint gate, so the advisory is instead ignored
+by ID in `pnpm-workspace.yaml` (`auditConfig.ignoreGhsas`). The maintainer approved this
+exception on 2026-11-08. No other advisory is ignored, and the lockfile is unchanged by
+the exception.
+
+Review this exception by 2026-12-08, or earlier when an ESLint release depends on a
+patched `minimatch`. Remove the ignore once the resolved graph contains no affected
+version.
+
+`pnpm verify`, which also gates the publish workflow, runs
+`scripts/check-supply-chain.mjs`. It finds every GHSA or CVE ID anywhere in
+`pnpm-workspace.yaml`, in any letter case or YAML form, and fails unless those IDs are
+exactly the ones `pnpm config get auditConfig --json` reports (it skips only this
+comparison, with a message, when pnpm is not installed).
+It also fails when `auditConfig` is present but names no ID. Each ID needs exactly one
+record under a “Time-Limited” heading in this document, with a single review date that
+is a real calendar date, not in the past, and no more than 90 days ahead.
+When a review date passes, re-run `pnpm audit`, then either remove the ignore or have
+the maintainer re-approve the exception with a new review date.
+
+## Resolved Exceptions
+
+- `brace-expansion@5.0.8` was pinned on 2026-07-31 inside the cool-off to patch
+  [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg). On
+  2026-11-08 the exception and its override were removed: `minimatch`’s own `^5.0.5`
+  range now resolves `brace-expansion@5.0.12`, which has cleared the cool-off and also
+  patches GHSA-rgw5-rvv9-x895, GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, and
+  GHSA-q2hr-2g5m-vwhr.
+- `tryscript` moved from 0.1.7 to 0.3.1 on 2026-11-08 so the graph resolves `zod@4.6.6`,
+  which patches GHSA-mrhx-c7xc-m3w5; `zod` 3.x has no patched release.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
