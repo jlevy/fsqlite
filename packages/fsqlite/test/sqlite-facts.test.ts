@@ -24,10 +24,13 @@ function makePlainDb(path: string, rows = 3): void {
   db.exec('PRAGMA application_id = 305419896;') // 0x12345678
   db.exec('PRAGMA user_version = 7;')
   db.exec('CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT);')
+  // One transaction: an autocommit insert per row syncs the file each time.
+  db.exec('BEGIN')
   const ins = db.prepare('INSERT INTO widgets VALUES (?,?)')
   for (let i = 0; i < rows; i++) {
     ins.run(i, `w${i}`.padEnd(40, 'x'))
   }
+  db.exec('COMMIT')
   db.close()
 }
 
