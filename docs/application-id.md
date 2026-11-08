@@ -13,7 +13,8 @@ SQLite database.
 On 2026-07-31, `0x4653514C` did not appear in SQLite’s published `magic.txt` list at
 `sqlite/sqlite` commit `f034d515b4208e1c9325271aef3dc4901f24e216`. The chosen bytes
 spell `FSQL`, making accidental reuse less likely and the header recognizable in a hex
-dump.
+dump. Re-checked on 2026-11-08 against `sqlite/sqlite` `master`: the value is still
+absent.
 
 The corresponding `file(1)` rule is:
 
