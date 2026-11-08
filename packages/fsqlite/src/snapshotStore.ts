@@ -398,15 +398,7 @@ export class SnapshotStore {
         marker = createStoreMarker(this.dir)
       }
 
-      for (const d of [
-        this.snapDir,
-        this.txPending,
-        this.txApplied,
-        this.txQuarantine,
-        this.leaseDir,
-      ]) {
-        mkdirSync(d, { recursive: true })
-      }
+      this._createStoreDirs()
       if (existsSync(this.currentPath)) {
         return
       } // another initializer won while we waited
@@ -463,6 +455,37 @@ export class SnapshotStore {
     })
     this._verifyCompatible()
     return this
+  }
+
+  /**
+   * Create any missing store subdirectory and fsync the parent of every directory created,
+   * deepest first, so a power loss cannot drop `tx/pending` or `leases/` from a store whose
+   * marker and pointer survived (spec section 10).
+   */
+  private _createStoreDirs(): void {
+    const parents = new Set<string>()
+    for (const d of [
+      this.snapDir,
+      this.txPending,
+      this.txApplied,
+      this.txQuarantine,
+      this.leaseDir,
+    ]) {
+      const first = mkdirSync(d, { recursive: true }) // the topmost directory it created
+      if (first === undefined) {
+        continue
+      }
+      for (let created = d; created !== dirname(created); created = dirname(created)) {
+        parents.add(dirname(created))
+        if (resolve(created) === resolve(first)) {
+          break
+        }
+      }
+    }
+    const deepestFirst = [...parents].sort((a, b) => b.length - a.length)
+    for (const parent of deepestFirst) {
+      fsyncDir(parent)
+    }
   }
 
   /**

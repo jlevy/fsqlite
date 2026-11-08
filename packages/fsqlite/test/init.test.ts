@@ -10,6 +10,7 @@ import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 import { runAsync } from './spawn.ts'
 import { setOwnerWriterForTest } from '../src/lock.ts'
+import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
 
 test('init enforces the NON-NULL primary key contract', () => {
   const cases: [string, RegExp | null][] = [
@@ -243,6 +244,24 @@ test('init still completes a first-open that crashed before committing snapshot 
 
     assert.equal(new SnapshotStore(dir, STORE_OPTS).init().currentVersion(), 0)
   } finally {
+    cleanup()
+  }
+})
+
+test('init makes every store subdirectory it creates durable through its parent', () => {
+  const { dir, cleanup } = tmpStore()
+  const synced: string[] = []
+  setAfterFsyncDirForTest((path) => synced.push(path))
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    assert.ok(synced.includes(join(dir, 'tx')), 'tx/ holds the new pending, applied, quarantine')
+
+    rmSync(store.leaseDir, { recursive: true })
+    synced.length = 0
+    new SnapshotStore(dir, STORE_OPTS).init()
+    assert.deepEqual(synced, [dir], 'a re-created leases/ is fsynced into the store root')
+  } finally {
+    setAfterFsyncDirForTest(null)
     cleanup()
   }
 })

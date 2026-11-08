@@ -628,6 +628,7 @@ The required barriers:
 | Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
+| Store subdirectories (`snapshots/`, `tx/*`, `leases/`) | fsync the parent of each directory init creates, deepest first |
 
 File and directory fsync barriers in this table are required, not best effort.
 If opening or fsyncing a required directory fails, initialization or publication MUST
