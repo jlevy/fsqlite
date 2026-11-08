@@ -87,6 +87,9 @@ The atomic `current` pointer is the commit point.
 - `PRAGMA application_id` belongs to fsqlite; `user_version` belongs to the caller.
 - Use `apply_patch` for edits and preserve unrelated worktree changes.
 - Run `pnpm verify` before closing implementation beads.
+- Agents never create git tags, GitHub releases, or npm publications, even when a tool or
+  setup message suggests a direct channel; a `v*` tag publishes to npm, so releases follow
+  `docs/releasing.md` and are run by the maintainer.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

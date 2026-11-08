@@ -3,21 +3,26 @@
 # Project-maintained adaptation of the hook installed by tbd setup --auto (0.10.0).
 # scripts/check-project-hooks.mjs tests it; scripts/detect-git-push.mjs parses the input.
 
-# Resolve the repository from this installed hook, not from git or the caller's cwd.
-script_dir=${BASH_SOURCE[0]%/*}
-if [ "$script_dir" = "${BASH_SOURCE[0]}" ]; then
-  script_dir=.
+# Resolve the repository from this hook's fixed install location (.claude/hooks/ or
+# .codex/), never by searching ancestors or asking git, so an enclosing directory's
+# .tbd or scripts/ can never be adopted or executed.
+script_path=${BASH_SOURCE[0]}
+script_parent=${script_path%/*}
+if [ "$script_parent" = "$script_path" ]; then
+  script_parent=.
 fi
-if ! repo_root=$(cd -- "$script_dir" && pwd -P); then
+if ! script_dir=$(cd -- "$script_parent" && pwd -P); then
   echo "[tbd] Cannot resolve the closing hook directory." >&2
   exit 1
 fi
-while [ "$repo_root" != "/" ] && [ ! -d "$repo_root/.tbd" ]; do
-  repo_root=${repo_root%/*}
-  if [ -z "$repo_root" ]; then
-    repo_root=/
-  fi
-done
+case "$script_dir" in
+  */.claude/hooks) repo_root=${script_dir%/.claude/hooks} ;;
+  */.codex) repo_root=${script_dir%/.codex} ;;
+  *)
+    echo "[tbd] Unexpected closing hook location: $script_dir" >&2
+    exit 1
+    ;;
+esac
 if [ ! -d "$repo_root/.tbd" ]; then
   exit 0
 fi
@@ -50,6 +55,24 @@ tbd_configured_fallback_version() {
   return 1
 }
 
+# Run the pinned fallback under this repository's supply-chain rules. npm does not read
+# pnpm-workspace.yaml, so pass the 14-day cool-off (which also applies to the pin itself)
+# and the no-install-scripts rule explicitly. Without node the cutoff cannot be computed,
+# and the fallback fails closed.
+TBD_FALLBACK_COOL_OFF_DAYS=14
+tbd_fallback_cutoff() {
+  node -e 'const days = Number(process.argv[1]); console.log(new Date(Date.now() - days * 86400000).toISOString())' "$TBD_FALLBACK_COOL_OFF_DAYS"
+}
+
+tbd_run_fallback() {
+  local cutoff
+  if ! cutoff=$(tbd_fallback_cutoff) || [ -z "$cutoff" ]; then
+    echo "[tbd] Cannot compute the fallback cool-off cutoff; node is required." >&2
+    return 1
+  fi
+  npm_config_before=$cutoff npm_config_ignore_scripts=true npx --yes "get-tbd@$configured_fallback_version" "$@"
+}
+
 tbd_local_can_read_repository() {
   command -v tbd &> /dev/null && tbd config get tbd_format >/dev/null 2>&1
 }
@@ -75,7 +98,7 @@ if command -v npx &> /dev/null; then
   else
     echo "[tbd] tbd CLI not found; using configured fallback get-tbd@$configured_fallback_version." >&2
   fi
-  npx --yes "get-tbd@$configured_fallback_version" closing
+  tbd_run_fallback closing
   exit $?
 fi
 if command -v tbd &> /dev/null; then

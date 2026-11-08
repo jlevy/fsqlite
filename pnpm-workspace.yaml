@@ -4,9 +4,10 @@ packages:
 minimumReleaseAge: 20160
 blockExoticSubdeps: true
 allowBuilds:
+  esbuild: false
   lefthook: false
-# Time-limited, maintainer-approved audit exception; see SUPPLY-CHAIN-SECURITY.md.
-# Review by 2026-12-08.
+# Time-limited, maintainer-approved audit exception recorded in SUPPLY-CHAIN-SECURITY.md;
+# scripts/check-supply-chain.mjs fails once its review date passes.
 auditConfig:
   ignoreGhsas:
     - GHSA-g3hv-75wg-m249

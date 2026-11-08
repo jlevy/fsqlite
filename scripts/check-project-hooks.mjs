@@ -128,6 +128,32 @@ const closingMarker = join(hookTestDir, 'closing-ran')
 const primeMarker = join(hookTestDir, 'prime-ran')
 const npxMarker = join(hookTestDir, 'npx-ran')
 const shadowMarker = join(hookTestDir, 'shadow-ran')
+const FALLBACK_COOL_OFF_MS = 14 * 24 * 60 * 60 * 1000
+const FALLBACK_CUTOFF_TOLERANCE_MS = 10 * 60 * 1000
+const resetNpxMarker = () => {
+  rmSync(npxMarker, { force: true })
+  rmSync(`${npxMarker}.env`, { force: true })
+}
+/**
+ * The npx fallback must run under the repository's supply-chain rules: no install
+ * scripts, and nothing published inside the 14-day cool-off.
+ * @param {string} label
+ */
+const assertFallbackPolicy = (label) => {
+  const env = Object.fromEntries(
+    readFileSync(`${npxMarker}.env`, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => line.split('=', 2)),
+  )
+  assert.equal(env.ignore_scripts, 'true', `${label} fallback allowed npm install scripts`)
+  const cutoff = Date.parse(env.before ?? '')
+  assert.ok(
+    Number.isFinite(cutoff) &&
+      Math.abs(Date.now() - FALLBACK_COOL_OFF_MS - cutoff) < FALLBACK_CUTOFF_TOLERANCE_MS,
+    `${label} fallback did not apply the 14-day cool-off (before=${env.before})`,
+  )
+}
 try {
   writeFileSync(join(hookTestDir, 'jq'), '#!/bin/bash\nexit 1\n', { mode: EXECUTABLE_MODE })
   writeFileSync(
@@ -137,7 +163,7 @@ try {
   )
   writeFileSync(
     join(hookTestDir, 'npx'),
-    '#!/bin/bash\nprintf "%s\\n" "$@" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
+    '#!/bin/bash\nprintf "%s\\n" "$@" > "$TBD_HOOK_TEST_NPX_MARKER"\nprintf "before=%s\\nignore_scripts=%s\\n" "${npm_config_before-}" "${npm_config_ignore_scripts-}" > "$TBD_HOOK_TEST_NPX_MARKER.env"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
     { mode: EXECUTABLE_MODE },
   )
   const shadowBin = join(hookTestDir, '.local', 'bin')
@@ -161,7 +187,7 @@ try {
 
   for (const hook of sessionHookCommands) {
     rmSync(primeMarker, { force: true })
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     rmSync(shadowMarker, { force: true })
     const session = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
@@ -183,7 +209,7 @@ try {
     )
 
     rmSync(primeMarker, { force: true })
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const incompatible = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
       encoding: 'utf8',
@@ -205,6 +231,7 @@ try {
       `--yes\nget-tbd@${tbdFallbackVersion}\nprime\n${hook.name.endsWith('PreCompact') ? '--brief\n' : ''}`,
       `${hook.name} hook did not use the exact configured fallback version`,
     )
+    assertFallbackPolicy(`${hook.name}`)
   }
 
   const noCliBin = join(hookTestDir, 'no-cli-bin')
@@ -322,7 +349,7 @@ try {
       `${hook.name} closing hook did not explain its malformed input`,
     )
 
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const failingTbd = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
       encoding: 'utf8',
@@ -338,7 +365,7 @@ try {
     )
 
     rmSync(closingMarker, { force: true })
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const incompatibleTbd = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
       encoding: 'utf8',
@@ -361,8 +388,9 @@ try {
       `--yes\nget-tbd@${tbdFallbackVersion}\nclosing\n`,
       `${hook.name} closing hook did not use the exact configured fallback version`,
     )
+    assertFallbackPolicy(`${hook.name}`)
 
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const failingNpx = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
       encoding: 'utf8',
@@ -545,7 +573,7 @@ try {
 
   writeFileSync(fixtureConfig, 'tbd_format: f08\ntbd_fallback_version: 9.9.9-rc.1+build.5\n')
   for (const kind of /** @type {const} */ (['session', 'closing'])) {
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const pinned = runFixtureHook(kind, fixtureEnv)
     assert.equal(pinned.status, 0, `fixture ${kind} hook failed:\n${pinned.stderr}`)
     assert.equal(
@@ -553,8 +581,9 @@ try {
       `--yes\nget-tbd@9.9.9-rc.1+build.5\n${fixtureNpxArgs[kind]}\n`,
       `fixture ${kind} hook did not use the configured fallback pin`,
     )
+    assertFallbackPolicy(`fixture ${kind}`)
 
-    rmSync(npxMarker, { force: true })
+    resetNpxMarker()
     const failing = runFixtureHook(kind, { ...fixtureEnv, TBD_HOOK_TEST_NPX_STATUS: '41' })
     assert.equal(failing.status, 41, `fixture ${kind} hook hid an npx fallback failure`)
   }
@@ -570,7 +599,7 @@ try {
   ]) {
     writeFileSync(fixtureConfig, `tbd_format: f08\n${badPin}`)
     for (const kind of /** @type {const} */ (['session', 'closing'])) {
-      rmSync(npxMarker, { force: true })
+      resetNpxMarker()
       const rejected = runFixtureHook(kind, fixtureEnv)
       assert.equal(
         rejected.status,
@@ -589,6 +618,48 @@ try {
       )
     }
   }
+
+  // A hook installed under a directory without its own .tbd must fail closed rather
+  // than adopt an enclosing directory's config or execute its scripts.
+  const ancestorRoot = join(hookTestDir, 'ancestor')
+  const nestedRoot = join(ancestorRoot, 'nested-repo')
+  const ancestorScriptMarker = join(hookTestDir, 'ancestor-script-ran')
+  mkdirSync(join(ancestorRoot, '.tbd'), { recursive: true })
+  mkdirSync(join(ancestorRoot, 'scripts'), { recursive: true })
+  writeFileSync(join(ancestorRoot, '.tbd', 'config.yml'), 'tbd_fallback_version: 6.6.6\n')
+  writeFileSync(
+    join(ancestorRoot, 'scripts', 'detect-git-push.mjs'),
+    `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(ancestorScriptMarker)}, '')\nconsole.log('yes')\n`,
+  )
+  const nestedScripts = {
+    session: join(nestedRoot, '.claude', 'scripts', 'tbd-session.sh'),
+    closing: join(nestedRoot, '.claude', 'hooks', 'tbd-closing-reminder.sh'),
+  }
+  mkdirSync(dirname(nestedScripts.session), { recursive: true })
+  mkdirSync(dirname(nestedScripts.closing), { recursive: true })
+  writeFileSync(nestedScripts.session, readFileSync(fixtureScripts.session))
+  writeFileSync(nestedScripts.closing, readFileSync(fixtureScripts.closing))
+  resetNpxMarker()
+  const nestedSession = spawnSync('bash', [nestedScripts.session], {
+    cwd: nestedRoot,
+    encoding: 'utf8',
+    env: fixtureEnv,
+  })
+  assert.equal(nestedSession.status, 1, 'session hook adopted an ancestor .tbd/config.yml')
+  assert.match(nestedSession.stderr, /Cannot locate repository \.tbd\/config\.yml/)
+  const nestedClosing = spawnSync('bash', [nestedScripts.closing], {
+    cwd: nestedRoot,
+    encoding: 'utf8',
+    env: fixtureEnv,
+    input: JSON.stringify({ tool_input: { command: 'git push origin HEAD' } }),
+  })
+  assert.equal(
+    nestedClosing.status,
+    0,
+    `closing hook failed outside a tbd repo:\n${nestedClosing.stderr}`,
+  )
+  assert.equal(existsSync(ancestorScriptMarker), false, "closing hook ran an ancestor's script")
+  assert.equal(existsSync(npxMarker), false, 'a hook outside a tbd repo invoked npx')
 } finally {
   rmSync(hookTestDir, { recursive: true, force: true })
 }

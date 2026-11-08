@@ -5,8 +5,8 @@
 #
 # Local-first when the installed CLI can read this repository's tbd_format. Otherwise,
 # use the exact version recorded by setup in .tbd/config.yml. Keeping the pin in config
-# avoids rewriting this script for every compatible patch while retaining deterministic
-# zero-install behavior. Never use an unpinned runner here.
+# avoids rewriting this script for every compatible patch. The fallback runs under the
+# repository's supply-chain rules (see tbd_run_fallback). Never use an unpinned runner.
 
 # Use the same caller override as the closing hook. An explicit empty value keeps PATH
 # unchanged for hermetic environments.
@@ -15,24 +15,28 @@ if [ -n "$tbd_hook_path_prefix" ]; then
     export PATH="$tbd_hook_path_prefix:$PATH"
 fi
 
-# Resolve the repository from this installed script, like the closing hook, so the
-# launcher works without git and from any working directory (including nested clones).
-script_dir=${BASH_SOURCE[0]%/*}
-if [ "$script_dir" = "${BASH_SOURCE[0]}" ]; then
-    script_dir=.
+# Resolve the repository from this script's fixed install location (.claude/scripts/ or
+# .codex/), never by searching ancestors or asking git: a missing config fails closed
+# instead of adopting some enclosing directory's configuration.
+script_path=${BASH_SOURCE[0]}
+script_parent=${script_path%/*}
+if [ "$script_parent" = "$script_path" ]; then
+    script_parent=.
 fi
-repo_root=
-if script_root=$(cd -- "$script_dir" 2>/dev/null && pwd -P); then
-    repo_root=$script_root
-    while [ "$repo_root" != "/" ] && [ ! -f "$repo_root/.tbd/config.yml" ]; do
-        repo_root=${repo_root%/*}
-        if [ -z "$repo_root" ]; then
-            repo_root=/
-        fi
-    done
+if ! script_dir=$(cd -- "$script_parent" && pwd -P); then
+    echo "[tbd] Cannot resolve the session hook directory." >&2
+    exit 1
 fi
-if [ -z "$repo_root" ] || [ ! -f "$repo_root/.tbd/config.yml" ]; then
-    echo "[tbd] Cannot locate repository .tbd/config.yml above $script_dir." >&2
+case "$script_dir" in
+    */.claude/scripts) repo_root=${script_dir%/.claude/scripts} ;;
+    */.codex) repo_root=${script_dir%/.codex} ;;
+    *)
+        echo "[tbd] Unexpected session hook location: $script_dir" >&2
+        exit 1
+        ;;
+esac
+if [ ! -f "$repo_root/.tbd/config.yml" ]; then
+    echo "[tbd] Cannot locate repository .tbd/config.yml at $repo_root." >&2
     exit 1
 fi
 if ! cd -- "$repo_root"; then
@@ -56,6 +60,24 @@ tbd_configured_fallback_version() {
         fi
     done < "$config_path"
     return 1
+}
+
+# Run the pinned fallback under this repository's supply-chain rules. npm does not read
+# pnpm-workspace.yaml, so pass the 14-day cool-off (which also applies to the pin itself)
+# and the no-install-scripts rule explicitly. Without node the cutoff cannot be computed,
+# and the fallback fails closed.
+TBD_FALLBACK_COOL_OFF_DAYS=14
+tbd_fallback_cutoff() {
+    node -e 'const days = Number(process.argv[1]); console.log(new Date(Date.now() - days * 86400000).toISOString())' "$TBD_FALLBACK_COOL_OFF_DAYS"
+}
+
+tbd_run_fallback() {
+    local cutoff
+    if ! cutoff=$(tbd_fallback_cutoff) || [ -z "$cutoff" ]; then
+        echo "[tbd] Cannot compute the fallback cool-off cutoff; node is required." >&2
+        return 1
+    fi
+    npm_config_before=$cutoff npm_config_ignore_scripts=true npx --yes "get-tbd@$configured_fallback_version" "$@"
 }
 
 tbd_local_can_read_repository() {
@@ -85,7 +107,7 @@ if command -v npx &> /dev/null; then
     else
         echo "[tbd] tbd CLI not found; using configured fallback get-tbd@$configured_fallback_version." >&2
     fi
-    npx --yes "get-tbd@$configured_fallback_version" prime "$@"
+    tbd_run_fallback prime "$@"
     exit $?
 fi
 
