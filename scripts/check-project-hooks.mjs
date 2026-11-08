@@ -16,9 +16,26 @@ import { fileURLToPath } from 'node:url'
 const EXECUTABLE_MODE = 0o755
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const tbdConfig = readFileSync(join(repoRoot, '.tbd', 'config.yml'), 'utf8')
+// Same exact-semver rule the hook scripts apply before invoking npx.
+const EXACT_SEMVER =
+  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/
 const tbdFallbackVersion = /^tbd_fallback_version:\s*(\S+)\s*$/m.exec(tbdConfig)?.[1]
-assert(tbdFallbackVersion, 'Expected .tbd/config.yml to pin an exact tbd_fallback_version')
-const escapedFallbackVersion = tbdFallbackVersion.replaceAll('.', '\\.')
+assert(
+  tbdFallbackVersion !== undefined && EXACT_SEMVER.test(tbdFallbackVersion),
+  'Expected .tbd/config.yml to pin an exact tbd_fallback_version',
+)
+
+// The Claude and Codex hook scripts are maintained as byte-identical copies.
+for (const [claudePath, codexPath] of [
+  ['.claude/scripts/tbd-session.sh', '.codex/tbd-session.sh'],
+  ['.claude/hooks/tbd-closing-reminder.sh', '.codex/tbd-closing-reminder.sh'],
+]) {
+  assert.equal(
+    readFileSync(join(repoRoot, codexPath), 'utf8'),
+    readFileSync(join(repoRoot, claudePath), 'utf8'),
+    `${codexPath} must be a byte-identical copy of ${claudePath}`,
+  )
+}
 const codexHooksPath = join(repoRoot, '.codex', 'hooks.json')
 const codexHooksConfig = JSON.parse(readFileSync(codexHooksPath, 'utf8'))
 const codexCommandHooks = Object.values(codexHooksConfig.hooks).flatMap((eventHooks) =>
@@ -242,6 +259,26 @@ try {
     TBD_HOOK_PATH_PREFIX: '',
     TBD_HOOK_TEST_MARKER: closingMarker,
   }
+  for (const hook of sessionHookCommands.filter(({ name }) => name.startsWith('Claude'))) {
+    rmSync(primeMarker, { force: true })
+    const withoutGitSession = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: { ...noGitEnv, TBD_HOOK_TEST_PRIME_MARKER: primeMarker },
+      shell: true,
+    })
+    assert.equal(
+      withoutGitSession.status,
+      0,
+      `${hook.name} hook failed when git was unavailable:\n${withoutGitSession.stderr}`,
+    )
+    assert.equal(
+      existsSync(primeMarker),
+      true,
+      `${hook.name} hook skipped tbd prime when git was unavailable`,
+    )
+  }
+
   const symlinkedPackageDir = join(hookTestDir, 'symlinked-package')
   symlinkSync(join(repoRoot, 'packages', 'fsqlite'), symlinkedPackageDir)
 
@@ -354,9 +391,8 @@ try {
       /tbd CLI not found.*npx is unavailable/is,
       `${hook.name} closing hook did not explain the missing CLI`,
     )
-    assert.match(
-      withoutCliOutput,
-      new RegExp(`npm install -g get-tbd@${escapedFallbackVersion}`),
+    assert.ok(
+      withoutCliOutput.includes(`npm install -g get-tbd@${tbdFallbackVersion}\n`),
       `${hook.name} closing hook did not explain how to install the missing CLI`,
     )
 
@@ -465,6 +501,94 @@ try {
     true,
     'Codex closing hook skipped tbd closing from a symlinked package directory',
   )
+
+  // Run copies of the hooks in a git-free fixture whose config the test controls, so the
+  // assertions prove the scripts read and validate the pin rather than echo a constant.
+  const fixtureRoot = join(hookTestDir, 'fixture-repo')
+  const fixtureScripts = {
+    session: join(fixtureRoot, '.claude', 'scripts', 'tbd-session.sh'),
+    closing: join(fixtureRoot, '.claude', 'hooks', 'tbd-closing-reminder.sh'),
+  }
+  mkdirSync(dirname(fixtureScripts.session), { recursive: true })
+  mkdirSync(dirname(fixtureScripts.closing), { recursive: true })
+  mkdirSync(join(fixtureRoot, 'scripts'), { recursive: true })
+  mkdirSync(join(fixtureRoot, '.tbd'), { recursive: true })
+  writeFileSync(
+    fixtureScripts.session,
+    readFileSync(join(repoRoot, '.claude', 'scripts', 'tbd-session.sh')),
+  )
+  writeFileSync(
+    fixtureScripts.closing,
+    readFileSync(join(repoRoot, '.claude', 'hooks', 'tbd-closing-reminder.sh')),
+  )
+  writeFileSync(
+    join(fixtureRoot, 'scripts', 'detect-git-push.mjs'),
+    readFileSync(join(repoRoot, 'scripts', 'detect-git-push.mjs')),
+  )
+  const fixtureConfig = join(fixtureRoot, '.tbd', 'config.yml')
+  const fixtureEnv = {
+    ...npxOnlyEnv,
+    TBD_HOOK_TEST_NPX_STATUS: '0',
+  }
+  /** @param {'session' | 'closing'} kind @param {Record<string, string>} env */
+  const runFixtureHook = (kind, env) =>
+    spawnSync('bash', [fixtureScripts[kind]], {
+      cwd: hookTestDir,
+      encoding: 'utf8',
+      env,
+      input:
+        kind === 'closing'
+          ? JSON.stringify({ tool_input: { command: 'git push origin HEAD' } })
+          : undefined,
+    })
+  const fixtureNpxArgs = { session: 'prime', closing: 'closing' }
+
+  writeFileSync(fixtureConfig, 'tbd_format: f08\ntbd_fallback_version: 9.9.9-rc.1+build.5\n')
+  for (const kind of /** @type {const} */ (['session', 'closing'])) {
+    rmSync(npxMarker, { force: true })
+    const pinned = runFixtureHook(kind, fixtureEnv)
+    assert.equal(pinned.status, 0, `fixture ${kind} hook failed:\n${pinned.stderr}`)
+    assert.equal(
+      readFileSync(npxMarker, 'utf8'),
+      `--yes\nget-tbd@9.9.9-rc.1+build.5\n${fixtureNpxArgs[kind]}\n`,
+      `fixture ${kind} hook did not use the configured fallback pin`,
+    )
+
+    rmSync(npxMarker, { force: true })
+    const failing = runFixtureHook(kind, { ...fixtureEnv, TBD_HOOK_TEST_NPX_STATUS: '41' })
+    assert.equal(failing.status, 41, `fixture ${kind} hook hid an npx fallback failure`)
+  }
+
+  for (const badPin of [
+    'tbd_fallback_version: latest\n',
+    'tbd_fallback_version: ^0.10.0\n',
+    'tbd_fallback_version: 0.10\n',
+    'tbd_fallback_version: 0.10.0; rm -rf /\n',
+    'tbd_fallback_version: 0.10.0 --registry=https://example.invalid\n',
+    'tbd_fallback_version: get-tbd@0.10.0\n',
+    '',
+  ]) {
+    writeFileSync(fixtureConfig, `tbd_format: f08\n${badPin}`)
+    for (const kind of /** @type {const} */ (['session', 'closing'])) {
+      rmSync(npxMarker, { force: true })
+      const rejected = runFixtureHook(kind, fixtureEnv)
+      assert.equal(
+        rejected.status,
+        1,
+        `fixture ${kind} hook accepted fallback config ${JSON.stringify(badPin)}`,
+      )
+      assert.match(
+        rejected.stderr,
+        /valid exact tbd_fallback_version/,
+        `fixture ${kind} hook did not explain the invalid fallback pin`,
+      )
+      assert.equal(
+        existsSync(npxMarker),
+        false,
+        `fixture ${kind} hook invoked npx with fallback config ${JSON.stringify(badPin)}`,
+      )
+    }
+  }
 } finally {
   rmSync(hookTestDir, { recursive: true, force: true })
 }

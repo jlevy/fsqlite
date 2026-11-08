@@ -15,12 +15,30 @@ if [ -n "$tbd_hook_path_prefix" ]; then
     export PATH="$tbd_hook_path_prefix:$PATH"
 fi
 
-repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+# Resolve the repository from this installed script, like the closing hook, so the
+# launcher works without git and from any working directory (including nested clones).
+script_dir=${BASH_SOURCE[0]%/*}
+if [ "$script_dir" = "${BASH_SOURCE[0]}" ]; then
+    script_dir=.
+fi
+repo_root=
+if script_root=$(cd -- "$script_dir" 2>/dev/null && pwd -P); then
+    repo_root=$script_root
+    while [ "$repo_root" != "/" ] && [ ! -f "$repo_root/.tbd/config.yml" ]; do
+        repo_root=${repo_root%/*}
+        if [ -z "$repo_root" ]; then
+            repo_root=/
+        fi
+    done
+fi
 if [ -z "$repo_root" ] || [ ! -f "$repo_root/.tbd/config.yml" ]; then
-    echo "[tbd] Cannot locate repository .tbd/config.yml." >&2
+    echo "[tbd] Cannot locate repository .tbd/config.yml above $script_dir." >&2
     exit 1
 fi
-cd "$repo_root" || exit 1
+if ! cd -- "$repo_root"; then
+    echo "[tbd] Cannot enter repository root: $repo_root" >&2
+    exit 1
+fi
 
 tbd_configured_fallback_version() {
     local config_path=$1
