@@ -142,13 +142,14 @@ try {
     // Exercise the installed CLI to verify its bin entry and shebang.
     const bin = join(proj, 'node_modules', '.bin', 'fsqlite')
     assert.match(run(bin, ['--help'], { cwd: proj }), /usage: fsqlite/, 'CLI --help')
+    assert.match(run(bin, ['--version'], { cwd: proj }), /^\d+\.\d+\.\d+/, 'CLI --version')
     assert.equal(
-      publishedVersion(run(bin, ['info', storeDir], { cwd: proj })),
+      publishedVersion(run(bin, ['info', storeDir, '--json'], { cwd: proj })),
       1,
-      'CLI info reports published head',
+      'CLI info --json reports published head',
     )
     run(bin, ['validate', storeDir], { cwd: proj }) // exits 0 on a healthy store
-    console.log('  CLI bin help, info, and validate OK')
+    console.log('  CLI bin help, version, info --json, and validate OK')
 
     console.log('package smoke test passed')
   } finally {

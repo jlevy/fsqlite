@@ -1,12 +1,15 @@
 // Deterministic store seeder for the CLI golden test. Builds a known fsqlite store in
-// <dir> via the public API, optionally planting a fault so the CLI's validate exit codes
-// (2 in-flight, 3 corrupt) can be exercised from the shell. The `plainfile`/`corrupt-sqlite`
-// modes instead write a plain SQLite file (no fsqlite layer) for the stats/doctor goldens.
+// <dir> via the public API, optionally planting a fault so the CLI's exit codes can be
+// exercised from the shell: in flight (orphan), corrupt (pointer or head), unsupported and
+// invalid markers, a committed pending envelope, and a torn fresh lease. The
+// `plainfile`/`corrupt-sqlite` modes instead write a plain SQLite file (no fsqlite layer)
+// for the stats/doctor goldens.
 //
-//   fsqlite-seed <dir>  [orphan|corrupt|corrupt-head]
+//   fsqlite-seed <dir>  [orphan|corrupt|corrupt-head|unsupported|invalid-marker|pending|torn-lease]
 //   fsqlite-seed <file> [plainfile|corrupt-sqlite]
 
-import { copyFileSync, writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
+import { copyFileSync, writeFileSync, openSync, writeSync, closeSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { SnapshotStore } from '../../src/index.ts'
 import * as driver from '../../src/driver.ts'
 import { STORE_OPTS } from '../fixture.ts'
@@ -67,6 +70,33 @@ if (fault === 'corrupt-head') {
     closeSync(fd)
   }
   console.log(`seeded ${dir} (corrupt head v2)`)
+  process.exit(0)
+}
+
+if (fault === 'unsupported') {
+  // A valid marker for a newer format version than this implementation reads.
+  const markerPath = join(dir, 'fsqlite.json')
+  const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as Record<string, unknown>
+  writeFileSync(markerPath, JSON.stringify({ ...marker, format_version: 'f2.0' }))
+  console.log(`seeded ${dir} (unsupported f2.0 marker)`)
+  process.exit(0)
+}
+
+if (fault === 'invalid-marker') {
+  writeFileSync(join(dir, 'fsqlite.json'), '[]\n') // JSON, but not a marker object
+  console.log(`seeded ${dir} (invalid marker)`)
+  process.exit(0)
+}
+
+if (fault === 'pending') {
+  store.write('seed', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('b', 'B', 't'))
+  console.log(`seeded ${dir} (live: 1 pending envelope)`)
+  process.exit(0)
+}
+
+if (fault === 'torn-lease') {
+  writeFileSync(join(store.leaseDir, 'torn.lease'), '') // fresh, so gc must read it
+  console.log(`seeded ${dir} (torn fresh lease)`)
   process.exit(0)
 }
 

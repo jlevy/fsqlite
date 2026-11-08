@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **191 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
+Current status: **193 `node:test` cases**, **76 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -67,15 +67,20 @@ Spawned as real child processes by the suites above, so the concurrency proofs a
 cross-process, not in-thread: `writer.ts`, `reader.ts`, `reconciler.ts`,
 `lock-holder.ts`, `direct-writer.ts`, `init-worker.ts`.
 
-### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 27 console cases)
+### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 76 console cases)
 
-Exercises the real CLI (`src/cli/bin.ts`) end to end: `--help` and usage with their
-exit codes; `info` and `validate` on a sealed store; `validate` exit codes 0, 2, and 3
-for sealed, in-flight, and corrupt stores; `gc` and `seal` with a
-stock-`sqlite3`-readable export header; `gc` refusing an integrity-corrupt head with
-exit 3 and deleting nothing; `stats` on an fsqlite store and on a plain SQLite file;
-`doctor` on clean and corrupt plain SQLite files; and `doctor --fix` restoring an
-in-flight store.
+Exercises the real CLI (`src/cli/bin.ts`) end to end with Node’s default warnings,
+asserting stdout, stderr, and the exit code: global and per-command help, `--version`,
+and every usage error (unknown command or option, missing or extra arguments, a flag
+never taken as a path, invalid `--retain` values that delete nothing); text and `--json`
+output of `info`, `validate`, `stats`, `gc`, and `doctor`; the exit codes of sealed,
+live, in-flight, invalid, unsupported, corrupt, and not-a-store paths across commands,
+including `info` and `stats` on a corrupt store; `repair --dry-run` changing nothing and
+`repair`; `gc` refusing a corrupt head or a torn lease (with its cause) and deleting
+nothing; `seal` with a stock-`sqlite3`-readable header and its refusals; `doctor` on
+clean and corrupt plain SQLite files and `doctor --fix`; and `fsinspect`, whose
+machine-dependent report is checked for its shape and for an exit code that matches its
+verdict.
 
 ### Clean-Room Package Smoke (`scripts/package-smoke.mjs`)
 
@@ -98,7 +103,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 191` / `# fail 0`; goldens `27 passed`; build
+- **Expect:** node:test reports `# pass 193` / `# fail 0`; goldens `76 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
@@ -134,11 +139,11 @@ node packages/fsqlite/src/cli/bin.ts doctor   "$QA/cli"
 ```
 
 - **Expect:** `$QA/cli/fsqlite.json` contains `format: "fsqlite"`,
-  `format_version: "f1.0"`, and a UUID `store_id`; `info` prints JSON with
-  `"state": "sealed"`, `current: 1`; `validate` prints `sealed` and `exit=0`; `stats`
+  `format_version: "f1.0"`, and a UUID `store_id`; `info` prints `state: sealed` and
+  `current: 1` (add `--json` for JSON); `validate` prints `sealed` and `exit=0`; `stats`
   reports `kind: fsqlite-store` with deterministic `application_id`/`user_version`/table
-  counts; `gc` prints a JSON result; `seal` writes the export; `doctor` prints binding
-  capabilities and `store: sealed`.
+  counts; `gc` prints what it removed and kept; `seal` writes the export; `doctor` prints
+  binding capabilities and `store: sealed`.
 - **PASS:** no errors; exit codes and states as above.
 
 ### B4. Cross-Tool Readback with Stock `sqlite3`
@@ -173,14 +178,16 @@ node packages/fsqlite/src/cli/bin.ts doctor "$QA/bad.db"; echo "exit=$?"
 ```bash
 node packages/fsqlite/test/cli-golden/seed.ts "$QA/inflight" orphan
 node packages/fsqlite/src/cli/bin.ts validate "$QA/inflight"; echo "exit=$?" # in-flight
+node packages/fsqlite/src/cli/bin.ts repair "$QA/inflight" --dry-run # plan only
 node packages/fsqlite/src/cli/bin.ts doctor "$QA/inflight" --fix
 node packages/fsqlite/src/cli/bin.ts validate "$QA/inflight"; echo "exit=$?" # repaired
 node packages/fsqlite/test/cli-golden/seed.ts "$QA/corrupt" corrupt
 node packages/fsqlite/src/cli/bin.ts validate "$QA/corrupt"; echo "exit=$?" # corrupt pointer
 ```
 
-- **Expect:** the in-flight store validates with `exit=2`, `doctor --fix` restores it,
-  then `validate` is `sealed` with `exit=0`; the corrupt-pointer store validates with
+- **Expect:** the in-flight store validates with `exit=2`, `repair --dry-run` lists
+  `remove orphan snapshot 2` and changes nothing, `doctor --fix` restores it, then
+  `validate` is `sealed` with `exit=0`; the corrupt-pointer store validates with
   `exit=3`.
 - **PASS:** in-flight is recoverable and corruption is surfaced, never silently
   accepted.
@@ -240,7 +247,7 @@ node packages/fsqlite/src/cli/bin.ts fsinspect "$QA"; echo "exit=$?"
 ```
 
 - **Expect:** a capability report; `fsqlite-safe` verdict on a normal local FS
-  (`exit=0`). On a WAL-hostile filesystem the WAL negative control is expected to fail
+  (`exit=0`, and `exit=5` when the filesystem cannot host a store). On a WAL-hostile filesystem the WAL negative control is expected to fail
   while the fsqlite primitives still pass: that is the intended signal, not a
   regression. A tmpfs, ramfs, or `volatile` overlayfs target fails `durableFsync`.
 - **PASS:** the report matches the filesystem you are on; record the verdict for the

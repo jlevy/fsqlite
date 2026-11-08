@@ -470,22 +470,43 @@ The CLI can inspect and maintain a store without application schema code:
 ```text
 fsqlite info      <dir>
 fsqlite validate  <dir>
-fsqlite stats     <path> [--json]
+fsqlite stats     <path>
 fsqlite gc        <dir> [--retain N]
 fsqlite seal      <dir> <out.sqlite>
-fsqlite repair    <dir>
-fsqlite doctor    <path> [--json] [--fix]
-fsqlite fsinspect <dir> [--json]
+fsqlite repair    <dir> [--dry-run]
+fsqlite doctor    <path> [--fix]
+fsqlite fsinspect <dir>
 ```
 
-Recognition and health have distinct exit codes: healthy `0`, in-flight `2`, invalid or
-corrupt `3`, unsupported `4`, and not an fsqlite store `64`.
+Every command takes `--json` and `--help`; `fsqlite --help` and `fsqlite --version`
+work too. Arguments are parsed strictly: an unknown command or option, a missing or
+extra argument, or an invalid `--retain` is a usage error that changes nothing.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Success; a reported store is `sealed` or `live` |
+| `1` | The operation failed |
+| `2` | In flight: a capture, publication, or maintenance step is mid-flight |
+| `3` | The store is invalid or corrupt |
+| `4` | The store needs a newer format version or feature |
+| `5` | `fsinspect`: the filesystem cannot host a store |
+| `64` | Usage error, or the path is not an fsqlite store |
+
+A command that reports on a store (`info`, `validate`, `stats`, `doctor`, `repair`)
+exits with the code of the state it reports, and a command that fails exits with the
+code of its error, so `gc` on an unsupported store exits `4` like `validate` does.
+`repair --dry-run` prints the steps repair would take without changing anything.
+`repair` and `doctor --fix` delete every transient file, so run them only when no
+writer or reconciler is active.
+Errors print their cause chain; set `FSQLITE_DEBUG=1` for the stack.
+`import { main } from 'fsqlite/cli'` runs the same CLI in-process and returns the exit
+code.
 
 `seal` produces a standalone SQLite copy and replaces its output path atomically, so
 that path holds either the previous file or the complete export; it refuses a
 destination the store owns.
 `gc` holds the publish lock for every deletion and refuses a store whose head fails
-validation, exiting `3` (invalid or corrupt) or `4` (unsupported).
+validation.
 `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
