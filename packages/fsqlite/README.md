@@ -342,6 +342,9 @@ The `f1.0` writer contract does not support virtual tables or DDL inside write
 callbacks. `SnapshotStore` also rejects a schema that declares triggers, because
 reconciliation would fire them a second time; use `DirectStore` for such a schema.
 Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
+Give tables that concurrent `SnapshotStore` writers insert into caller-generated keys,
+such as UUIDs: writers seeded from the same snapshot allocate the same next rowid or
+`AUTOINCREMENT` value, so their inserts always conflict.
 Conflict actions are `lww` (replace), `union` (keep the existing row), and `strict`
 (quarantine the conflicting envelope).
 The `'*'` default is `strict` when omitted.

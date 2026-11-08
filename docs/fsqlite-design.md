@@ -233,6 +233,14 @@ can reject an entire envelope across keys or tables.
 | Trigger | `SnapshotStore` rejects a schema that declares one, at `init()` and on every open, naming the trigger. Changeset apply runs ordinary statements, so a trigger would fire again and its recorded effects would conflict, and `node:sqlite` cannot disable triggers. `DirectStore` runs callbacks directly and supports triggers. |
 | Cross-row application invariant | Not inferred. Use a version-stamped guard row, a `strict` point-row compare-and-retry pattern, or `DirectStore`. Range, predicate, and aggregate invariants are not protected by ordinary merge policy. |
 
+Rowid and `AUTOINCREMENT` keys collide across concurrent `SnapshotStore` writers by
+construction. Each writer’s private copy allocates the next key from the same published
+base, so two concurrent inserts claim the same key, and the later envelope meets a
+same-key CONFLICT: `strict` quarantines it, `lww` overwrites the earlier row, and
+`union` drops the later one.
+Tables that concurrent writers insert into should use caller-generated keys such as
+UUIDs. `DirectStore` serializes writes, so its rowid keys do not collide.
+
 DDL is not a transaction-envelope operation.
 Callbacks that change the SQLite schema, `application_id`, `user_version`, or
 fsqlite-owned tables fail.
