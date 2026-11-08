@@ -258,8 +258,10 @@ use.
    run B9 against the target filesystem and confirm `fsqlite-safe`.
 2. **Power-Loss Durability.** Publication uses fsync barriers for the snapshot, pointer,
    and their directories, and a missing directory fsync capability fails closed.
-   There is **no fault-injected block-device test** simulating real power loss in CI.
-   **Manual check:** reason about B7 (process-crash) as the closest reproducible proxy.
+   fsqlite issues each barrier through Node after SQLite closes the file; on macOS that
+   is `F_FULLFSYNC` (via libuv), not a cache-only `fsync(2)`. There is **no
+   fault-injected block-device test** simulating real power loss in CI. **Manual
+   check:** reason about B7 (process-crash) as the closest reproducible proxy.
 3. **Cross-Language Writers.** Readers work across bindings; non-Node *writers*
    (Python/APSW and Rust/rusqlite) against the format are **future work**. **Manual
    check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.

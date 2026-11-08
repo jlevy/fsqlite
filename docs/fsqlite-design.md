@@ -443,8 +443,12 @@ no-replace hard links for snapshot commits, close-to-open visibility, and fsync
 behavior.
 `fsinspect` probes these properties from one host, and local multiprocess tests
 simulate network-shaped visibility.
-Directory fsync is part of the safe verdict and publication fails closed when it is
-unavailable. Neither is a substitute for the pending two-host NFS/SMB gate.
+Every durability barrier is a file or directory fsync that fsqlite issues through Node
+after SQLite has closed the file, so SQLite’s own sync settings do not matter for
+publication. On macOS, Node’s fsync uses `F_FULLFSYNC`, which plain `fsync(2)` does not
+(spec section 10). Directory fsync is part of the safe verdict and publication fails
+closed when it is unavailable.
+Neither is a substitute for the pending two-host NFS/SMB gate.
 The alpha supplies a protocol design, a reference implementation, and local evidence;
 universal shared-filesystem certification remains outside that scope.
 Consumer synchronization folders are not conforming shared filesystems.

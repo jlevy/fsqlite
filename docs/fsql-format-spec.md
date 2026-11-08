@@ -641,6 +641,18 @@ Directory barriers open the directory read-only and are POSIX-only (O1). A platf
 filesystem without that capability is unsupported for `f1.0` mutation rather than
 silently downgraded.
 
+**Barrier mechanics.** Every barrier in the table is an fsync the implementation issues
+itself, on the file or directory, after the SQLite connection that wrote the file has
+closed. SQLite’s own syncs while it writes a transient build, working copy, or
+`VACUUM INTO` output are not barriers in this protocol, so SQLite’s `synchronous` and
+`fullfsync` settings do not affect publication durability.
+On Apple platforms `fsync(2)` flushes only to the drive’s cache; an implementation there
+MUST issue `fcntl(F_FULLFSYNC)` for each barrier, using the strongest weaker barrier
+only where the filesystem rejects it.
+Node’s `fs.fsyncSync` already does this: libuv’s `uv__fs_fsync` tries `F_FULLFSYNC`,
+then `F_BARRIERFSYNC`, then `fsync`, so the Node implementation’s barriers are full
+flushes on macOS without any SQLite pragma.
+
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss
 durable until a reconcile publishes a snapshot containing it** because the envelope
