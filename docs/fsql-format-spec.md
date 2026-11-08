@@ -186,10 +186,13 @@ Requirements:
 
 - **S4.** Every *caller* table (any table not named `sqlite_*`, `applied_tx`, or
   `fsqlite_meta`) MUST have a primary key, and unless it is a single-column
-  `INTEGER PRIMARY KEY` (a non-null rowid alias), every PK column MUST be declared
-  `NOT NULL`. Writers/initializers MUST reject schemas violating this requirement
-  because the merge policy (§6) is keyed on primary keys, and SQLite otherwise permits
-  NULLs in non-integer PKs.
+  `INTEGER PRIMARY KEY` that is a rowid alias (and therefore non-null), every PK column
+  MUST be declared `NOT NULL`. Writers/initializers MUST reject schemas violating this
+  requirement because the merge policy (§6) is keyed on primary keys, SQLite otherwise
+  permits NULLs in non-integer PKs, and a session omits every row whose key is NULL. A
+  column declared `INTEGER PRIMARY KEY DESC` is not a rowid alias (a documented SQLite
+  quirk), so it too MUST be `NOT NULL`; the table-constraint form
+  `PRIMARY KEY (id DESC)` remains an alias.
   The `f1.0` Writer role does not support virtual tables: SQLite sessions do not capture
   them, and their implementation-owned shadow tables do not satisfy this caller-table
   contract. Derived indexes that use virtual tables belong outside the envelope writer

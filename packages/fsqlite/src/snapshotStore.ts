@@ -156,9 +156,12 @@ const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
 const DEFAULT_MAX_ENVELOPE_BYTES = 1 << 30
 
 /**
- * Every caller table needs a NON-NULL primary key: the per-table merge policy is keyed on it.
- * An INTEGER PRIMARY KEY is a non-null rowid alias; any other primary key column must be NOT
- * NULL (SQLite otherwise allows a NULL in a non-integer PRIMARY KEY).
+ * Every caller table needs a NON-NULL primary key: the per-table merge policy is keyed on it,
+ * and a session silently omits any row whose key is NULL. A rowid table's INTEGER PRIMARY KEY
+ * is a non-null rowid alias exactly when SQLite builds no separate primary-key index for it;
+ * the column-level `INTEGER PRIMARY KEY DESC` form gets one, stays an ordinary column, and
+ * admits NULL. Every other primary key column must be NOT NULL (SQLite otherwise allows a
+ * NULL in a non-integer PRIMARY KEY).
  */
 function validatePrimaryKeys(db: driver.DB): void {
   const tables = (
@@ -181,14 +184,26 @@ function validatePrimaryKeys(db: driver.DB): void {
       throw new Error(`table "${t}" has no primary key; fsqlite requires a NON-NULL primary key`)
     }
     const firstPk = pk[0]
-    const isRowidAlias =
+    const integerKey =
       pk.length === 1 && firstPk !== undefined && /^integer$/i.test(firstPk.type.trim())
+    const hasPkIndex = (
+      db.prepare(`PRAGMA index_list(${quoted})`).all() as { origin: string }[]
+    ).some((index) => index.origin === 'pk')
+    const isRowidAlias = integerKey && !hasPkIndex
     const nullablePk = pk.find((c) => c.notnull === 0)
-    if (!isRowidAlias && nullablePk) {
+    if (isRowidAlias || !nullablePk) {
+      continue
+    }
+    if (integerKey) {
       throw new Error(
-        `table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`,
+        `table "${t}" primary key column "${nullablePk.name}" is nullable: an INTEGER PRIMARY ` +
+          'KEY declared DESC is not a rowid alias and admits NULL keys, which changesets omit; ' +
+          'declare it NOT NULL or drop DESC',
       )
     }
+    throw new Error(
+      `table "${t}" primary key column "${nullablePk.name}" is nullable; declare it NOT NULL`,
+    )
   }
 }
 

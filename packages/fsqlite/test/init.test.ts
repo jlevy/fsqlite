@@ -18,6 +18,10 @@ test('init enforces the NON-NULL primary key contract', () => {
     ['CREATE TABLE t (k TEXT PRIMARY KEY, v TEXT);', /primary key/i], // nullable TEXT PK (SQLite quirk)
     ['CREATE TABLE t (k TEXT PRIMARY KEY NOT NULL, v TEXT);', null], // explicit NOT NULL PK
     ['CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);', null], // INTEGER PK is a non-null rowid alias
+    // A column-level DESC key is not a rowid alias and admits NULL, which sessions drop.
+    ['CREATE TABLE t (id INTEGER PRIMARY KEY DESC, v TEXT);', /not a rowid alias/],
+    ['CREATE TABLE t (id INTEGER NOT NULL PRIMARY KEY DESC, v TEXT);', null],
+    ['CREATE TABLE t (id INTEGER, v TEXT, PRIMARY KEY (id DESC));', null], // still an alias
   ]
   for (const [schema, expectErr] of cases) {
     const { dir, cleanup } = tmpStore()
