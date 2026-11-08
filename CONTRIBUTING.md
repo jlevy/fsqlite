@@ -49,8 +49,10 @@ development loop.
 - Run `pnpm verify` before submitting a pull request.
 
 Formatting is enforced by Prettier, flowmark, ESLint, and lefthook.
-CI verifies the declared Node floor on Linux plus the current Node LTS on Linux and
-macOS.
+CI runs `pnpm verify` on Linux with the declared Node 22.18.0 floor and the newest Node
+22, 24, and 26 releases, and on macOS with Node 26. It also smoke-tests the packed
+package on Node 24.0.0, the floor of the 24 line, and audits the dependencies weekly as
+well as on every change.
 
 ## Upgrading tbd
 

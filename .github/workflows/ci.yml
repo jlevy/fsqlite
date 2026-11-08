@@ -1,50 +1,104 @@
 name: CI
 
+# Pull requests are verified by the pull_request event; pushes run only for main, so a
+# pull request branch is not verified twice. Release tags are verified by publish.yml.
 on:
   push:
+    branches: [main]
   pull_request:
+  schedule:
+    # Weekly, so a newly published advisory fails the audit job on its own run instead
+    # of on an unrelated change.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: read # check out the repository; no job writes anything
+
+concurrency:
+  # One group per pull request (a new push cancels the superseded run) and one per
+  # commit otherwise, so every commit on main keeps its own run.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
     name: Verify (${{ matrix.os }}, Node ${{ matrix.node }})
+    if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
+          # The declared engines floor on the 22 line; `22` alone resolves to the newest.
           - os: ubuntu-latest
             node: 22.18.0
           - os: ubuntu-latest
+            node: 22
+          - os: ubuntu-latest
             node: 24
+          - os: ubuntu-latest
+            node: 26
           - os: macos-latest
-            node: 24
+            node: 26
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          version: '0.13.5'
           enable-cache: false
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm verify
 
+  consumer-floor:
+    # Development tools need Node 24.11 or later on the 24 line, so build on the
+    # .nvmrc release and run only the packed-tarball smoke test at the 24.0.0 floor.
+    name: Package smoke (Node 24.0.0 floor)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm build
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.0.0
+      - name: Smoke-test the packed package
+        working-directory: packages/fsqlite
+        run: node scripts/package-smoke.mjs
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 24
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
           cache: pnpm
+      # The frozen install also re-verifies the lockfile against minimumReleaseAge and
+      # trustPolicy.
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm audit --audit-level=moderate
       - run: pnpm audit signatures

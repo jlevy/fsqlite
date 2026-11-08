@@ -4,6 +4,19 @@ fsqlite has no runtime dependencies and allows no dependency lifecycle scripts.
 Development dependencies are locked with pnpm and ordinarily must have been published
 for at least 14 days before they can enter the lockfile.
 
+## Pinned Tools
+
+- pnpm is pinned by `packageManager` in `package.json`, and the development and release
+  Node version by `.nvmrc`.
+- The Markdown formatter runs as `uvx --isolated --from flowmark-rs==X.Y.Z`, an exact
+  pin with no dependencies of its own.
+- CI pins the `uv` release it installs, so the tool that fetches the formatter does not
+  float to a release inside the cool-off.
+- GitHub Actions are pinned to full commit SHAs, with the release tag in a trailing
+  comment. Pin only a release that has itself cleared the cool-off.
+- Every workflow checks out without persisting credentials and installs with
+  `--frozen-lockfile --ignore-scripts`.
+
 ## Time-Limited Audit Exception
 
 `pnpm audit` reports
