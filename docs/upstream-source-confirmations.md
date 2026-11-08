@@ -99,7 +99,8 @@ The same file documents a BSD/macOS NFS `lockd` bug and its workaround at
 SQLite’s default Unix VFS normally uses `fcntl()` byte-range advisory locks; `flock()`
 is an alternative locking style, not the default mechanism.
 This confirms why fsqlite does not depend on either style as its cross-client
-coordination primitive and instead specifies `mkdir`/`rename` publication semantics.
+coordination primitive and instead specifies `mkdir`, no-replace `link`, and `rename`
+publication semantics.
 
 The NFS-to-error path is explicit in the source:
 

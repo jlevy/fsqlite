@@ -40,8 +40,8 @@ fsqlite changes the shared unit from one live writable database to immutable com
 SQLite generations. Cooperative writers work in private SQLite files and publish a new
 generation through the `f1.0` protocol.
 Cross-client safety no longer depends on SQLite locks for one shared writable file; it
-depends on exclusive directory creation, atomic rename-replace, visibility, and
-durability from the store’s filesystem.
+depends on exclusive directory creation, atomic rename-replace, no-replace hard links,
+visibility, and durability from the store’s filesystem.
 
 ## Choose by Coordination Model
 
@@ -612,6 +612,7 @@ new DirectStore(dir, options).write((db) => {
 | `src/storeFormat` | Marker recognition, format version, store identity, and required-feature gating |
 | `src/snapshotStore` | Concurrent capture, reconcile, reads, leases, GC, validation, repair, and sealing |
 | `src/directStore` | Local serialized writer over the same immutable format |
+| `src/publication` | No-replace snapshot commit and identity-checked pointer swap shared by both strategies |
 | `src/conflictPolicy` | Deterministic policy routing and conflict classification |
 | `src/driver` | `node:sqlite` capability, changeset, integrity, backup, and callback-boundary chokepoint |
 | `src/lock` | Fenced `mkdir` lease used for publication and maintenance |

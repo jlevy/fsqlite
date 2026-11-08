@@ -66,14 +66,15 @@ Spawned as real child processes by the suites above, so the concurrency proofs a
 cross-process, not in-thread: `writer.ts`, `reader.ts`, `reconciler.ts`,
 `lock-holder.ts`, `direct-writer.ts`, `init-worker.ts`.
 
-### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 24 console cases)
+### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 27 console cases)
 
 Exercises the real CLI (`src/cli/index.ts`) end to end: `--help` and usage with their
 exit codes; `info` and `validate` on a sealed store; `validate` exit codes 0, 2, and 3
 for sealed, in-flight, and corrupt stores; `gc` and `seal` with a
-stock-`sqlite3`-readable export header; `stats` on an fsqlite store and on a plain
-SQLite file; `doctor` on clean and corrupt plain SQLite files; and `doctor --fix`
-restoring an in-flight store.
+stock-`sqlite3`-readable export header; `gc` refusing an integrity-corrupt head with
+exit 3 and deleting nothing; `stats` on an fsqlite store and on a plain SQLite file;
+`doctor` on clean and corrupt plain SQLite files; and `doctor --fix` restoring an
+in-flight store.
 
 ### Clean-Room Package Smoke (`scripts/package-smoke.mjs`)
 

@@ -55,8 +55,8 @@ which risks database corruption.
 
 fsqlite avoids the shared writable file.
 Each agent works in a private SQLite file, and cooperative publishers expose complete
-immutable generations through directory creation and atomic rename.
-On a mount that meets the
+immutable generations through directory creation, no-replace hard links, and atomic
+rename. On a mount that meets the
 [`f1.0` publication contract](#shared-filesystems-and-cloud-agents), agents can share
 and update ordinary SQLite data without a database server.
 
@@ -175,7 +175,8 @@ independence.
 fsqlite targets shared paths that cannot provide SQLite’s live-file locking contract but
 can provide the `f1.0` publication contract.
 Both strategies require correct exclusive directory creation, atomic rename-replace,
-close-to-open visibility, and file and directory fsync behavior from the exact mount.
+no-replace hard links, close-to-open visibility, and file and directory fsync behavior
+from the exact mount.
 
 This distinction matters in cloud-agent sandboxes, where a workspace path may be
 network-backed or virtualized even when it looks local.

@@ -55,8 +55,8 @@ which risks database corruption.
 
 fsqlite avoids the shared writable file.
 Each agent works in a private SQLite file, and cooperative publishers expose complete
-immutable generations through directory creation and atomic rename.
-On a mount that meets the
+immutable generations through directory creation, no-replace hard links, and atomic
+rename. On a mount that meets the
 [`f1.0` publication contract](#shared-filesystems-and-cloud-agents), agents can share
 and update ordinary SQLite data without a database server.
 
@@ -182,7 +182,8 @@ write rate and burst size determine most of the cost.
 fsqlite targets shared paths that cannot provide SQLite’s live-file locking contract but
 can provide the `f1.0` publication contract.
 Both strategies require correct exclusive directory creation, atomic rename-replace,
-close-to-open visibility, and file and directory fsync behavior from the exact mount.
+no-replace hard links, close-to-open visibility, and file and directory fsync behavior
+from the exact mount.
 
 This distinction matters in cloud-agent sandboxes, where a workspace path may be
 network-backed or virtualized even when it looks local.
@@ -348,9 +349,11 @@ a causal or globally clock-ordered last-write guarantee across hosts.
 
 Call `init()` on each application handle before ordinary use.
 On an existing store it verifies the exact caller-schema identity rather than executing
-the DDL again. `schemaVersion` is an integer from 0 through 2,147,483,647. Incrementing
-it does not migrate a store; a different version or exact schema string is incompatible
-until a future explicit migration protocol exists.
+the DDL again. If the store still holds snapshots but has lost `current`, `init()`
+refuses to create a new empty snapshot 0; run `fsqlite repair` to restore the pointer.
+`schemaVersion` is an integer from 0 through 2,147,483,647. Incrementing it does not
+migrate a store; a different version or exact schema string is incompatible until a
+future explicit migration protocol exists.
 
 ## Choose a Write Strategy
 
@@ -469,7 +472,11 @@ fsqlite fsinspect <dir> [--json]
 Recognition and health have distinct exit codes: healthy `0`, in-flight `2`, invalid or
 corrupt `3`, unsupported `4`, and not an fsqlite store `64`.
 
-`seal` produces a standalone SQLite copy.
+`seal` produces a standalone SQLite copy and replaces its output path atomically, so
+that path holds either the previous file or the complete export; it refuses a
+destination the store owns.
+`gc` holds the publish lock for every deletion and refuses a store whose head fails
+validation, exiting `3` (invalid or corrupt) or `4` (unsupported).
 `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
@@ -545,8 +552,10 @@ is the normative protocol authority.
   addition to retained snapshots, read leases, a reconcile build, and envelopes.
   Reconcile also loads the lifetime `applied_tx` ledger, which is not yet checkpointed.
   Monitor free space and pending backlog.
-- DirectStore holds its lease across copy, callback, checks, fsync, and publication.
-  Configure a stale window longer than the worst-case operation.
+- DirectStore holds its lease across copy, callback, checks, fsync, and publication, and
+  renews it at each step boundary.
+  Configure a stale window longer than the longest single step (one head copy, one
+  callback, or one fsync).
   A stolen lease is fenced safely but can cause the callback to retry.
 - `seal()` pins one published snapshot and creates an integrity-checked point-in-time
   SQLite file while writers continue.
