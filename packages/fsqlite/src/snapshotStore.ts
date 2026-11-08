@@ -138,6 +138,14 @@ const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
 /** Default cap on a single changeset envelope before reconcile quarantines it (1 GiB). */
 const DEFAULT_MAX_ENVELOPE_BYTES = 1 << 30
 
+/** init found a lineage without `current`; only repair may choose the head to restore. */
+const missingPointerError = (versions: number[]): Error =>
+  new Error(
+    `refusing to initialize: ${STORE_MARKER_FILENAME} exists and snapshots/ holds snapshot(s) ` +
+      `${versions.join(', ')}, but current is missing; run repair to restore current to the ` +
+      'newest integrity-clean snapshot instead of re-creating snapshot 0',
+  )
+
 /**
  * Every caller table needs a NON-NULL primary key: the per-table merge policy is keyed on it.
  * An INTEGER PRIMARY KEY is a non-null rowid alias; any other primary key column must be NOT
@@ -394,6 +402,12 @@ export class SnapshotStore {
       if (existsSync(this.currentPath)) {
         return
       } // another initializer won while we waited
+      // A marked store with snapshots but no pointer has lost `current`, not crashed in its
+      // first open (which leaves no snapshot). Building snapshot 0 here would roll it back.
+      const lineage = this.snapshotVersions()
+      if (lineage.length > 0) {
+        throw missingPointerError(lineage)
+      }
       const tmp = `${this.snapshotPath(0)}.${rand()}.tmp`
       try {
         const db = driver.open(tmp)
@@ -420,7 +434,15 @@ export class SnapshotStore {
         if (!lease.fence()) {
           throw new Error('init lost ownership of publish.lock before snapshot publication')
         }
-        renameSync(tmp, this.snapshotPath(0))
+        try {
+          linkSync(tmp, this.snapshotPath(0)) // commit without replacing (spec F5c)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+            throw missingPointerError([0])
+          }
+          throw error
+        }
+        unlinkSync(tmp)
         fsyncDir(this.snapDir)
         if (!lease.fence()) {
           throw new Error('init lost ownership of publish.lock before pointer publication')

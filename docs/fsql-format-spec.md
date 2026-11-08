@@ -206,11 +206,18 @@ Requirements:
 Snapshot 0 is the empty initial snapshot created by `init` (empty caller tables, both
 reserved tables, identity stamped).
 First-open MUST be fenced: build under the publish lock through a uniquely-named
-transient, rename into place, and then publish the pointer so concurrent initializers
-converge on one snapshot 0. After init (and on every reopen), an implementation MUST
-verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
-equals its `schema_version`, `application_id` equals `0x4653514C`, and
-`fsqlite_meta.schema_hash` equals the hash of its exact supplied DDL string.
+transient, commit it as snapshot 0 without replacing (as in F5c), and then publish the
+pointer so concurrent initializers converge on one snapshot 0. When `fsqlite.json`
+exists but `current` does not, initialization MUST refuse if `snapshots/` holds any
+snapshot (including snapshot 0) and MUST direct the operator to repair (§11): the store
+has a lineage whose pointer was lost, and building a new snapshot 0 would roll every
+reader back to an empty store, after which repair would delete the newer snapshots as
+orphans. Only a marked store with no snapshot (a first-open that crashed before its
+commit) may be initialized again.
+After init (and on every reopen), an implementation MUST verify compatibility: the
+snapshot identity matches `fsqlite.json`, `user_version` equals its `schema_version`,
+`application_id` equals `0x4653514C`, and `fsqlite_meta.schema_hash` equals the hash of
+its exact supplied DDL string.
 The last check rejects a *divergent schema at the same version*, which the integer alone
 cannot catch.
 

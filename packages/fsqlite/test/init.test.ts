@@ -209,3 +209,40 @@ test('init abandons snapshot-0 publication after losing its lock token', () => {
     cleanup()
   }
 })
+
+test('init refuses a store whose current pointer is missing but whose snapshots exist', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    for (let i = 0; i < 3; i++) {
+      store.write('w', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`a${i}`, 'A', 't'),
+      )
+      store.reconcile()
+    }
+    rmSync(store.currentPath)
+    const before = readdirSync(store.snapDir).sort()
+
+    assert.throws(() => new SnapshotStore(dir, STORE_OPTS).init(), /current is missing.*run repair/)
+    assert.deepEqual(readdirSync(store.snapDir).sort(), before, 'no snapshot was rebuilt')
+    assert.equal(existsSync(store.currentPath), false, 'init did not roll the store back to 0')
+
+    store.repair()
+    assert.equal(new SnapshotStore(dir, STORE_OPTS).init().currentVersion(), 3)
+  } finally {
+    cleanup()
+  }
+})
+
+test('init still completes a first-open that crashed before committing snapshot 0', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    rmSync(store.currentPath)
+    rmSync(store.snapshotPath(0))
+
+    assert.equal(new SnapshotStore(dir, STORE_OPTS).init().currentVersion(), 0)
+  } finally {
+    cleanup()
+  }
+})
