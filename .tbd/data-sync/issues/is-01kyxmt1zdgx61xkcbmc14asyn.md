@@ -5,13 +5,17 @@ title: Evaluate rebaser support and upstream node:sqlite enhancements
 kind: task
 status: open
 priority: 3
-version: 1
+version: 2
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
 dependencies: []
 parent_id: is-01kyxmrxxwhdr0a5f90akc73a4
 created_at: 2026-08-01T03:10:15.533Z
-updated_at: 2026-08-01T03:10:15.533Z
+updated_at: 2026-11-08T20:32:18.129Z
 ---
 Evaluate SQLite rebaser use without making it a base-format requirement. Prepare upstream Node requests for conflict table context and rebaser exposure, then decide whether a later optional feature can use them while f1.0 remains implementable without them.
+
+## Notes
+
+2026-11-08: fable-research.md research section (c) item 10 sketches the upstream request: an apply_v3 filter, the change object passed to onConflict, and an optional rebaser, with APSW as precedent.
