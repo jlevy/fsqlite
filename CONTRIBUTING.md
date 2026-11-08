@@ -82,8 +82,8 @@ footer, and link checks still cover it.
 ## Releasing
 
 Release maintainers should follow [the release runbook](docs/releasing.md).
-The first npm publication is a documented bootstrap case; later releases use trusted
-publishing.
+The first npm publication is a documented bootstrap case; later releases are staged
+through npm trusted publishing and approved by an owner with 2FA.
 
 ## Reporting Bugs
 

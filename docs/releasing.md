@@ -31,17 +31,35 @@ are final. A tag is an immutable release assertion, not a staging mechanism.
 
 ## Trusted Publishing
 
-After the package exists, configure its npm trusted publisher for:
+After the package exists, configure GitHub and npm once:
 
-- GitHub organization or user: `jlevy`
-- Repository: `fsqlite`
-- Workflow: `publish.yml`
-- Environment: none
+1. In the repository settings on GitHub, create the environment `npm`. Restrict its
+   deployment branches and tags to tags matching `v*`. Required reviewers are optional:
+   npm already holds every staged release until an owner approves it with 2FA, but a
+   reviewer also gates when the workflow can request an OIDC token.
+
+2. On npmjs.com, add a trusted publisher to `fsqlite` with:
+   - GitHub organization or user: `jlevy`
+   - Repository: `fsqlite`
+   - Workflow: `publish.yml`
+   - Environment: `npm`
+   - Allowed actions: `npm stage publish` only; leave `npm publish` disallowed.
+
+   The command-line equivalent is
+   `npm trust github fsqlite --repo jlevy/fsqlite --file publish.yml --env npm --allow-stage-publish`.
+
+3. After the first trusted release, set the package’s publishing access to “Require
+   two-factor authentication and disallow tokens”.
 
 Later releases use the tag-triggered `.github/workflows/publish.yml` workflow.
-It installs from the committed lockfile, runs the complete verification gate, confirms
-the tag matches the package version, and publishes with npm’s GitHub Actions OIDC
-trusted publishing. The explicit `v0.1.0` branch is the only manual bootstrap exception.
+Its `build` job has no OIDC permission: it installs from the committed lockfile, runs
+the complete verification gate, confirms the tag matches the package version, packs the
+tarball, and smoke-tests that exact tarball.
+Its `stage` job runs in the `npm` environment with `id-token: write`, checks out and
+installs nothing, and stages that tarball with `npm stage publish` and provenance.
+A staged version is not public until an owner approves it.
+The explicit `v0.1.0` branch is the only manual bootstrap exception: for that tag the
+workflow verifies the owner-published package and skips the `stage` job.
 No long-lived npm token is stored in GitHub.
 
 For a later release during the alpha phase:
@@ -49,8 +67,12 @@ For a later release during the alpha phase:
 1. Update the version and changelog in a pull request.
 2. Verify the merged commit in a clean checkout.
 3. Create the exact matching `v*` tag on that commit and push it.
-4. Watch the Publish workflow and verify the npm version, dist-tag, provenance, and a
-   fresh consumer install.
+4. Watch the Publish workflow; the `stage` job logs the staged version and its stage ID.
+5. With npm 11.15 or later, review the staged release with `npm stage list fsqlite` and,
+   if needed, `npm stage download <stage-id>`. Then run `npm stage approve <stage-id>`,
+   which prompts for 2FA, or `npm stage reject <stage-id>` to discard it.
+6. Verify the npm version, dist-tag, provenance
+   (`npm view fsqlite@<version> dist.attestations`), and a fresh consumer install.
 
 Stable releases use the same process with the appropriate npm dist-tag after the
 package’s compatibility policy is established.

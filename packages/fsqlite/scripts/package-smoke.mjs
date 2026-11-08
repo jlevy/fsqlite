@@ -2,7 +2,8 @@
 // project with no development tooling, and exercise the published contract: the library
 // import (`fsqlite`) and the CLI bin (`fsqlite`). This test verifies what npm
 // consumers actually get, independent of the source checkout. It normally requires
-// `dist/`; the release workflow can instead verify an exact registry package spec.
+// `dist/`; the release workflow can instead verify an exact registry package spec or the
+// release tarball it packed.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -65,8 +66,8 @@ function publishedVersion(output) {
   return value.current
 }
 
-// By default, pack exactly what would publish. The release workflow can instead pass
-// an exact registry spec to verify the first owner-authenticated publication.
+// By default, pack exactly what would publish. The release workflow can instead pass an
+// exact registry spec (the first owner-authenticated publication) or a packed tarball.
 const tarball =
   registryPackage === undefined
     ? packedFilename(run('npm', ['pack', '--json'], { cwd: pkgDir, env: npmEnv }))
