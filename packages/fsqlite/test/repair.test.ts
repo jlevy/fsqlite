@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFileSync, existsSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -205,6 +205,43 @@ test('root pointer transients are surfaced, swept by gc, and removed by repair',
     store.repair()
     assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
     assert.equal(existsSync(grave), false, 'repair removes a lock moved aside by a crashed break')
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('init journal and lease temps are surfaced, swept by gc, and removed by repair', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    // SQLite's journal for init's snapshot-0 temp, and a crashed readLease's lease temp.
+    const debris = () => [
+      join(store.snapDir, '000000000000.fsqlite.sqlite.deadbeef00.tmp-journal'),
+      join(store.leaseDir, '000001762600000-deadbeef00.lease.abcdef0123.tmp'),
+    ]
+    const plant = (ageMs: number): void => {
+      const at = new Date(Date.now() - ageMs)
+      for (const path of debris()) {
+        writeFileSync(path, 'x')
+        utimesSync(path, at, at)
+      }
+    }
+    plant(120_000)
+    const validation = store.validate()
+    assert.equal(validation.state, 'in-flight-capture')
+    for (const path of debris()) {
+      assert.ok(
+        validation.issues.some((issue) => issue.includes(basename(path))),
+        `validate names ${basename(path)}: ${JSON.stringify(validation.issues)}`,
+      )
+    }
+
+    store.gc({ transientStaleMs: 60_000 })
+    assert.deepEqual(debris().filter(existsSync), [], 'gc sweeps both stale transients')
+
+    plant(0)
+    store.repair()
+    assert.deepEqual(debris().filter(existsSync), [], 'repair removes both transients')
     assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()

@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **164 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
+Current status: **165 `node:test` cases**, **27 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -49,7 +49,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
 | `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, and refuses store-owned destinations |
 | `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving |
-| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup, and never quarantining a live or just-committed envelope |
+| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup (including init journals and lease temps), and never quarantining a live or just-committed envelope |
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
@@ -98,7 +98,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 164` / `# fail 0`; goldens `27 passed`; build
+- **Expect:** node:test reports `# pass 165` / `# fail 0`; goldens `27 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/index.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.

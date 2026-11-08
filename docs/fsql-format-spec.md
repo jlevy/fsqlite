@@ -83,6 +83,7 @@ paths below are relative to it.
     .direct-<hex10>.sqlite         # transient: DirectStore build (§9)
     .gc-<version>-<hex10>.tmp      # transient: snapshot tombstoned by GC (§8 G2)
     *.tmp                          # transient: init's snapshot-0 build (§3)
+    *.tmp-journal                  # transient: SQLite's rollback journal for that build
   tx/
     pending/
       <txid>.txn/                  # transaction envelope (§5)
@@ -94,6 +95,7 @@ paths below are relative to it.
     quarantine/<txid>.txn/         # rejected envelopes (+ QUARANTINE reason file)
   leases/
     <token>.lease                  # read lease: {version, pid, host, at} (§8)
+    <token>.lease.<hex10>.tmp      # transient: lease publication (§8)
 ```
 
 `fsqlite.json` makes the directory self-identifying.
@@ -130,11 +132,13 @@ Naming grammar:
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
   Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
-- **Transients** are exactly the entries matching: prefix `.build-`, prefix `.direct-`,
-  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. All are files except
-  `publish.lock.<hex10>.tmp/`, a directory, so removing a transient MUST handle both.
-  Transients are never part of store state; a *fresh* transient indicates work in
-  flight, an *old* one indicates a crash (§11).
+- **Transients** are exactly the entries at the store root, in `snapshots/`, in
+  `tx/pending/`, or in `leases/` matching: prefix `.build-`, prefix `.direct-`, prefix
+  `.work-` (under `tx/pending/`), suffix `.tmp`, or suffix `.tmp-journal` (the rollback
+  journal SQLite keeps beside a `.tmp` database while it writes one).
+  All are files except `publish.lock.<hex10>.tmp/`, a directory, so removing a transient
+  MUST handle both. Transients are never part of store state; a *fresh* transient
+  indicates work in flight, an *old* one indicates a crash (§11).
 - **Envelope dir**: `<txid>.txn` (§5 defines `<txid>`).
 - **Hex tokens** (`<hex10>` etc.)
   are lowercase hex from a cryptographically random source; their only requirement is
@@ -610,10 +614,10 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   A lease that lands just before the rename can see its snapshot vanish briefly, until
   the second scan restores it; the newest `retain` versions are never collected, which
   bounds RL1’s retries.
-- **G3.** GC MAY also sweep *stale* transients at the store root, in `snapshots/`, and
-  in `tx/pending/` (`.build-*`, `.direct-*`, `.work-*`, and `*.tmp`), but MUST NOT sweep
-  *fresh* ones, which may belong to a live initializer, reconcile, DirectStore write, or
-  envelope capture in another process.
+- **G3.** GC MAY also sweep *stale* transients (§2) at the store root, in `snapshots/`,
+  in `tx/pending/`, and in `leases/`, but MUST NOT sweep *fresh* ones, which may belong
+  to a live initializer, reconcile, DirectStore write, envelope capture, or read-lease
+  publication in another process.
   Staleness is mtime-based with a window comfortably above any plausible build duration.
 
 ## 9. The DirectStore Strategy

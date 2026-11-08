@@ -137,7 +137,8 @@ const missingPointerError = (versions: number[]): Error =>
   )
 
 // Transient (never-store-state) entries, per fsql-format-spec.md §2: reconcile builds,
-// DirectStore builds, init's snapshot-0 temp, writer working copies, gc tombstones
+// DirectStore builds, init's snapshot-0 temp and the SQLite rollback journal beside it
+// (`.tmp-journal`), writer working copies, lease temps (`leases/*.tmp`), gc tombstones
 // (`.gc-<version>-<hex>.tmp`), and lock directories moved aside by a break or release
 // (`publish.lock.<hex>.tmp/`, the only directory). A fresh one is work in flight; an old
 // one is crash debris. Removal is recursive for that reason.
@@ -145,7 +146,8 @@ const isTransientFile = (f: string): boolean =>
   f.startsWith('.build-') ||
   f.startsWith('.direct-') ||
   f.startsWith('.work-') ||
-  f.endsWith('.tmp')
+  f.endsWith('.tmp') ||
+  f.endsWith('.tmp-journal')
 
 // writerId is interpolated into filesystem paths (the working copy and the envelope dir),
 // so it must be a safe single path component: no separators, traversal, or oversize names.
@@ -1136,9 +1138,9 @@ export class SnapshotStore {
       }
     }
     fence()
-    sweepStaleTransients(this.dir)
-    sweepStaleTransients(this.snapDir)
-    sweepStaleTransients(this.txPending)
+    for (const dir of this._transientDirs()) {
+      sweepStaleTransients(dir)
+    }
     return { removed, kept: versions.length - removed, leased: [...leased] }
   }
 
@@ -1245,14 +1247,10 @@ export class SnapshotStore {
     }
 
     // In-flight tells.
-    const rootFiles = readdirSync(this.dir)
     const snapFiles = existsSync(this.snapDir) ? readdirSync(this.snapDir) : []
-    const pendingFiles = existsSync(this.txPending) ? readdirSync(this.txPending) : []
-    const transients = [
-      ...rootFiles.filter(isTransientFile),
-      ...snapFiles.filter(isTransientFile),
-      ...pendingFiles.filter(isTransientFile), // .work-* writer copies
-    ]
+    const transients = this._transientDirs().flatMap((dir) =>
+      existsSync(dir) ? readdirSync(dir).filter(isTransientFile) : [],
+    )
     if (transients.length) {
       issues.push(`transient build files present: ${transients.join(', ')}`)
     }
@@ -1493,7 +1491,7 @@ export class SnapshotStore {
         actions.push(`removed ${wasIntegrityClean ? 'orphan' : 'corrupt'} snapshot ${v}`)
       }
     }
-    for (const dir of [this.dir, this.snapDir, this.txPending]) {
+    for (const dir of this._transientDirs()) {
       if (!existsSync(dir)) {
         continue
       }
@@ -1539,6 +1537,11 @@ export class SnapshotStore {
     }
 
     return actions
+  }
+
+  /** Every directory that can hold transients (spec section 2), for validate, gc, and repair. */
+  private _transientDirs(): string[] {
+    return [this.dir, this.snapDir, this.txPending, this.leaseDir]
   }
 
   /** Published snapshot versions in ascending order. */
