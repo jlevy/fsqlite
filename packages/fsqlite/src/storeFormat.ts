@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { FsqliteError, StoreFormatError } from './errors.ts'
+import { errorMessage, FsqliteError, StoreFormatError } from './errors.ts'
 import { fsyncDir, fsyncPath, removeQuietly } from './fsutil.ts'
 
 export const STORE_MARKER_FILENAME = 'fsqlite.json'
@@ -54,7 +54,7 @@ export function recognizeStore(storeDir: string): StoreRecognition {
   } catch (error) {
     return {
       state: 'invalid',
-      issue: `invalid ${STORE_MARKER_FILENAME}: malformed JSON (${error instanceof Error ? error.message : String(error)})`,
+      issue: `invalid ${STORE_MARKER_FILENAME}: malformed JSON (${errorMessage(error)})`,
     }
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

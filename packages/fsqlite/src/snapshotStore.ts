@@ -42,6 +42,7 @@ import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
 import {
+  errorMessage,
   FsqliteError,
   PermanentConflictError,
   PostPublishError,
@@ -796,7 +797,10 @@ export class SnapshotStore {
    *
    * If reconcile throws, the published ledger decides: when it already holds this
    * transaction (reconcile failed after publishing it), the call returns success, so `fn`
-   * never runs again for a published transaction; otherwise the error propagates.
+   * never runs again for a published transaction. When the envelope is still pending, the
+   * call throws a {@link TransactionError} with code `in-flight` and the reconcile error as
+   * its `cause`: a later reconcile folds that envelope, so running the write again would
+   * apply its change twice. Reconcile and check the ledger for `txId` instead.
    */
   writeWithRetry(
     writerId: string,
@@ -808,24 +812,22 @@ export class SnapshotStore {
       if (txId === null) {
         return { txId: null, attempts: attempt + 1, conflicted: false }
       }
+      const quarantinePath = join(this.txQuarantine, `${txId}.txn`, 'QUARANTINE')
+      let reconcileError: unknown = null
       try {
         this.reconcile() // idempotent and OCC-safe; folds ours and any peers'
       } catch (error) {
-        if (!this._isPublishedOr(txId, error)) {
-          throw error
-        }
+        reconcileError = error
       }
-      if (this._isPublished(txId)) {
+      const published =
+        reconcileError === null
+          ? this._isPublished(txId)
+          : this._isPublishedOr(txId, reconcileError)
+      if (published) {
         return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
       }
-      const quarantinePath = join(this.txQuarantine, `${txId}.txn`, 'QUARANTINE')
       if (!existsSync(quarantinePath)) {
-        throw new TransactionError(
-          'corrupt',
-          txId,
-          `writeWithRetry: transaction ${txId} has no published or quarantined outcome`,
-          null,
-        )
+        throw this._unsettledTransaction(txId, reconcileError)
       }
       const reason = readFileSync(quarantinePath, 'utf8')
       const reasonCode = quarantineReasonCode(reason)
@@ -842,6 +844,36 @@ export class SnapshotStore {
     throw new FsqliteError(
       'retryable',
       `writeWithRetry: exceeded retries after ${maxRetries} attempts (persistent strict conflict)`,
+    )
+  }
+
+  /**
+   * The error for a captured transaction that is neither published nor quarantined: still
+   * pending (`in-flight`, after a reconcile `failure` or a reconcile that left it for the
+   * next one), or gone from every envelope directory (`corrupt`).
+   */
+  private _unsettledTransaction(txId: string, failure: unknown): TransactionError {
+    const options = failure === null ? {} : { cause: failure }
+    if (existsSync(join(this.txPending, `${txId}.txn`))) {
+      const why =
+        failure === null
+          ? 'reconcile left it pending'
+          : `reconcile failed before publishing it (${errorMessage(failure)})`
+      return new TransactionError(
+        'in-flight',
+        txId,
+        `writeWithRetry: transaction ${txId} is captured but not published: ${why}; a later ` +
+          'reconcile folds it, so do not run the write again',
+        null,
+        options,
+      )
+    }
+    return new TransactionError(
+      'corrupt',
+      txId,
+      `writeWithRetry: transaction ${txId} has no published, pending, or quarantined outcome`,
+      null,
+      options,
     )
   }
 
@@ -1368,7 +1400,7 @@ export class SnapshotStore {
       } catch (error) {
         return {
           state: 'corrupt',
-          issues: [...issues, error instanceof Error ? error.message : String(error)],
+          issues: [...issues, errorMessage(error)],
         }
       }
       problems = driver.integrityProblems(db)

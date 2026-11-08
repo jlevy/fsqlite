@@ -20,7 +20,7 @@
 // supported line, so fsqlite keeps that name until its Node floor reaches 26.11.
 import { DatabaseSync, constants, backup } from 'node:sqlite'
 import type { DatabaseSyncOptions } from 'node:sqlite'
-import { FsqliteError } from './errors.ts'
+import { errorMessage, FsqliteError } from './errors.ts'
 import type { WorkFn, Capabilities } from './types.ts'
 
 export { constants }
@@ -247,7 +247,7 @@ export function foreignKeyProblems(db: DatabaseSync): string[] {
       (row) => `foreign_key_check: ${JSON.stringify(row)}`,
     )
   } catch (error) {
-    return [`foreign_key_check error: ${error instanceof Error ? error.message : String(error)}`]
+    return [`foreign_key_check error: ${errorMessage(error)}`]
   }
 }
 
@@ -279,7 +279,7 @@ export function integrityProblems(db: DatabaseSync): string[] {
   } catch (e) {
     // Severe corruption makes SQLite throw SQLITE_CORRUPT mid-check rather than return rows;
     // surface that as a problem (R2) instead of letting it crash validate/seal.
-    return [`integrity_check error: ${e instanceof Error ? e.message : String(e)}`]
+    return [`integrity_check error: ${errorMessage(e)}`]
   }
   const messages = rows.map((r) => String(Object.values(r)[0]))
   const integrity = messages.length === 1 && messages[0] === 'ok' ? [] : messages

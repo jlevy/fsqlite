@@ -6,6 +6,13 @@
 // Argument mistakes remain TypeErrors, and an unexpected filesystem or SQLite failure that
 // fsqlite does not classify propagates unchanged.
 
+import { inspect } from 'node:util'
+
+/** The message of `error`, or a readable rendering of a non-Error throw value. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : inspect(error)
+}
+
 /**
  * Stable, machine-readable error categories.
  *
@@ -95,10 +102,9 @@ export class PostPublishError extends FsqliteError {
   readonly published: number
 
   constructor(published: number, cause: unknown) {
-    const reason = cause instanceof Error ? cause.message : String(cause)
     super(
       'post-publish',
-      `version ${published} is published, but a later step failed (${reason}); ` +
+      `version ${published} is published, but a later step failed (${errorMessage(cause)}); ` +
         'do not re-run the write it carries',
       { cause },
     )

@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { SnapshotStore, TransactionError } from '../src/index.ts'
+import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
 import type { DatabaseSync } from 'node:sqlite'
@@ -122,6 +123,46 @@ test('writeWithRetry does not rerun caller code after a permanent UNIQUE conflic
     )
     assert.equal(calls, 1, 'a permanent changeset conflict must not rerun caller code')
   } finally {
+    cleanup()
+  }
+})
+
+test('writeWithRetry reports a write reconcile could not publish as pending, not retryable', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, OPTS).init()
+    store.writeWithRetry('seed', increment) // c = 1
+    let failures = 0
+    setAfterFsyncPathForTest((path) => {
+      if (path.includes('.build-') && failures++ === 0) {
+        throw Object.assign(new Error('injected build fsync failure'), { code: 'EIO' })
+      }
+    })
+    let calls = 0
+    assert.throws(
+      () =>
+        store.writeWithRetry('w', (db) => {
+          calls++
+          increment(db)
+        }),
+      (error: unknown) =>
+        error instanceof TransactionError &&
+        error.code === 'in-flight' &&
+        !error.retryable &&
+        error.cause instanceof Error &&
+        error.cause.message === 'injected build fsync failure' &&
+        store.pendingTxns().includes(`${error.txId}.txn`),
+    )
+    assert.equal(calls, 1)
+    assert.equal(counter(store), 1, 'nothing was published')
+
+    // The captured envelope is still pending, so the write lands exactly once when the
+    // next reconcile folds it; running the write again would have incremented twice.
+    store.reconcile()
+    assert.equal(counter(store), 2)
+    assert.deepEqual(store.pendingTxns(), [])
+  } finally {
+    setAfterFsyncPathForTest(null)
     cleanup()
   }
 })
