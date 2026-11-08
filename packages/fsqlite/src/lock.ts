@@ -6,7 +6,7 @@
 //
 // Correctness rests on immutable snapshots, an atomic pointer swap, and the applied_tx
 // ledger. The lease reduces redundant work. Its owner token lets a holder revalidate
-// ownership immediately before publication and abort if it lost the lease.
+// ownership immediately before each destructive step and abort if it lost the lease.
 
 import {
   mkdirSync,
@@ -145,8 +145,9 @@ export function withLock<T>(
       }
       // Lock exists. Break it only if it is older than the stale window. This is the
       // irreducible NFS hazard: a holder paused past the lease can be stolen out from
-      // under it. The defense is `ownerOf()` revalidation in `fn` and a staleMs value
-      // well above the maximum critical section, not aggressive breaking.
+      // under it. The defense is the holder's `lease.fence()` before each destructive step,
+      // its step-boundary heartbeats, and a staleMs value well above the longest single
+      // step, not aggressive breaking.
       try {
         const seen = observeLock(lockPath)
         if (seen === null) {

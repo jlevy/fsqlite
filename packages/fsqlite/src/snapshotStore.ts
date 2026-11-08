@@ -128,10 +128,19 @@ const STORE_ROOT_ENTRIES: ReadonlySet<string> = new Set([
   'publish.lock',
 ])
 
+/** init found a lineage without `current`; only repair may choose the head to restore. */
+const missingPointerError = (versions: number[]): Error =>
+  new Error(
+    `refusing to initialize: ${STORE_MARKER_FILENAME} exists and snapshots/ holds snapshot(s) ` +
+      `${versions.join(', ')}, but current is missing; run repair to restore current to the ` +
+      'newest integrity-clean snapshot instead of re-creating snapshot 0',
+  )
+
 // Transient (never-store-state) entries, per fsql-format-spec.md §2: reconcile builds,
-// DirectStore builds, init's snapshot-0 temp, writer working copies, and lock directories
-// moved aside by a break or release (`publish.lock.<hex>.tmp/`, the only directory). A fresh
-// one is work in flight; an old one is crash debris. Removal is recursive for that reason.
+// DirectStore builds, init's snapshot-0 temp, writer working copies, gc tombstones
+// (`.gc-<version>-<hex>.tmp`), and lock directories moved aside by a break or release
+// (`publish.lock.<hex>.tmp/`, the only directory). A fresh one is work in flight; an old
+// one is crash debris. Removal is recursive for that reason.
 const isTransientFile = (f: string): boolean =>
   f.startsWith('.build-') ||
   f.startsWith('.direct-') ||
@@ -145,14 +154,6 @@ const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
 
 /** Default cap on a single changeset envelope before reconcile quarantines it (1 GiB). */
 const DEFAULT_MAX_ENVELOPE_BYTES = 1 << 30
-
-/** init found a lineage without `current`; only repair may choose the head to restore. */
-const missingPointerError = (versions: number[]): Error =>
-  new Error(
-    `refusing to initialize: ${STORE_MARKER_FILENAME} exists and snapshots/ holds snapshot(s) ` +
-      `${versions.join(', ')}, but current is missing; run repair to restore current to the ` +
-      'newest integrity-clean snapshot instead of re-creating snapshot 0',
-  )
 
 /**
  * Every caller table needs a NON-NULL primary key: the per-table merge policy is keyed on it.
