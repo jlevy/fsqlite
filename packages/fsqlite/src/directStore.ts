@@ -77,7 +77,12 @@ export class DirectStore {
   /**
    * Synchronous copy, mutate, publish under the publish lock, with OCC on the
    * `current` pointer (so it also composes safely with a SnapshotStore reconcile
-   * publishing into the same store). Retries internally on a lost race.
+   * publishing into the same store). Retries internally on a lost race, rerunning `fn`.
+   * Returns the published version, which always carries this call's mutation.
+   *
+   * An error with a numeric `published` property (`PostPublishError`) was raised after
+   * that version became current (for example a failed directory fsync after the pointer
+   * rename): the write is visible and must not be re-run. Any other error published nothing.
    */
   write(
     fn: WorkFn,

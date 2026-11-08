@@ -38,7 +38,7 @@ import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
 import { normalize, applyWithPolicy } from './conflictPolicy.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
+import { fsyncPath, fsyncDir, postPublishError, publishPointer } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
 import { isLockFresh, withLock } from './lock.ts'
@@ -601,6 +601,10 @@ export class SnapshotStore {
    * concurrently-published row under a 'strict' table, re-seeds and re-runs `fn`, up
    * to `maxRetries`. The classic read-modify-write compare-and-retry loop; prevents a
    * lost update on a strict row without any global lock.
+   *
+   * If reconcile throws, the published ledger decides: when it already holds this
+   * transaction (reconcile failed after publishing it), the call returns success, so `fn`
+   * never runs again for a published transaction; otherwise the error propagates.
    */
   writeWithRetry(
     writerId: string,
@@ -612,11 +616,14 @@ export class SnapshotStore {
       if (txId === null) {
         return { txId: null, attempts: attempt + 1, conflicted: false }
       }
-      this.reconcile() // idempotent and OCC-safe; folds ours and any peers'
-      const applied = this.read((db) =>
-        Boolean(db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId)),
-      )
-      if (applied) {
+      try {
+        this.reconcile() // idempotent and OCC-safe; folds ours and any peers'
+      } catch (error) {
+        if (!this._isPublishedOr(txId, error)) {
+          throw error
+        }
+      }
+      if (this._isPublished(txId)) {
         return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
       }
       const quarantinePath = join(this.txQuarantine, `${txId}.txn`, 'QUARANTINE')
@@ -632,6 +639,25 @@ export class SnapshotStore {
       // A strict same-row conflict is retryable: re-seed and re-run fn.
     }
     throw new Error('writeWithRetry: exceeded retries (persistent conflict)')
+  }
+
+  /**
+   * Whether the head `current` names holds `txId`, consulted after `failure`. If the store
+   * cannot even be read, `failure` is the error to report, so it is rethrown instead.
+   */
+  private _isPublishedOr(txId: string, failure: unknown): boolean {
+    try {
+      return this._isPublished(txId)
+    } catch {
+      throw failure
+    }
+  }
+
+  /** Whether the head `current` names holds `txId` in its ledger. */
+  private _isPublished(txId: string): boolean {
+    return this.read((db) =>
+      Boolean(db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId)),
+    )
   }
 
   /** Committed pending transaction dirs, in deterministic (txid) order. */
@@ -650,6 +676,11 @@ export class SnapshotStore {
    * `applied_tx` ledger) and conflict-resolving per the merge policy (clashes are quarantined,
    * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
    * builder retry.
+   *
+   * An error with a numeric `published` property (`PostPublishError`) was raised after
+   * the new version became current, for example while moving envelopes (spec F6); the data
+   * is published and the leftovers are settled by the next reconcile. Any other error means
+   * this call published nothing.
    */
   reconcile({
     maxRetries = DEFAULT_RECONCILE_RETRIES,
@@ -804,7 +835,12 @@ export class SnapshotStore {
         throw new Error('CRASH after-pointer')
       } // published; tx not yet archived
 
-      const settled = this._settle(applied, archivable, quarantined)
+      let settled: { applied: number; quarantined: number }
+      try {
+        settled = this._settle(applied, archivable, quarantined)
+      } catch (error) {
+        throw postPublishError(next, error)
+      }
       return {
         published: next,
         applied: settled.applied,

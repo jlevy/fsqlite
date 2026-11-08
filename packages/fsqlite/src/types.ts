@@ -88,6 +88,17 @@ export interface WriteWithRetryResult {
   conflicted: boolean
 }
 
+/**
+ * An error raised after the `current` pointer already named a newly published version,
+ * for example a post-publish envelope move (spec F6) or a directory fsync that failed after
+ * the pointer rename. The version is visible to readers, so the write it carries must not
+ * be re-run; `published` is that version. Every error without this property was raised
+ * before publication, and the attempt published nothing.
+ */
+export interface PostPublishError extends Error {
+  readonly published: number
+}
+
 /** Result of `gc()`: snapshots removed, snapshots kept, and the versions a lease pinned. */
 export interface GcResult {
   removed: number

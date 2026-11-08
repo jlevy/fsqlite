@@ -373,6 +373,10 @@ Protocol:
    An implementation MUST NOT archive an envelope because its own build applied it.
    The reason MUST be written before the move; if it cannot be persisted, leave that
    envelope in place and fail loudly.
+   A failure after the pointer swap (here, or a directory fsync after the pointer
+   rename) MUST be reported as distinct from a failure before it, because a caller that
+   reruns a write whose version is already published applies it twice.
+   The Node implementation sets a numeric `published` property on such errors.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
    archivable on the next run.
 

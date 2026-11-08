@@ -16,7 +16,7 @@
 
 import { closeSync, fstatSync, linkSync, openSync, statSync, unlinkSync, utimesSync } from 'node:fs'
 import type { Stats } from 'node:fs'
-import { fsyncDir, publishPointer } from './fsutil.ts'
+import { fsyncDir, isPostPublishError, postPublishError, publishPointer } from './fsutil.ts'
 import { sleepSync } from './lock.ts'
 import type { LockLease } from './lock.ts'
 
@@ -128,13 +128,19 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
       }
       publishPointer(c.storeDir, c.currentPath, c.next)
     } catch (error) {
-      removeOwnOrphan(c, expected, error)
+      if (!isPostPublishError(error)) {
+        removeOwnOrphan(c, expected, error)
+      }
       throw error
     }
     // A holder that lost its lease can still finish a pointer rename it began before
     // pausing. If the entry is no longer this build, `current` names another holder's
     // snapshot, so this attempt published nothing of its own.
-    return namesBuild(c.dest, expected) ? 'published' : 'retry'
+    try {
+      return namesBuild(c.dest, expected) ? 'published' : 'retry'
+    } catch (error) {
+      throw postPublishError(c.next, error)
+    }
   } finally {
     closeSync(fd)
   }

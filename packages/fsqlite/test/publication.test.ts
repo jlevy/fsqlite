@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import {
   copyFileSync,
   existsSync,
+  mkdirSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -245,6 +246,77 @@ test('reconcile archives only envelopes the ledger of the head now named by curr
     assert.equal(recovered.quarantined, 1)
     assert.ok(ledgerOf(store.snapshotPath(store.currentVersion())).includes(x ?? ''))
     assert.deepEqual(txns(store.txQuarantine), [`${torn}.txn`])
+  } finally {
+    setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})
+
+/** A committed envelope that reconcile will quarantine but cannot record a reason for. */
+function unquarantinableEnvelope(store: SnapshotStore): void {
+  const txId = store.write('wt', insert('t'))
+  const txDir = join(store.txPending, `${txId}.txn`)
+  writeFileSync(join(txDir, 'changeset.bin'), 'tampered')
+  mkdirSync(join(txDir, 'QUARANTINE')) // the reason file cannot be written
+}
+
+const publishedVersionOf = (error: unknown): unknown =>
+  error instanceof Error && 'published' in error ? error.published : undefined
+
+test('a reconcile failure after the pointer swap reports the version it published', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const x = store.write('wx', insert('x'))
+    unquarantinableEnvelope(store)
+
+    assert.throws(
+      () => store.reconcile(),
+      (error: unknown) => publishedVersionOf(error) === 1,
+    )
+    assert.equal(store.currentVersion(), 1)
+    assert.ok(ledgerOf(store.snapshotPath(1)).includes(x ?? ''))
+  } finally {
+    cleanup()
+  }
+})
+
+test('writeWithRetry returns a published transaction instead of failing after its publication', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    unquarantinableEnvelope(store)
+    let calls = 0
+
+    const result = store.writeWithRetry('wx', (db) => {
+      calls++
+      insert('x')(db)
+    })
+
+    assert.equal(result.attempts, 1)
+    assert.equal(calls, 1, 'fn is never re-run once its transaction is published')
+    assert.ok(ledgerOf(store.snapshotPath(store.currentVersion())).includes(result.txId ?? ''))
+  } finally {
+    cleanup()
+  }
+})
+
+test('a DirectStore barrier failure after the pointer rename reports the published version', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new DirectStore(dir, STORE_OPTS).init()
+    setAfterFsyncDirForTest((path) => {
+      if (path === dir) {
+        setAfterFsyncDirForTest(null)
+        throw Object.assign(new Error('injected store root fsync failure'), { code: 'EIO' })
+      }
+    })
+
+    assert.throws(
+      () => store.write(insert('a')),
+      (error: unknown) => publishedVersionOf(error) === 1,
+    )
+    assert.equal(store.currentVersion(), 1, 'the version is visible, so the caller must not rerun')
   } finally {
     setAfterFsyncDirForTest(null)
     cleanup()
