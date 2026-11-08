@@ -69,6 +69,7 @@ import type {
 const rand = (): string => randomBytes(5).toString('hex')
 const sha256 = (buf: Uint8Array | string): string => createHash('sha256').update(buf).digest('hex')
 const pad = (n: number): string => String(n).padStart(12, '0')
+const txIdOf = (txn: string): string => txn.replace(/\.txn$/, '')
 const nowIso = (): string => new Date().toISOString()
 
 const CHANGESET_FILENAME = 'changeset.bin'
@@ -679,7 +680,7 @@ export class SnapshotStore {
         )
         const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
         for (const txn of pending) {
-          const txId = txn.replace(/\.txn$/, '')
+          const txId = txIdOf(txn)
           if (seen.has(txId)) {
             archivable.push(txn)
             continue
@@ -752,12 +753,11 @@ export class SnapshotStore {
 
       if (applied.length === 0) {
         rmSync(tmp, { force: true })
-        this._archive(archivable)
-        this._quarantine(quarantined)
+        const settled = this._settle(applied, archivable, quarantined)
         return {
           published: base,
           applied: 0,
-          quarantined: quarantined.length,
+          quarantined: settled.quarantined,
           attempts: attempt + 1,
         }
       }
@@ -804,12 +804,11 @@ export class SnapshotStore {
         throw new Error('CRASH after-pointer')
       } // published; tx not yet archived
 
-      this._archive([...applied, ...archivable])
-      this._quarantine(quarantined)
+      const settled = this._settle(applied, archivable, quarantined)
       return {
         published: next,
-        applied: applied.length,
-        quarantined: quarantined.length,
+        applied: settled.applied,
+        quarantined: settled.quarantined,
         attempts: attempt + 1,
       }
     }
@@ -1200,6 +1199,43 @@ export class SnapshotStore {
       .filter((x): x is string => Boolean(x))
       .map(Number)
       .sort((a, b) => a - b)
+  }
+
+  /**
+   * F6: move this attempt's envelopes out of `tx/pending/` according to the ledger of the
+   * head `current` names now, not according to what the build believes it published.
+   *
+   * Only envelopes in that ledger move to `tx/applied/`. When the ledger also holds every
+   * envelope this build applied or found archivable, the published lineage is this build's
+   * own, so its quarantine decisions stand. Otherwise an overlapping holder moved `current`
+   * to a lineage this build never saw (spec L5): every other envelope stays pending, for
+   * the next reconcile to classify against that lineage. Returns the counts actually moved.
+   */
+  private _settle(
+    applied: string[],
+    archivable: string[],
+    quarantined: [string, string][],
+  ): { applied: number; quarantined: number } {
+    const db = driver.openReadonly(this.snapshotPath(this.currentVersion()))
+    const ledgered = new Set<string>()
+    try {
+      const inLedger = db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?')
+      for (const txn of [...applied, ...archivable, ...quarantined.map(([t]) => t)]) {
+        if (inLedger.get(txIdOf(txn)) !== undefined) {
+          ledgered.add(txn)
+        }
+      }
+    } finally {
+      db.close()
+    }
+    const lineageIsOurs = [...applied, ...archivable].every((txn) => ledgered.has(txn))
+    const toQuarantine = lineageIsOurs ? quarantined.filter(([txn]) => !ledgered.has(txn)) : []
+    this._archive([...ledgered])
+    this._quarantine(toQuarantine)
+    return {
+      applied: applied.filter((txn) => ledgered.has(txn)).length,
+      quarantined: toQuarantine.length,
+    }
   }
 
   private _archive(txns: string[]): void {

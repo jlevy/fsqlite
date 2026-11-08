@@ -7,7 +7,15 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, readdirSync, renameSync, rmSync, utimesSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
@@ -198,6 +206,47 @@ test("a publisher never reclaims a fresh entry inside another holder's link-to-s
     assert.equal(store.currentVersion(), 0)
     assert.equal(txns(store.txPending).length, 1, 'the envelope stays pending')
   } finally {
+    cleanup()
+  }
+})
+
+test('reconcile archives only envelopes the ledger of the head now named by current holds', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const x = store.write('wx', insert('x'))
+    const torn = store.write('wt', insert('t'))
+    writeFileSync(join(store.txPending, `${torn}.txn`, 'changeset.bin'), 'tampered')
+    setAfterFsyncDirForTest((path) => {
+      if (path === dir) {
+        setAfterFsyncDirForTest(null)
+        // A holder that stalled between its final checks and its pointer rename resumes
+        // and renames its stale pointer value over current (spec L5).
+        writeFileSync(`${store.currentPath}.late.tmp`, '0')
+        renameSync(`${store.currentPath}.late.tmp`, store.currentPath)
+      }
+    })
+
+    store.reconcile()
+
+    assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(
+      txns(store.txPending).sort(),
+      [`${x}.txn`, `${torn}.txn`].sort(),
+      'the head current names lacks both, so neither is archived or quarantined yet',
+    )
+    assert.deepEqual(txns(store.txApplied), [])
+
+    const past = new Date(Date.now() - 120_000)
+    utimesSync(store.snapshotPath(1), past, past) // the regressed build is now a stale orphan
+    const recovered = store.reconcile()
+
+    assert.equal(recovered.applied, 1)
+    assert.equal(recovered.quarantined, 1)
+    assert.ok(ledgerOf(store.snapshotPath(store.currentVersion())).includes(x ?? ''))
+    assert.deepEqual(txns(store.txQuarantine), [`${torn}.txn`])
+  } finally {
+    setAfterFsyncDirForTest(null)
     cleanup()
   }
 })

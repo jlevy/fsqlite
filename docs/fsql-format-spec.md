@@ -55,8 +55,8 @@ Three structural properties deliver them:
    reduces wasted work.
    Exactly-once application is guaranteed by recording each applied transaction ID
    inside its snapshot and by publishing only from the still-current base (§6). Lock
-   holders can overlap after a stale-lock break, but they cannot double-apply or corrupt
-   a conforming store.
+   holders can overlap after a stale-lock break; L5 states exactly what overlap can and
+   cannot do to a conforming store.
 
 Each published snapshot remains an ordinary SQLite file: any SQLite binding in any
 language can open it with no fsqlite code at all.
@@ -361,9 +361,16 @@ Protocol:
      longer holds this build, `current` names another holder’s snapshot, so the attempt
      published nothing of its own and MUST retry rather than report success.
      A conforming target filesystem MUST support hard links with these semantics.
-6. **F6.** After publish (outside the lock), move applied and archivable envelopes to
-   `tx/applied/` and quarantined ones to `tx/quarantine/`, writing each quarantined
-   envelope a `QUARANTINE` file containing the reason.
+6. **F6.** After publish (outside the lock), or after a build that applied nothing, open
+   the snapshot that `current` names *now* and read its ledger.
+   Move to `tx/applied/` only envelopes whose `tx_id` that ledger contains.
+   If it contains every envelope the build applied or found archivable, the published
+   lineage is the build’s own: move the build’s quarantined envelopes that the ledger
+   does not contain to `tx/quarantine/`, writing each a `QUARANTINE` file containing the
+   reason. Otherwise an overlapping holder moved `current` to a lineage the build never
+   saw (L5); every remaining envelope MUST stay in `tx/pending/` for the next reconcile
+   to classify against that lineage.
+   An implementation MUST NOT archive an envelope because its own build applied it.
    The reason MUST be written before the move; if it cannot be persisted, leave that
    envelope in place and fail loudly.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
@@ -376,6 +383,8 @@ both build, but only one can publish a given version; the loser rebuilds from th
 winner’s snapshot, where the winner’s ledger makes already-folded envelopes no-ops.
 A crash before F5c publishes nothing (the build is a transient); a crash after F5c loses
 only the F6 moves, which are recovered by the ledger-skip.
+Because F6 consults the ledger of the head `current` names rather than the build’s own
+belief, an envelope leaves `tx/pending/` only once it is in the published lineage.
 **`base_version` in the manifest is informational.
 An envelope seeded from version N may be folded into version N+k.** The per-table policy
 resolves cross-version merges; the base does not pin them.
@@ -446,6 +455,7 @@ build.
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
+
 - **L2.** Liveness is the lock dir’s **mtime**. A holder whose critical section has
   several long steps (copying a head, running an application callback, an fsync,
   scanning snapshots) SHOULD heartbeat at each step boundary by touching the dir once
@@ -468,20 +478,46 @@ build.
   (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
   An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
   lock it could have waited for.
+
 - **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
   holder MUST re-read `owner.json` and verify its own token immediately before each
   destructive step (F5b, every repair and GC deletion), and MUST abandon the step on a
   mismatch. The Node implementation fences by verify, touch, verify: it checks its token,
   refreshes the dir’s mtime, and checks the token again, so a fenced step begins with a
   full stale window in which no conforming breaker (L2 step 3) can remove the lock.
+
 - **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
   `owner.json` still carries its token, and MUST remove it through the same
   rename-aside-and-recheck step as L2, so a successor that acquires between the token
   check and the removal is restored rather than deleted.
   A stale-broken holder must not delete a successor’s live lock because doing so would
   admit a third concurrent holder.
-- **L5.** Correctness MUST NOT depend on L1-L4 (see §1): even two overlapping holders
-  cannot double-publish a version (F5a) or double-apply an envelope (the ledger).
+
+- **L5.** Correctness MUST NOT depend on L1-L4 (see §1). Two holders can overlap after a
+  stale-lock break, for example when a holder pauses past the stale window and later
+  resumes mid-operation.
+  With F5c and F6 as specified, overlapping holders cannot:
+  - replace a snapshot another holder committed or published, because F5c commits
+    without replacing and reclaims only an entry older than the stale window;
+  - report another holder’s build as their own publication, because of the identity
+    checks around the pointer swap, so a DirectStore write that returns names a snapshot
+    that carries its callback;
+  - publish a version from a superseded base (F5a, and fencing before each step);
+  - apply an envelope twice (the ledger), or archive an envelope that the head `current`
+    names does not contain (F6).
+
+  Overlap can still waste work: a fenced-out attempt rebuilds, and a DirectStore attempt
+  reruns its callback.
+  One window remains in `f1.0`. The pointer swap is a blind `rename()`, so a holder that
+  stalls longer than the stale window after its final pre-swap checks but before its
+  pointer rename, while at least two later versions are published, can on resuming
+  rename its older version over `current`. `current` then still names a complete,
+  integrity-gated snapshot, and envelopes not yet settled stay pending (F6), but
+  envelopes the newer versions’ publishers already archived, and DirectStore writes they
+  already returned, are absent from the restored lineage, and a later publisher reclaims
+  the newer snapshot as a stale orphan.
+  Step-boundary heartbeats (L2) mean such a stall needs a frozen process, not a slow
+  step. Open issue O6 tracks the structural fix.
   Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
   and OCC, not staleness precision, carry correctness.
   (See Open issue O3.)
@@ -727,24 +763,38 @@ The same artifacts test every implementation.
   A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
   semantics for the pointer, and `CreateHardLink` for the F5c no-replace commit.
   The cross-platform CI matrix gates the claim.
+
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
+
 - **O3: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
   Correctness never depends on these (L5), but liveness tuning on skewed clusters is
   undocumented; the planned real-NFS gate and protocol model both probe this.
+
 - **O4: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
   This specification treats it only as provenance.
   A future version could instead define semantics such as staleness warnings.
+
 - **O5: conflict-policy identity is not stamped.** All reconcilers in one caller-schema
   epoch must use the same effective policy, but `f1.0` relies on deployment
   configuration to enforce that rule.
   A future revision should bind the normalized policy to the store or schema epoch, or
   define an equivalent admission check and policy-transition protocol.
+
+- **O6: Shared snapshot names and a blind pointer swap.** Every publisher of version N+1
+  competes for the one path `snapshots/<N+1>`, and the pointer swap cannot fail on a
+  changed `current`. F5c and F6 make overlapping holders safe except for the
+  late-pointer window in L5. A future `f1.x` revision should publish builds under unique
+  names (for example `<version>-<hex10>.fsqlite.sqlite`) with `current` naming the file,
+  gated by a `required_features` entry, so builds never share a path and the pointer
+  identifies the exact build.
+  Closing the late-pointer window additionally needs a pointer protocol that cannot move
+  `current` backward, such as a no-replace commit of a per-version pointer record.
 
 ## 15. References
 
