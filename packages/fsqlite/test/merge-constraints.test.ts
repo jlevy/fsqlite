@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { ACTIONS, SnapshotStore, applyWithPolicy, normalize } from '../src/index.ts'
+import type { ConflictPolicyInput, NormalizedPolicy } from '../src/index.ts'
 import * as driver from '../src/driver.ts'
 import { tmpStore } from './fixture.ts'
 
@@ -209,6 +210,90 @@ test('applyWithPolicy rejects a dangling foreign key without a caller-supplied c
       (target.prepare('SELECT COUNT(*) count FROM child').get() as { count: number }).count,
       0,
     )
+  } finally {
+    writer.close()
+    target.close()
+    fixture.cleanup()
+  }
+})
+
+test('normalize rejects Object.prototype member names as conflict actions', () => {
+  for (const action of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+    const policy = JSON.parse(`{"docs": "${action}"}`) as ConflictPolicyInput
+    assert.throws(
+      () => normalize(policy),
+      /unknown conflict action/,
+      `should reject action ${action}`,
+    )
+  }
+})
+
+test('tables named after Object.prototype members reconcile under their own policy', () => {
+  const { dir, cleanup } = tmpStore()
+  const store = new SnapshotStore(dir, {
+    schema: `
+      CREATE TABLE "constructor" (id TEXT PRIMARY KEY NOT NULL, v TEXT NOT NULL);
+      CREATE TABLE "__proto__" (id TEXT PRIMARY KEY NOT NULL, v TEXT NOT NULL);
+    `,
+    schemaVersion: 1,
+    // Parsed JSON makes `__proto__` an own key, as a policy loaded from a config file would.
+    conflictPolicy: JSON.parse('{"__proto__": "lww", "*": "union"}') as ConflictPolicyInput,
+  }).init()
+  try {
+    for (const [writer, value] of [
+      ['A', 'a'],
+      ['B', 'b'],
+    ] as const) {
+      store.write(writer, (db) => {
+        db.prepare('INSERT INTO "constructor" VALUES (?, ?)').run('k', value)
+        db.prepare('INSERT INTO "__proto__" VALUES (?, ?)').run('k', value)
+      })
+    }
+
+    const result = store.reconcile()
+
+    assert.deepEqual(
+      { applied: result.applied, quarantined: result.quarantined },
+      { applied: 2, quarantined: 0 },
+    )
+    // `__proto__` is listed as lww, so B's row wins; `constructor` falls back to the
+    // union default, so A's first row stays.
+    assert.deepEqual(
+      store.read((db) => ({
+        constructor: (db.prepare('SELECT v FROM "constructor"').get() as { v: string }).v,
+        proto: (db.prepare('SELECT v FROM "__proto__"').get() as { v: string }).v,
+      })),
+      { constructor: 'a', proto: 'b' },
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('applyWithPolicy applies tables a hand-built policy leaves to the strict default', () => {
+  const fixture = tmpStore()
+  const writer = driver.open(join(fixture.dir, 'writer.sqlite'))
+  const target = driver.open(join(fixture.dir, 'target.sqlite'))
+  const parents = (): number =>
+    (target.prepare('SELECT COUNT(*) count FROM parent').get() as { count: number }).count
+  try {
+    writer.exec(FOREIGN_KEY_SCHEMA)
+    target.exec(FOREIGN_KEY_SCHEMA)
+    const changeset = driver.recordChangeset(writer, (db) => {
+      db.prepare('INSERT INTO parent VALUES (?)').run('p')
+    })
+    assert.ok(changeset)
+
+    // An action outside the normalized vocabulary would match no pass, so it is refused.
+    const unnormalized = { parent: 'lww' } as unknown as NormalizedPolicy
+    assert.throws(() => {
+      applyWithPolicy(target, changeset, unnormalized)
+    }, /policy maps table 'parent' to 'lww'/)
+    assert.equal(parents(), 0)
+
+    // A policy without '*' still routes the unlisted `parent` table to strict.
+    applyWithPolicy(target, changeset, { child: 'replace' })
+    assert.equal(parents(), 1)
   } finally {
     writer.close()
     target.close()

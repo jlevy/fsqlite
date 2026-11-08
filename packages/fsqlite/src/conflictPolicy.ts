@@ -21,7 +21,7 @@
 
 import type { DatabaseSync } from 'node:sqlite'
 import { constants, foreignKeyCheck } from './driver.ts'
-import type { ConflictAction, ConflictPolicyInput, NormalizedPolicy } from './types.ts'
+import type { ConflictPolicyInput, NormalizedPolicy } from './types.ts'
 
 const C = constants as unknown as Record<string, number>
 
@@ -79,39 +79,59 @@ export class PermanentConflictError extends Error {
   }
 }
 
+type Action = (typeof ACTIONS)[number]
+
+/**
+ * Every accepted action spelling. A Map, so an Object.prototype member name such as
+ * `constructor` or `toString` is never mistaken for an action.
+ */
+const ACTION_SPELLINGS: ReadonlyMap<string, Action> = new Map([
+  ['lww', 'replace'],
+  ['union', 'omit'],
+  ['replace', 'replace'],
+  ['omit', 'omit'],
+  ['strict', 'strict'],
+])
+
 /**
  * A policy maps each table name to an action, with `'*'` as the default.
  * Aliases: 'lww' = 'replace' (last-writer-wins), 'union' = 'omit' (set-union /
  * first-writer-wins).
  *
  *   { url_index: 'lww', relationships: 'union', '*': 'strict' }
+ *
+ * The result has a null prototype, so a table named like an Object.prototype member
+ * (`constructor`, `__proto__`) is an ordinary key, never an inherited value.
  */
 export function normalize(policy: ConflictPolicyInput = {}): NormalizedPolicy {
-  const alias: Record<ConflictAction, 'replace' | 'omit' | 'strict'> = {
-    lww: 'replace',
-    union: 'omit',
-    replace: 'replace',
-    omit: 'omit',
-    strict: 'strict',
-  }
-  const out: NormalizedPolicy = {}
-  for (const [k, value] of Object.entries(policy as Record<string, unknown>)) {
-    if (typeof value !== 'string' || !(value in alias)) {
-      throw new Error(`unknown conflict action '${String(value)}' for table '${k}'`)
+  const out = Object.create(null) as NormalizedPolicy
+  for (const [table, value] of Object.entries(policy as Record<string, unknown>)) {
+    const action = typeof value === 'string' ? ACTION_SPELLINGS.get(value) : undefined
+    if (action === undefined) {
+      throw new Error(`unknown conflict action '${String(value)}' for table '${table}'`)
     }
-    const a = alias[value as ConflictAction]
-    out[k] = a
+    out[table] = action
   }
-  out['*'] ??= 'strict' // deny-by-default: never silently pick a winner
+  if (!Object.hasOwn(out, '*')) {
+    out['*'] = 'strict' // deny-by-default: never silently pick a winner
+  }
   return out
 }
 
-export function actionFor(policy: NormalizedPolicy, table: string): 'replace' | 'omit' | 'strict' {
-  return policy[table] ?? policy['*'] ?? 'strict'
+const ownAction = (policy: NormalizedPolicy, key: string): Action | undefined =>
+  Object.hasOwn(policy, key) ? policy[key] : undefined
+
+/**
+ * The action for `table`: its own entry, else the policy's own `'*'`, else `strict`. Only
+ * own keys count, so a plain-object policy cannot route `constructor` or `toString` to an
+ * inherited Object.prototype member.
+ */
+export function actionFor(policy: NormalizedPolicy, table: string): Action {
+  return ownAction(policy, table) ?? ownAction(policy, '*') ?? 'strict'
 }
 
 function conflictResult(
-  action: 'replace' | 'omit' | 'strict',
+  action: Action,
   type: number,
   strict: number[],
   permanent: number[],
@@ -145,7 +165,18 @@ export function applyWithPolicy(
   policy: NormalizedPolicy,
   beforeCommit: () => void = () => undefined,
 ): void {
-  const used = new Set(Object.values(policy))
+  for (const [table, action] of Object.entries(policy as Record<string, unknown>)) {
+    if (typeof action !== 'string' || !(ACTIONS as readonly string[]).includes(action)) {
+      throw new Error(
+        `policy maps table '${table}' to '${String(action)}', which is not one of ` +
+          `${ACTIONS.join(', ')}; pass the policy through normalize()`,
+      )
+    }
+  }
+  // Every table routes to its own action or the fallback, so running a pass for each of
+  // these applies every table. Without the fallback, a hand-built policy lacking '*' would
+  // skip unlisted tables silently while the envelope is ledgered as applied.
+  const used = new Set([...Object.values(policy), ownAction(policy, '*') ?? 'strict'])
   db.exec('BEGIN IMMEDIATE')
   try {
     // A single envelope may span several filtered policy passes. Defer enforcement until
