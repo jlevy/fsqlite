@@ -1,9 +1,9 @@
 {
   "name": "fsqlite-workspace",
   "private": true,
-  "packageManager": "pnpm@11.14.0",
+  "packageManager": "pnpm@11.28.8",
   "engines": {
-    "node": ">=22.18.0 <23 || >=24.0.0"
+    "node": ">=22.18.0 <23 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
     "build": "pnpm --filter fsqlite build",
@@ -11,8 +11,8 @@
     "format:check": "pnpm format:code:check && pnpm format:markdown:check",
     "format:code": "prettier --write .",
     "format:code:check": "prettier --check .",
-    "format:markdown": "uvx --from flowmark-rs==0.3.1 flowmark --auto --inplace --nobackup .",
-    "format:markdown:check": "uvx --from flowmark-rs==0.3.1 flowmark --auto --check .",
+    "format:markdown": "uvx --isolated --from flowmark-rs==0.4.0 flowmark --auto --inplace --nobackup .",
+    "format:markdown:check": "uvx --isolated --from flowmark-rs==0.4.0 flowmark --auto --check .",
     "typecheck": "pnpm --filter fsqlite typecheck",
     "lint": "pnpm --filter fsqlite lint",
     "lint:check": "pnpm --filter fsqlite lint:check",
@@ -25,7 +25,7 @@
     "verify": "pnpm format:check && pnpm lint:check && pnpm typecheck && pnpm test:project-hooks && pnpm test:supply-chain && pnpm test:all"
   },
   "devDependencies": {
-    "lefthook": "2.1.10",
-    "prettier": "3.9.5"
+    "lefthook": "2.2.1",
+    "prettier": "3.9.10"
   }
 }

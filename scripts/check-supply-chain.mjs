@@ -7,7 +7,11 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { checkAuditExceptions, crossCheckPnpmAuditConfig } from './supply-chain-exceptions.mjs'
+import {
+  PNPM_AUDIT_COMMAND,
+  checkAuditExceptions,
+  crossCheckPnpmAudit,
+} from './supply-chain-exceptions.mjs'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const { ids, errors } = checkAuditExceptions({
@@ -16,21 +20,19 @@ const { ids, errors } = checkAuditExceptions({
   today: new Date().toISOString().slice(0, 10),
 })
 
-const pnpm = spawnSync('pnpm', ['config', 'get', 'auditConfig', '--json'], {
-  cwd: repoRoot,
-  encoding: 'utf8',
-})
+const command = `pnpm ${PNPM_AUDIT_COMMAND.join(' ')}`
+const pnpm = spawnSync('pnpm', PNPM_AUDIT_COMMAND, { cwd: repoRoot, encoding: 'utf8' })
 if (/** @type {NodeJS.ErrnoException | undefined} */ (pnpm.error)?.code === 'ENOENT') {
   console.warn(
-    'supply-chain: pnpm is not on PATH, so the auditConfig cross-check against ' +
-      '`pnpm config get auditConfig --json` was skipped.',
+    `supply-chain: pnpm is not on PATH, so the audit cross-check against \`${command}\` ` +
+      'was skipped.',
   )
 } else if (pnpm.error !== undefined || pnpm.status !== 0) {
   errors.push(
-    `\`pnpm config get auditConfig --json\` failed (${pnpm.error?.message ?? `exit ${pnpm.status ?? pnpm.signal}`}):\n${pnpm.stderr}`,
+    `\`${command}\` failed (${pnpm.error?.message ?? `exit ${pnpm.status ?? pnpm.signal}`}):\n${pnpm.stderr}`,
   )
 } else {
-  errors.push(...crossCheckPnpmAuditConfig({ ids, pnpmOutput: pnpm.stdout }))
+  errors.push(...crossCheckPnpmAudit({ ids, pnpmOutput: pnpm.stdout }))
 }
 
 if (errors.length > 0) {

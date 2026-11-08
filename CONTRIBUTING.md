@@ -6,13 +6,21 @@ adding a regression test that fails without the change.
 
 ## Development Setup
 
-Install Node `>=22.18.0 <23 || >=24.0.0`, pnpm 11.14.0, and `uv` (used to run the pinned
-Markdown formatter), then run:
+Install Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`, pnpm 11.28.8, and `uv` (used to run
+the pinned Markdown formatter), then run:
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec lefthook install
 pnpm verify
 ```
+
+`pnpm-workspace.yaml` sets `engineStrict`, so installing the development tools also
+enforces their own engines: development needs Node 22.18 or later on the 22 line, 24.11
+or later on the 24 line, or 26 and later.
+The published package keeps the wider runtime range.
+Installing with `--ignore-scripts` skips lefthook’s own installer, so
+`pnpm exec lefthook install` is what enables the Git hooks.
 
 Common focused commands:
 
@@ -41,8 +49,10 @@ development loop.
 - Run `pnpm verify` before submitting a pull request.
 
 Formatting is enforced by Prettier, flowmark, ESLint, and lefthook.
-CI verifies the declared Node floor on Linux plus the current Node LTS on Linux and
-macOS.
+CI runs `pnpm verify` on Linux with the declared Node 22.18.0 floor and the newest Node
+22, 24, and 26 releases, and on macOS with Node 26. It also smoke-tests the packed
+package on Node 24.0.0, the floor of the 24 line, and audits the dependencies weekly as
+well as on every change.
 
 ## Upgrading tbd
 
@@ -76,8 +86,8 @@ footer, and link checks still cover it.
 ## Releasing
 
 Release maintainers should follow [the release runbook](docs/releasing.md).
-The first npm publication is a documented bootstrap case; later releases use trusted
-publishing.
+The first npm publication is a documented bootstrap case; later releases are staged
+through npm trusted publishing and approved by an owner with 2FA.
 
 ## Reporting Bugs
 

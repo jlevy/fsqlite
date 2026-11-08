@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 import {
   EXCEPTION_WINDOW_DAYS,
   checkAuditExceptions,
-  crossCheckPnpmAuditConfig,
+  crossCheckPnpmAudit,
   findAdvisoryIds,
 } from './supply-chain-exceptions.mjs'
 
@@ -11,12 +11,19 @@ const TODAY = '2026-11-08'
 const RECORDED = 'GHSA-g3hv-75wg-m249'
 const UNRECORDED = 'GHSA-aaaa-bbbb-cccc'
 
-/** @param {string} auditConfig */
-const workspace = (auditConfig) =>
-  `packages:\n  - packages/*\n\nminimumReleaseAge: 20160\n# Time-limited audit exception.\n${auditConfig}`
+/** @param {string} auditSettings */
+const workspace = (auditSettings) =>
+  'packages:\n  - packages/*\n\nminimumReleaseAge: 20160\ntrustPolicy: no-downgrade\n' +
+  `trustPolicyExclude:\n  - undici-types@6.21.0\n# Time-limited audit exception.\n${auditSettings}`
 
-/** The form pnpm-workspace.yaml uses today. */
-const CURRENT_WORKSPACE = workspace(`auditConfig:\n  ignoreGhsas:\n    - ${RECORDED}\n`)
+/** The current section and list keys, then the deprecated ones pnpm still honors alone. */
+const AUDIT_KEYS = [
+  ['audit', 'ignore'],
+  ['auditConfig', 'ignoreGhsas'],
+]
+
+/** The form pnpm-workspace.yaml uses today, pnpm 11.16's `audit.ignore`. */
+const CURRENT_WORKSPACE = workspace(`audit:\n  ignore:\n    - ${RECORDED}\n`)
 
 /** @param {string} body @param {string} [heading] */
 const policy = (body, heading = '## Time-Limited Audit Exception') =>
@@ -29,6 +36,13 @@ const record = (reviewBy, id = RECORDED) =>
   `Review this exception by ${reviewBy}, or earlier when a patched release clears the cool-off.`
 
 const CURRENT_POLICY = policy(record('2026-12-08'))
+
+/** A trustPolicyExclude record in the shape SUPPLY-CHAIN-SECURITY.md uses. */
+const TRUST_POLICY_RECORD =
+  '## Conditional Trust-Policy Exclusion\n\n`trustPolicyExclude` admits exactly ' +
+  '`undici-types@6.21.0`. The maintainer approved this exclusion on 2026-11-08.\n\n' +
+  'This exclusion has no calendar review date: review it whenever `@types/node` moves ' +
+  'to another major line, and remove it then.'
 
 /** @param {string} date @param {number} days */
 const addDays = (date, days) =>
@@ -50,34 +64,60 @@ const assertOneError = (result, pattern) => {
 }
 
 describe('checkAuditExceptions', () => {
-  test('accepts the current block-list form with a current record', () => {
+  test('accepts the current audit.ignore form with a current record', () => {
     assert.deepEqual(check({}), { ids: [RECORDED], errors: [] })
   })
 
-  test('accepts a workspace without auditConfig or advisory IDs', () => {
-    assert.deepEqual(check({ workspaceText: workspace('') }), { ids: [], errors: [] })
+  test('accepts the deprecated auditConfig.ignoreGhsas form with a current record', () => {
+    const workspaceText = workspace(`auditConfig:\n  ignoreGhsas:\n    - ${RECORDED}\n`)
+    assert.deepEqual(check({ workspaceText }), { ids: [RECORDED], errors: [] })
   })
 
-  // Each form hides an unrecorded advisory next to the recorded one; the gate must find it.
-  const hiddenForms = {
-    'flow list': `auditConfig:\n  ignoreGhsas: [${RECORDED}, ${UNRECORDED}]\n`,
-    'quoted IDs': `auditConfig:\n  ignoreGhsas:\n    - "${RECORDED}"\n    - '${UNRECORDED}'\n`,
-    'comment before items': `auditConfig:\n  ignoreGhsas:\n    # why these are ignored\n    - ${RECORDED}\n    - ${UNRECORDED}\n`,
-    'trailing comments': `auditConfig:\n  ignoreGhsas:\n    - ${RECORDED} # minimatch\n    - ${UNRECORDED} # other\n`,
-    'blank lines': `auditConfig:\n  ignoreGhsas:\n\n    - ${RECORDED}\n   \n    - ${UNRECORDED}\n`,
-    'uppercase ID': `auditConfig:\n  ignoreGhsas:\n    - ${RECORDED}\n    - ${UNRECORDED.toUpperCase()}\n`,
-    'flow mapping': `auditConfig: { ignoreGhsas: ["${RECORDED}", "${UNRECORDED}"] }\n`,
+  test('accepts a workspace without audit settings or advisory IDs', () => {
+    assert.deepEqual(check({ workspaceText: workspace('') }), { ids: [], errors: [] })
+    assert.deepEqual(
+      check({
+        workspaceText: workspace(
+          '# No audit exception is active.\nupdate:\n  ignoreDeps:\n    - webpack\n',
+        ),
+      }),
+      { ids: [], errors: [] },
+    )
+  })
+
+  // Each form hides an unrecorded advisory next to the recorded one; the gate must find it
+  // under the current key and under the deprecated one.
+  for (const [section, list] of AUDIT_KEYS) {
+    const hiddenForms = {
+      'flow list': `${section}:\n  ${list}: [${RECORDED}, ${UNRECORDED}]\n`,
+      'quoted IDs': `${section}:\n  ${list}:\n    - "${RECORDED}"\n    - '${UNRECORDED}'\n`,
+      'comment before items': `${section}:\n  ${list}:\n    # why these are ignored\n    - ${RECORDED}\n    - ${UNRECORDED}\n`,
+      'trailing comments': `${section}:\n  ${list}:\n    - ${RECORDED} # minimatch\n    - ${UNRECORDED} # other\n`,
+      'blank lines': `${section}:\n  ${list}:\n\n    - ${RECORDED}\n   \n    - ${UNRECORDED}\n`,
+      'uppercase ID': `${section}:\n  ${list}:\n    - ${RECORDED}\n    - ${UNRECORDED.toUpperCase()}\n`,
+      'flow mapping': `${section}: { ${list}: ["${RECORDED}", "${UNRECORDED}"] }\n`,
+    }
+    for (const [form, auditSettings] of Object.entries(hiddenForms)) {
+      test(`finds an unrecorded advisory in ${section}.${list} written as: ${form}`, () => {
+        const result = check({ workspaceText: workspace(auditSettings) })
+        assert.deepEqual(result.ids, [RECORDED, UNRECORDED].sort())
+        assertOneError(
+          result,
+          new RegExp(`^${UNRECORDED} appears in pnpm-workspace.yaml .* no exception record`),
+        )
+      })
+    }
   }
-  for (const [form, auditConfig] of Object.entries(hiddenForms)) {
-    test(`finds an unrecorded advisory written as: ${form}`, () => {
-      const result = check({ workspaceText: workspace(auditConfig) })
-      assert.deepEqual(result.ids, [RECORDED, UNRECORDED].sort())
-      assertOneError(
-        result,
-        new RegExp(`^${UNRECORDED} appears in pnpm-workspace.yaml .* no exception record`),
-      )
+
+  test('finds an unrecorded advisory when both keys are set', () => {
+    const result = check({
+      workspaceText: workspace(
+        `audit:\n  ignore:\n    - ${RECORDED}\nauditConfig:\n  ignoreGhsas:\n    - ${UNRECORDED}\n`,
+      ),
     })
-  }
+    assert.deepEqual(result.ids, [RECORDED, UNRECORDED].sort())
+    assertOneError(result, new RegExp(`^${UNRECORDED} appears in pnpm-workspace.yaml`))
+  })
 
   test('finds an unrecorded CVE in ignoreCves', () => {
     const result = check({
@@ -91,18 +131,39 @@ describe('checkAuditExceptions', () => {
 
   test('matches records regardless of ID case', () => {
     const result = check({
-      workspaceText: workspace(`auditConfig:\n  ignoreGhsas:\n    - ${RECORDED.toUpperCase()}\n`),
+      workspaceText: workspace(`audit:\n  ignore:\n    - ${RECORDED.toUpperCase()}\n`),
     })
     assert.deepEqual(result, { ids: [RECORDED], errors: [] })
   })
 
-  test('fails when auditConfig is present but names no recognizable ID', () => {
-    for (const auditConfig of [
+  test('fails when an audit section is present but names no recognizable ID', () => {
+    for (const auditSettings of [
+      'audit:\n  ignore: []\n',
+      'audit:\n  ignore:\n    - GHSA-g3hv-75wg\n',
+      'audit: { ignore: [] }\n',
+      '"audit":\n  "ignore": []\n',
+      '# audit.ignore is empty for now.\n',
       'auditConfig:\n  ignoreGhsas: []\n',
       'auditConfig:\n  ignoreGhsas:\n    - GHSA-g3hv-75wg\n',
     ]) {
-      assertOneError(check({ workspaceText: workspace(auditConfig) }), /no GHSA-.* ID was found/)
+      assertOneError(
+        check({ workspaceText: workspace(auditSettings) }),
+        /configures audit .* no GHSA-.* ID was found/,
+      )
     }
+  })
+
+  test('does not read a trust-policy exclusion record as an audit exception', () => {
+    const policyText = policy(`${record('2026-12-08')}\n\n${TRUST_POLICY_RECORD}`)
+    assert.deepEqual(check({ policyText }), { ids: [RECORDED], errors: [] })
+    assert.deepEqual(check({ workspaceText: workspace(''), policyText }), {
+      ids: [],
+      errors: [],
+    })
+    assertOneError(
+      check({ policyText: `# Supply-Chain Security\n\n${TRUST_POLICY_RECORD}\n` }),
+      /no exception record under a "Time-Limited" heading/,
+    )
   })
 
   test('requires the record to sit under a Time-Limited heading', () => {
@@ -191,44 +252,64 @@ describe('findAdvisoryIds', () => {
   })
 })
 
-describe('crossCheckPnpmAuditConfig', () => {
+describe('crossCheckPnpmAudit', () => {
   test('accepts the IDs the scan found', () => {
     const pnpmOutput = JSON.stringify({
-      ignoreGhsas: [RECORDED.toUpperCase()],
-      ignoreUnfixable: true,
+      level: 'moderate',
+      ignore: [RECORDED.toUpperCase()],
+      ignorePrune: true,
     })
-    assert.deepEqual(crossCheckPnpmAuditConfig({ ids: [RECORDED], pnpmOutput }), [])
-    assert.deepEqual(crossCheckPnpmAuditConfig({ ids: [], pnpmOutput: '\n' }), [])
+    assert.deepEqual(crossCheckPnpmAudit({ ids: [RECORDED], pnpmOutput }), [])
+    assert.deepEqual(crossCheckPnpmAudit({ ids: [], pnpmOutput: '\n' }), [])
+  })
+
+  test('accepts the deprecated auditConfig shape', () => {
+    const pnpmOutput = JSON.stringify({ ignoreGhsas: [RECORDED] })
+    assert.deepEqual(crossCheckPnpmAudit({ ids: [RECORDED], pnpmOutput }), [])
   })
 
   test('fails when pnpm ignores an ID the scan did not find', () => {
-    const errors = crossCheckPnpmAuditConfig({
+    const errors = crossCheckPnpmAudit({
       ids: [RECORDED],
-      pnpmOutput: JSON.stringify({ ignoreGhsas: [RECORDED], ignoreCves: ['CVE-2026-12345'] }),
+      pnpmOutput: JSON.stringify({ ignore: [RECORDED, 'CVE-2026-12345'] }),
     })
     assert.equal(errors.length, 1)
     assert.match(errors[0], /pnpm ignores CVE-2026-12345, but pnpm-workspace.yaml does not name it/)
   })
 
   test('fails when the scan finds an ID pnpm does not ignore', () => {
-    const errors = crossCheckPnpmAuditConfig({
+    const errors = crossCheckPnpmAudit({
       ids: [RECORDED, UNRECORDED],
-      pnpmOutput: JSON.stringify({ ignoreGhsas: [RECORDED] }),
+      pnpmOutput: JSON.stringify({ ignore: [RECORDED] }),
     })
     assert.equal(errors.length, 1)
     assert.match(errors[0], /names GHSA-aaaa-bbbb-cccc, but pnpm does not report it/)
-    assert.equal(crossCheckPnpmAuditConfig({ ids: [RECORDED], pnpmOutput: '' }).length, 1)
+    assert.equal(crossCheckPnpmAudit({ ids: [RECORDED], pnpmOutput: '' }).length, 1)
+  })
+
+  test('fails on an ID left under auditConfig when audit.ignore is also set', () => {
+    // pnpm reports only audit.ignore when both keys are set, and ignores only those IDs.
+    const errors = crossCheckPnpmAudit({
+      ids: [RECORDED, UNRECORDED].sort(),
+      pnpmOutput: JSON.stringify({ ignore: [RECORDED] }),
+    })
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /names GHSA-aaaa-bbbb-cccc, .* drops the deprecated auditConfig/)
   })
 
   test('fails on entries that are not advisory IDs and on unparsable output', () => {
-    const [entryError] = crossCheckPnpmAuditConfig({
+    const [entryError] = crossCheckPnpmAudit({
       ids: [RECORDED],
-      pnpmOutput: JSON.stringify({ ignoreGhsas: [RECORDED, 'bogus'] }),
+      pnpmOutput: JSON.stringify({ ignore: [RECORDED, 'bogus'] }),
     })
-    assert.match(entryError, /auditConfig\.ignoreGhsas entry "bogus", which is not a GHSA or CVE/)
+    assert.match(entryError, /audit ignore entry "bogus", which is not a GHSA or CVE/)
     assert.match(
-      crossCheckPnpmAuditConfig({ ids: [], pnpmOutput: '{' })[0],
-      /Cannot parse `pnpm config get auditConfig --json` output/,
+      crossCheckPnpmAudit({ ids: [], pnpmOutput: '{' })[0],
+      /Cannot parse `pnpm config get audit --json` output/,
+    )
+    assert.match(
+      crossCheckPnpmAudit({ ids: [], pnpmOutput: '[]' })[0],
+      /pnpm reports audit settings that are not an object/,
     )
   })
 })

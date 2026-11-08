@@ -6,43 +6,60 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
-  id-token: write
+  contents: read # check out the repository; only the stage job adds id-token
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
+    # Install, verify, and pack without OIDC: the development dependencies that run
+    # here never see a token that npm would accept.
+    name: Verify and pack
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      dist-tag: ${{ steps.release.outputs.dist-tag }}
+      node-version: ${{ steps.release.outputs.node-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+          node-version-file: .nvmrc
           package-manager-cache: false
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          version: '0.13.5'
           enable-cache: false
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm verify
       - name: Verify tag matches package version
         working-directory: packages/fsqlite
         run: test "${GITHUB_REF_NAME}" = "v$(node --print "require('./package.json').version")"
-      - name: Choose npm dist-tag
+      - name: Choose version, npm dist-tag, and Node release
         if: github.ref_name != 'v0.1.0'
-        id: npm-dist-tag
+        id: release
         working-directory: packages/fsqlite
         run: |
           version="$(node --print "require('./package.json').version")"
           major="${version%%.*}"
           if [[ "$version" == *-* || "$major" == "0" ]]; then
-            echo 'tag=alpha' >> "$GITHUB_OUTPUT"
+            tag=alpha
           else
-            echo 'tag=latest' >> "$GITHUB_OUTPUT"
+            tag=latest
           fi
+          {
+            echo "version=$version"
+            echo "dist-tag=$tag"
+            echo "node-version=$(node --print process.versions.node)"
+          } >> "$GITHUB_OUTPUT"
       - name: Verify owner-authenticated bootstrap publication
         if: github.ref_name == 'v0.1.0'
         working-directory: packages/fsqlite
@@ -52,7 +69,51 @@ jobs:
           test "$(npm view fsqlite@0.1.0 version)" = "0.1.0"
           test "$(npm view fsqlite dist-tags.alpha)" = "0.1.0"
           node scripts/package-smoke.mjs
-      - name: Publish to npm with trusted publishing
+      - name: Pack and smoke-test the release tarball
         if: github.ref_name != 'v0.1.0'
         working-directory: packages/fsqlite
-        run: npm publish --access public --tag "${{ steps.npm-dist-tag.outputs.tag }}"
+        env:
+          FSQLITE_SMOKE_PACKAGE: ${{ runner.temp }}/release/fsqlite-${{ steps.release.outputs.version }}.tgz
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/release"
+          node scripts/package-smoke.mjs
+      - name: Upload the release tarball
+        if: github.ref_name != 'v0.1.0'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/release/fsqlite-${{ steps.release.outputs.version }}.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  stage:
+    # Stage exactly the tarball the build job verified. Nothing is checked out or
+    # installed here. A staged version is not public until an owner approves it with
+    # 2FA; see docs/releasing.md.
+    name: Stage on npm
+    needs: build
+    if: github.ref_name != 'v0.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      id-token: write # npm trusted publishing and provenance signing
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ needs.build.outputs.node-version }}
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Download the release tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/release
+      - name: Stage the release with trusted publishing
+        env:
+          DIST_TAG: ${{ needs.build.outputs.dist-tag }}
+          TARBALL: ${{ runner.temp }}/release/fsqlite-${{ needs.build.outputs.version }}.tgz
+          # Fail instead of staging without provenance.
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: npm stage publish "$TARBALL" --access public --tag "$DIST_TAG"

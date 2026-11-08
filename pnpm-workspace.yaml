@@ -1,13 +1,27 @@
 packages:
   - packages/*
 
+# pnpm 11 reads only auth, registry, and TLS settings from .npmrc; every other setting
+# belongs here.
+engineStrict: true
 minimumReleaseAge: 20160
 blockExoticSubdeps: true
+# Reject a release whose provenance or trusted-publisher evidence is weaker than an
+# earlier release of the same package. See SUPPLY-CHAIN-SECURITY.md before adding an
+# exclusion.
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  # Maintainer-approved exclusion recorded in SUPPLY-CHAIN-SECURITY.md; review it when
+  # @types/node leaves the 22 line.
+  - undici-types@6.21.0
+strictDepBuilds: true
 allowBuilds:
+  # Both ship their platform binary as an optional dependency, so neither needs its
+  # install script. esbuild arrives through tsx (tryscript) and tsdown.
   esbuild: false
   lefthook: false
 # Time-limited, maintainer-approved audit exception recorded in SUPPLY-CHAIN-SECURITY.md;
 # scripts/check-supply-chain.mjs fails once its review date passes.
-auditConfig:
-  ignoreGhsas:
+audit:
+  ignore:
     - GHSA-g3hv-75wg-m249

@@ -696,8 +696,8 @@ The package has a higher load-time floor than the session API alone: Node’s st
 `backup` named export was added in v22.16.0 and v23.8.0. Because fsqlite imports it at
 ESM link time, older releases cannot load the package and no runtime capability guard
 can intercept the failure.
-The alpha declares `>=22.18.0 <23 || >=24.0.0`; 22.18 is also the unflagged TypeScript
-type-stripping floor used by the source test loop.
+The alpha declares `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`; 22.18 is also the unflagged
+TypeScript type-stripping floor used by the source test loop.
 
 > **Re-verified against current Node (2026-11-08).** All five constraints above hold on
 > `nodejs/node` `main` (v28-pre, SQLite 3.54.1): the conflict handler still drops the

@@ -303,10 +303,10 @@ record the exact SQLite and Node capabilities behind the reference package.
 npm install fsqlite@alpha
 ```
 
-Requires Node `>=22.18.0 <23 || >=24.0.0`. The split range is intentional: fsqlite
-statically imports the `node:sqlite` backup API introduced in Node 22.16, and its source
-development loop also relies on type stripping stabilized in Node 22.18. Node 23 is not
-an LTS line and versions before 23.8 cannot load the package.
+Requires Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`. The split range is intentional:
+fsqlite statically imports the `node:sqlite` backup API introduced in Node 22.16, and
+its source development loop also relies on type stripping stabilized in Node 22.18. Node
+23 is not an LTS line and versions before 23.8 cannot load the package.
 
 ## Quick Start
 

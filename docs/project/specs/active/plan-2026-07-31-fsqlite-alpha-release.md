@@ -198,9 +198,11 @@ weakest:
 | Unflagged `.ts` type-stripping | 22.18.0 | required to run from source |
 
 Node’s API history records `backup` in 22.16.0 and 23.8.0. The published range is
-therefore `>=22.18.0 <23 || >=24.0.0`: 22.18 is the higher source-development floor, the
-non-LTS Node 23 line is excluded rather than expressing a misleading partial range, and
-Node 24 is fully supported.
+therefore `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`: 22.18 is the higher source-development
+floor, the non-LTS Node 23 line is excluded rather than expressing a misleading partial
+range, and Node 24 is fully supported.
+The non-LTS Node 25 line, end-of-life since 2026-06-01, is excluded as well; Node 26 and
+later are admitted, since every major from Node 27 on is an LTS line.
 CI pins an explicit 22.18.0 job because `node-version: 22` resolves to latest 22.x and
 hides precisely this class of bug.
 

@@ -291,7 +291,7 @@ the exact SQLite and Node capabilities behind the reference package.
 npm install fsqlite@alpha
 ```
 
-Requires Node `>=22.18.0 <23 || >=24.0.0`.
+Requires Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`.
 
 ## Quick Start
 
