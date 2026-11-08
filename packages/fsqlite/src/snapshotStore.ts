@@ -117,7 +117,7 @@ function validateSchemaVersion(value: unknown = 1): number {
 }
 
 /** Throw a TypeError unless `value` is a safe integer of at least `min`. */
-function requireSafeInteger(name: string, value: unknown, min: number): number {
+export function requireSafeInteger(name: string, value: unknown, min: number): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min) {
     throw new TypeError(`${name} must be a safe integer >= ${min}; received ${String(value)}`)
   }
@@ -534,7 +534,11 @@ export class SnapshotStore {
     this.schemaHash = sha256(this.schema).slice(0, 16)
     this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
     this.toolVersion = opts.toolVersion ?? DEFAULT_TOOL_VERSION
-    this.maxEnvelopeBytes = opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES
+    this.maxEnvelopeBytes = requireSafeInteger(
+      'maxEnvelopeBytes',
+      opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES,
+      1,
+    )
     this._clock = 0
   }
 
@@ -671,9 +675,44 @@ export class SnapshotStore {
     try {
       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
       this.assertStrategySchema(db)
+      this.assertPolicyTables(db)
     } finally {
       db.close()
     }
+  }
+
+  /**
+   * Refuse a conflict policy that routes a table the store's schema does not declare: a
+   * misspelled key would otherwise fall back to the `'*'` action silently. DirectStore,
+   * which applies no changesets, overrides this.
+   */
+  protected assertPolicyTables(db: driver.DB): void {
+    const callerTables = new Set(
+      (
+        db
+          .prepare(
+            "SELECT name FROM main.sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+          )
+          .all() as { name: string }[]
+      )
+        .map((row) => row.name)
+        .filter((name) => !(driver.OWNED_TABLES as readonly string[]).includes(name)),
+    )
+    const unknown = Object.keys(this.conflictPolicy).filter(
+      (table) => table !== '*' && !callerTables.has(table),
+    )
+    if (unknown.length === 0) {
+      return
+    }
+    const named = unknown.map((table) => `"${table}"`).join(', ')
+    throw new FsqliteError(
+      'incompatible',
+      unknown.length === 1
+        ? `conflictPolicy names table ${named}, which is not a caller table in this store's ` +
+            "schema; a misspelled key falls back to the '*' action silently, so fix or remove it"
+        : `conflictPolicy names tables ${named}, which are not caller tables in this store's ` +
+            "schema; a misspelled key falls back to the '*' action silently, so fix or remove them",
+    )
   }
 
   /**
@@ -779,6 +818,7 @@ export class SnapshotStore {
    * packager/uploader reads it. Returns { version, heartbeat, release }.
    */
   readLease({ maxRetries = DEFAULT_READ_LEASE_RETRIES }: { maxRetries?: number } = {}): ReadLease {
+    requireSafeInteger('maxRetries', maxRetries, 0)
     this.assertStoreIdentity()
     // Optimistic claim, then verify: publish the lease *before* committing to read the
     // version, then confirm the snapshot still exists. This closes the check-then-act race
@@ -917,6 +957,7 @@ export class SnapshotStore {
     fn: WorkFn,
     { maxRetries = DEFAULT_WRITE_RETRIES }: { maxRetries?: number } = {},
   ): WriteWithRetryResult {
+    requireSafeInteger('maxRetries', maxRetries, 1)
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const txId = this.write(writerId, fn)
       if (txId === null) {
@@ -1032,6 +1073,7 @@ export class SnapshotStore {
     maxRetries = DEFAULT_RECONCILE_RETRIES,
     lockOpts = {},
   }: { maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
+    requireSafeInteger('maxRetries', maxRetries, 1)
     const marker = readStoreMarker(this.dir)
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {

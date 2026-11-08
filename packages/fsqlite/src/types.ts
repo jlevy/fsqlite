@@ -34,7 +34,9 @@ export interface StoreOptions {
   schemaVersion?: number
   /**
    * Per-table merge policy (table to action, `'*'` the default). Every reconciler for one
-   * store epoch must use the same effective policy; see {@link ConflictPolicyInput}.
+   * store epoch must use the same effective policy; see {@link ConflictPolicyInput}. Every
+   * key other than `'*'` must name a caller table, so a misspelling cannot silently fall
+   * back to the default. An unknown action throws a `TypeError`.
    */
   conflictPolicy?: ConflictPolicyInput
   /** Free-form writer/tool version recorded on each envelope for provenance. */
@@ -42,7 +44,7 @@ export interface StoreOptions {
   /**
    * Reconcile refuses to load a changeset envelope larger than this many bytes, quarantining
    * it instead of reading it fully into memory. Guards against a runaway writer OOMing the
-   * reconciler. Defaults to 1 GiB.
+   * reconciler. A positive safe integer; defaults to 1 GiB.
    */
   maxEnvelopeBytes?: number
 }

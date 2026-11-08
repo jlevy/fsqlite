@@ -146,6 +146,65 @@ test('schemaVersion rejects values SQLite cannot preserve before touching the st
   }
 })
 
+test('maxEnvelopeBytes and maxRetries reject values that would disable or wedge their guard', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    for (const [index, maxEnvelopeBytes] of [0, -1, 1.5, NaN, Infinity].entries()) {
+      const storeDir = join(dir, `envelope-${index}`)
+      assert.throws(
+        () => new SnapshotStore(storeDir, { ...STORE_OPTS, maxEnvelopeBytes }).init(),
+        (error: unknown) =>
+          error instanceof TypeError && error.message.startsWith('maxEnvelopeBytes must be'),
+      )
+      assert.equal(existsSync(storeDir), false, 'validation must precede filesystem mutation')
+    }
+    const store = new SnapshotStore(join(dir, 'store'), STORE_OPTS).init()
+    const direct = new DirectStore(join(dir, 'store'), STORE_OPTS)
+    let calls = 0
+    const fn = (): void => {
+      calls++
+    }
+    for (const maxRetries of [0, -1, 1.5, NaN]) {
+      assert.throws(() => store.reconcile({ maxRetries }), /maxRetries must be/)
+      assert.throws(() => store.writeWithRetry('w', fn, { maxRetries }), /maxRetries must be/)
+      assert.throws(() => direct.write(fn, { maxRetries }), /maxRetries must be/)
+    }
+    assert.throws(() => store.readLease({ maxRetries: -1 }), /maxRetries must be/)
+    assert.equal(calls, 0, 'no attempt runs before its options are validated')
+  } finally {
+    cleanup()
+  }
+})
+
+test('init rejects a conflict policy that names a table the schema does not declare', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    for (const [index, conflictPolicy] of [
+      { urll_index: 'lww' as const, '*': 'strict' as const },
+      { applied_tx: 'lww' as const },
+    ].entries()) {
+      const storeDir = join(dir, `policy-${index}`)
+      const table = Object.keys(conflictPolicy)[0] ?? ''
+      assert.throws(
+        () => new SnapshotStore(storeDir, { ...STORE_OPTS, conflictPolicy }).init(),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes(`conflictPolicy names table "${table}"`) &&
+          error.message.includes('not a caller table'),
+      )
+    }
+    // DirectStore applies no changesets, so it never consults a policy.
+    assert.doesNotThrow(() =>
+      new DirectStore(join(dir, 'direct'), {
+        ...STORE_OPTS,
+        conflictPolicy: { urll_index: 'lww' },
+      }).init(),
+    )
+  } finally {
+    cleanup()
+  }
+})
+
 test('schemaVersion preserves both ends of the supported fsqlite range', () => {
   const { dir, cleanup } = tmpStore()
   const schema = 'CREATE TABLE t (k TEXT PRIMARY KEY NOT NULL);'

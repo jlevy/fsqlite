@@ -20,7 +20,7 @@ import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
 import { withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
-import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
+import { requireSafeInteger, SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
 import type {
   StoreOptions,
@@ -41,6 +41,10 @@ class DirectStrategyStore extends SnapshotStore {
   protected override assertStrategySchema(): void {
     // DirectStore never applies a changeset: a trigger fires once, inside the callback's own
     // transaction on the build, so trigger schemas are supported.
+  }
+
+  protected override assertPolicyTables(): void {
+    // DirectStore never consults a conflict policy.
   }
 }
 
@@ -102,6 +106,7 @@ export class DirectStore {
       maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
     }: { lockOpts?: LockOptions; maxRetries?: number } = {},
   ): number {
+    requireSafeInteger('maxRetries', maxRetries, 1)
     const marker = readStoreMarker(this.base.dir)
     this.base.read((db) => {
       verifySnapshotForPublish(db, marker, this.base.schemaVersion, this.base.schemaHash)
