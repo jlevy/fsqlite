@@ -489,8 +489,10 @@ validation, exiting `3` (invalid or corrupt) or `4` (unsupported).
 `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
-Its safe verdict requires working directory fsync as well as the coordination
-primitives. The QA runbook includes a
+Its safe verdict requires working directory fsync and a filesystem whose fsync persists
+as well as the coordination primitives, so it refuses tmpfs, ramfs, and overlayfs
+mounted with `volatile`. It probes an existing directory and never creates one.
+The QA runbook includes a
 [manual CLI walkthrough](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md#b3-cli-walkthrough-on-a-real-store)
 and filesystem capability check.
 

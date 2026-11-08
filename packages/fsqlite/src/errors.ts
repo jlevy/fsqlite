@@ -8,9 +8,12 @@
 
 import { inspect } from 'node:util'
 
-/** The message of `error`, or a readable rendering of a non-Error throw value. */
+/** The message of `error`, the string itself, or a readable rendering of another value. */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : inspect(error)
+  if (error instanceof Error) {
+    return error.message
+  }
+  return typeof error === 'string' ? error : inspect(error)
 }
 
 /**
