@@ -243,6 +243,13 @@ interface Manifest {
   tool_version: string
 }
 
+/** What one reconcile build did with each committed pending envelope (spec F3). */
+interface FoldResult {
+  applied: string[]
+  archivable: string[]
+  quarantined: [string, string][]
+}
+
 interface TableColumn {
   name: string
   type: string
@@ -780,7 +787,6 @@ export class SnapshotStore {
     lockOpts = {},
   }: { maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
     const marker = readStoreMarker(this.dir)
-    const policy = this.conflictPolicy
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const base = this.currentVersion()
@@ -791,93 +797,34 @@ export class SnapshotStore {
       }
 
       const tmp = join(this.snapDir, `.build-${rand()}.sqlite`)
-      copyFileSync(this.snapshotPath(base), tmp)
-      const applied: string[] = []
-      const archivable: string[] = []
-      const quarantined: [string, string][] = []
-      const db = driver.open(tmp)
+      let fold: FoldResult
+      let result: CommitOutcome | 'nothing-applied'
+      // A crash seam models a dead process, which runs no cleanup.
+      let crashed = false
       try {
-        const seen = new Set(
-          (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
-            String(r.tx_id),
-          ),
-        )
-        const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
-        for (const txn of pending) {
-          const txId = txIdOf(txn)
-          if (seen.has(txId)) {
-            archivable.push(txn)
-            continue
-          } // already in this lineage
-          const txDir = join(this.txPending, txn)
-          let csSize = 0
-          try {
-            csSize = statSync(join(txDir, CHANGESET_FILENAME)).size
-          } catch {
-            /* missing/unreadable is handled by the read below */
-          }
-          if (csSize > this.maxEnvelopeBytes) {
-            quarantined.push([txn, `envelope-too-large: ${csSize} > ${this.maxEnvelopeBytes}`])
-            continue
-          }
-          let cs: Uint8Array
-          let man: Manifest
-          try {
-            cs = readFileSync(join(txDir, CHANGESET_FILENAME))
-            man = JSON.parse(readFileSync(join(txDir, 'manifest.json'), 'utf8')) as Manifest
-          } catch {
-            quarantined.push([txn, 'unreadable-envelope'])
-            continue
-          }
-          if (sha256(cs) !== man.changeset_sha256) {
-            quarantined.push([txn, 'digest-mismatch'])
-            continue
-          }
-          if (man.format_version !== marker.format_version) {
-            quarantined.push([txn, 'format-version-mismatch'])
-            continue
-          }
-          if (man.tx_id !== txId) {
-            quarantined.push([txn, 'tx-id-mismatch'])
-            continue
-          }
-          if (man.store_id !== marker.store_id) {
-            quarantined.push([txn, 'store-id-mismatch'])
-            continue
-          }
-          if (man.changeset !== CHANGESET_FILENAME) {
-            quarantined.push([txn, 'changeset-filename-mismatch'])
-            continue
-          }
-          if (man.schema_version !== this.schemaVersion) {
-            quarantined.push([txn, 'schema-version-mismatch'])
-            continue
-          }
-          if (man.schema_hash !== this.schemaHash) {
-            quarantined.push([txn, 'schema-hash-mismatch'])
-            continue
-          }
-          try {
-            applyWithPolicy(db, cs, policy, () => {
-              mark.run(man.tx_id, nowIso())
-            })
-            applied.push(txn)
-            seen.add(txId)
-          } catch (e) {
-            // A genuine conflict aborted the apply (policy returned ABORT) or some other
-            // apply error. Quarantine the tx; do not poison the whole batch.
-            quarantined.push([txn, `apply-failed: ${(e as Error).message}`])
-          }
+        fold = this._fold(tmp, base, pending, marker)
+        if (fold.applied.length === 0) {
+          result = 'nothing-applied'
+        } else {
+          if (crashAt === 'after-build') {
+            crashed = true
+            throw new Error('CRASH after-build')
+          } // tmp orphaned; current unchanged
+          result = this._publishBuild(tmp, base, lockOpts, crashAt)
         }
-        verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
-        driver.quickCheck(db)
       } finally {
-        db.close()
+        // Every exit before or from the publish step discards the build. Once committed,
+        // the build has no `.build-` name left, so this only ever removes an uncommitted
+        // transient, never a committed or published snapshot.
+        if (!crashed) {
+          rmSync(tmp, { force: true })
+        }
       }
-
-      if (applied.length === 0) {
-        rmSync(tmp, { force: true })
-        const settled = this._settle(applied, archivable, quarantined)
+      if (result === 'retry') {
+        continue
+      }
+      if (result === 'nothing-applied') {
+        const settled = this._settle(fold.applied, fold.archivable, fold.quarantined)
         return {
           published: base,
           applied: 0,
@@ -885,63 +832,14 @@ export class SnapshotStore {
           attempts: attempt + 1,
         }
       }
-      if (crashAt === 'after-build') {
-        throw new Error('CRASH after-build')
-      } // tmp orphaned; current unchanged
-
       const next = base + 1
-      fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
-      // Once committed, the build has no `.build-` name left, so removing that name on any
-      // exit from the publish step only ever discards an uncommitted transient.
-      const discardBuild = (): void => {
-        rmSync(tmp, { force: true })
-      }
-      let result: CommitOutcome
-      try {
-        result = withLock(
-          this.publishLock,
-          (_token, lease): CommitOutcome => {
-            if (this.currentVersion() !== base) {
-              return 'retry'
-            } // someone published while we built
-            if (!lease.fence()) {
-              return 'retry'
-            } // lost ownership (stale break): fencing
-            return commitSnapshot({
-              storeDir: this.dir,
-              currentPath: this.currentPath,
-              snapDir: this.snapDir,
-              build: tmp,
-              dest: this.snapshotPath(next),
-              base,
-              next,
-              readCurrent: () => this.currentVersion(),
-              lease,
-              afterLink:
-                crashAt === 'after-snapshot'
-                  ? () => {
-                      throw new Error('CRASH after-snapshot')
-                    }
-                  : undefined,
-            })
-          },
-          lockOpts,
-        )
-      } catch (error) {
-        discardBuild()
-        throw error
-      }
-      if (result === 'retry') {
-        discardBuild()
-        continue
-      }
       if (crashAt === 'after-pointer') {
         throw new Error('CRASH after-pointer')
       } // published; tx not yet archived
 
       let settled: { applied: number; quarantined: number }
       try {
-        settled = this._settle(applied, archivable, quarantined)
+        settled = this._settle(fold.applied, fold.archivable, fold.quarantined)
       } catch (error) {
         throw postPublishError(next, error)
       }
@@ -953,6 +851,155 @@ export class SnapshotStore {
       }
     }
     throw new Error('reconcile exceeded retries (excessive publish contention)')
+  }
+
+  /**
+   * F2-F4: copy the base to the `tmp` build, fold the committed `pending` envelopes into it
+   * in order, and run the pre-publication gates. Each envelope is applied, found archivable
+   * (already in the base lineage), or quarantined with a reason; one bad envelope never
+   * aborts the batch. A gate failure throws, and the caller discards the build.
+   */
+  private _fold(tmp: string, base: number, pending: string[], marker: StoreMarker): FoldResult {
+    copyFileSync(this.snapshotPath(base), tmp)
+    const applied: string[] = []
+    const archivable: string[] = []
+    const quarantined: [string, string][] = []
+    const db = driver.open(tmp)
+    try {
+      const seen = new Set(
+        (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
+          String(r.tx_id),
+        ),
+      )
+      const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
+      for (const txn of pending) {
+        const txId = txIdOf(txn)
+        if (seen.has(txId)) {
+          archivable.push(txn)
+          continue
+        } // already in this lineage
+        const admitted = this._admitEnvelope(txn, marker)
+        if (typeof admitted === 'string') {
+          quarantined.push([txn, admitted])
+          continue
+        }
+        try {
+          applyWithPolicy(db, admitted.changeset, this.conflictPolicy, () => {
+            mark.run(admitted.manifest.tx_id, nowIso())
+          })
+          applied.push(txn)
+          seen.add(txId)
+        } catch (e) {
+          // A genuine conflict aborted the apply (policy returned ABORT) or some other
+          // apply error. Quarantine the tx; do not poison the whole batch.
+          quarantined.push([txn, `apply-failed: ${(e as Error).message}`])
+        }
+      }
+      verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
+      driver.quickCheck(db)
+    } finally {
+      db.close()
+    }
+    return { applied, archivable, quarantined }
+  }
+
+  /**
+   * F3 admission: read envelope `txn` and check it against the store and this handle. Returns
+   * its changeset and manifest, or the quarantine reason.
+   */
+  private _admitEnvelope(
+    txn: string,
+    marker: StoreMarker,
+  ): { changeset: Uint8Array; manifest: Manifest } | string {
+    const txDir = join(this.txPending, txn)
+    let csSize = 0
+    try {
+      csSize = statSync(join(txDir, CHANGESET_FILENAME)).size
+    } catch {
+      /* missing/unreadable is handled by the read below */
+    }
+    if (csSize > this.maxEnvelopeBytes) {
+      return `envelope-too-large: ${csSize} > ${this.maxEnvelopeBytes}`
+    }
+    let cs: Uint8Array
+    let parsed: unknown
+    try {
+      cs = readFileSync(join(txDir, CHANGESET_FILENAME))
+      parsed = JSON.parse(readFileSync(join(txDir, 'manifest.json'), 'utf8'))
+    } catch {
+      return 'unreadable-envelope'
+    }
+    // Valid JSON that is not an object (`null`, an array, a string) has no fields to check;
+    // reading one from `null` would throw out of the whole reconcile.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return 'malformed-manifest'
+    }
+    const man = parsed as Manifest
+    if (sha256(cs) !== man.changeset_sha256) {
+      return 'digest-mismatch'
+    }
+    if (man.format_version !== marker.format_version) {
+      return 'format-version-mismatch'
+    }
+    if (man.tx_id !== txIdOf(txn)) {
+      return 'tx-id-mismatch'
+    }
+    if (man.store_id !== marker.store_id) {
+      return 'store-id-mismatch'
+    }
+    if (man.changeset !== CHANGESET_FILENAME) {
+      return 'changeset-filename-mismatch'
+    }
+    if (man.schema_version !== this.schemaVersion) {
+      return 'schema-version-mismatch'
+    }
+    if (man.schema_hash !== this.schemaHash) {
+      return 'schema-hash-mismatch'
+    }
+    return { changeset: cs, manifest: man }
+  }
+
+  /**
+   * F5: fsync the build, then commit it as `base + 1` and swap the pointer under the publish
+   * lock. Returns `retry` when another publisher won or this one was fenced out.
+   */
+  private _publishBuild(
+    tmp: string,
+    base: number,
+    lockOpts: LockOptions,
+    crashAt: CrashAt,
+  ): CommitOutcome {
+    const next = base + 1
+    fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
+    return withLock(
+      this.publishLock,
+      (_token, lease): CommitOutcome => {
+        if (this.currentVersion() !== base) {
+          return 'retry'
+        } // someone published while we built
+        if (!lease.fence()) {
+          return 'retry'
+        } // lost ownership (stale break): fencing
+        return commitSnapshot({
+          storeDir: this.dir,
+          currentPath: this.currentPath,
+          snapDir: this.snapDir,
+          build: tmp,
+          dest: this.snapshotPath(next),
+          base,
+          next,
+          readCurrent: () => this.currentVersion(),
+          lease,
+          afterLink:
+            crashAt === 'after-snapshot'
+              ? () => {
+                  throw new Error('CRASH after-snapshot')
+                }
+              : undefined,
+        })
+      },
+      lockOpts,
+    )
   }
 
   /**

@@ -5,17 +5,22 @@ import {
   copyFileSync,
   existsSync,
   readFileSync,
+  readdirSync,
   renameSync,
   writeFileSync,
 } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { SnapshotStore } from '../src/index.ts'
+import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore, table: string): number =>
   store.read((db) => (db.prepare(`SELECT COUNT(*) c FROM ${table}`).get() as { c: number }).c)
+
+const buildFiles = (store: SnapshotStore): string[] =>
+  readdirSync(store.snapDir).filter((f) => f.startsWith('.build-'))
 
 function freshStore() {
   const { dir, cleanup } = tmpStore()
@@ -164,6 +169,66 @@ test('an envelope whose manifest tx_id differs from its directory is quarantined
       'tx-id-mismatch',
     )
     assert.equal(count(store, 'artifacts'), 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a manifest that is not a JSON object is quarantined without blocking its siblings', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const malformed = ['null', '[]', '"manifest"', '7'].map((json, i) => {
+      const txId = store.write('A', (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`bad-${i}`, 'bad', 't')
+      })
+      assert.ok(txId)
+      writeFileSync(join(store.txPending, `${txId}.txn`, 'manifest.json'), json)
+      return txId
+    })
+    store.write('B', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('good', 'good', 't')
+    })
+
+    const result = store.reconcile()
+
+    assert.deepEqual(
+      { applied: result.applied, quarantined: result.quarantined },
+      { applied: 1, quarantined: malformed.length },
+    )
+    for (const txId of malformed) {
+      assert.equal(
+        readFileSync(join(store.txQuarantine, `${txId}.txn`, 'QUARANTINE'), 'utf8'),
+        'malformed-manifest',
+      )
+    }
+    assert.equal(count(store, 'artifacts'), 1)
+    assert.deepEqual(buildFiles(store), [])
+  } finally {
+    cleanup()
+  }
+})
+
+test('a reconcile that fails before publication removes its build', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const txId = store.write('A', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    setAfterFsyncPathForTest((path) => {
+      if (basename(path).startsWith('.build-')) {
+        throw new Error('injected build fsync failure')
+      }
+    })
+    try {
+      assert.throws(() => store.reconcile(), /injected build fsync failure/)
+    } finally {
+      setAfterFsyncPathForTest(null)
+    }
+
+    assert.deepEqual(buildFiles(store), [])
+    assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(store.pendingTxns(), [`${txId}.txn`])
+    assert.equal(store.reconcile().applied, 1)
   } finally {
     cleanup()
   }

@@ -325,8 +325,9 @@ Protocol:
 3. **F3.** For each envelope in order:
    - already in *seen* → mark **archivable** (it is in this lineage; move to
      `tx/applied/` after publish);
-   - payload missing/unreadable, payload larger than the configured cap (Node default 1
-     GiB), digest ≠ `changeset_sha256`, manifest `tx_id` differs from the envelope
+   - payload or manifest missing/unreadable, manifest valid JSON but not an object (Node
+     reason `malformed-manifest`), payload larger than the configured cap (Node default
+     1 GiB), digest ≠ `changeset_sha256`, manifest `tx_id` differs from the envelope
      directory, `format_version` or `store_id` differs from the marker, or
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
@@ -342,8 +343,9 @@ Protocol:
 4. **F4.** Reassert the build’s application ID, reserved-table shapes and metadata,
    marker identity, schema version, and schema hash.
    Then run the integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`). A
-   failure aborts the whole reconcile (the build is a discarded transient; nothing was
-   published).
+   failure aborts the whole reconcile and publishes nothing.
+   A failure at any step before the build is committed (F5c) MUST discard the build
+   transient, so a failing reconcile never leaves a head-sized file behind per attempt.
 5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
    moves, and finish. Otherwise **publish** under the lock (§7):
    - **F5a.** Re-read `current`; if ≠ base, a peer published first, so discard the build
