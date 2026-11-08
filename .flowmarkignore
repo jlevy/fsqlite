@@ -4,3 +4,5 @@ packages/fsqlite/test/cli-golden/
 .codex/
 .tbd/
 node_modules/
+# tbd regenerates the managed AGENTS.md block verbatim; rewrapping it makes tbd doctor report drift.
+AGENTS.md

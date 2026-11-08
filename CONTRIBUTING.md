@@ -44,6 +44,25 @@ Formatting is enforced by Prettier, flowmark, ESLint, and lefthook.
 CI verifies the declared Node floor on Linux plus the current Node LTS on Linux and
 macOS.
 
+## Upgrading tbd
+
+The agent hook scripts under `.claude/` and `.codex/` are project-maintained adaptations
+of the files `tbd setup --auto` generates: they resolve the repository without git,
+detect pushes with `scripts/detect-git-push.mjs`, and fail visibly instead of silently.
+Setup still replaces or duplicates them, so after a tbd upgrade:
+
+1. Run `tbd setup --auto` and review the diff.
+2. Restore `.claude/settings.json` and `.codex/hooks.json`, and port any upstream
+   launcher changes into `tbd-session.sh` and `tbd-closing-reminder.sh` without dropping
+   the project hardening.
+3. Run `pnpm test:project-hooks`, then `tbd doctor`. A “user-owned” warning for Codex
+   hooks is expected.
+
+`.claude/agents/tbd-strong-max.md` is a project-owned override that runs the strong-max
+tier on Fable at `max`; setup keeps it because its generated marker was removed.
+
+## Releasing
+
 Release maintainers should follow [the release runbook](docs/releasing.md).
 The first npm publication is a documented bootstrap case; later releases use trusted
 publishing.

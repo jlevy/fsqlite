@@ -15,6 +15,10 @@ import { fileURLToPath } from 'node:url'
 
 const EXECUTABLE_MODE = 0o755
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const tbdConfig = readFileSync(join(repoRoot, '.tbd', 'config.yml'), 'utf8')
+const tbdFallbackVersion = /^tbd_fallback_version:\s*(\S+)\s*$/m.exec(tbdConfig)?.[1]
+assert(tbdFallbackVersion, 'Expected .tbd/config.yml to pin an exact tbd_fallback_version')
+const escapedFallbackVersion = tbdFallbackVersion.replaceAll('.', '\\.')
 const codexHooksPath = join(repoRoot, '.codex', 'hooks.json')
 const codexHooksConfig = JSON.parse(readFileSync(codexHooksPath, 'utf8'))
 const codexCommandHooks = Object.values(codexHooksConfig.hooks).flatMap((eventHooks) =>
@@ -111,12 +115,12 @@ try {
   writeFileSync(join(hookTestDir, 'jq'), '#!/bin/bash\nexit 1\n', { mode: EXECUTABLE_MODE })
   writeFileSync(
     join(hookTestDir, 'tbd'),
-    '#!/bin/bash\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit "${TBD_HOOK_TEST_TBD_STATUS:-0}"\nfi\nif [[ "$1" == "prime" ]]; then\n  printf "" > "$TBD_HOOK_TEST_PRIME_MARKER"\n  exit 0\nfi\nexit 1\n',
+    '#!/bin/bash\nif [[ "$1" == "config" && "$2" == "get" && "$3" == "tbd_format" ]]; then\n  exit "${TBD_HOOK_TEST_CONFIG_STATUS:-0}"\nfi\nif [[ "$1" == "whoami" ]]; then\n  exit 0\nfi\nif [[ "$1" == "closing" ]]; then\n  printf "" > "$TBD_HOOK_TEST_MARKER"\n  exit "${TBD_HOOK_TEST_TBD_STATUS:-0}"\nfi\nif [[ "$1" == "prime" ]]; then\n  printf "" > "$TBD_HOOK_TEST_PRIME_MARKER"\n  exit 0\nfi\nexit 1\n',
     { mode: EXECUTABLE_MODE },
   )
   writeFileSync(
     join(hookTestDir, 'npx'),
-    '#!/bin/bash\nprintf "" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
+    '#!/bin/bash\nprintf "%s\\n" "$@" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
     { mode: EXECUTABLE_MODE },
   )
   const shadowBin = join(hookTestDir, '.local', 'bin')
@@ -159,6 +163,30 @@ try {
       existsSync(npxMarker),
       false,
       `${hook.name} hook contacted its npx fallback despite a hermetic tbd shim`,
+    )
+
+    rmSync(primeMarker, { force: true })
+    rmSync(npxMarker, { force: true })
+    const incompatible = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: { ...hookEnv, TBD_HOOK_TEST_CONFIG_STATUS: '1' },
+      shell: true,
+    })
+    assert.equal(
+      incompatible.status,
+      0,
+      `${hook.name} hook failed its pinned fallback:\n${incompatible.stderr}`,
+    )
+    assert.equal(
+      existsSync(primeMarker),
+      false,
+      `${hook.name} hook primed with a tbd that cannot read this repository format`,
+    )
+    assert.equal(
+      readFileSync(npxMarker, 'utf8'),
+      `--yes\nget-tbd@${tbdFallbackVersion}\nprime\n${hook.name.endsWith('PreCompact') ? '--brief\n' : ''}`,
+      `${hook.name} hook did not use the exact configured fallback version`,
     )
   }
 
@@ -272,6 +300,31 @@ try {
       `${hook.name} closing hook fell through to npx after a tbd failure`,
     )
 
+    rmSync(closingMarker, { force: true })
+    rmSync(npxMarker, { force: true })
+    const incompatibleTbd = spawnSync(hook.command, {
+      cwd: join(repoRoot, 'packages', 'fsqlite'),
+      encoding: 'utf8',
+      env: { ...hookEnv, TBD_HOOK_TEST_CONFIG_STATUS: '1' },
+      input: JSON.stringify({ tool_input: { command: 'git push --dry-run' } }),
+      shell: true,
+    })
+    assert.equal(
+      incompatibleTbd.status,
+      0,
+      `${hook.name} closing hook failed its pinned fallback:\n${incompatibleTbd.stderr}`,
+    )
+    assert.equal(
+      existsSync(closingMarker),
+      false,
+      `${hook.name} closing hook ran a tbd that cannot read this repository format`,
+    )
+    assert.equal(
+      readFileSync(npxMarker, 'utf8'),
+      `--yes\nget-tbd@${tbdFallbackVersion}\nclosing\n`,
+      `${hook.name} closing hook did not use the exact configured fallback version`,
+    )
+
     rmSync(npxMarker, { force: true })
     const failingNpx = spawnSync(hook.command, {
       cwd: join(repoRoot, 'packages', 'fsqlite'),
@@ -303,7 +356,7 @@ try {
     )
     assert.match(
       withoutCliOutput,
-      /npm install -g get-tbd@0\.4\.2/,
+      new RegExp(`npm install -g get-tbd@${escapedFallbackVersion}`),
       `${hook.name} closing hook did not explain how to install the missing CLI`,
     )
 
