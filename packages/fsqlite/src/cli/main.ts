@@ -9,9 +9,10 @@
 // This module has no import-time effects: `main(argv, io)` runs one invocation and
 // returns its exit code. The `fsqlite` bin (bin.ts) wires it to the process.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import type { ParseArgsOptionsConfig } from 'node:util'
+import packageInfo from '../../package.json' with { type: 'json' }
 import { DEFAULT_RETAINED_SNAPSHOTS, SnapshotStore } from '../snapshotStore.ts'
 import { inspectFilesystem, formatInspectReport } from '../fsinspect.ts'
 import { capabilities } from '../driver.ts'
@@ -253,18 +254,6 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   },
 }
 
-/** The package version, read from the package.json beside src/ or dist/. */
-function packageVersion(): string {
-  const manifest: unknown = JSON.parse(
-    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-  )
-  const version =
-    typeof manifest === 'object' && manifest !== null && 'version' in manifest
-      ? manifest.version
-      : undefined
-  return typeof version === 'string' ? version : 'unknown'
-}
-
 function globalHelp(): string[] {
   const width = Math.max(...Object.keys(COMMANDS).map((name) => name.length))
   return [
@@ -341,7 +330,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     return EXIT.ok
   }
   if (first === '--version' || first === '-V') {
-    io.out(packageVersion())
+    io.out(packageInfo.version)
     return EXIT.ok
   }
   if (first === 'help') {

@@ -115,7 +115,7 @@ pnpm verify
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
   reports `ℹ tests 219` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
-  `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
+  `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.
 - **PASS:** `pnpm verify` exits 0 with the counts above.
 
