@@ -202,8 +202,12 @@ function readPointerText(path: string): string {
   const fd = openSync(path, 'r')
   let length = 0
   try {
-    for (let n = 1; n > 0 && length < buf.length; length += n) {
-      n = readSync(fd, buf, length, buf.length - length, length)
+    while (length < buf.length) {
+      const n = readSync(fd, buf, length, buf.length - length, length)
+      if (n === 0) {
+        break
+      }
+      length += n
     }
   } finally {
     closeSync(fd)
