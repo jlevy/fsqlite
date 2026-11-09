@@ -3,9 +3,9 @@ type: is
 id: is-01m6yzk1n2gkxw8f929sjdtd8y
 title: "PR #5 B3 (Medium): the DirectStore heartbeat test passes with the heartbeat removed"
 kind: task
-status: in_progress
+status: closed
 priority: 2
-version: 3
+version: 4
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,8 +14,12 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:29.185Z
-updated_at: 2026-11-09T01:59:32.852Z
+updated_at: 2026-11-09T02:06:34.798Z
 started_at: 2026-11-09T01:48:24.787Z
+closed_at: 2026-11-09T02:06:34.798Z
+close_reason: "Addressed in the reviewed 6d628b6 head. PRs #3 and #5 are merged into main at 40149ee. pnpm verify passed locally and all seven PR #5 checks passed."
+resolution: null
+duplicate_of: null
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820668230
 

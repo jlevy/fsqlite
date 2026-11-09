@@ -3,9 +3,9 @@ type: is
 id: is-01m6yzk12hxtqmpesqj6a5s8ss
 title: "PR #5 B1 (High): the O6 window's outcome is silent permanent loss that `validate()` reports as `sealed` and `repair()` completes; two spec statements about it are imprecise"
 kind: task
-status: in_progress
+status: closed
 priority: 1
-version: 3
+version: 4
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,8 +14,12 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:28.592Z
-updated_at: 2026-11-09T01:59:31.622Z
+updated_at: 2026-11-09T02:06:34.786Z
 started_at: 2026-11-09T01:48:24.774Z
+closed_at: 2026-11-09T02:06:34.786Z
+close_reason: "Addressed in the reviewed 6d628b6 head. PRs #3 and #5 are merged into main at 40149ee. pnpm verify passed locally and all seven PR #5 checks passed."
+resolution: null
+duplicate_of: null
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820668230
 

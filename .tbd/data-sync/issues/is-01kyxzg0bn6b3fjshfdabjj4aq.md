@@ -3,9 +3,9 @@ type: is
 id: is-01kyxzg0bn6b3fjshfdabjj4aq
 title: Heartbeat long publish-lock critical sections
 kind: task
-status: open
+status: closed
 priority: 2
-version: 6
+version: 7
 spec_path: docs/project/specs/future/plan-2026-07-31-fsqlite-post-alpha-roadmap.md
 labels:
   - post-alpha
@@ -13,7 +13,11 @@ labels:
 dependencies: []
 parent_id: is-01kyxmrxxwhdr0a5f90akc73a4
 created_at: 2026-08-01T06:17:00.532Z
-updated_at: 2026-11-08T22:23:27.829Z
+updated_at: 2026-11-09T02:06:35.127Z
+closed_at: 2026-11-09T02:06:35.127Z
+close_reason: "Implemented by the comprehensive update merged in PR #5 and verified with pnpm verify and GitHub CI."
+resolution: null
+duplicate_of: null
 ---
 DirectStore holds the publish lease across copy, callback, candidate checks, fsync, and publication; repair can scan multiple snapshots under the lease. The Node default stale window is 20 seconds. Fencing preserves safety if a long operation is stale-broken, but repeated work can livelock or time out. Design a safe heartbeat for synchronous critical sections or shorten them through an optimistic protocol, then add a controlled long-operation regression. Until then, deployments must set staleMs above their worst-case operation and keep timeoutMs > staleMs.
 

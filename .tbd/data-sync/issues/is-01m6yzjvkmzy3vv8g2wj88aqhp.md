@@ -3,9 +3,9 @@ type: is
 id: is-01m6yzjvkmzy3vv8g2wj88aqhp
 title: "PR #5 A8 (Low): the PR description disagrees with the code and runbook in two places"
 kind: task
-status: in_progress
+status: closed
 priority: 3
-version: 3
+version: 4
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,8 +14,12 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:22.995Z
-updated_at: 2026-11-09T01:59:35.372Z
+updated_at: 2026-11-09T02:06:34.755Z
 started_at: 2026-11-09T01:48:24.746Z
+closed_at: 2026-11-09T02:06:34.755Z
+close_reason: "Addressed in the reviewed 6d628b6 head. PRs #3 and #5 are merged into main at 40149ee. pnpm verify passed locally and all seven PR #5 checks passed."
+resolution: null
+duplicate_of: null
 ---
 Review A at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820620761
 

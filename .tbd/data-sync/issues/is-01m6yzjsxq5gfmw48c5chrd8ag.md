@@ -3,9 +3,9 @@ type: is
 id: is-01m6yzjsxq5gfmw48c5chrd8ag
 title: "PR #5 A2 (Medium): `LockOptions` is not validated, so `staleMs: 0` lets `repair()` break a live publisher's lock and delete its build"
 kind: task
-status: in_progress
+status: closed
 priority: 2
-version: 3
+version: 4
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,8 +14,12 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:21.270Z
-updated_at: 2026-11-09T01:59:32.014Z
+updated_at: 2026-11-09T02:06:34.725Z
 started_at: 2026-11-09T01:48:24.712Z
+closed_at: 2026-11-09T02:06:34.725Z
+close_reason: "Addressed in the reviewed 6d628b6 head. PRs #3 and #5 are merged into main at 40149ee. pnpm verify passed locally and all seven PR #5 checks passed."
+resolution: null
+duplicate_of: null
 ---
 Review A at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820620761
 
