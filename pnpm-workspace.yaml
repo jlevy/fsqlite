@@ -5,6 +5,8 @@ packages:
 # belongs here.
 engineStrict: true
 minimumReleaseAge: 20160
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
 blockExoticSubdeps: true
 # Reject a release whose provenance or trusted-publisher evidence is weaker than an
 # earlier release of the same package. See SUPPLY-CHAIN-SECURITY.md before adding an

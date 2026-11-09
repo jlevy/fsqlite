@@ -1,4 +1,4 @@
-// Rules for time-limited audit exceptions, kept free of I/O so that
+// Rules for the pnpm policy floor and exceptions, kept free of I/O so that
 // supply-chain-exceptions.test.mjs can cover each one with fixtures.
 // scripts/check-supply-chain.mjs applies them to the repository files.
 
@@ -9,6 +9,7 @@
 export const EXCEPTION_WINDOW_DAYS = 90
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const MIN_RELEASE_AGE_MINUTES = 14 * 24 * 60
 const ADVISORY_ID_SOURCE = 'GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}|CVE-[0-9]{4}-[0-9]{4,}'
 // Any GHSA or CVE ID in the text, in any case, not embedded in a longer token.
 const ADVISORY_ID = new RegExp(`(?<![0-9a-z])(?:${ADVISORY_ID_SOURCE})(?![0-9a-z])`, 'gi')
@@ -332,6 +333,70 @@ export const checkTrustPolicyExclusions = ({ workspaceText, policyText }) => {
 
 /** The command whose output crossCheckPnpmTrustPolicy reads. */
 export const PNPM_TRUST_POLICY_COMMAND = ['config', 'get', 'trustPolicyExclude', '--json']
+
+/** The command whose output crossCheckPnpmPolicyFloor reads. */
+export const PNPM_POLICY_FLOOR_COMMAND = ['config', 'list', '--json']
+
+/**
+ * Require the repo's dependency policy in pnpm's resolved configuration, including
+ * user or environment settings that could weaken the workspace configuration.
+ * @param {string} pnpmOutput
+ * @returns {string[]}
+ */
+export const crossCheckPnpmPolicyFloor = (pnpmOutput) => {
+  /** @type {Record<string, unknown>} */
+  let config
+  try {
+    config = JSON.parse(pnpmOutput)
+  } catch {
+    return ['Cannot parse `pnpm config list --json` output.']
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    return ['Expected `pnpm config list --json` to report a config object.']
+  }
+
+  const errors = []
+  const { minimumReleaseAge, minimumReleaseAgeExclude, allowBuilds } = config
+  if (!Number.isInteger(minimumReleaseAge) || Number(minimumReleaseAge) < MIN_RELEASE_AGE_MINUTES) {
+    errors.push(`pnpm minimumReleaseAge must be at least ${MIN_RELEASE_AGE_MINUTES} minutes.`)
+  }
+  if (
+    minimumReleaseAgeExclude !== undefined &&
+    (!Array.isArray(minimumReleaseAgeExclude) || minimumReleaseAgeExclude.length > 0)
+  ) {
+    errors.push('pnpm minimumReleaseAgeExclude must be empty or unset.')
+  }
+  for (const [key, expected] of Object.entries({
+    minimumReleaseAgeStrict: true,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    trustPolicy: 'no-downgrade',
+    engineStrict: true,
+    strictDepBuilds: true,
+    blockExoticSubdeps: true,
+  })) {
+    if (config[key] !== expected) {
+      errors.push(`pnpm ${key} must be ${JSON.stringify(expected)}.`)
+    }
+  }
+  if (
+    allowBuilds !== undefined &&
+    (allowBuilds === null ||
+      typeof allowBuilds !== 'object' ||
+      Array.isArray(allowBuilds) ||
+      Object.values(allowBuilds).some((allowed) => allowed !== false))
+  ) {
+    errors.push('pnpm allowBuilds must deny every listed dependency build.')
+  }
+  for (const key of ['trustLockfile', 'dangerouslyAllowAllBuilds']) {
+    if (config[key] !== undefined && config[key] !== false) {
+      errors.push(`pnpm ${key} must be disabled.`)
+    }
+  }
+  if (config.trustPolicyIgnoreAfter !== undefined) {
+    errors.push('pnpm trustPolicyIgnoreAfter must be unset.')
+  }
+  return errors
+}
 
 /**
  * Compares the exclusions pnpm applies, as printed by
