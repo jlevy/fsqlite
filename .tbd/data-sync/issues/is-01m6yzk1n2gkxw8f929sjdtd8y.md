@@ -1,0 +1,19 @@
+---
+type: is
+id: is-01m6yzk1n2gkxw8f929sjdtd8y
+title: "PR #5 B3 (Medium): the DirectStore heartbeat test passes with the heartbeat removed"
+kind: task
+status: open
+priority: 2
+version: 1
+labels:
+  - pr-5-review
+dependencies: []
+parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+created_at: 2026-11-09T01:43:29.185Z
+updated_at: 2026-11-09T01:43:29.185Z
+---
+Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
+
+`packages/fsqlite/test/direct.test.ts:352-390`; `packages/fsqlite/src/directStore.ts:152-154`, `:179`, `:183`.
+Reverting `if (!lease.heartbeat()) return abandon()` after the copy leaves all 18 tests in `direct.test.ts` green. The test ages the lock inside the callback and after the build fsync, but both observation points (`fsyncPath` of the `.direct-` file and `fsyncDir` of `snapshots/`) come after the fences at `:179`/`:183` and inside `linkBuild`, which refresh the lock anyway. The step boundary the heartbeat guards, copy → callback, is never observed, so the only renewal the PR added (C8) has no proof; the fences were already there.
