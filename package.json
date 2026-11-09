@@ -17,6 +17,7 @@
     "lint": "pnpm --filter fsqlite lint",
     "lint:check": "pnpm --filter fsqlite lint:check",
     "test": "pnpm --filter fsqlite test",
+    "check:docs": "pnpm --filter fsqlite check:docs",
     "test:golden": "pnpm --filter fsqlite test:golden",
     "test:project-hooks": "node scripts/check-project-hooks.mjs",
     "test:supply-chain": "node --test scripts/supply-chain-exceptions.test.mjs && node scripts/check-supply-chain.mjs",

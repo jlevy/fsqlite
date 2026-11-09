@@ -91,7 +91,7 @@ try {
       'installed package is missing dist/index.mjs',
     )
 
-    // Exercise the library entry through the package name to verify exports and types.
+    // Exercise the library entry through the package name to verify its runtime exports.
     const storeDir = join(proj, 'store')
     writeFileSync(
       join(proj, 'use-lib.mjs'),
@@ -122,6 +122,56 @@ try {
       ].join('\n'),
     )
     process.stdout.write(run('node', ['use-require.cjs'], { cwd: proj }))
+
+    // Type-check a TypeScript consumer against the published declarations, including the
+    // `./cli` subpath, with library checks on, using this checkout's compiler and Node types.
+    const tsc = join(pkgDir, 'node_modules', '.bin', 'tsc')
+    assert.ok(existsSync(tsc), 'the TypeScript compiler is missing: install dev dependencies')
+    writeFileSync(
+      join(proj, 'consumer.ts'),
+      [
+        "import { DirectStore, FsqliteError, SnapshotStore, inspectFilesystem } from 'fsqlite'",
+        "import type { FsqliteErrorCode, GcResult, ReadLease, StoreOptions } from 'fsqlite'",
+        "import { main } from 'fsqlite/cli'",
+        "const options: StoreOptions = { schema: '', conflictPolicy: { '*': 'lww' } }",
+        "const store = new SnapshotStore('store', options)",
+        "const txId: string | null = store.write('w', (db) => { db.prepare('SELECT 1').get() })",
+        'const gc: GcResult = store.gc({ retain: 1 })',
+        'const lease: ReadLease = store.readLease()',
+        'lease[Symbol.dispose]()',
+        "const code: number = main(['--help'], { out: () => undefined, err: () => undefined })",
+        'try {',
+        '  store.validate()',
+        '} catch (error) {',
+        '  if (error instanceof FsqliteError) {',
+        '    const category: FsqliteErrorCode = error.code',
+        '    console.log(category, error.retryable)',
+        '  }',
+        '}',
+        '// @ts-expect-error the store layout is not part of the published API',
+        'console.log(store.snapDir)',
+        "new DirectStore('direct', { schema: '' })",
+        'console.log(txId, gc, code, typeof inspectFilesystem)',
+      ].join('\n'),
+    )
+    writeFileSync(
+      join(proj, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'es2023',
+          module: 'nodenext',
+          moduleResolution: 'nodenext',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: false,
+          types: ['node'],
+          typeRoots: [join(pkgDir, 'node_modules', '@types')],
+        },
+        files: ['consumer.ts'],
+      }),
+    )
+    run(tsc, ['-p', proj], { cwd: proj })
+    console.log('  TypeScript consumer type-checks against the published declarations')
 
     // The `fsqlite/cli` export is importable: it runs no command and leaves the exit code.
     writeFileSync(

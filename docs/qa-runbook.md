@@ -17,7 +17,7 @@ The two correctness invariants that every check supports are:
 Run the whole automated gate with:
 
 ```bash
-pnpm test:all      # node:test, CLI goldens, build, and clean-room package smoke
+pnpm test:all      # doc checks, node:test, CLI goldens, build, and clean-room package smoke
 pnpm lint:check    # zero-warning eslint
 pnpm typecheck     # tsc --noEmit
 ```
@@ -63,6 +63,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `errors.test.ts` | `C6`, `C11` | The typed error model: each `FsqliteError` code and `retryable` flag raised through the public API, and machine-coded quarantine reasons |
 | `read-retry.test.ts` | `C4`, `C11` | A reader whose snapshot gc collects after the pointer read retries on the new head, within a bound, and a pointer to a missing snapshot stays corruption |
 | `cli.test.ts` | `C11` | The importable CLI runs nothing on import, returns exit codes, maps every state and error code to its exit code, and prints cause chains |
+| `examples.test.ts` | `C10`, `C11` | Both runnable examples complete and their own result checks pass |
 | `cli-bin.test.ts` | `C11` | The bin keeps the exit code when stdout or stderr closes early and hides only node:sqlite’s experimental notice |
 
 ### Multiprocess Worker Harness (`workers/`)
@@ -107,7 +108,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 205` / `# fail 0`; goldens `78 passed`; build
+- **Expect:** node:test reports `# tests 205` / `# fail 0`; goldens `78 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`;
   package smoke prints `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.

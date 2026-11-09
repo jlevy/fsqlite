@@ -144,7 +144,8 @@ function withoutTbdManagedBlocks(source) {
   return source.replace(/<!-- BEGIN TBD INTEGRATION\b[\s\S]*?<!-- END TBD INTEGRATION -->/gu, '')
 }
 
-function checkEditorialSafety() {
+/** Fail on an em or en dash or a missing doc footer in maintained prose. */
+export function checkEditorialSafety() {
   const proseFiles = filesBelow(repoDir, (path) => proseExtensions.has(extname(path)))
   for (const path of proseFiles) {
     const repoPath = relative(repoDir, path).split(sep).join('/')
@@ -167,15 +168,26 @@ function checkEditorialSafety() {
   }
 }
 
-/** @param {number} nodeTests */
+/** Fail on a machine-local path or a broken, escaping local link in any Markdown file. */
+export function checkMarkdownLinks() {
+  const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
+  for (const path of markdown) {
+    checkMarkdownSafety(path, readFileSync(path, 'utf8'))
+  }
+  return markdown.length
+}
+
+/**
+ * Fail when a documented `node:test` or CLI golden count differs from the suite's.
+ * @param {number} nodeTests
+ */
 export function checkDocClaims(nodeTests) {
-  checkEditorialSafety()
   const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
   const claimPatterns = [
     {
       label: 'node:test',
       expected: nodeTests,
-      patterns: [/(\d+)\s+`node:test`\s+cases/giu, /node:test reports `# pass (\d+)`/giu],
+      patterns: [/(\d+)\s+`node:test`\s+cases/giu, /node:test reports `# tests (\d+)`/giu],
     },
     {
       label: 'CLI golden',
@@ -187,7 +199,6 @@ export function checkDocClaims(nodeTests) {
   let checked = 0
   for (const path of markdown) {
     const source = readFileSync(path, 'utf8')
-    checkMarkdownSafety(path, source)
     for (const claim of claimPatterns) {
       for (const pattern of claim.patterns) {
         for (const match of source.matchAll(pattern)) {

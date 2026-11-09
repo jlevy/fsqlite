@@ -27,6 +27,7 @@ Common focused commands:
 ```bash
 pnpm test
 pnpm test:golden
+pnpm check:docs
 pnpm typecheck
 pnpm lint
 pnpm format
