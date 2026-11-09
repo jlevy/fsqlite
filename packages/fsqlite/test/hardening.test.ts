@@ -191,3 +191,34 @@ test('a quoted pointer prefix never splits a character and always says it is a p
     cleanup()
   }
 })
+
+test('a pointer is trimmed of ASCII whitespace only, and its quote shows the rest', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    for (const content of [' 0\n', '\t0\r\n', '\v0\f']) {
+      writeFileSync(store.currentPath, content)
+      assert.equal(store.currentVersion(), 0, `${JSON.stringify(content)} is a valid pointer (P1)`)
+    }
+    // A UTF-8 byte order mark and a no-break space are not ASCII whitespace. The quote is
+    // the untrimmed content, with characters a log would hide escaped.
+    const bom = String.fromCodePoint(0xfeff)
+    const nbsp = String.fromCodePoint(0xa0)
+    for (const [content, quoted] of [
+      [`${bom}0`, String.raw`"\ufeff0"`],
+      [`0${nbsp}`, String.raw`"0\u00a0"`],
+      [' x\n', String.raw`" x\n"`],
+    ] as const) {
+      writeFileSync(store.currentPath, content)
+      assert.throws(
+        () => store.currentVersion(),
+        (error: unknown) =>
+          error instanceof FsqliteError &&
+          error.code === 'corrupt' &&
+          error.message === `corrupt current pointer: ${quoted}`,
+        `${JSON.stringify(content)} is corrupt`,
+      )
+    }
+  } finally {
+    cleanup()
+  }
+})

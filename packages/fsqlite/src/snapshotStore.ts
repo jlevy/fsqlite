@@ -188,6 +188,24 @@ const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]
 const MAX_POINTER_BYTES = 64
 /** The most of a malformed pointer an error message quotes. */
 const POINTER_QUOTE_CHARS = 32
+/**
+ * A valid pointer (spec P1): decimal digits with optional ASCII whitespace around them.
+ * `trim()` would also strip Unicode spaces and a byte order mark.
+ */
+const POINTER_PATTERN = /^[ \t\n\v\f\r]*(\d+)[ \t\n\v\f\r]*$/
+/** Characters a log line would hide: controls, format characters such as a BOM, spaces. */
+const UNPRINTED = /[\p{Cc}\p{Cf}\p{Z}]/gu
+
+/** `JSON.stringify(text)`, also escaping every unprinted character but U+0020. */
+function escapeText(text: string): string {
+  return JSON.stringify(text).replace(UNPRINTED, (c) => {
+    const code = c.codePointAt(0) ?? 0
+    if (c === ' ') {
+      return c
+    }
+    return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, '0')}`
+  })
+}
 
 /**
  * Quote at most {@link POINTER_QUOTE_CHARS} characters (code points, so none is split) of
@@ -197,10 +215,10 @@ const POINTER_QUOTE_CHARS = 32
 function quotePointer(text: string, prefix = false): string {
   const chars = Array.from(text)
   if (!prefix && chars.length <= POINTER_QUOTE_CHARS) {
-    return JSON.stringify(text)
+    return escapeText(text)
   }
   const quoted = chars.slice(0, POINTER_QUOTE_CHARS)
-  return `${JSON.stringify(quoted.join(''))} (the first ${quoted.length} characters)`
+  return `${escapeText(quoted.join(''))} (the first ${quoted.length} characters)`
 }
 
 /** Read at most {@link MAX_POINTER_BYTES} of `current`; a longer file is corruption. */
@@ -866,10 +884,11 @@ export class SnapshotStore {
    */
   currentVersion(): number {
     readStoreMarker(this.dir)
-    const raw = readPointerText(this.currentPath).trim()
-    const version = /^\d+$/.test(raw) ? Number(raw) : Number.NaN
+    const text = readPointerText(this.currentPath)
+    const digits = POINTER_PATTERN.exec(text)?.[1]
+    const version = digits === undefined ? Number.NaN : Number(digits)
     if (!Number.isSafeInteger(version)) {
-      throw new FsqliteError('corrupt', `corrupt current pointer: ${quotePointer(raw)}`)
+      throw new FsqliteError('corrupt', `corrupt current pointer: ${quotePointer(text)}`)
     }
     return version
   }
