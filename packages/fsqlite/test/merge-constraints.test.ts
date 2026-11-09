@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { SnapshotStore } from '../src/index.ts'
+import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { ACTIONS, applyWithPolicy, normalize } from '../src/conflictPolicy.ts'
 import type { ConflictPolicyInput, NormalizedPolicy } from '../src/index.ts'
 import * as driver from '../src/driver.ts'
@@ -137,6 +137,38 @@ test('reconcile quarantines the envelope that would introduce a dangling foreign
       readFileSync(join(store.txQuarantine, `${offendingTx}.txn`, 'QUARANTINE'), 'utf8'),
       /FOREIGN_KEY|foreign_key_check/,
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('foreign keys close at each envelope, even when a later envelope in the batch would cure it', () => {
+  // A check once per batch would apply B here: C's later parent row repairs the dangling
+  // reference B leaves at its own boundary. Per-envelope closure (spec F3) quarantines B,
+  // so the outcome does not depend on which envelopes one reconcile happens to batch.
+  const { dir, cleanup } = tmpStore()
+  const options = {
+    schema: FOREIGN_KEY_SCHEMA,
+    schemaVersion: 1,
+    conflictPolicy: { parent: 'lww', child: 'lww', '*': 'strict' } as const,
+  }
+  const store = new SnapshotStore(dir, options).init()
+  try {
+    store.write('seed', (db) => db.prepare('INSERT INTO parent VALUES (?)').run('p'))
+    store.reconcile()
+    const b = store.write('B', (db) => db.prepare('INSERT INTO child VALUES (?,?)').run('c', 'p'))
+    // A serialized writer deletes p and publishes without folding the pending tail.
+    new DirectStore(dir, { schema: options.schema, schemaVersion: 1 }).write((db) => {
+      db.prepare('DELETE FROM parent WHERE id = ?').run('p')
+    })
+    store.write('C', (db) => db.prepare('INSERT INTO parent VALUES (?)').run('p'))
+
+    const result = store.reconcile()
+
+    assert.deepEqual([result.applied, result.quarantined], [1, 1])
+    assert.deepEqual(rowsOf(store, 'parent'), [{ id: 'p' }])
+    assert.deepEqual(rowsOf(store, 'child'), [], "B's dangling child never landed")
+    assert.ok(existsSync(join(store.txQuarantine, `${b}.txn`, 'QUARANTINE')))
   } finally {
     cleanup()
   }
