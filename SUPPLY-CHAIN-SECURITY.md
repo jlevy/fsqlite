@@ -64,7 +64,9 @@ with a message, when pnpm is not installed).
 pnpm reports the IDs it acts on under `audit.ignore` whichever key set them, so IDs left
 under the deprecated `auditConfig.ignoreGhsas` still count; when both keys are set, pnpm
 uses only `audit.ignore`, and the gate fails on the IDs it drops.
-The gate also fails when an `audit` or `auditConfig` section is present but names no ID.
+The gate also fails when an audit ignore list (`audit.ignore`, or the deprecated
+`ignoreGhsas` or `ignoreCves`) is present but names no ID; an `audit` section that only
+sets `level` names no advisory and passes.
 Each ID needs exactly one record under a “Time-Limited” heading in this document, with a
 single review date that is a real calendar date, not in the past, and no more than 90
 days ahead.
@@ -92,6 +94,10 @@ line, and remove it then.
 The review-date rules of `scripts/check-supply-chain.mjs` cover only advisories ignored
 for `pnpm audit`, not this exclusion; the frozen install in CI re-verifies the lockfile
 against the trust policy on every change.
+The gate does require every `trustPolicyExclude` entry, at its exact version, to be
+named under a heading that says “Trust-Policy Exclusion” in this document, and it fails
+unless those entries are exactly the ones `pnpm config get trustPolicyExclude --json`
+reports.
 
 ## Held Upgrades
 

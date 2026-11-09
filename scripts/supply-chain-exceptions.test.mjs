@@ -3,8 +3,11 @@ import { describe, test } from 'node:test'
 import {
   EXCEPTION_WINDOW_DAYS,
   checkAuditExceptions,
+  checkTrustPolicyExclusions,
   crossCheckPnpmAudit,
+  crossCheckPnpmTrustPolicy,
   findAdvisoryIds,
+  findTrustPolicyExcludes,
 } from './supply-chain-exceptions.mjs'
 
 const TODAY = '2026-11-08'
@@ -151,6 +154,20 @@ describe('checkAuditExceptions', () => {
         /configures audit .* no GHSA-.* ID was found/,
       )
     }
+  })
+
+  test('accepts an audit section that sets only the level, with no ignore list', () => {
+    for (const auditSettings of [
+      'audit:\n  level: high\n',
+      'audit: { level: moderate }\n',
+      '# audit level only\naudit:\n  level: high\n',
+    ]) {
+      assert.deepEqual(check({ workspaceText: workspace(auditSettings) }), { ids: [], errors: [] })
+    }
+    assertOneError(
+      check({ workspaceText: workspace('audit:\n  level: high\n  ignore: []\n') }),
+      /configures audit .* no GHSA-.* ID was found/,
+    )
   })
 
   test('does not read a trust-policy exclusion record as an audit exception', () => {
@@ -310,6 +327,86 @@ describe('crossCheckPnpmAudit', () => {
     assert.match(
       crossCheckPnpmAudit({ ids: [], pnpmOutput: '[]' })[0],
       /pnpm reports audit settings that are not an object/,
+    )
+  })
+})
+
+describe('checkTrustPolicyExclusions', () => {
+  const TRUST_POLICY_TEXT = policy(`${record('2026-12-08')}\n\n${TRUST_POLICY_RECORD}`)
+
+  test('finds the entries of a block or flow list, ignoring quotes and comments', () => {
+    assert.deepEqual(findTrustPolicyExcludes(CURRENT_WORKSPACE), ['undici-types@6.21.0'])
+    assert.deepEqual(
+      findTrustPolicyExcludes(
+        'trustPolicyExclude:\n  # why\n  - "a@1.0.0" # first\n\n  - \'b@2.0.0\'\nnext: 1\n',
+      ),
+      ['a@1.0.0', 'b@2.0.0'],
+    )
+    assert.deepEqual(findTrustPolicyExcludes('trustPolicyExclude: [a@1.0.0, "b@2.0.0"]\n'), [
+      'a@1.0.0',
+      'b@2.0.0',
+    ])
+    assert.deepEqual(findTrustPolicyExcludes('trustPolicy: no-downgrade\n'), [])
+  })
+
+  test('accepts an exclusion with a record under a Trust-Policy Exclusion heading', () => {
+    assert.deepEqual(
+      checkTrustPolicyExclusions({
+        workspaceText: CURRENT_WORKSPACE,
+        policyText: TRUST_POLICY_TEXT,
+      }),
+      { entries: ['undici-types@6.21.0'], errors: [] },
+    )
+  })
+
+  test('fails for an exclusion with no record, or a record elsewhere', () => {
+    const workspaceText = CURRENT_WORKSPACE.replace(
+      '  - undici-types@6.21.0\n',
+      '  - undici-types@6.21.0\n  - left-pad@1.3.0\n',
+    )
+    const { errors } = checkTrustPolicyExclusions({ workspaceText, policyText: TRUST_POLICY_TEXT })
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^left-pad@1\.3\.0 is excluded from trustPolicy .* no record under/)
+    const elsewhere = policy(`${record('2026-12-08')}\n\nWe also trust left-pad@1.3.0.`)
+    assert.equal(
+      checkTrustPolicyExclusions({ workspaceText, policyText: elsewhere }).errors.length,
+      2,
+      'a mention outside a Trust-Policy Exclusion section is not a record',
+    )
+    assert.equal(
+      checkTrustPolicyExclusions({
+        workspaceText: CURRENT_WORKSPACE.replace('undici-types@6.21.0', 'undici-types@6.21.01'),
+        policyText: TRUST_POLICY_TEXT,
+      }).errors.length,
+      1,
+      'a record names the exact version',
+    )
+  })
+})
+
+describe('crossCheckPnpmTrustPolicy', () => {
+  test('accepts the entries the scan found, and an unset list', () => {
+    assert.deepEqual(
+      crossCheckPnpmTrustPolicy({
+        entries: ['undici-types@6.21.0'],
+        pnpmOutput: JSON.stringify(['undici-types@6.21.0']),
+      }),
+      [],
+    )
+    assert.deepEqual(crossCheckPnpmTrustPolicy({ entries: [], pnpmOutput: 'undefined\n' }), [])
+  })
+
+  test('fails when pnpm and the scan disagree, or pnpm prints something else', () => {
+    const errors = crossCheckPnpmTrustPolicy({
+      entries: ['a@1.0.0'],
+      pnpmOutput: JSON.stringify(['b@2.0.0']),
+    })
+    assert.equal(errors.length, 2)
+    assert.match(errors[0], /pnpm excludes b@2\.0\.0 from trustPolicy, but the scan of/)
+    assert.match(errors[1], /names a@1\.0\.0, but pnpm does not exclude it/)
+    assert.match(
+      crossCheckPnpmTrustPolicy({ entries: [], pnpmOutput: '{}' })[0] ?? '',
+      /not a list/,
     )
   })
 })
