@@ -135,6 +135,7 @@ export interface InspectVerdict {
   warnings: string[]
 }
 
+/** What `inspectFilesystem` found at `dir`: its filesystem, every probe, and the verdict. */
 export interface InspectReport {
   dir: string
   fs: FsType
@@ -492,7 +493,7 @@ export function inspectVerdict(fs: FsType, probes: InspectProbes): InspectVerdic
  * structured report. The probes run in a private scratch subdirectory that is removed
  * afterward; existing contents are never touched.
  */
-export function inspect(dir: string): InspectReport {
+export function inspectFilesystem(dir: string): InspectReport {
   let isDirectory = false
   try {
     isDirectory = statSync(dir).isDirectory()
@@ -527,7 +528,7 @@ export function inspect(dir: string): InspectReport {
 }
 
 /** Render a report as a compact human-readable string, with plain Unicode marks. */
-export function formatReport(report: InspectReport): string {
+export function formatInspectReport(report: InspectReport): string {
   const mark = (b: boolean): string => (b ? '✓' : '✗')
   const lines: string[] = []
   lines.push(`fsinspect: ${report.dir}`)

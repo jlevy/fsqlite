@@ -19,6 +19,9 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "erasableSyntaxOnly": true,
+    // The published declarations omit members marked @internal, such as the store layout
+    // paths, which tests and the CLI use but callers should not depend on.
+    "stripInternal": true,
     "types": ["node"]
   },
   "include": ["src", "test", "workers", "examples", "benchmarks", "scripts", "tsdown.config.ts"]

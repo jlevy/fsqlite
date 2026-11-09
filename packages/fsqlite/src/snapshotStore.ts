@@ -71,7 +71,10 @@ import type {
   WorkFn,
   ReadFn,
   ValidateResult,
+  ReadLeaseOptions,
+  ReconcileOptions,
   ReconcileResult,
+  WriteWithRetryOptions,
   WriteWithRetryResult,
   GcOptions,
   GcResult,
@@ -511,17 +514,28 @@ export function verifySnapshotForPublish(
  * on the publish lock being perfect.
  */
 export class SnapshotStore {
+  /** The store root this handle was opened on. */
   readonly dir: string
+  /** @internal Store layout paths (spec section 2); not part of the public API. */
   readonly snapDir: string
+  /** @internal */
   readonly txPending: string
+  /** @internal */
   readonly txApplied: string
+  /** @internal */
   readonly txQuarantine: string
+  /** @internal */
   readonly leaseDir: string
+  /** @internal */
   readonly currentPath: string
+  /** @internal */
   readonly publishLock: string
+  /** The caller DDL; see {@link StoreOptions.schema}. */
   readonly schema: string
   readonly schemaVersion: number
+  /** The first 16 hex digits of SHA-256 over `schema`, stamped into every snapshot. */
   readonly schemaHash: string
+  /** The frozen, normalized merge policy this handle reconciles with. */
   readonly conflictPolicy: NormalizedPolicy
   readonly toolVersion: string
   readonly maxEnvelopeBytes: number
@@ -696,6 +710,7 @@ export class SnapshotStore {
    * misspelled key would otherwise fall back to the `'*'` action silently. DirectStore,
    * which applies no changesets, overrides this.
    */
+  /** @internal */
   protected assertPolicyTables(db: driver.DB): void {
     const callerTables = new Set(
       (
@@ -731,6 +746,7 @@ export class SnapshotStore {
    * clause, so a SnapshotStore schema may declare neither; DirectStore, which runs its
    * callback on the build directly, overrides this.
    */
+  /** @internal */
   protected assertStrategySchema(db: driver.DB): void {
     rejectCallerTriggers(db)
     rejectKeyConflictResolution(db)
@@ -747,6 +763,7 @@ export class SnapshotStore {
     }
   }
 
+  /** The path of snapshot `v`, whether or not it exists. */
   snapshotPath(v: number): string {
     return join(this.snapDir, `${pad(v)}.fsqlite.sqlite`)
   }
@@ -827,7 +844,7 @@ export class SnapshotStore {
    * Pin the current version so reconcile's GC will not delete it while a
    * packager/uploader reads it. Returns { version, heartbeat, release }.
    */
-  readLease({ maxRetries = DEFAULT_READ_LEASE_RETRIES }: { maxRetries?: number } = {}): ReadLease {
+  readLease({ maxRetries = DEFAULT_READ_LEASE_RETRIES }: ReadLeaseOptions = {}): ReadLease {
     requireSafeInteger('maxRetries', maxRetries, 0)
     this.assertStoreIdentity()
     // Optimistic claim, then verify: publish the lease *before* committing to read the
@@ -965,7 +982,7 @@ export class SnapshotStore {
   writeWithRetry(
     writerId: string,
     fn: WorkFn,
-    { maxRetries = DEFAULT_WRITE_RETRIES }: { maxRetries?: number } = {},
+    { maxRetries = DEFAULT_WRITE_RETRIES }: WriteWithRetryOptions = {},
   ): WriteWithRetryResult {
     requireSafeInteger('maxRetries', maxRetries, 1)
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -1082,7 +1099,7 @@ export class SnapshotStore {
   reconcile({
     maxRetries = DEFAULT_RECONCILE_RETRIES,
     lockOpts = {},
-  }: { maxRetries?: number; lockOpts?: LockOptions } = {}): ReconcileResult {
+  }: ReconcileOptions = {}): ReconcileResult {
     requireSafeInteger('maxRetries', maxRetries, 1)
     const marker = readStoreMarker(this.dir)
     const crashAt = reconcileCrashAtForTest

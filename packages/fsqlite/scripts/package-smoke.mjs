@@ -96,14 +96,14 @@ try {
     writeFileSync(
       join(proj, 'use-lib.mjs'),
       [
-        "import { SnapshotStore, DirectStore, inspect } from 'fsqlite'",
+        "import { SnapshotStore, DirectStore, inspectFilesystem } from 'fsqlite'",
         "import assert from 'node:assert/strict'",
         `const s = new SnapshotStore(${JSON.stringify(storeDir)}, { schema: 'CREATE TABLE kv(k TEXT PRIMARY KEY NOT NULL, v TEXT)', conflictPolicy: { '*': 'lww' } }).init()`,
         "s.write('w1', (db) => db.prepare('INSERT INTO kv VALUES (?,?)').run('a', '1'))",
         's.reconcile()',
         "assert.equal(s.read((db) => db.prepare('SELECT v FROM kv WHERE k=?').get('a')).v, '1')",
         "assert.equal(typeof DirectStore, 'function')",
-        "assert.equal(typeof inspect, 'function')",
+        "assert.equal(typeof inspectFilesystem, 'function')",
         "console.log('  library import and write/reconcile/read OK')",
       ].join('\n'),
     )
@@ -114,10 +114,10 @@ try {
       join(proj, 'use-require.cjs'),
       [
         "const assert = require('node:assert/strict')",
-        "const { SnapshotStore, DirectStore, inspect } = require('fsqlite')",
+        "const { SnapshotStore, DirectStore, inspectFilesystem } = require('fsqlite')",
         "assert.equal(typeof SnapshotStore, 'function')",
         "assert.equal(typeof DirectStore, 'function')",
-        "assert.equal(typeof inspect, 'function')",
+        "assert.equal(typeof inspectFilesystem, 'function')",
         "console.log('  library require OK')",
       ].join('\n'),
     )

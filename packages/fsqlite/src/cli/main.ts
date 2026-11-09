@@ -13,7 +13,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import type { ParseArgsOptionsConfig } from 'node:util'
 import { DEFAULT_RETAINED_SNAPSHOTS, SnapshotStore } from '../snapshotStore.ts'
-import { inspect, formatReport } from '../fsinspect.ts'
+import { inspectFilesystem, formatInspectReport } from '../fsinspect.ts'
 import { capabilities } from '../driver.ts'
 import { errorMessage, FsqliteError } from '../errors.ts'
 import type { FsqliteErrorCode } from '../errors.ts'
@@ -686,11 +686,11 @@ function runFsinspect(inv: Invocation): number {
   if (!isDirectory) {
     throw new UsageError(`'${path}' is not an existing directory`, 'fsinspect')
   }
-  const report = inspect(path)
+  const report = inspectFilesystem(path)
   if (inv.json) {
     inv.io.out(JSON.stringify(report, null, 2))
   } else {
-    inv.io.out(formatReport(report))
+    inv.io.out(formatInspectReport(report))
   }
   return report.verdict.fsqliteSafe ? EXIT.ok : EXIT.unsafeFilesystem
 }

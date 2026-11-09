@@ -22,13 +22,25 @@ import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
 import { LockTimeoutError } from './errors.ts'
 
+/**
+ * Publish-lock timing, in milliseconds. `timeoutMs` must exceed `staleMs`: a waiter must
+ * be able to outwait the stale window, or it would break a lock it could have waited for.
+ */
 export interface LockOptions {
+  /** How long to wait for the lock before throwing `LockTimeoutError`; default 30 s. */
   timeoutMs?: number
+  /** Delay between acquisition attempts; default 25 ms. */
   pollMs?: number
+  /**
+   * Age after which an unrefreshed lock counts as abandoned and may be broken; default
+   * 20 s. Choose it longer than the longest single step a holder takes between renewals.
+   */
   staleMs?: number
+  /** Diagnostic callback run after this caller breaks a stale lock. */
   onStaleBreak?: ((meta: OwnerMeta | null) => void) | null
 }
 
+/** The owner record (`owner.json`) a lock holder writes inside the lock directory. */
 export interface OwnerMeta {
   token: string
   pid: number
@@ -282,12 +294,6 @@ function removeLockIf(
     rmSync(grave, { recursive: true, force: true })
   }
   return null
-}
-
-/** Touch the lock dir mtime so a slow-but-alive holder is not considered stale. */
-export function heartbeat(lockPath: string): void {
-  const now = new Date()
-  utimesSync(lockPath, now, now)
 }
 
 function readOwner(lockPath: string): OwnerMeta | null {

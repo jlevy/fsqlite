@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
+import type { StoreOptions } from '../src/types.ts'
 import { runAsync } from './spawn.ts'
 import { setOwnerWriterForTest } from '../src/lock.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
@@ -193,13 +194,10 @@ test('init rejects a conflict policy that names a table the schema does not decl
           error.message.includes('not a caller table'),
       )
     }
-    // DirectStore applies no changesets, so it never consults a policy.
-    assert.doesNotThrow(() =>
-      new DirectStore(join(dir, 'direct'), {
-        ...STORE_OPTS,
-        conflictPolicy: { urll_index: 'lww' },
-      }).init(),
-    )
+    // DirectStore applies no changesets, so it never consults a policy, even one a
+    // JavaScript caller passes despite DirectStoreOptions.
+    const untyped: StoreOptions = { ...STORE_OPTS, conflictPolicy: { urll_index: 'lww' } }
+    assert.doesNotThrow(() => new DirectStore(join(dir, 'direct'), untyped).init())
   } finally {
     cleanup()
   }

@@ -17,6 +17,7 @@ function isArrayOfNonEmptyStrings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0)
 }
 
+/** The contents of `fsqlite.json`, the store's immutable identity (spec section 2). */
 export interface StoreMarker {
   format: typeof STORE_FORMAT_NAME
   format_version: typeof STORE_FORMAT_VERSION
@@ -24,12 +25,17 @@ export interface StoreMarker {
   store_id: string
 }
 
+/**
+ * What `recognizeStore` found: a supported store's marker, or why the path is not a store
+ * this implementation may read or change (spec section 11).
+ */
 export type StoreRecognition =
   | { state: 'not-a-store'; issue: string }
   | { state: 'invalid'; issue: string }
   | { state: 'unsupported'; issue: string }
   | { state: 'supported'; marker: StoreMarker }
 
+/** The recognition states other than `supported`. */
 export type StoreRecognitionFailure = Exclude<StoreRecognition['state'], 'supported'>
 
 export function storeMarkerPath(storeDir: string): string {

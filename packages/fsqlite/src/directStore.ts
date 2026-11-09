@@ -30,9 +30,24 @@ import type {
   GcOptions,
   GcResult,
   ReadLease,
+  ReadLeaseOptions,
   RepairOptions,
   RepairResult,
 } from './types.ts'
+
+/**
+ * DirectStore's configuration: the schema and its identity. It applies no changesets, so
+ * it takes no merge policy and no envelope-size cap.
+ */
+export type DirectStoreOptions = Omit<StoreOptions, 'conflictPolicy' | 'maxEnvelopeBytes'>
+
+/** Options for `DirectStore.write()`. Invalid values throw a `TypeError`. */
+export interface DirectWriteOptions {
+  /** Publish-lock options; `staleMs` must exceed the longest single step of a write. */
+  lockOpts?: LockOptions
+  /** Attempts after a lost publication race; an integer of at least 1, default 8. */
+  maxRetries?: number
+}
 
 const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
@@ -57,38 +72,48 @@ class DirectStrategyStore extends SnapshotStore {
 export class DirectStore {
   private base: SnapshotStore
 
-  constructor(dir: string, opts: StoreOptions = {}) {
+  constructor(dir: string, opts: DirectStoreOptions = {}) {
     this.base = new DirectStrategyStore(dir, opts)
   }
 
+  /** Create the store if absent, otherwise verify it is schema-compatible; see `SnapshotStore#init`. */
   init(): this {
     this.base.init()
     return this
   }
+  /** Read the published head; see `SnapshotStore#read`. */
   read<T>(fn: ReadFn<T>): T {
     return this.base.read(fn)
   }
+  /** The version `current` names; see `SnapshotStore#currentVersion`. */
   currentVersion(): number {
     return this.base.currentVersion()
   }
+  /** Classify the store's health; see `SnapshotStore#validate`. */
   validate(): ValidateResult {
     return this.base.validate()
   }
+  /** Export the head as a standalone SQLite file; see `SnapshotStore#seal`. */
   seal(dest: string): string {
     return this.base.seal(dest)
   }
+  /** Delete superseded snapshots; see `SnapshotStore#gc`. */
   gc(opts?: GcOptions): GcResult {
     return this.base.gc(opts)
   }
+  /** Restore the last consistent point; see `SnapshotStore#repair`. */
   repair(opts?: RepairOptions): RepairResult {
     return this.base.repair(opts)
   }
+  /** The steps `repair` would take, without taking them; see `SnapshotStore#planRepair`. */
   planRepair(opts?: RepairOptions): RepairResult {
     return this.base.planRepair(opts)
   }
-  readLease(): ReadLease {
-    return this.base.readLease()
+  /** Pin the head against gc; see `SnapshotStore#readLease`. */
+  readLease(opts?: ReadLeaseOptions): ReadLease {
+    return this.base.readLease(opts)
   }
+  /** The path of snapshot `v`, whether or not it exists. */
   snapshotPath(v: number): string {
     return this.base.snapshotPath(v)
   }
@@ -105,10 +130,7 @@ export class DirectStore {
    */
   write(
     fn: WorkFn,
-    {
-      lockOpts = {},
-      maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
-    }: { lockOpts?: LockOptions; maxRetries?: number } = {},
+    { lockOpts = {}, maxRetries = DEFAULT_DIRECT_WRITE_RETRIES }: DirectWriteOptions = {},
   ): number {
     requireSafeInteger('maxRetries', maxRetries, 1)
     const marker = readStoreMarker(this.base.dir)

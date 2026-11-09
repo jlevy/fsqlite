@@ -3,11 +3,12 @@
 // idempotent ledger. DirectStore provides a serialized-writer strategy over the same
 // format.
 //
-// See README.md for the rationale and the correctness model.
+// This module is the package's public API. Merge-policy, lock, and mount-detection
+// helpers are implementation details and are not exported. See README.md for the
+// rationale, the correctness model, and the error contract.
 
-export { SnapshotStore } from './snapshotStore.ts'
+export { SnapshotStore, DEFAULT_RETAINED_SNAPSHOTS } from './snapshotStore.ts'
 export { DirectStore } from './directStore.ts'
-export { ACTIONS, normalize, actionFor, applyWithPolicy, conflictName } from './conflictPolicy.ts'
 export {
   FsqliteError,
   StoreFormatError,
@@ -19,9 +20,8 @@ export {
   TransactionError,
 } from './errors.ts'
 export type { FsqliteErrorCode, StoreFormatErrorState } from './errors.ts'
-export { withLock, ownerOf, heartbeat } from './lock.ts'
 export { capabilities, backupDatabase } from './driver.ts'
-export { inspect, formatReport, detectFsType } from './fsinspect.ts'
+export { inspectFilesystem, formatInspectReport } from './fsinspect.ts'
 export { isSqliteFile, sqliteFacts, integrityReport } from './sqliteFacts.ts'
 export {
   FSQLITE_APPLICATION_ID,
@@ -33,8 +33,19 @@ export {
 } from './storeFormat.ts'
 
 export type * from './types.ts'
-export type { LockLease, LockOptions, OwnerMeta } from './lock.ts'
-export type { InspectReport, ProbeResult, FsType } from './fsinspect.ts'
-export type { SqliteFacts } from './sqliteFacts.ts'
+export type { DirectStoreOptions, DirectWriteOptions } from './directStore.ts'
+export type { LockOptions, OwnerMeta } from './lock.ts'
+export type {
+  FsType,
+  InspectProbes,
+  InspectReport,
+  InspectVerdict,
+  MkdirProbeResult,
+  MtimeProbeResult,
+  ProbeResult,
+  RequiredProbe,
+  WalProbeResult,
+} from './fsinspect.ts'
+export type { SqliteFacts, SqliteTableFacts } from './sqliteFacts.ts'
 export type { BackupDatabaseOptions } from './driver.ts'
 export type { StoreMarker, StoreRecognition, StoreRecognitionFailure } from './storeFormat.ts'

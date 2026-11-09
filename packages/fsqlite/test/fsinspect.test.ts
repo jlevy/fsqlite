@@ -10,8 +10,8 @@ import { join } from 'node:path'
 import { FsqliteError } from '../src/index.ts'
 import {
   detectFsType,
-  formatReport,
-  inspect,
+  formatInspectReport,
+  inspectFilesystem,
   inspectVerdict,
   parseMountinfo,
 } from '../src/fsinspect.ts'
@@ -33,9 +33,9 @@ const PROBES = [
 // One probe run serves every structural assertion: each run spins and fsyncs. The first
 // test checks that it left nothing behind, then removes the directory.
 const scratch = mkdtempSync(join(tmpdir(), 'fsinspect-test-'))
-const report: InspectReport = inspect(scratch)
+const report: InspectReport = inspectFilesystem(scratch)
 
-test('inspect returns a structured report with every probe and leaves no scratch behind', () => {
+test('inspectFilesystem returns a structured report with every probe and leaves no scratch behind', () => {
   try {
     assert.equal(report.dir, scratch)
     assert.deepEqual(Object.keys(report.probes).sort(), [...PROBES].sort())
@@ -68,20 +68,20 @@ test('local temp disk passes every required coordination probe', () => {
   }
 })
 
-test('formatReport renders the dir, probes, and verdict with plain Unicode marks', () => {
-  const out = formatReport(report)
+test('formatInspectReport renders the dir, probes, and verdict with plain Unicode marks', () => {
+  const out = formatInspectReport(report)
   assert.match(out, /^fsinspect: /)
   assert.match(out, /[✓✗] mkdirAtomic/u)
   assert.match(out, /verdict: fsqlite-safe=[✓✗] wal-safe=[✓✗]/u)
   assert.doesNotMatch(out, /\p{Extended_Pictographic}/u)
 })
 
-test('inspect refuses a path that is not an existing directory and creates nothing', () => {
+test('inspectFilesystem refuses a path that is not an existing directory and creates nothing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fsinspect-missing-'))
   try {
     const missing = join(dir, 'no', 'such', 'typo')
     assert.throws(
-      () => inspect(missing),
+      () => inspectFilesystem(missing),
       (error: unknown) =>
         error instanceof FsqliteError &&
         error.code === 'refused' &&

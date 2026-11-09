@@ -18,9 +18,9 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { SnapshotStore, withLock, ownerOf, heartbeat, LockTimeoutError } from '../src/index.ts'
+import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
-import { setOwnerWriterForTest, setStaleLockMoverForTest } from '../src/lock.ts'
+import { ownerOf, setOwnerWriterForTest, setStaleLockMoverForTest, withLock } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
@@ -146,17 +146,6 @@ test('a stale-lock break never deletes a successor that re-acquired the lock fir
     )
   } finally {
     setStaleLockMoverForTest(null)
-    cleanup()
-  }
-})
-
-test('lock heartbeat reports loss instead of silently succeeding', () => {
-  const { dir, cleanup } = tmpStore()
-  try {
-    assert.throws(() => {
-      heartbeat(join(dir, 'missing.lock'))
-    }, /ENOENT/)
-  } finally {
     cleanup()
   }
 })

@@ -64,7 +64,9 @@ export type StoreValidationState = StoreState | StoreRecognitionState
 /** Recognition plus health classification and any human-readable issues. */
 export interface ValidateResult {
   state: StoreValidationState
+  /** The version `current` names; absent when recognition fails or the pointer is unusable. */
   current?: number
+  /** Committed pending envelopes; present whenever `current` is. */
   pending?: number
   issues: string[]
 }
@@ -75,6 +77,7 @@ export interface ValidateResult {
  * the publish took.
  */
 export interface ReconcileResult {
+  /** The version `current` names after this call (unchanged when nothing was published). */
   published: number
   applied: number
   quarantined: number
@@ -89,6 +92,26 @@ export interface WriteWithRetryResult {
   txId: string | null
   attempts: number
   conflicted: boolean
+}
+
+/** Options for `reconcile()`. Invalid values throw a `TypeError`. */
+export interface ReconcileOptions {
+  /** Publication attempts under contention; an integer of at least 1, default 8. */
+  maxRetries?: number
+  /** Publish-lock options. */
+  lockOpts?: LockOptions
+}
+
+/** Options for `writeWithRetry()`. Invalid values throw a `TypeError`. */
+export interface WriteWithRetryOptions {
+  /** Write attempts after strict conflicts; an integer of at least 1, default 5. */
+  maxRetries?: number
+}
+
+/** Options for `readLease()`. Invalid values throw a `TypeError`. */
+export interface ReadLeaseOptions {
+  /** Re-reads of `current` after gc collects the version first read; at least 0, default 8. */
+  maxRetries?: number
 }
 
 /** Options for `gc()`. Invalid values throw a `TypeError` before anything is deleted. */
@@ -131,8 +154,11 @@ export interface RepairResult {
  * past `leaseStaleMs` self-clears so a dead packager cannot wedge `gc`.
  */
 export interface ReadLease {
+  /** The pinned version. */
   version: number
+  /** Refresh the pin's liveness. */
   heartbeat: () => void
+  /** Drop the pin. */
   release: () => void
 }
 
@@ -142,8 +168,18 @@ export interface ReadLease {
  * so neither fsqlite nor a callback can load one, whatever the binding supports.
  */
 export interface Capabilities {
+  /** The session extension records changesets; SnapshotStore writers require it. */
   session: boolean
+  /**
+   * The binding exposes changeset apply. Informational: every supported Node release
+   * does, and fsqlite cannot load without it.
+   */
   applyChangeset: boolean
+  /**
+   * The binding exposes the online backup API. Informational: fsqlite imports it
+   * statically, so a binding without it cannot load the package.
+   */
   backup: boolean
+  /** The binding exposes SQLite's changeset rebaser; node:sqlite does not. */
   rebaser: boolean
 }
