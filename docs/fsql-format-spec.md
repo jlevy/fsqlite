@@ -35,7 +35,7 @@ Everything in this format serves two correctness invariants:
 
 - **R1 (bounded loss).** A crash, stale-lock overlap, torn capture, or interrupted
   protocol operation loses at most the *unpublished tail* and never a previously
-  published snapshot. The **commit point of the store is snapshot publication** (§6); see
+  published snapshot, except in the late-pointer window that L5 describes. The **commit point of the store is snapshot publication** (§6); see
   §10 for what is durable before that point.
   Safe backup means copying a pinned immutable snapshot or using a conforming
   backup/seal operation.
@@ -573,16 +573,28 @@ duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
 
   Overlap can still waste work: a fenced-out attempt rebuilds, and a DirectStore attempt
   reruns its callback.
-  One window remains in `f1.0`. The pointer swap is a blind `rename()`, so a holder that
-  stalls longer than the stale window after its final pre-swap checks but before its
-  pointer rename, while at least two later versions are published, can on resuming
-  rename its older version over `current`. `current` then still names a complete,
-  integrity-gated snapshot, and envelopes not yet settled stay pending (F6), but
-  envelopes the newer versions’ publishers already archived, and DirectStore writes they
-  already returned, are absent from the restored lineage, and a later publisher reclaims
-  the newer snapshot as a stale orphan.
-  Step-boundary heartbeats (L2) mean such a stall needs a frozen process, not a slow
-  step. Open issue O6 tracks the structural fix.
+  One window remains in `f1.0`. The pointer swap is a blind `rename()`. F5c writes and
+  fsyncs the pointer temp before its final checks, so the window is that rename alone:
+  a holder that stalls inside it for longer than the stale window (a frozen process, or
+  a rename that blocks that long, for example against a hung NFS server) while at least
+  two later versions are published can, on resuming, rename its older version over
+  `current`. `current` then still names a complete, integrity-gated snapshot, and
+  envelopes not yet settled stay pending (F6). Envelopes that the newer versions’
+  publishers already archived, and DirectStore writes they already returned, are absent
+  from the restored lineage.
+  Without the recovery below, the loss becomes permanent once a later publisher reclaims
+  the newer snapshot as a stale orphan (F5c).
+  A GC deleting the version the late rename restores can also leave `current` naming a
+  missing snapshot.
+  Validation and repair bound the damage for SnapshotStore envelopes (§11): `validate`
+  reports a store whose `tx/applied/` holds an envelope the head’s ledger lacks as
+  `corrupt`, never as healthy, so GC refuses it; GC re-reads `current` before each unlink
+  (G2); and repair re-points `current` to the newest clean snapshot that holds those
+  envelopes, or, once that snapshot is gone, returns them to `tx/pending/` for the next
+  reconcile to fold again.
+  A returned DirectStore write leaves no envelope, so its loss in this window cannot be
+  detected.
+  Open issue O6 tracks the structural fix.
   Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
   and OCC, not staleness precision, carry correctness.
   (See Open issue O3.)
@@ -624,6 +636,9 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   snapshot name (without replacing) and keep it; otherwise it unlinks the tombstone.
   If the second scan fails (for example on an unreadable fresh lease), GC MUST restore
   the snapshot before failing.
+  Before the unlink, GC MUST also re-read `current`: under the lock only an overlapping
+  holder (L5) can change it, and its late pointer rename may name the tombstoned
+  version, so on any change GC MUST restore the tombstone and refuse.
   A single re-scan followed by an unlink does not close the race: a reader can publish
   its lease and pass its existence check between them.
   With the tombstone, every interleaving is safe: a reader whose existence check runs
@@ -778,7 +793,7 @@ layout, trusting no single file:
 | `sealed` | Pointer valid, head passes `integrity_check` and `foreign_key_check`, no committed pending envelopes, no in-flight tells |
 | `live` | As `sealed`, but committed pending envelopes await reconcile |
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
-| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity or required reserved schema/metadata mismatches the marker and format, or the head fails `integrity_check` or `foreign_key_check` |
+| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity or required reserved schema/metadata mismatches the marker and format, the head fails `integrity_check` or `foreign_key_check`, or `tx/applied/` holds an envelope the head’s `applied_tx` ledger lacks (`current` moved back behind a version that published it, L5) |
 
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
 `invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
@@ -792,6 +807,13 @@ published snapshot was integrity-gated at publish and never modified (S6):
    `foreign_key_check`, keep it.
    Otherwise identify the **newest integrity-clean snapshot**. If none exists, fail
    without deleting or rewriting anything so forensic recovery remains possible.
+   Then, if `tx/applied/` holds envelopes that the chosen snapshot’s ledger lacks, and a
+   newer integrity-clean snapshot holds every envelope of the chosen snapshot’s ledger
+   and at least one of those archived envelopes, that newer snapshot was published once
+   and lost `current` to a late pointer rename (L5): choose the newest such snapshot
+   instead. The orphan of a torn publish also extends the head’s ledger, but its
+   envelopes are still pending (F6 never ran), so no archived envelope distinguishes it
+   and it is rolled back as before.
    Only after finding a clean destination may repair re-point and delete corrupt
    snapshots.
 2. Acquire `publish.lock` through L1-L5 and revalidate its owner token immediately
@@ -802,6 +824,10 @@ published snapshot was integrity-gated at publish and never modified (S6):
    valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
+   Move every archived envelope that the restored head’s ledger lacks back to
+   `tx/pending/`, so the next reconcile folds it onto the restored head: these envelopes
+   were published in a lineage that is gone, either a newer head a late pointer rename
+   stranded and a publisher then reclaimed, or a corrupt head step 1 fell back past.
 4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
    transient stale window (G3), preserving evidence with a `QUARANTINE` reason file.
    A younger one may be a live capture and MUST be left in place.
@@ -954,6 +980,9 @@ The same artifacts test every implementation.
   identifies the exact build.
   Closing the late-pointer window additionally needs a pointer protocol that cannot move
   `current` backward, such as a no-replace commit of a per-version pointer record.
+  Until then, `f1.0` narrows the window to the pointer rename itself and detects and
+  repairs its SnapshotStore consequences (L5, §11); the roadmap item “Publish builds
+  under unique snapshot filenames (`f1.1`)” tracks the structural fix.
 
 - **O7: Envelope moves on overlayfs.** F6 and repair move envelope *directories* with
   `rename()`. overlayfs fails that with `EXDEV` for a directory in a lower layer unless

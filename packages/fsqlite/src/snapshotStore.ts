@@ -421,6 +421,36 @@ const EXPECTED_OWNED_TABLES: Record<string, TableColumn[]> = {
   ],
 }
 
+/** The tx ids a snapshot's `applied_tx` ledger holds. */
+function ledgerIds(db: driver.DB): Set<string> {
+  return new Set(
+    (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
+      String(r.tx_id),
+    ),
+  )
+}
+
+/** Archived envelopes listed by name in a validate issue before the rest are counted. */
+const STRANDED_ENVELOPES_SHOWN = 3
+
+/**
+ * The validate issue for archived envelopes the head's ledger lacks. F6 archives an
+ * envelope only once the head `current` names holds it, and a lineage's ledger only
+ * grows, so this state means `current` moved back behind a version that published them.
+ */
+function strandedEnvelopesIssue(txns: string[]): string {
+  const shown = txns.slice(0, STRANDED_ENVELOPES_SHOWN).join(', ')
+  const more =
+    txns.length > STRANDED_ENVELOPES_SHOWN
+      ? ` and ${txns.length - STRANDED_ENVELOPES_SHOWN} more`
+      : ''
+  return (
+    `tx/applied holds ${txns.length} envelope(s) the head's ledger lacks (${shown}${more}): ` +
+    'current moved back behind a version that published them (spec O6), or repair fell ' +
+    'back past them; run repair, which restores that version or returns them to tx/pending'
+  )
+}
+
 function metaValue(db: driver.DB, key: string): string | undefined {
   const hasMeta = db
     .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fsqlite_meta'")
@@ -1203,11 +1233,7 @@ export class SnapshotStore {
     const quarantined: [string, string][] = []
     const db = driver.openBuild(tmp)
     try {
-      const seen = new Set(
-        (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
-          String(r.tx_id),
-        ),
-      )
+      const seen = ledgerIds(db)
       const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
       for (const txn of pending) {
         const txId = txIdOf(txn)
@@ -1416,7 +1442,7 @@ export class SnapshotStore {
         continue
       }
       fence()
-      if (this.collectSnapshot(v, leaseStaleMs)) {
+      if (this.collectSnapshot(v, cur, leaseStaleMs)) {
         removed++
       } else {
         leased.add(v)
@@ -1457,13 +1483,33 @@ export class SnapshotStore {
    * lease and pass its existence check between the two. After the rename the reader's check
    * fails and it retries; a lease published before the rename is visible to the re-scan.
    * Returns true if the snapshot was deleted, false if a lease kept it.
+   *
+   * Before the unlink, gc also re-reads `current`, which it read as `cur` under the lock.
+   * Only a holder overlapping gc's lock (spec L5) can move it; its late pointer rename may
+   * name `v`, so gc keeps `v` and refuses.
    */
-  private collectSnapshot(v: number, leaseStaleMs: number): boolean {
+  private collectSnapshot(v: number, cur: number, leaseStaleMs: number): boolean {
     const path = this.snapshotPath(v)
     const tombstone = join(this.snapDir, `.gc-${pad(v)}-${rand()}.tmp`)
     const restore = (): void => {
       linkSync(tombstone, path) // never replace a snapshot name
       unlinkSync(tombstone)
+    }
+    // Restore the tombstone and return the error to throw: `failure`, or, when the restore
+    // fails too, an io error naming both.
+    const restoreAfter = (failure: unknown, why: string): unknown => {
+      try {
+        restore()
+      } catch (restoreError) {
+        return new FsqliteError(
+          'io',
+          `gc could not restore snapshot ${v} from its tombstone ${tombstone} after ${why} ` +
+            `(${errorMessage(failure)}); rename the tombstone back to ${path} ` +
+            'before running gc again',
+          { cause: new AggregateError([failure, restoreError]) },
+        )
+      }
+      return failure
     }
     try {
       renameSync(path, tombstone)
@@ -1477,22 +1523,27 @@ export class SnapshotStore {
       leasedNow = this.activeLeasedVersions(leaseStaleMs).has(v)
     } catch (error) {
       // Fail closed: an unreadable lease must not cost the snapshot it may pin.
-      try {
-        restore()
-      } catch (restoreError) {
-        throw new FsqliteError(
-          'io',
-          `gc could not restore snapshot ${v} from its tombstone ${tombstone} after a lease ` +
-            `re-scan failed (${errorMessage(error)}); rename the tombstone back to ${path} ` +
-            'before running gc again',
-          { cause: new AggregateError([error, restoreError]) },
-        )
-      }
-      throw error
+      throw restoreAfter(error, 'a lease re-scan failed')
     }
     if (leasedNow) {
       restore()
       return false
+    }
+    let now: number
+    try {
+      now = this.currentVersion()
+    } catch (error) {
+      throw restoreAfter(error, 'current became unreadable')
+    }
+    if (now !== cur) {
+      throw restoreAfter(
+        new FsqliteError(
+          'retryable',
+          `gc refused: current moved from ${cur} to ${now} while gc held the publish lock, ` +
+            'so an overlapping publisher renamed it (spec L5); run validate, then gc again',
+        ),
+        'current moved',
+      )
     }
     try {
       unlinkSync(tombstone)
@@ -1545,7 +1596,8 @@ export class SnapshotStore {
   /**
    * Classify store health from on-disk layout without trusting any single file: detects a
    * missing/torn pointer, an orphan snapshot ahead of `current`, transient build files, a held
-   * lock, and live `-wal`/`-shm` side files. Surfaces every inconsistency (R2) as a
+   * lock, live `-wal`/`-shm` side files, and archived envelopes the head's ledger lacks (a
+   * pointer that moved backward, spec O6). Surfaces every inconsistency (R2) as a
    * {@link StoreState} plus issues, rather than silently accepting it.
    */
   validate(): ValidateResult {
@@ -1604,6 +1656,7 @@ export class SnapshotStore {
     // Integrity of the current head.
     const db = driver.openReadonly(this.snapshotPath(cur))
     let problems: string[]
+    let ledger = new Set<string>()
     try {
       try {
         verifySnapshotIdentity(db, marker)
@@ -1614,6 +1667,9 @@ export class SnapshotStore {
         }
       }
       problems = driver.integrityProblems(db)
+      if (problems.length === 0) {
+        ledger = ledgerIds(db)
+      }
     } finally {
       db.close()
     }
@@ -1622,6 +1678,11 @@ export class SnapshotStore {
         state: 'corrupt',
         issues: [...issues, `snapshot ${cur} failed integrity validation: ${problems.join('; ')}`],
       }
+    }
+    // The head lineage must hold every archived envelope (spec O6).
+    const stranded = this.archivedOutside(ledger)
+    if (stranded.length) {
+      return { state: 'corrupt', issues: [...issues, strandedEnvelopesIssue(stranded)] }
     }
 
     const pendingCommitted = this.pendingTxns().length
@@ -1725,8 +1786,10 @@ export class SnapshotStore {
 
   /**
    * doctor/repair: restore the last consistent point. Principled because every published
-   * snapshot is immutable and was quick_check-validated at publish (R1). Use
-   * {@link planRepair} to see the steps without taking them.
+   * snapshot is immutable and was quick_check-validated at publish (R1). A newer clean
+   * snapshot that a late pointer rename stranded is restored rather than deleted, and
+   * archived envelopes the restored head lacks return to the pending tail (spec section
+   * 11). Use {@link planRepair} to see the steps without taking them.
    */
   repair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
     const lock = resolveLockOptions(lockOpts)
@@ -1817,20 +1880,29 @@ export class SnapshotStore {
         `repair: no snapshot matches the store identity in ${STORE_MARKER_FILENAME}`,
       )
     }
+    // A full check reads the whole snapshot, so each version is checked at most once.
+    const checked = new Map<number, boolean>()
     const integrityOk = (v: number): boolean => {
+      const known = checked.get(v)
+      if (known !== undefined) {
+        return known
+      }
+      let ok: boolean
       try {
         const db = driver.openReadonly(this.snapshotPath(v))
         try {
           verifySnapshotIdentity(db, marker)
-          return driver.integrityCheck(db)
+          ok = driver.integrityCheck(db)
         } finally {
           db.close()
         }
       } catch {
-        return false // a file that won't even open as SQLite is corrupt
+        ok = false // a file that won't even open as SQLite is corrupt
       } finally {
         renew()
       }
+      checked.set(v, ok)
+      return ok
     }
 
     // Determine the restored head, preferring the current pointer if its snapshot is valid.
@@ -1856,7 +1928,11 @@ export class SnapshotStore {
           'repair: no integrity-clean snapshot exists; every snapshot was left in place',
         )
       }
-      const head = good
+    }
+    const archived = this.archivedOutside(new Set())
+    const goodLedger = this.snapshotLedger(good)
+    const head = this.regressedHead(good, goodLedger, versions, archived, integrityOk) ?? good
+    if (head !== cur) {
       steps.push({
         planned: `re-publish current -> ${head}`,
         apply: (assertOwnership) => {
@@ -1869,7 +1945,7 @@ export class SnapshotStore {
 
     // Delete snapshots ahead of the restored pointer (rolled-back orphans) and transients.
     for (const v of versions) {
-      if (v > good) {
+      if (v > head) {
         const kind = integrityOk(v) ? 'orphan' : 'corrupt'
         steps.push({
           planned: `remove ${kind} snapshot ${v}`,
@@ -1880,6 +1956,20 @@ export class SnapshotStore {
           },
         })
       }
+    }
+
+    // Archived envelopes the restored head's ledger lacks were published in a lineage that
+    // is gone (a reclaimed or corrupt newer head). Return them to tx/pending/, so the next
+    // reconcile folds them onto the restored head instead of leaving them lost.
+    const headLedger = head === good ? goodLedger : this.snapshotLedger(head)
+    for (const txn of archived.filter((t) => !headLedger.has(txIdOf(t)))) {
+      steps.push({
+        planned: `return archived ${txn} to tx/pending (the restored head's ledger lacks it)`,
+        apply: (assertOwnership) => {
+          assertOwnership()
+          return this.returnArchived(txn)
+        },
+      })
     }
     for (const dir of this.transientDirs()) {
       if (!existsSync(dir)) {
@@ -1921,6 +2011,76 @@ export class SnapshotStore {
       }
     }
     return steps
+  }
+
+  /** The tx ids in snapshot `v`'s ledger. */
+  private snapshotLedger(v: number): Set<string> {
+    const db = driver.openReadonly(this.snapshotPath(v))
+    try {
+      return ledgerIds(db)
+    } finally {
+      db.close()
+    }
+  }
+
+  /** Archived envelope directories (`tx/applied/*.txn`) whose tx id `ledger` lacks, sorted. */
+  private archivedOutside(ledger: ReadonlySet<string>): string[] {
+    if (!existsSync(this.txApplied)) {
+      return []
+    }
+    return readdirSync(this.txApplied)
+      .filter((d) => d.endsWith('.txn') && !ledger.has(txIdOf(d)))
+      .sort()
+  }
+
+  /**
+   * The newest integrity-clean snapshot ahead of `good` that a late pointer rename stranded
+   * (spec O6), or null. A torn publish also leaves a clean orphan whose ledger extends
+   * `good`'s, so the ledger alone cannot tell them apart. What does is an archived envelope
+   * that `good` lacks and the orphan holds: F6 archives only what the head `current` named
+   * held, so that orphan's lineage was published once.
+   */
+  private regressedHead(
+    good: number,
+    goodLedger: ReadonlySet<string>,
+    versions: number[],
+    archived: string[],
+    integrityOk: (v: number) => boolean,
+  ): number | null {
+    const lacking = archived.map(txIdOf).filter((id) => !goodLedger.has(id))
+    if (lacking.length === 0) {
+      return null
+    }
+    for (const v of [...versions].reverse()) {
+      if (v <= good) {
+        break
+      }
+      if (!integrityOk(v)) {
+        continue
+      }
+      const ledger = this.snapshotLedger(v)
+      if ([...goodLedger].every((id) => ledger.has(id)) && lacking.some((id) => ledger.has(id))) {
+        return v
+      }
+    }
+    return null
+  }
+
+  /** Move archived envelope `txn` back to tx/pending/; returns the action taken. */
+  private returnArchived(txn: string): string {
+    try {
+      renameSync(join(this.txApplied, txn), join(this.txPending, txn))
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        return `left ${txn}, which is no longer archived`
+      }
+      if (code === 'EEXIST' || code === 'ENOTEMPTY') {
+        return `left archived ${txn}, because tx/pending already holds an envelope of that name`
+      }
+      throw error
+    }
+    return `returned archived ${txn} to tx/pending`
   }
 
   /** Move abandoned uncommitted envelope `d` to quarantine; returns the action taken. */

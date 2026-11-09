@@ -19,9 +19,10 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { DirectStore, SnapshotStore } from '../src/index.ts'
+import { DirectStore, FsqliteError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { setBeforeSnapshotLinkForTest } from '../src/publication.ts'
+import { setReconcileCrashForTest } from '../src/snapshotStore.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const insert = (id: string) => (db: DatabaseSync) => {
@@ -366,6 +367,139 @@ test('a DirectStore barrier failure after the pointer rename reports the publish
     assert.equal(store.currentVersion(), 1, 'the version is visible, so the caller must not rerun')
   } finally {
     setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})
+
+// The O6 window (spec L5): a holder stalled past the stale window inside its pointer rename
+// resumes and renames an older version over `current` after newer versions published.
+// These tests model the late rename directly, since the fence now precedes everything else.
+
+/** Rename a pointer naming `version` over `current`, as a resumed late holder does. */
+function lateRename(store: SnapshotStore, version: number): void {
+  writeFileSync(`${store.currentPath}.late.tmp`, String(version))
+  renameSync(`${store.currentPath}.late.tmp`, store.currentPath)
+}
+
+const ageEntry = (path: string): void => {
+  const past = new Date(Date.now() - 120_000)
+  utimesSync(path, past, past)
+}
+
+/** Version 1 holds X and version 2 holds X and Z, both archived; then current regresses to 1. */
+function regressedStore(dir: string): { store: SnapshotStore; z: string } {
+  const store = new SnapshotStore(dir, STORE_OPTS).init()
+  store.write('wx', insert('x'))
+  assert.equal(store.reconcile().published, 1)
+  const z = store.write('wz', insert('z')) ?? ''
+  assert.equal(store.reconcile().published, 2)
+  lateRename(store, 1)
+  return { store, z }
+}
+
+test('validate never reports a store healthy while an archived envelope is outside the head lineage', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const { store, z } = regressedStore(dir)
+    const stranded = (issues: string[]): boolean =>
+      issues.some((issue) => issue.includes(`${z}.txn`) && issue.includes('spec O6'))
+
+    const regressed = store.validate()
+    assert.equal(regressed.state, 'corrupt')
+    assert.ok(stranded(regressed.issues), regressed.issues.join('; '))
+
+    // A later publisher reclaims the stranded snapshot 2 as a stale orphan.
+    ageEntry(store.snapshotPath(2))
+    new SnapshotStore(dir, STORE_OPTS).write('wq', insert('q'))
+    assert.equal(new SnapshotStore(dir, STORE_OPTS).reconcile().published, 2)
+    assert.deepEqual(rowsOf(store.snapshotPath(2)), ['q', 'x'], 'Z is in no published snapshot')
+    const reclaimed = store.validate()
+    assert.equal(reclaimed.state, 'corrupt', 'never sealed while Z is stranded')
+    assert.ok(stranded(reclaimed.issues), reclaimed.issues.join('; '))
+    assert.throws(() => store.gc({ retain: 0 }), /gc refused: store is corrupt/)
+    assert.deepEqual(store.snapshotVersions(), [0, 1, 2], 'gc deleted nothing')
+
+    // Repair returns Z to the pending tail, and the next reconcile folds it again.
+    const repaired = store.repair()
+    assert.ok(repaired.actions.includes(`returned archived ${z}.txn to tx/pending`))
+    assert.equal(repaired.state, 'live')
+    assert.equal(store.reconcile().applied, 1)
+    assert.deepEqual(rowsOf(store.snapshotPath(store.currentVersion())), ['q', 'x', 'z'])
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair restores a snapshot a late pointer rename stranded, but still removes a torn publish', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const { store, z } = regressedStore(dir)
+
+    const repaired = store.repair()
+
+    assert.ok(repaired.actions.includes('re-published current -> 2'), repaired.actions.join('; '))
+    assert.ok(!repaired.actions.some((action) => action.startsWith('removed')))
+    assert.equal(store.currentVersion(), 2)
+    assert.ok(ledgerOf(store.snapshotPath(2)).includes(z))
+    assert.equal(store.validate().state, 'sealed')
+
+    // A torn publish also leaves a clean orphan whose ledger extends the head's, but no
+    // archived envelope proves it was ever published, so repair still rolls it back.
+    store.write('wt', insert('t'))
+    try {
+      setReconcileCrashForTest('after-snapshot')
+      assert.throws(() => store.reconcile(), /CRASH after-snapshot/)
+    } finally {
+      setReconcileCrashForTest(null)
+    }
+    assert.ok(ledgerOf(store.snapshotPath(3)).length > ledgerOf(store.snapshotPath(2)).length)
+    const torn = store.repair()
+    assert.ok(torn.actions.includes('removed orphan snapshot 3'), torn.actions.join('; '))
+    assert.equal(store.currentVersion(), 2)
+    assert.equal(store.pendingTxns().length, 1, 'the torn publish left its envelope pending')
+  } finally {
+    setReconcileCrashForTest(null)
+    cleanup()
+  }
+})
+
+test('gc keeps a snapshot that a late pointer rename names while gc holds the lock', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    for (const id of ['a', 'b']) {
+      store.write('w', insert(id))
+      store.reconcile()
+    }
+    const scanLeases = (
+      store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
+    ).activeLeasedVersions.bind(store)
+    Object.assign(store, {
+      activeLeasedVersions: (ms: number): Set<number> => {
+        // gc read current = 2 under the lock and tombstoned 1; the late rename lands now.
+        if (readdirSync(store.snapDir).some((f) => f.startsWith('.gc-000000000001-'))) {
+          lateRename(store, 1)
+        }
+        return scanLeases(ms)
+      },
+    })
+
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message.includes('current moved from 2 to 1'),
+    )
+
+    assert.ok(existsSync(store.snapshotPath(1)), 'the snapshot current now names is restored')
+    assert.equal(readdirSync(store.snapDir).filter((f) => f.startsWith('.gc-')).length, 0)
+    assert.equal(store.validate().state, 'corrupt', "b's envelope is outside the head lineage")
+    store.repair()
+    assert.equal(store.currentVersion(), 2)
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
     cleanup()
   }
 })

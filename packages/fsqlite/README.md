@@ -331,7 +331,7 @@ the store root `dir` without touching the filesystem.
 | `validate()` | `ValidateResult` | Classifies the store as `sealed`, `live`, `in-flight-capture`, `corrupt`, or a recognition failure, with issues |
 | `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses an unhealthy store |
 | `planRepair({ lockOpts })` | `RepairResult` | Lists the steps `repair()` would take without changing anything |
-| `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while a live publisher holds the lock |
+| `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first, and returns archived envelopes the restored head lacks to the pending tail; refuses while a live publisher holds the lock |
 | `seal(destPath)` | `destPath` | Writes an integrity-checked standalone copy of the head; refuses while envelopes are pending |
 
 `lockOpts` is a `LockOptions` with `timeoutMs` (default 30 s), `pollMs` (25 ms),
@@ -450,7 +450,7 @@ Argument mistakes throw `TypeError`.
 | `not-a-store` | The path has no `fsqlite.json` | Check the path |
 | `invalid` | `fsqlite.json` is malformed | Inspect the marker; nothing may mutate the store |
 | `unsupported` | A newer format version or required feature | Use a newer fsqlite |
-| `corrupt` | Torn or dangling pointer, identity mismatch, or a head that fails integrity checks | Run `repair` |
+| `corrupt` | Torn or dangling pointer, identity mismatch, a head that fails integrity checks, or archived envelopes the head’s ledger lacks | Run `repair` |
 | `in-flight` | A live publisher holds the lock, or a captured write is still pending | Wait, then retry (see `TransactionError`) |
 | `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
 | `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |

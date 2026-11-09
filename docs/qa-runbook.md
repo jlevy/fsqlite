@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **208 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **211 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -50,7 +50,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
 | `fencing.test.ts` | `C3`, `C5` | Lease acquisition, stale break, token fencing, heartbeat loss, owner-write cleanup, and lock-option validation at every entry point before a live lock or build is touched |
-| `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, a pointer-temp fsync that stalls past the stale window caught by the final fence, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
+| `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, a pointer-temp fsync that stalls past the stale window caught by the final fence, waiting on a fresh entry, no orphan after a DirectStore retry, archiving only what the published ledger holds, and the late-pointer window: validate reports stranded archived envelopes, repair restores the stranded head or refolds them, and gc keeps the version a late rename names |
 | `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, refuses store-owned destinations, and reports a corrupt head as corrupt |
 | `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
 | `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup (including init journals and lease temps), never quarantining a live or just-committed envelope, lock loss at acquisition, and a `planRepair()` dry run that changes nothing |
@@ -113,7 +113,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 208` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 211` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

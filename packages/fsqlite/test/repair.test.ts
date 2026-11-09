@@ -137,9 +137,15 @@ test('repair removes a corrupt head snapshot and falls back to the prior good on
     writeFileSync(store.snapshotPath(2), 'totally-not-sqlite'.repeat(100))
     const res = store.repair()
     assert.equal(store.currentVersion(), 1, 'fell back to the prior integrity-clean snapshot')
-    assert.equal(store.validate().state, 'sealed')
     assert.ok(res.actions.some((a) => a.includes('removed corrupt snapshot 2')))
-    assert.equal(count(store), 1, 'v1 (the last clean head) intact; v2 delta is the bounded loss')
+    assert.equal(count(store), 1, 'v1 (the last clean head) is intact')
+    // The envelope v2 published is archived but absent from v1's ledger, so repair returns
+    // it to the pending tail instead of losing it with the corrupt head.
+    assert.ok(res.actions.some((a) => a.startsWith('returned archived ')))
+    assert.equal(res.state, 'live')
+    assert.equal(store.reconcile().applied, 1)
+    assert.equal(count(store), 2, 'the next reconcile refolds the v2 delta')
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }
