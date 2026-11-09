@@ -168,7 +168,11 @@ test('foreign keys close at each envelope, even when a later envelope in the bat
     assert.deepEqual([result.applied, result.quarantined], [1, 1])
     assert.deepEqual(rowsOf(store, 'parent'), [{ id: 'p' }])
     assert.deepEqual(rowsOf(store, 'child'), [], "B's dangling child never landed")
-    assert.ok(existsSync(join(store.txQuarantine, `${b}.txn`, 'QUARANTINE')))
+    assert.match(
+      readFileSync(join(store.txQuarantine, `${b}.txn`, 'QUARANTINE'), 'utf8'),
+      /FOREIGN_KEY|foreign_key_check/,
+      'B was quarantined for its dangling reference, not for another reason',
+    )
   } finally {
     cleanup()
   }
