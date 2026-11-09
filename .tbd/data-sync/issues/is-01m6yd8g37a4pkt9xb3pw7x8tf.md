@@ -5,7 +5,7 @@ title: "[epic] 2026-11 comprehensive technical review and refresh"
 kind: epic
 status: open
 priority: 1
-version: 19
+version: 20
 labels: []
 dependencies: []
 child_order_hints:
@@ -27,7 +27,8 @@ child_order_hints:
   - is-01m6ydrb1q2ca19r1se9zgfa4n
   - is-01m6yvqx40ct1san22756vkhhf
   - is-01m6yvqxcgmxkk2pg86dysxzfy
+  - is-01m6yzjs2jwh0a84r8t5txe16x
 created_at: 2026-11-08T20:23:09.158Z
-updated_at: 2026-11-09T00:36:14.352Z
+updated_at: 2026-11-09T01:43:20.401Z
 ---
 Full review of fsqlite (core correctness, API/CLI/tests, dependencies/CI, research currency, docs/specs) on 2026-11-08, delivered as one follow-up PR after the tbd 0.10.0 upgrade (PR #4). Integrates open PR #3 (docs: clarify SQLite locking and engine reuse) per the maintainer. Review reports: fable-core (C1-C22), opus-ts (T1-T28), opus-deps (D1-D19), fable-research (R1-R40), opus-docs (Dn1-Dn26).

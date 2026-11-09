@@ -1,0 +1,56 @@
+---
+type: is
+id: is-01m6yzjs2jwh0a84r8t5txe16x
+title: "Complete review and stabilization for fsqlite PRs #3 and #5"
+kind: task
+status: in_progress
+priority: 1
+version: 38
+delegate: codex@spud10
+labels: []
+dependencies: []
+parent_id: is-01m6yd8g37a4pkt9xb3pw7x8tf
+child_order_hints:
+  - is-01m6yzjsmjpb4er7pke4j43vbr
+  - is-01m6yzjsxq5gfmw48c5chrd8ag
+  - is-01m6yzjt6nb6afm6zqq85a74yj
+  - is-01m6yzjtffxp3n0x7nb9etvrwe
+  - is-01m6yzjtrfwqrd07q2drzd0ssn
+  - is-01m6yzjv1gh5vy0rbh0z1bgw8w
+  - is-01m6yzjvacp2qdahc9ym6vhh43
+  - is-01m6yzjvkmzy3vv8g2wj88aqhp
+  - is-01m6yzjvwd5pvvscrsjnar74ev
+  - is-01m6yzjw5z38hf28a5bgxn95ey
+  - is-01m6yzjwjp7asdk030nf2ygdnd
+  - is-01m6yzjww5hv85ksgvaczkmt2a
+  - is-01m6yzjx5sdmgkwz7435bj97dv
+  - is-01m6yzjxf9bxnybgd0aew5sd9t
+  - is-01m6yzjxrtjq7wk14jpgttvewe
+  - is-01m6yzjy2f4yz7c25tdpg8gkar
+  - is-01m6yzjyp2zhtvmx4p7smn84nz
+  - is-01m6yzjz0fedkgfxesv0xrag80
+  - is-01m6yzjz9p90xab7c1bh7jhcp4
+  - is-01m6yzjzjxp3y1d2r880jdj95e
+  - is-01m6yzjzw5vbeyjv3tzpdspk53
+  - is-01m6yzk05g4vgewv02g3qzgk2h
+  - is-01m6yzk0f6hyxy4fcrtnxvg0xw
+  - is-01m6yzk0sjfm017ew5xapqedtw
+  - is-01m6yzk12hxtqmpesqj6a5s8ss
+  - is-01m6yzk1bv2dnv1r4c2j3fff20
+  - is-01m6yzk1n2gkxw8f929sjdtd8y
+  - is-01m6yzk1z3sqs18h4qkr9yg02e
+  - is-01m6yzk28668n853npbnxf4whh
+  - is-01m6yzk2hj73aj9fepwqv6yf4t
+  - is-01m6yzk2twg6x5tnmr50vy2qy2
+  - is-01m6yzk3409bza6r50zj38cbdf
+  - is-01m6yzk3dh1gzbytxyp1h5c1pj
+  - is-01m6yzk3ppynjk8ct3wj3xq3sb
+  - is-01m6yzk3zx81hev09mm5rrhgp4
+  - is-01m6yzk4910x12jvye926371sv
+hold: null
+hold_until: null
+created_at: 2026-11-09T01:43:20.401Z
+updated_at: 2026-11-09T01:43:31.872Z
+started_at: 2026-11-09T01:43:20.822Z
+---
+Review both pinned PRs, address merge blockers, track lower-priority findings, validate the merged result, and prepare focused follow-up PRs.
