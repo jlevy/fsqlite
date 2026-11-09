@@ -1497,7 +1497,8 @@ export class SnapshotStore {
   /**
    * `validated` is the head gc checked. `collect` is whether that check was the full one,
    * run because some snapshot was old enough to delete; without it gc deletes no snapshot
-   * and sweeps no tombstone, only the other stale transients.
+   * and sweeps no tombstone, only the other stale transients. The result reports it as
+   * `integrityChecked`.
    */
   private gcLocked(
     lease: LockLease,
@@ -1566,7 +1567,12 @@ export class SnapshotStore {
     for (const dir of this.transientDirs()) {
       sweepStaleTransients(dir)
     }
-    return { removed, kept: versions.length - removed, leased: [...leased] }
+    return {
+      removed,
+      kept: versions.length - removed,
+      leased: [...leased],
+      integrityChecked: collect,
+    }
   }
 
   /**

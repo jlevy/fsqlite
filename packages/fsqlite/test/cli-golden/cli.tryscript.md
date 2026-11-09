@@ -505,7 +505,7 @@ $ ls store/snapshots
 
 ```console
 $ fsqlite gc store --retain 1
-removed 0 snapshot(s); kept 2; leased: none
+removed 0 snapshot(s); kept 2; leased: none; integrity check: skipped
 ? 0
 ```
 
@@ -516,7 +516,8 @@ $ fsqlite gc store --retain 0 --json
   "retain": 0,
   "removed": 1,
   "kept": 1,
-  "leased": []
+  "leased": [],
+  "integrityChecked": true
 }
 ? 0
 ```
@@ -547,7 +548,7 @@ $ ls damaged/snapshots
 
 ```console
 $ fsqlite gc damaged
-removed 0 snapshot(s); kept 3; leased: none
+removed 0 snapshot(s); kept 3; leased: none; integrity check: skipped
 ? 0
 ```
 

@@ -133,6 +133,12 @@ export interface GcResult {
   removed: number
   kept: number
   leased: number[]
+  /**
+   * Whether gc ran the head's full integrity check, which it does only when some snapshot
+   * is old enough to delete. When false, gc proved nothing about the head's pages: use
+   * `validate()` to detect corruption.
+   */
+  integrityChecked: boolean
 }
 
 /** Options for `repair()` and `planRepair()`. */

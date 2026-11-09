@@ -618,7 +618,8 @@ function runGc(inv: Invocation): number {
   const result = requireStore(path).gc({ retain })
   emit(inv, { path, retain, ...result }, () => [
     `removed ${result.removed} snapshot(s); kept ${result.kept}; ` +
-      `leased: ${result.leased.join(' ') || 'none'}`,
+      `leased: ${result.leased.join(' ') || 'none'}; ` +
+      `integrity check: ${result.integrityChecked ? 'passed' : 'skipped'}`,
   ])
   return EXIT.ok
 }
