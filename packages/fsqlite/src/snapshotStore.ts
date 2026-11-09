@@ -189,11 +189,18 @@ const MAX_POINTER_BYTES = 64
 /** The most of a malformed pointer an error message quotes. */
 const POINTER_QUOTE_CHARS = 32
 
-/** Quote at most {@link POINTER_QUOTE_CHARS} of malformed pointer text, escaped. */
-function quotePointer(text: string): string {
-  return text.length <= POINTER_QUOTE_CHARS
-    ? JSON.stringify(text)
-    : `${JSON.stringify(text.slice(0, POINTER_QUOTE_CHARS))} (the first ${POINTER_QUOTE_CHARS} characters)`
+/**
+ * Quote at most {@link POINTER_QUOTE_CHARS} characters (code points, so none is split) of
+ * malformed pointer text, escaped. `prefix` says the text is already only the start of the
+ * pointer, so the quote names itself a prefix even when every character fits.
+ */
+function quotePointer(text: string, prefix = false): string {
+  const chars = Array.from(text)
+  if (!prefix && chars.length <= POINTER_QUOTE_CHARS) {
+    return JSON.stringify(text)
+  }
+  const quoted = chars.slice(0, POINTER_QUOTE_CHARS)
+  return `${JSON.stringify(quoted.join(''))} (the first ${quoted.length} characters)`
 }
 
 /** Read at most {@link MAX_POINTER_BYTES} of `current`; a longer file is corruption. */
@@ -213,10 +220,12 @@ function readPointerText(path: string): string {
     closeSync(fd)
   }
   if (length > MAX_POINTER_BYTES) {
+    // Streaming decode holds back a character the bound cuts off instead of emitting U+FFFD.
+    const start = new TextDecoder().decode(buf.subarray(0, MAX_POINTER_BYTES), { stream: true })
     throw new FsqliteError(
       'corrupt',
       `corrupt current pointer: larger than ${MAX_POINTER_BYTES} bytes, beginning ` +
-        quotePointer(buf.toString('utf8', 0, POINTER_QUOTE_CHARS + 1)),
+        quotePointer(start, true),
     )
   }
   return buf.toString('utf8', 0, length)

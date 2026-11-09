@@ -156,3 +156,38 @@ test('a corrupt current pointer is read and quoted only up to a small bound', ()
     cleanup()
   }
 })
+
+test('a quoted pointer prefix never splits a character and always says it is a prefix', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const messageFor = (content: string): string => {
+      writeFileSync(store.currentPath, content)
+      try {
+        store.currentVersion()
+      } catch (error) {
+        assert.ok(error instanceof FsqliteError && error.code === 'corrupt')
+        return error.message
+      }
+      throw new Error(`pointer ${JSON.stringify(content)} parsed`)
+    }
+    const oversize = 'corrupt current pointer: larger than 64 bytes, beginning '
+
+    // 80 bytes of two-byte characters: over the bound, so the quote is only a prefix.
+    assert.equal(
+      messageFor('é'.repeat(40)),
+      `${oversize}"${'é'.repeat(32)}" (the first 32 characters)`,
+    )
+    // 64 bytes end inside the 22nd three-byte character, which is left out, not mangled.
+    assert.equal(
+      messageFor('€'.repeat(30)),
+      `${oversize}"${'€'.repeat(21)}" (the first 21 characters)`,
+    )
+    // Within the bound, the 32nd character is a surrogate pair and is quoted whole.
+    assert.equal(
+      messageFor(`${'z'.repeat(31)}😀${'z'.repeat(8)}`),
+      `corrupt current pointer: "${'z'.repeat(31)}😀" (the first 32 characters)`,
+    )
+  } finally {
+    cleanup()
+  }
+})
