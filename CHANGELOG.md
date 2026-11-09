@@ -62,9 +62,10 @@ publication validation are still pending.
   lineage. `GcResult.integrityChecked` and the `integrity check:` field of `fsqlite gc`
   say whether the full check ran.
   On a 39.5 MiB head its median fell from about 20 ms to about 1 ms.
-- **Pointer diagnostics:** `current` is read only up to 64 bytes, and an error quotes at
-  most 32 characters of a corrupt pointer, so a large file renamed over `current` is
-  never loaded or echoed whole into logs.
+- **Pointer diagnostics:** `current` content longer than 64 bytes or naming a version
+  above 2^53 − 1 is corruption (spec P1), only ASCII whitespace around the digits is
+  trimmed, and an error quotes at most 32 characters of a corrupt pointer, escaped, so a
+  large file renamed over `current` is never loaded or echoed whole into logs.
 
 ### Changes From the July 2026 Repository Snapshot
 

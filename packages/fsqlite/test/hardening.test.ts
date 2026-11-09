@@ -152,6 +152,19 @@ test('a corrupt current pointer is read and quoted only up to a small bound', ()
     assert.throws(() => store.read(() => 0), corrupt(/^corrupt current pointer: "9{32}"/))
     writeFileSync(store.currentPath, ' 0\n')
     assert.equal(store.currentVersion(), 0, 'surrounding whitespace is still allowed (P1)')
+
+    // P1's limits are exact: 64 bytes and 2^53 - 1 are valid, one more of either is not.
+    writeFileSync(store.currentPath, `${' '.repeat(63)}0`)
+    assert.equal(store.currentVersion(), 0)
+    writeFileSync(store.currentPath, `${' '.repeat(64)}0`)
+    assert.throws(() => store.currentVersion(), corrupt(/^corrupt current pointer: larger than 64/))
+    writeFileSync(store.currentPath, String(Number.MAX_SAFE_INTEGER))
+    assert.equal(store.currentVersion(), Number.MAX_SAFE_INTEGER)
+    writeFileSync(store.currentPath, '9007199254740992')
+    assert.throws(
+      () => store.currentVersion(),
+      corrupt(/^corrupt current pointer: "9007199254740992"$/),
+    )
   } finally {
     cleanup()
   }

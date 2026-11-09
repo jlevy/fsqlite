@@ -182,9 +182,9 @@ function applyFailureReason(error: unknown): string {
 const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]?.trim() ?? ''
 
 /**
- * The most of `current` a read loads. A valid pointer is a safe-integer version (at most
- * 16 digits) plus optional whitespace, so anything longer is corruption, and bounding the
- * read keeps a pointer replaced by a large file from being loaded and echoed whole.
+ * The longest valid `current` (spec P1): a safe-integer version (at most 16 digits) plus
+ * optional whitespace. Longer content is corruption. A read loads one byte more to detect
+ * it, so a pointer replaced by a large file is never loaded or echoed whole.
  */
 const MAX_POINTER_BYTES = 64
 /** The most of a malformed pointer an error message quotes. */
@@ -222,7 +222,7 @@ function quotePointer(text: string, prefix = false): string {
   return `${escapeText(quoted.join(''))} (the first ${quoted.length} characters)`
 }
 
-/** Read at most {@link MAX_POINTER_BYTES} of `current`; a longer file is corruption. */
+/** Read `current`, loading at most one byte past {@link MAX_POINTER_BYTES}; more is corruption. */
 function readPointerText(path: string): string {
   const buf = Buffer.alloc(MAX_POINTER_BYTES + 1)
   const fd = openSync(path, 'r')
@@ -879,9 +879,9 @@ export class SnapshotStore {
   /**
    * The published version the `current` pointer names. Parsed strictly: an empty or
    * non-numeric pointer is corruption (R2) and throws rather than silently reading as
-   * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer. At
-   * most {@link MAX_POINTER_BYTES} are read, and a digit string too long to be a safe
-   * integer is corruption too.
+   * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer.
+   * Content longer than {@link MAX_POINTER_BYTES}, which is never read whole, and a digit
+   * string too long to be a safe integer are corruption too (spec P1).
    */
   currentVersion(): number {
     readStoreMarker(this.dir)

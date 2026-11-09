@@ -264,13 +264,15 @@ without the caller DDL.
 `current` contains the published version as an ASCII decimal string (no padding
 required; the Node implementation writes the bare number with no trailing newline).
 
-- **P1.** Readers MUST parse strictly: after trimming ASCII whitespace, the content MUST
-  match `^\d+$`. Anything else, including empty content, is **corruption** and MUST be
-  surfaced per R2 rather than silently treated as version 0. A valid pointer is a few
-  bytes, so a reader SHOULD bound its read and treat a larger file as corruption without
-  loading it, and SHOULD quote at most a short, escaped prefix of malformed content in
-  diagnostics (the Node implementation reads at most 64 bytes and quotes at most 32
-  characters).
+- **P1.** Readers MUST parse strictly: the content MUST be at most 64 bytes, and after
+  trimming ASCII whitespace (space, tab, line feed, vertical tab, form feed, and
+  carriage return; a byte order mark or a no-break space is not ASCII whitespace) it
+  MUST match `^\d+$` and name a version no greater than 2^53 − 1 (9007199254740991).
+  Anything else, including empty content, is **corruption** and MUST be surfaced per R2
+  rather than silently treated as version 0. A reader SHOULD detect content over 64
+  bytes without loading the whole file, and SHOULD quote at most a short, escaped prefix
+  of malformed content in diagnostics (the Node implementation reads at most 65 bytes,
+  treats content longer than 64 bytes as corruption, and quotes at most 32 characters).
 - **P2.** The pointer MUST be replaced atomically and durably: write the new content to
   a uniquely-named temp file in the same directory → fsync the temp file → `rename()` it
   over `current` → fsync the directory.
