@@ -5,7 +5,7 @@ title: "PR #5 A9: Merge with a merge commit, not a squash or rebase. That keeps 
 kind: task
 status: in_progress
 priority: 3
-version: 2
+version: 3
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,7 +14,7 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:23.276Z
-updated_at: 2026-11-09T01:48:24.752Z
+updated_at: 2026-11-09T01:59:35.624Z
 started_at: 2026-11-09T01:48:24.752Z
 ---
-Review A at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWu-f2Q
+Review A at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820620761

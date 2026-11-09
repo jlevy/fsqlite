@@ -5,7 +5,7 @@ title: 'PR #5 C6: Make the 2FA approval check the bytes. `docs/releasing.md:111-
 kind: task
 status: in_progress
 priority: 3
-version: 2
+version: 3
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,7 +14,7 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:27.068Z
-updated_at: 2026-11-09T01:54:01.126Z
+updated_at: 2026-11-09T01:59:38.505Z
 started_at: 2026-11-09T01:54:01.126Z
 ---
-Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvARmw
+Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820649883

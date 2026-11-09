@@ -5,7 +5,7 @@ title: "PR #5 C4 (Low): the Markdown formatter can fall back to a source build i
 kind: task
 status: in_progress
 priority: 3
-version: 2
+version: 3
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,9 +14,9 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:26.477Z
-updated_at: 2026-11-09T01:48:24.827Z
+updated_at: 2026-11-09T01:59:37.704Z
 started_at: 2026-11-09T01:48:24.827Z
 ---
-Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvARmw
+Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820649883
 
 `package.json:14-15`.
