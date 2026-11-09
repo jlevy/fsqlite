@@ -744,6 +744,8 @@ never the final path; a reader of the destination then sees the previous file or
 complete export, and an interrupted seal leaves only its temp.
 The destination MUST NOT be a store-owned path (`current`, `fsqlite.json`,
 `publish.lock`, or anything under the store’s subdirectories).
+The reference implementation’s `seal()` also refuses to start while committed envelopes
+are pending; an export of the head alone copies a leased snapshot instead.
 This specification makes no guarantee about an arbitrary recursive directory copy racing
 publication, garbage collection, or interruption.
 
@@ -911,7 +913,8 @@ The same artifacts test every implementation.
   `FILE_RENAME_POSIX_SEMANTICS` (Windows 10 1607 and later) can replace an open target
   but is not reachable from Node’s `fs`. A Windows implementation needs a native helper
   for both, or a spec change that declares Windows reader-only.
-  The cross-platform CI matrix gates the claim.
+  CI runs on Linux and macOS only; a Windows CI job, not yet present, must gate any
+  Windows mutation claim.
 
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.

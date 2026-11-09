@@ -2,7 +2,7 @@
 
 For the project thesis, agent use case, architecture, strategy choice, and quick start,
 begin with the [root README](../README.md).
-For the complete npm installation and API guide, use the
+For installation, usage, the API reference, the CLI, and error codes, use the
 [package README](../packages/fsqlite/README.md).
 The documents here define the store format, explain the design, preserve its technical
 basis, and track validation and future work.
@@ -11,8 +11,8 @@ basis, and track validation and future work.
 
 | Need | Document | Role |
 | --- | --- | --- |
-| Understand the project, its agent use case, and its main tradeoffs | [Project README](../README.md) | Primary project landing page, architecture overview, strategy guide, quick start, and documentation entry point |
-| Install and operate the Node package | [Package README](../packages/fsqlite/README.md) | Self-contained npm consumer guide, API contract, CLI reference, and limitations |
+| Understand the project, its agent use case, and its main tradeoffs | [Project README](../README.md) | Primary project landing page, thesis, storage-model guide, architecture overview, quick start, and documentation entry point |
+| Install and operate the Node package | [Package README](../packages/fsqlite/README.md) | npm usage and API reference: install, write strategies, API, CLI, error codes, and limitations; links to the project README for the overview |
 | Recognize, read, or implement an fsqlite store | [FSQL Format Specification](fsql-format-spec.md) | Normative `f1.0` directory, metadata, snapshot, envelope, publication, and upgrade rules |
 | Evaluate the architecture and its constraints | [fsqlite Design and Constraints](fsqlite-design.md) | First-principles comparison with ordinary SQLite, implementation boundary, system constraints, strategy choice, trust boundary, and tradeoffs |
 | Assess schema evolution, scale, and local-agent workload fit | [Schema Evolution and Workload Fit](research/research-2026-08-01-schema-evolution-and-workload-fit.md) | Official SQLite evidence, current measurements, mitigation guidance, severity, and adoption boundaries |
@@ -21,14 +21,14 @@ basis, and track validation and future work.
 | Verify the SQLite file identifier | [Application ID](application-id.md) | Selection and registry status of the fixed `FSQL` application ID |
 | Test a release or evaluate its guarantees | [QA Runbook](qa-runbook.md) | Automated and manual tests mapped to claims and known gaps |
 | See current limitations and planned capabilities | [Roadmap](roadmap.md) | User-facing work after the first alpha |
-| Publish a release | [Release Runbook](releasing.md) | Bootstrap publication, trusted publishing, verification, and recovery procedures |
+| Publish a release | [Release Runbook](releasing.md) | Bootstrap publication, dist-tags, one-time trusted-publishing setup, staged releases, and verification |
 | Review dependency policy | [Supply-Chain Security](../SUPPLY-CHAIN-SECURITY.md) | Install, lockfile, lifecycle-script, and release controls |
 
 The format specification is the only normative protocol authority.
 The design owns the stable `C1` through `C12` system-constraint registry and explains
 how the implementation fits it.
 The root README owns the public project thesis and documentation entry point.
-The package README is the self-contained npm consumer guide.
+The package README is the npm usage and API reference.
 The QA runbook is an evidence index.
 The dated research and source confirmations support claims but do not define current
 behavior.

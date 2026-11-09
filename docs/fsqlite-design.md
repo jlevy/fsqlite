@@ -543,9 +543,14 @@ A reader can pin one with `readLease()` and copy that file safely.
 integrity-checked standalone SQLite artifact, published through an fsynced temp and an
 atomic rename so the destination never holds a partial export.
 
-Supported backup paths use a published snapshot, read lease, `seal()`, or the backup
-helpers. An arbitrary recursive live-store copy may include recoverable transients, and
-its software, copy order, GC races, or interruption can omit a complete clean snapshot.
+`seal()` refuses to start while committed envelopes are pending, so reconcile before
+sealing; to export the head without folding the pending tail, copy a leased snapshot
+instead.
+
+Supported backup paths use a published snapshot, read lease, `seal()`, or
+`backupDatabase()`. An arbitrary recursive live-store copy may include recoverable
+transients, and its software, copy order, GC races, or interruption can omit a complete
+clean snapshot.
 
 ### Threading and Processes
 
@@ -675,12 +680,16 @@ new DirectStore(dir, options).write((db) => {
 | --- | --- |
 | `src/storeFormat` | Marker recognition, format version, store identity, and required-feature gating |
 | `src/snapshotStore` | Concurrent capture, reconcile, reads, leases, GC, validation, repair, and sealing |
-| `src/directStore` | Local serialized writer over the same immutable format |
+| `src/directStore` | Serialized writer lane over the same immutable format |
 | `src/publication` | No-replace snapshot commit and identity-checked pointer swap shared by both strategies |
 | `src/conflictPolicy` | Deterministic policy routing and conflict classification |
-| `src/driver` | `node:sqlite` capability, changeset, integrity, backup, and callback-boundary chokepoint |
+| `src/driver` | `node:sqlite` capability, changeset, integrity, `backupDatabase()`, and callback-boundary chokepoint |
 | `src/lock` | Fenced `mkdir` lease used for publication and maintenance |
-| `src/cli` | Schema-agnostic operator commands and diagnostics |
+| `src/errors` | The typed `FsqliteError` model and its stable codes |
+| `src/fsutil` | Fail-closed file and directory fsync, atomic pointer writes, and transient cleanup |
+| `src/fsinspect` | Filesystem capability probes and the `fsinspect` verdict |
+| `src/sqliteFacts` | Schema-agnostic facts and integrity reports for any SQLite file |
+| `src/cli` | Schema-agnostic operator commands and diagnostics, with an importable `main()` |
 
 The CLI provides `info`, `validate`, `gc`, `seal`, `repair`, `stats`, `doctor`, and
 `fsinspect` without requiring application schema code.

@@ -139,17 +139,17 @@ design.
 
 ## Choose a Storage Model
 
-Choose a storage model from the way writers coordinate and when updates must become
-visible. A single machine can have many independent writers, while several callers can
-sometimes share one serialized writer lane.
-Writer independence, visibility, isolation, snapshot size, and write cadence determine
-the fit:
-
 Here, an “agent” is an independently running cooperative process with its own store
 handle. Threads sharing one SQLite connection belong to a different coordination model.
 A fixed dataset can be shared directly as a read-only SQLite file.
 fsqlite becomes relevant when the shared data evolves: cooperative writers need a safe
 publication path while agents continue reading complete generations.
+
+Choose a storage model from the way writers coordinate and when updates must become
+visible. A single machine can have many independent writers, while several callers can
+sometimes share one serialized writer lane.
+Writer independence, visibility, isolation, snapshot size, and write cadence determine
+the fit:
 
 | Situation | Default choice | Why |
 | --- | --- | --- |
@@ -165,6 +165,11 @@ independence. `DirectStore` fits agents that need the same immutable publication
 but can serialize every complete callback.
 Ordinary SQLite remains the simpler choice for a single embedded owner, or whenever its
 live-file coordination model reliably meets the workload.
+If that choice uses WAL, run SQLite 3.51.3 or later (Node 22.22.3, 24.15.0, or any 26
+release): SQLite documents a rare
+[WAL-reset race](https://sqlite.org/wal.html#the_wal_reset_bug) in 3.7.0 through 3.51.2
+that can corrupt a WAL database with two or more open connections.
+fsqlite store files never use WAL, so that race cannot reach a published snapshot.
 
 The [coordination-model guide](docs/fsqlite-design.md#choose-by-coordination-model)
 develops this decision from visibility, isolation, snapshot size, and writer
@@ -264,7 +269,7 @@ layout, publication races, and consistency boundaries.
 
 ## Reference Implementation
 
-The reference implementation is roughly 2,600 lines of TypeScript code (November 2026),
+The reference implementation is roughly 4,100 lines of TypeScript code (November 2026),
 including the CLI and excluding tests and generated output.
 It is packaged for npm as `fsqlite`, uses only Node built-ins, and has zero runtime
 dependencies. Supported Node releases include SQLite and expose it through the built-in
@@ -292,7 +297,13 @@ the exact SQLite and Node capabilities behind the reference package.
 npm install fsqlite@alpha
 ```
 
-Requires Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`.
+Requires Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`; Node 24.22 or later, or 26.8 or
+later, is recommended because the 22 line lacks the 2026 `node:sqlite` memory-safety
+fixes. Node 26 has been the Active LTS line since 2026-10-28. The
+[package README](packages/fsqlite/README.md#install) explains the range.
+The package is not yet published to npm, so until the first release that command returns
+404; meanwhile, clone this repository and import `packages/fsqlite/src/index.ts` on a
+supported Node.
 
 ## Quick Start
 
@@ -312,30 +323,37 @@ const store = new SnapshotStore('./knowledge.fsqlite', {
 
 // Independent agents can capture envelopes without taking the publish lease.
 store.write('research-agent', (db) => {
-  db.prepare('INSERT INTO facts VALUES (?, ?)').run('answer', '42')
+  db.prepare(
+    'INSERT INTO facts VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+  ).run('answer', '42')
 })
 
 // Any cooperative participant or an orchestrator may reconcile the pending tail.
 store.reconcile()
 
-const row = store.read((db) =>
-  db.prepare('SELECT value FROM facts WHERE key = ?').get('answer'),
+const answer = store.read(
+  (db) => db.prepare('SELECT value FROM facts WHERE key = ?').get('answer')?.value,
 )
-console.log(row)
+console.log(answer) // 42
 ```
 
 Every caller table needs a non-null primary key.
 `SnapshotStore` callbacks may perform data changes but not DDL; an `f1.0` store has one
 fixed caller-schema epoch.
 The [package README](packages/fsqlite/README.md) documents installation, the full writer
-contract, conflict policies, schema replacement, CLI operations, and limitations.
+contract, conflict policies, schema replacement, the API reference, error codes, CLI
+operations, and limitations.
 
 ## Portable Sharing and Replication
 
 Each published head is an immutable standard SQLite file.
 `seal()` pins one head and creates an integrity-checked point-in-time copy while writers
 continue. A successful export is one complete database.
-Writes still pending, or published after the head was selected, are outside that export.
+`seal()` refuses to start while committed envelopes are pending, so reconcile the
+pending tail first; envelopes committed and versions published after it selects the head
+are outside that export.
+To copy the current head without folding pending work, pin it with `readLease()` and
+copy the file `snapshotPath(lease.version)` names.
 
 fsqlite provides a stable file boundary that an application can move with its own
 transport. Remote transport, consensus, and automatic bidirectional replication remain
