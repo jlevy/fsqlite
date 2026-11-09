@@ -263,6 +263,32 @@ test('gc that has nothing to delete skips the full head check but not the cheap 
   }
 })
 
+test('gc classifies the store once, with the full head check only when it collects', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 2)
+    // Every classification lists and looks up each archived transaction, so a collecting
+    // gc that classified cheaply and then fully would pay that scan twice.
+    const classify = (
+      store as unknown as { classify: (deep: boolean) => ValidateResult }
+    ).classify.bind(store)
+    const passes: boolean[] = []
+    Object.assign(store, {
+      classify: (deep: boolean): ValidateResult => {
+        passes.push(deep)
+        return classify(deep)
+      },
+    })
+
+    assert.deepEqual(store.gc(), { removed: 0, kept: 3, leased: [] })
+    assert.deepEqual(store.gc({ retain: 0 }), { removed: 2, kept: 1, leased: [] })
+    assert.deepEqual(passes, [false, true], 'one cheap pass, then one full pass')
+  } finally {
+    cleanup()
+  }
+})
+
 test('gc waits for the publish lock instead of deleting under a live publisher or repair', () => {
   const { dir, cleanup } = tmpStore()
   try {

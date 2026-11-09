@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **223 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **224 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -52,7 +52,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `fencing.test.ts` | `C3`, `C5` | Exclusive acquisition, refusal to steal old locks, token checks, heartbeat loss, and owner-write cleanup |
 | `publication.test.ts` | `C5` | Paused publishers retain exclusive ownership at the pointer swap; no-replace commits, unexplained snapshot preservation, defensive identity checks, and archiving only what the published ledger holds |
 | `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, refuses store-owned destinations, and reports a corrupt head as corrupt |
-| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head, with the full head check skipped but the cheap ones kept when nothing is collectable; publish-lock fencing; option validation; serialized lease acquisition against GC and two-phase tombstone failure recovery; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
+| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head, with the full head check skipped but the cheap ones kept when nothing is collectable, and a single classification per gc; publish-lock fencing; option validation; serialized lease acquisition against GC and two-phase tombstone failure recovery; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
 | `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, existing-lock refusal, quiescent abandoned-lock recovery, mutation revalidation, transient cleanup (including init journals and lease temps), never quarantining a live or just-committed envelope, lock loss at acquisition, and a `planRepair()` dry run that changes nothing |
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures, and a write reconcile could not publish reported as pending rather than retryable |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
@@ -113,7 +113,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 223` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 224` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

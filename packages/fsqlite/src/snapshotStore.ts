@@ -1431,13 +1431,18 @@ export class SnapshotStore {
     validateLockOptions(lockOpts)
     // Validate outside the lock: the integrity check reads the whole head and must not
     // stall publishers. A recognition failure is refused before the lock dir is created.
-    // The cheap checks run first; the full one only when there is a snapshot to delete.
-    let health = this.classify(false)
-    const head = health.current
-    const collect = head !== undefined && this.snapshotVersions().some((v) => v < head - retain)
-    if (collect) {
-      health = this.validate()
+    // The full check runs only when there is a snapshot to delete, and the store is
+    // classified once either way: each pass looks up every archived transaction. A wrong
+    // guess here only costs work: `collect` false deletes nothing, and the floor and the
+    // `current`-moved check below both use the head the classification checked.
+    let collect = false
+    try {
+      const head = this.currentVersion()
+      collect = this.snapshotVersions().some((v) => v < head - retain)
+    } catch {
+      // A recognition failure or an unreadable pointer: the classification reports it.
     }
+    const health = collect ? this.validate() : this.classify(false)
     if (!GC_SAFE_STATES.has(health.state) || health.current === undefined) {
       const message =
         `gc refused: store is ${health.state}: ${health.issues.join('; ')}; ` +
