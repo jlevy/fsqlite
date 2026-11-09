@@ -134,10 +134,11 @@ export function requireSafeInteger(name: string, value: unknown, min: number): n
 }
 
 /**
- * Store states in which gc may delete: the head passed identity and full integrity
- * validation. `in-flight-capture` qualifies because its tells (fresh transients, a held
- * lock, uncommitted envelopes, an orphan ahead of `current`) are routine on a live store
- * and gc never touches them; a corrupt or unrecognized store may need every snapshot.
+ * Store states in which gc may proceed: the head passed identity and lineage validation,
+ * and full integrity validation whenever gc has a snapshot to delete (see `gc`).
+ * `in-flight-capture` qualifies because its tells (fresh transients, a held lock,
+ * uncommitted envelopes, an orphan ahead of `current`) are routine on a live store and gc
+ * never touches them; a corrupt or unrecognized store may need every snapshot.
  */
 const GC_SAFE_STATES: ReadonlySet<StoreValidationState> = new Set([
   'sealed',
@@ -1440,9 +1441,10 @@ export class SnapshotStore {
    * another process (spec G3); `transientStaleMs` gates that.
    *
    * gc is destructive maintenance, so it fails closed (spec G0): invalid options throw a
-   * TypeError, a store that does not validate with an integrity-clean head is refused (its
-   * older snapshots may be the only recovery points repair has), and every deletion runs
-   * under the publish lock with a fenced token, so gc never interleaves with repair.
+   * TypeError, a store that does not validate is refused, no snapshot is deleted unless
+   * the head passed the full integrity check (its older snapshots may be the only recovery
+   * points repair has), and every deletion runs under the publish lock with a fenced
+   * token, so gc never interleaves with repair.
    *
    * The integrity check reads the whole head, so it runs only when some snapshot is old
    * enough to delete. A call that would delete nothing still checks recognition, the
