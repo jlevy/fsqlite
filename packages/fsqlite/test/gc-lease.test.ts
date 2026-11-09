@@ -380,6 +380,43 @@ test('gc restores a tombstoned snapshot when the re-scan after the tombstone fai
   }
 })
 
+test('gc reports both failures when it cannot restore a tombstone after a failed re-scan', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 3)
+    const scanLeases = (
+      store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
+    ).activeLeasedVersions.bind(store)
+    Object.assign(store, {
+      activeLeasedVersions: (ms: number): Set<number> => {
+        if (!existsSync(store.snapshotPath(0))) {
+          writeFileSync(join(store.leaseDir, 'torn.lease'), '{')
+          // Something takes the snapshot's name, so the no-replace restore must fail.
+          writeFileSync(store.snapshotPath(0), 'occupied')
+        }
+        return scanLeases(ms)
+      },
+    })
+
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'io' &&
+        /could not restore snapshot 0 from its tombstone .*fresh lease torn\.lease/.test(
+          error.message,
+        ) &&
+        error.cause instanceof AggregateError &&
+        error.cause.errors.length === 2,
+    )
+    const tombstones = readdirSync(store.snapDir).filter((f) => f.startsWith('.gc-'))
+    assert.equal(tombstones.length, 1, 'the tombstone the message names is still there')
+  } finally {
+    cleanup()
+  }
+})
+
 test('gc reports a snapshot it could not remove and leaves every other version', () => {
   const { dir, cleanup } = tmpStore()
   try {

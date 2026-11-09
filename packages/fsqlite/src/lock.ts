@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
 import { LockTimeoutError } from './errors.ts'
+import { removeQuietly } from './fsutil.ts'
 
 /**
  * Publish-lock timing, in milliseconds. `timeoutMs` must exceed `staleMs`: a waiter must
@@ -142,7 +143,7 @@ export function withLock<T>(
       try {
         writeOwner(join(lockPath, 'owner.json'), meta)
       } catch (error) {
-        rmSync(lockPath, { recursive: true, force: true })
+        removeQuietly(lockPath)
         throw error
       }
       held = true

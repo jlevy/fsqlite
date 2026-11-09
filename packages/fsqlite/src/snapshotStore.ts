@@ -1474,7 +1474,18 @@ export class SnapshotStore {
     try {
       leasedNow = this.activeLeasedVersions(leaseStaleMs).has(v)
     } catch (error) {
-      restore() // fail closed: an unreadable lease must not cost the snapshot it may pin
+      // Fail closed: an unreadable lease must not cost the snapshot it may pin.
+      try {
+        restore()
+      } catch (restoreError) {
+        throw new FsqliteError(
+          'io',
+          `gc could not restore snapshot ${v} from its tombstone ${tombstone} after a lease ` +
+            `re-scan failed (${errorMessage(error)}); rename the tombstone back to ${path} ` +
+            'before running gc again',
+          { cause: new AggregateError([error, restoreError]) },
+        )
+      }
       throw error
     }
     if (leasedNow) {
