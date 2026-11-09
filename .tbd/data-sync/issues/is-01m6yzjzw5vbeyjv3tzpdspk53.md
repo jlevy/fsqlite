@@ -3,17 +3,26 @@ type: is
 id: is-01m6yzjzw5vbeyjv3tzpdspk53
 title: "PR #5 C7: Assert the effective pnpm policy floor. `scripts/check-supply-chain.mjs` checks audit ignores and trust-policy exclusions, but not the settings they depend on. Any of these edi"
 kind: task
-status: open
+status: closed
 priority: 3
-version: 1
+version: 5
+delegate: codex@spud10
 labels:
   - pr-5-review
+  - pr-6
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:27.364Z
-updated_at: 2026-11-09T01:43:27.364Z
+updated_at: 2026-11-09T16:05:10.344Z
+started_at: 2026-11-09T01:48:24.833Z
+closed_at: 2026-11-09T16:05:10.344Z
+close_reason: "Landed in PR #6 at the reviewed head 4fab291. Local pnpm verify, all seven PR checks, and all seven post-merge checks on main bcb77e1 passed. Live npm staging remains a release-time step."
+resolution: null
+duplicate_of: null
 ---
-Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvARmw
+Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820649883
 
   - `minimumReleaseAge: 0`;
   - adding `minimumReleaseAgeExclude`;

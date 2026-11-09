@@ -5,12 +5,12 @@ title: "PR #5 C9: Bound envelope reads by descriptor. `admitEnvelope` (`snapshot
 kind: task
 status: open
 priority: 3
-version: 1
+version: 2
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 created_at: 2026-11-09T01:43:27.972Z
-updated_at: 2026-11-09T01:43:27.972Z
+updated_at: 2026-11-09T01:59:39.238Z
 ---
-Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvARmw
+Review C at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820649883
