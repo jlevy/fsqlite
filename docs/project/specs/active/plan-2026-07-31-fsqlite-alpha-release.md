@@ -4,7 +4,8 @@
 
 **Author:** Joshua Levy (with LLM assistance)
 
-**Status:** In progress
+**Status:** Complete except publication (`fsq-cggp`), which awaits the maintainer’s
+authorization
 
 **Tracking epic:** `fsq-mh41`
 
@@ -14,9 +15,9 @@ Establish `github.com/jlevy/fsqlite` as the standalone home of `fsqlite` and pub
 alpha to npm.
 
 The package is filesystem-friendly concurrent SQLite: immutable snapshot publication and
-transaction-envelope changesets behind a fenced `mkdir` lease, with a local
-single-writer `DirectStore` mode, over plain SQLite files, server-free, on any
-filesystem that supplies the protocol’s required coordination and durability behavior.
+transaction-envelope changesets behind a fenced `mkdir` lease, with a serialized
+`DirectStore` lane, over plain SQLite files, server-free, on any filesystem that
+supplies the protocol’s required coordination and durability behavior.
 
 The runtime code is already self-contained: no source, worker, or test import escapes
 the package. The work is to establish an independent toolchain, fix the recovery-path
@@ -44,8 +45,9 @@ documentation and public API to the standard expected of a published package.
 - **The real cross-host NFS/EFS concurrency gate.** It remains the headline honesty gap
   and stays disclosed, not closed.
   Tracked as post-alpha.
-- **Windows support.** The CLI golden harness uses `#!/bin/sh` wrappers and the test
-  glob relies on POSIX expansion.
+- **Windows support.** Node cannot fsync a directory on Windows, SQLite opens snapshots
+  without `FILE_SHARE_DELETE` (format spec O1), and the CLI golden harness uses
+  `#!/bin/sh` wrappers.
   The package targets POSIX shared filesystems for alpha.
 - **Migrating off `node --test` to vitest.** The zero-dependency test story is a product
   property, not an accident.
@@ -74,8 +76,9 @@ the first publish.
 
 ### Toolchain: pnpm, Node, `node --test`, and tsdown
 
-The deciding evidence: Bun cannot resolve `node:sqlite` at all, which is the module the
-entire storage engine is built on.
+The deciding evidence in July 2026: Bun could not resolve `node:sqlite` at all, which is
+the module the entire storage engine is built on.
+Bun 1.4.0 added `node:sqlite` in August 2026, but it is not a tested fsqlite runtime.
 Beyond that, under `bun test` `process.execPath` is the Bun binary, so the multi-process
 crash, kill, and fencing tests would silently spawn Bun children instead of Node ones,
 and would keep passing while testing the wrong engine.
@@ -114,10 +117,13 @@ breaking every doc link, whereas paying for the structure now is a root `package
 and `-F` filters in a few scripts.
 
 The one real cost is the README split: GitHub renders the repo root, npm renders the
-package. Resolve it by making `packages/fsqlite/README.md` the primary package guide.
-It must be in the tarball.
-Keep the root `README.md` as a short repository overview that links to it rather than
-maintaining two copies that drift.
+package. The root `README.md` is the project overview: thesis, core properties,
+storage-model choice, architecture, and the documentation map.
+`packages/fsqlite/README.md`, which must be in the tarball, is the usage and API
+reference: install, quick start, write strategies, schema replacement, store identity,
+API, CLI, errors, correctness model, and limitations.
+Overview passages live only in the root README, and the package README links to them
+rather than maintaining two copies that drift.
 
 Format-level and research documentation lives in the repo-root `docs/`, since it spans
 implementations rather than belonging to the Node library.
@@ -125,24 +131,22 @@ The package README links to it with absolute URLs, which is required in any case
 `files` excludes `docs/` from the published tarball.
 
 ```
-README.md                    short repo overview, links to the package
-LICENSE
-CHANGELOG.md                 repository and package release history
-CONTRIBUTING.md
+README.md                    project overview and documentation entry point
+LICENSE  CHANGELOG.md  CONTRIBUTING.md  SUPPLY-CHAIN-SECURITY.md
 package.json                 private root, workspace scripts
-pnpm-workspace.yaml
+pnpm-workspace.yaml          workspace globs and install hardening
+scripts/                     project-hook and supply-chain gates
 docs/
-  fsqlite-design.md
-  fsql-format-spec.md
-  upstream-source-confirmations.md
-  qa-runbook.md
-  roadmap.md
-  research/research-2026-06-06-portable-concurrent-sqlite.md
+  README.md                  documentation map
+  fsqlite-design.md  fsql-format-spec.md  application-id.md
+  upstream-source-confirmations.md  qa-runbook.md  releasing.md  roadmap.md
+  research/                  dated research reports
+  project/specs/             release and roadmap plans
 packages/
   fsqlite/
-    README.md                primary npm landing page
+    README.md                npm usage and API reference
     package.json
-    src/ test/ workers/ examples/ scripts/
+    src/ test/ workers/ examples/ benchmarks/ scripts/
 ```
 
 The repo keeps a `pnpm-workspace.yaml` for the workspace globs, which is also where pnpm
@@ -163,18 +167,14 @@ version `0.1.0` and Git tag `v0.1.0` identify the first release.
 ### Supply-Chain Posture
 
 A package with zero runtime dependencies needs **no lifecycle scripts**. State that
-security property in the README as well as configuring it:
-
-```yaml
-# pnpm-workspace.yaml
-packages:
-  - packages/*
-minimumReleaseAge: 20160 # 14 days in minutes
-blockExoticSubdeps: true
-allowBuilds: [] # zero runtime deps: nothing needs to build
-```
+security property in the README as well as configuring it.
+`pnpm-workspace.yaml` holds the cool-off, build-script, and trust-policy settings, and
+`SUPPLY-CHAIN-SECURITY.md` records the policy and every exception.
 
 ### The `engines` Defect
+
+The file and line references in this section and the next record the code as imported in
+July 2026; every defect they describe is fixed.
 
 `src/driver.ts:15` is a static named import:
 
@@ -342,7 +342,7 @@ The detailed evidence and reconsideration triggers are in
 
 The comprehensive architecture revision adds one first-principles decision boundary.
 Ordinary local SQLite remains the default when writers can take turns.
-DirectStore adds immutable publication for one application writer.
+DirectStore adds immutable publication through one serialized writer lane.
 SnapshotStore adds independent capture and deterministic reconciliation, with full-head
 copying, delayed visibility, and nonserializable merge semantics as explicit costs.
 Schema maintenance is quiescent and application-managed in `f1.0`; future migration must
@@ -356,7 +356,8 @@ Implementation-independent material lives under the root `docs/` directory.
 The package README is the npm landing page, with install instructions, runtime
 requirements, alpha limitations, and absolute links to public repository documentation
 because `files` excludes `docs/` from the tarball.
-The root README provides a short project and documentation map.
+The root README is the project overview and documentation map, and the package README
+links to its overview sections.
 Contributor, release, roadmap, changelog, and supply-chain documents cover
 repository-level operations without duplicating the technical references.
 
@@ -457,7 +458,8 @@ Goal: a stranger can find, understand, install, and use this.
 - [x] (`fsq-hhve`) Complete the flat, self-identifying `f1.0` store root and marker,
   including distinct not-a-store, invalid, unsupported, and corrupt classifications
 - [x] (`fsq-fnh1`) Verify that the fixed `FSQL` SQLite `application_id` is
-  collision-free and record it with SQLite’s application-id registry process
+  collision-free against SQLite’s `magic.txt`; submitting the `file(1)` rule upstream is
+  a separate step
 - [x] (`fsq-rkix`) Settle the four public-API rough edges
 - [x] (`fsq-7qhj`) Complete concurrent backup-and-restore validation against the settled
   public backup surface
@@ -539,6 +541,34 @@ Goal: a stranger can find, understand, install, and use this.
 - [x] (`fsq-f7tg`) Address the late session-hook PATH review
   - [x] (`fsq-ilul`) Keep startup and closing hooks on the same tbd PATH policy
   - [x] (`fsq-nkqk`) Keep the PreCompact test hermetic and offline-safe
+
+### Phase 4: Pre-Publication Review
+
+Goal: the November 2026 review (epic `fsq-rz37`) lands before the tarball and changelog
+are frozen.
+Its changes are in the review pull request; each box is checked when its bead
+closes.
+
+- [ ] (`fsq-joo8`) Commit snapshots by no-replace link with identity checks, so
+  overlapping publishers cannot clobber an in-flight or published snapshot
+- [ ] (`fsq-lqcn`, `fsq-ml8x`, `fsq-4cyi`) Gate gc on store health and the publish lock,
+  tombstone snapshots before unlinking them, and validate its options
+- [ ] (`fsq-0vzp`) Refuse init over a lineage whose `current` pointer is missing
+- [ ] (`fsq-y98s`, `fsq-p76i`) Support foreign-key actions, reject trigger schemas in
+  SnapshotStore, and route conflict policy by own keys only
+- [ ] (`fsq-7mt5`) Core robustness fixes, including the atomic seal, ledger-verified
+  settle, and `PostPublishError`
+- [ ] (`fsq-nprq`, `fsq-qu8v`) Typed `FsqliteError` codes, the narrowed public API,
+  strict CLI parsing with one exit-code table, and reader retry
+- [ ] (`fsq-76fp`, `fsq-sdph`) Refresh dependencies and the CI matrix, pin actions by
+  SHA, and stage npm publication through the protected `npm` environment
+- [ ] (`fsq-0pz4`, `fsq-abqp`, `fsq-avgp`) Fold in PR #3 and apply the research and
+  documentation corrections
+- [ ] (`fsq-7zke`, `fsq-f8ke`) Close the remaining gc tombstone and reconcile-copy
+  races, or defer them explicitly
+
+### Phase 5: Alpha Publish
+
 - [ ] (`fsq-cggp`) Publish `0.1.0` under the `alpha` dist-tag
 - [ ] (`fsq-cggp`) Verify a clean install from the registry in an empty project
 
@@ -554,8 +584,10 @@ That smoke test is the only check that proves the published contract, and it bec
 more important once this repo publishes for real.
 
 Each Phase 2 fix lands with a regression test that fails before it.
-CI runs the full gate on every push: format check, Markdown check, zero-warning lint,
-`tsc --noEmit`, the test suite, the goldens, the build with publint, and the smoke test.
+CI runs `pnpm verify` on every pull request and every push to `main`: format check,
+Markdown check, zero-warning lint, `tsc --noEmit`, the project-hook and supply-chain
+gates, the test suite, the goldens, the build with publint, and the smoke test.
+A separate job runs `pnpm audit` and `pnpm audit signatures` on every change and weekly.
 
 Deferred and disclosed rather than silently missing: the real cross-host NFS/EFS gate
 (`fsq-at6m`), power-loss fault injection (`fsq-hm6r`), and Windows publication
@@ -565,8 +597,11 @@ post-alpha work.
 
 ## Rollout Plan
 
-Publish `0.1.0` to npm under the `alpha` dist-tag, so `npm install fsqlite` does not
-resolve to it by default.
+Publish `0.1.0` to npm under the `alpha` dist-tag.
+The `alpha` dist-tag and the README communicate the phase.
+npm’s documentation does not say whether the registry also points `latest` at a
+package’s first version, so `npm install fsqlite` may resolve to `0.1.0`; the release
+runbook checks `npm view fsqlite dist-tags` after publishing.
 The README states plainly that the format is draft, the API may move, and the cross-host
 concurrency gate is pending.
 
@@ -577,7 +612,10 @@ rollover-managed ledger growth.
 
 ## Open Questions
 
-None for the first publication.
+- If the first publish also sets `latest`, should later `0.x` releases publish to
+  `latest` directly, or keep `alpha` and move `latest` by hand after each approval?
+- Should the package README’s absolute links point at the release tag rather than
+  `main`, so the README frozen into each tarball keeps matching links?
 
 ## References
 
