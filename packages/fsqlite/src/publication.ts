@@ -11,13 +11,15 @@
 //   2. Verify identity at the pointer swap. The holder records the identity of its build
 //      before linking and re-checks the entry immediately before swapping the pointer and
 //      again after it, so it never reports another holder's build as its own publication.
+//      The pointer temp is written and fsynced before that last check, so only the rename
+//      runs after it.
 //   3. Clean up only its own orphan. A holder that abandons after linking removes the entry
 //      only while it is still its own build and still ahead of `current`.
 
 import { closeSync, fstatSync, linkSync, openSync, statSync, unlinkSync, utimesSync } from 'node:fs'
 import type { Stats } from 'node:fs'
 import { FsqliteError, PostPublishError } from './errors.ts'
-import { fsyncDir, publishPointer } from './fsutil.ts'
+import { commitPointer, fsyncDir, preparePointer, removeQuietly } from './fsutil.ts'
 import { sleepSync } from './lock.ts'
 import type { LockLease } from './lock.ts'
 
@@ -122,14 +124,24 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
       throw error
     }
     c.afterLink?.()
+    let pointerTemp: string | null = null
     try {
+      // Write and fsync the pointer temp before the final checks, so the only step left
+      // between them and the swap is the rename itself. A stall inside a slow fsync then
+      // happens before the fence and is caught by it, instead of inside the blind window
+      // where a stale-broken holder can still move `current` backward (spec L5, O6).
+      pointerTemp = preparePointer(c.currentPath, c.next)
       if (c.readCurrent() !== c.base || !c.lease.fence() || !namesBuild(c.dest, expected)) {
+        removeQuietly(pointerTemp)
         removeOwnOrphan(c, expected)
         return 'retry'
       }
-      publishPointer(c.storeDir, c.currentPath, c.next)
+      commitPointer(c.storeDir, c.currentPath, pointerTemp, c.next)
     } catch (error) {
       if (!(error instanceof PostPublishError)) {
+        if (pointerTemp !== null) {
+          removeQuietly(pointerTemp)
+        }
         removeOwnOrphan(c, expected, error)
       }
       throw error

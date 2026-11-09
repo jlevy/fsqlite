@@ -20,7 +20,7 @@ import {
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
-import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
+import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { setBeforeSnapshotLinkForTest } from '../src/publication.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -114,6 +114,48 @@ test("a stale-broken DirectStore writer resuming after a peer published cannot r
     assert.equal(calls, 2, 'the resumed writer reran its callback on the new head')
   } finally {
     setBeforeSnapshotLinkForTest(null)
+    cleanup()
+  }
+})
+
+test('a publisher whose pointer-temp fsync outlasts the stale window cannot move current backward', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const paused = new SnapshotStore(dir, STORE_OPTS).init()
+    const x = paused.write('wx', insert('x'))
+    let z = null as string | null
+    setAfterFsyncPathForTest((path) => {
+      if (!path.startsWith(`${paused.currentPath}.`) || !path.endsWith('.tmp')) {
+        return
+      }
+      setAfterFsyncPathForTest(null)
+      // The holder's pointer-temp fsync stalls past the stale window (a hung disk or NFS
+      // server). A peer breaks its lock, reclaims its aged entry, and publishes 1; a second
+      // peer publishes 2 and archives Z.
+      rmSync(paused.publishLock, { recursive: true, force: true })
+      const past = new Date(Date.now() - 120_000)
+      utimesSync(paused.snapshotPath(1), past, past)
+      const peer = new SnapshotStore(dir, STORE_OPTS)
+      peer.write('wy', insert('y'))
+      assert.equal(peer.reconcile().published, 1)
+      z = peer.write('wz', insert('z'))
+      assert.equal(peer.reconcile().published, 2)
+    })
+
+    paused.reconcile()
+
+    assert.equal(paused.currentVersion(), 2, 'the stalled holder never renamed its pointer')
+    const head = paused.snapshotPath(2)
+    assert.deepEqual(rowsOf(head), ['x', 'y', 'z'])
+    assert.ok(ledgerOf(head).includes(x ?? '') && ledgerOf(head).includes(z ?? ''))
+    assert.deepEqual(
+      readdirSync(dir).filter((f) => f.endsWith('.tmp')),
+      [],
+      'the abandoned pointer temp was removed',
+    )
+    assert.equal(paused.validate().state, 'sealed')
+  } finally {
+    setAfterFsyncPathForTest(null)
     cleanup()
   }
 })

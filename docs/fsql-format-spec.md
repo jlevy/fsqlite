@@ -398,11 +398,14 @@ Protocol:
      remove it and link again.
      A younger entry MUST NOT be removed; wait, re-checking `current` and fencing, until
      it is published, removed, or stale, and fail loudly at the acquisition timeout.
-     Immediately before the pointer swap, re-check `current` == base, fencing (L3), and
-     that the snapshot name still has the recorded identity.
-     On any mismatch, remove the entry only while it is still this holder’s build and
-     `current` < base+1, then retry.
-     Swap the pointer per P2/P3. Then re-check the identity once more: if the name no
+     Write and fsync the pointer temp (P2) first.
+     Then, immediately before the pointer rename, re-check `current` == base, fencing
+     (L3), and that the snapshot name still has the recorded identity, so that only the
+     rename itself follows these checks; a slow temp fsync then delays the checks
+     instead of running inside the window they guard (L5).
+     On any mismatch, remove the pointer temp, and remove the entry only while it is
+     still this holder’s build and `current` < base+1, then retry.
+     Rename the pointer temp over `current` and fsync the store root (P2/P3). Then re-check the identity once more: if the name no
      longer holds this build, `current` names another holder’s snapshot, so the attempt
      published nothing of its own and MUST retry rather than report success.
      A conforming target filesystem MUST support hard links with these semantics.

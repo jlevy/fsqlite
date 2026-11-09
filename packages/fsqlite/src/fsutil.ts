@@ -67,14 +67,33 @@ export function removeQuietly(path: string): void {
 }
 
 /**
- * Durably replace a store's numeric current pointer. A failure after the rename (the root
- * directory fsync) is a {@link PostPublishError}: the new version is already visible.
+ * Write and fsync a pointer temp naming `version` beside `currentPath`, the slow half of a
+ * pointer swap (spec P2). Returns the temp's path for {@link commitPointer}; on failure the
+ * temp is removed.
  */
-export function publishPointer(storeDir: string, currentPath: string, version: number): void {
+export function preparePointer(currentPath: string, version: number): string {
   const tempPath = `${currentPath}.${randomBytes(5).toString('hex')}.tmp`
   try {
     writeFileSync(tempPath, String(version), { flag: 'wx' })
     fsyncPath(tempPath)
+  } catch (error) {
+    removeQuietly(tempPath)
+    throw error
+  }
+  return tempPath
+}
+
+/**
+ * Rename a prepared pointer temp over `current`, then fsync the store root. A failure
+ * after the rename is a {@link PostPublishError}: the new version is already visible.
+ */
+export function commitPointer(
+  storeDir: string,
+  currentPath: string,
+  tempPath: string,
+  version: number,
+): void {
+  try {
     renameSync(tempPath, currentPath)
   } catch (error) {
     removeQuietly(tempPath)
@@ -85,4 +104,12 @@ export function publishPointer(storeDir: string, currentPath: string, version: n
   } catch (error) {
     throw new PostPublishError(version, error)
   }
+}
+
+/**
+ * Durably replace a store's numeric current pointer in one step, for callers that make no
+ * checks between preparing the temp and renaming it.
+ */
+export function publishPointer(storeDir: string, currentPath: string, version: number): void {
+  commitPointer(storeDir, currentPath, preparePointer(currentPath, version), version)
 }
