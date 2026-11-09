@@ -383,6 +383,11 @@ Protocol:
    marker identity, schema version, and schema hash.
    Then run the integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`). A
    failure aborts the whole reconcile and publishes nothing.
+   For a conforming build the gate’s `foreign_key_check` repeats what F3’s per-envelope
+   checks already proved.
+   It is kept deliberately: it is the one check of the complete build that does not rely
+   on per-envelope attribution, and it costs one scan of the foreign-key-bearing tables
+   per reconcile, not per envelope.
    A failure at any step before the build is committed (F5c) MUST discard the build
    transient, so a failing reconcile never leaves a head-sized file behind per attempt.
 5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
