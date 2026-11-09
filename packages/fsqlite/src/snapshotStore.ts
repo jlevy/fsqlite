@@ -22,6 +22,7 @@
 // making publish exactly-once across crashes and racing reconcilers.
 
 import {
+  closeSync,
   mkdirSync,
   copyFileSync,
   linkSync,
@@ -31,6 +32,8 @@ import {
   writeFileSync,
   renameSync,
   existsSync,
+  openSync,
+  readSync,
   realpathSync,
   rmSync,
   statSync,
@@ -176,6 +179,44 @@ function applyFailureReason(error: unknown): string {
 
 /** The machine code that opens a quarantine reason (`digest-mismatch`, `strict-conflict`). */
 const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]?.trim() ?? ''
+
+/**
+ * The most of `current` a read loads. A valid pointer is a safe-integer version (at most
+ * 16 digits) plus optional whitespace, so anything longer is corruption, and bounding the
+ * read keeps a pointer replaced by a large file from being loaded and echoed whole.
+ */
+const MAX_POINTER_BYTES = 64
+/** The most of a malformed pointer an error message quotes. */
+const POINTER_QUOTE_CHARS = 32
+
+/** Quote at most {@link POINTER_QUOTE_CHARS} of malformed pointer text, escaped. */
+function quotePointer(text: string): string {
+  return text.length <= POINTER_QUOTE_CHARS
+    ? JSON.stringify(text)
+    : `${JSON.stringify(text.slice(0, POINTER_QUOTE_CHARS))} (the first ${POINTER_QUOTE_CHARS} characters)`
+}
+
+/** Read at most {@link MAX_POINTER_BYTES} of `current`; a longer file is corruption. */
+function readPointerText(path: string): string {
+  const buf = Buffer.alloc(MAX_POINTER_BYTES + 1)
+  const fd = openSync(path, 'r')
+  let length = 0
+  try {
+    for (let n = 1; n > 0 && length < buf.length; length += n) {
+      n = readSync(fd, buf, length, buf.length - length, length)
+    }
+  } finally {
+    closeSync(fd)
+  }
+  if (length > MAX_POINTER_BYTES) {
+    throw new FsqliteError(
+      'corrupt',
+      `corrupt current pointer: larger than ${MAX_POINTER_BYTES} bytes, beginning ` +
+        quotePointer(buf.toString('utf8', 0, POINTER_QUOTE_CHARS + 1)),
+    )
+  }
+  return buf.toString('utf8', 0, length)
+}
 
 /** init found a lineage without `current`; only repair may choose the head to restore. */
 const missingPointerError = (versions: number[]): FsqliteError =>
@@ -803,15 +844,18 @@ export class SnapshotStore {
   /**
    * The published version the `current` pointer names. Parsed strictly: an empty or
    * non-numeric pointer is corruption (R2) and throws rather than silently reading as
-   * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer.
+   * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer. At
+   * most {@link MAX_POINTER_BYTES} are read, and a digit string too long to be a safe
+   * integer is corruption too.
    */
   currentVersion(): number {
     readStoreMarker(this.dir)
-    const raw = readFileSync(this.currentPath, 'utf8').trim()
-    if (!/^\d+$/.test(raw)) {
-      throw new FsqliteError('corrupt', `corrupt current pointer: ${JSON.stringify(raw)}`)
+    const raw = readPointerText(this.currentPath).trim()
+    const version = /^\d+$/.test(raw) ? Number(raw) : Number.NaN
+    if (!Number.isSafeInteger(version)) {
+      throw new FsqliteError('corrupt', `corrupt current pointer: ${quotePointer(raw)}`)
     }
-    return Number(raw)
+    return version
   }
 
   /**

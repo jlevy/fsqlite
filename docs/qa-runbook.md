@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **219 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **220 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -44,7 +44,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, malformed-manifest, wrong-schema and manifest-field admission, quarantine-write, NOTFOUND quarantine, every corrupt and in-flight validation state, envelope-size handling, no-op writes, and seal/GC pinning; a reconcile that fails before publication removes its build |
 | `merge-constraints.test.ts` | `C7` | Fixed filtered-pass order, UNIQUE and foreign-key closure at envelope and publication boundaries, foreign-key actions applied once from their recorded effects, a merge-created dangling reference quarantined, and policy routing by own keys only, so tables or actions named like `Object.prototype` members never drop changes |
 | `init.test.ts` | `C5-C8` | Non-null primary-key contract, including the nullable `INTEGER PRIMARY KEY DESC` quirk; SnapshotStore trigger and key `ON CONFLICT REPLACE`/`IGNORE` rejection; schema-version, envelope-size, retry, and policy-table option validation; schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
-| `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, and read-lease protection from concurrent GC |
+| `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, read-lease protection from concurrent GC, and a corrupt `current` read and quoted only up to a small bound |
 | `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, readers that overlap many publishes without a failed, torn, or regressing read, and serialized DirectStore writers with zero loss |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
@@ -113,7 +113,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 219` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 220` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

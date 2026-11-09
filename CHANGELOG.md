@@ -49,6 +49,12 @@ publication validation are still pending.
   Every connection pins SQLite’s defensive mode where `node:sqlite` offers it, and none
   enables extension loading.
 
+### Performance and Diagnostics
+
+- **Pointer diagnostics:** `current` is read only up to 64 bytes, and an error quotes at
+  most 32 characters of a corrupt pointer, so a large file renamed over `current` is
+  never loaded or echoed whole into logs.
+
 ### Changes From the July 2026 Repository Snapshot
 
 The repository has carried an unpublished `0.1.0` since July 2026. Code written against
