@@ -100,8 +100,8 @@ plan tracks work and does not redefine them.
 
 - Run real cross-host contention on NFSv4.1/EFS, SMB, and representative managed shared
   filesystems.
-- Exercise clock skew, attribute caching, stale-lock breaks, close-to-open visibility,
-  and directory fsync behavior.
+- Exercise clock skew, attribute caching, abandoned-lock recovery, close-to-open
+  visibility, and directory fsync behavior.
 - Add block-device power-loss fault injection for snapshot and pointer publication.
 - Specify an optional durable-envelope receipt mode for callers that need accepted
   writes to survive power loss before reconcile.
@@ -115,8 +115,8 @@ plan tracks work and does not redefine them.
   explicit alternative.
 - Research replay-based bit-rot recovery without making repair destructive or
   speculative.
-- Add a safe heartbeat or shorter optimistic critical section for DirectStore and repair
-  operations that may exceed the lease stale window.
+- Shorten the critical sections for DirectStore and repair to reduce the time other
+  clients wait for the publish lock.
 
 ### Platform and Runtime Portability
 

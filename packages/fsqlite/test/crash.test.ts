@@ -4,24 +4,13 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync, utimesSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { SnapshotStore } from '../src/index.ts'
 import { setReconcileCrashForTest } from '../src/snapshotStore.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
   store.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
-
-/**
- * A real crash after the snapshot commit also leaves publish.lock behind, so recovery can
- * begin only after the stale window, by which time the orphan it left is that old too.
- * The crash seam throws instead of dying, so age the orphan to model that elapsed window.
- */
-const ageOrphanAhead = (store: SnapshotStore): void => {
-  const orphan = store.snapshotPath(store.currentVersion() + 1)
-  const past = new Date(Date.now() - 120_000)
-  utimesSync(orphan, past, past)
-}
 
 function storeWith(n: number) {
   const { dir, cleanup } = tmpStore()
@@ -50,7 +39,8 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
         assert.equal(afterCrash, before, 'a crash before the pointer swap leaves current intact')
       }
       if (crashAt === 'after-snapshot') {
-        ageOrphanAhead(store)
+        assert.throws(() => store.reconcile(), /already exists ahead of current/)
+        store.repair() // the fixture has no live clients; classify the orphan explicitly
       }
 
       store.reconcile()
@@ -68,7 +58,7 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
   })
 }
 
-test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', () => {
+test('an orphan snapshot ahead of the pointer blocks publication until explicit repair', () => {
   const { store, cleanup } = storeWith(2)
   try {
     try {
@@ -83,7 +73,9 @@ test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', ()
       'orphan snapshot ahead of pointer exists after the crash',
     )
     assert.equal(store.validate().state, 'in-flight-capture')
-    ageOrphanAhead(store)
+    assert.throws(() => store.reconcile(), /already exists ahead of current/)
+    assert.ok(existsSync(store.snapshotPath(cur + 1)), 'failed publication preserved evidence')
+    store.repair()
     store.reconcile()
     store.gc({ retain: 0 })
     const ahead = readdirSync(store.snapDir)

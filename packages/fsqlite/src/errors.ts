@@ -25,7 +25,11 @@ export function errorMessage(error: unknown): string {
  * - `corrupt`: the store is inconsistent (torn or dangling pointer, identity mismatch, a
  *   head that fails integrity validation). Run `repair`.
  * - `in-flight`: a capture, publication, or maintenance operation is mid-flight, such as a
- *   live publisher holding `publish.lock`, or a captured write still pending.
+ *   live publisher holding `publish.lock`. Retry the operation later.
+ * - `pending`: a write was captured but its envelope is not published yet. Reconcile and
+ *   inspect its outcome; never repeat the write, which could apply it twice.
+ * - `outcome-unknown`: a captured write's publication or quarantine status could not be
+ *   inspected. Preserve its txId and inspect again; never repeat the write.
  * - `conflict`: a changeset conflicted with the published head under the merge policy.
  * - `retryable`: bounded contention ran out (lock timeout, lost lock ownership, publish
  *   retries exhausted). Retry later.
@@ -43,6 +47,8 @@ export type FsqliteErrorCode =
   | 'unsupported'
   | 'corrupt'
   | 'in-flight'
+  | 'pending'
+  | 'outcome-unknown'
   | 'conflict'
   | 'retryable'
   | 'post-publish'
@@ -170,7 +176,8 @@ export class LockTimeoutError extends FsqliteError {
 
 /**
  * `writeWithRetry` captured transaction `txId` but could not publish it. The code says
- * where the envelope is: `in-flight` (still pending; a later reconcile folds it),
+ * where the envelope is: `pending` (a later reconcile folds it), `outcome-unknown`
+ * (its status could not be read),
  * `conflict` or `refused` (quarantined for good, with `quarantineReason`), or `corrupt`
  * (the envelope has no outcome). None is retryable: running the write again would apply
  * its change a second time once the pending envelope is folded.
@@ -181,7 +188,7 @@ export class TransactionError extends FsqliteError {
   readonly quarantineReason: string | null
 
   constructor(
-    code: 'in-flight' | 'conflict' | 'refused' | 'corrupt',
+    code: 'pending' | 'outcome-unknown' | 'conflict' | 'refused' | 'corrupt',
     txId: string,
     message: string,
     quarantineReason: string | null,

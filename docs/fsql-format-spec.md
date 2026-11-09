@@ -33,7 +33,7 @@ The `current` file names the snapshot that readers should open.
 
 Everything in this format serves two correctness invariants:
 
-- **R1 (bounded loss).** A crash, stale-lock overlap, torn capture, or interrupted
+- **R1 (bounded loss).** A crash, paused publisher, torn capture, or interrupted
   protocol operation loses at most the *unpublished tail* and never a previously
   published snapshot. The **commit point of the store is snapshot publication** (§6); see
   §10 for what is durable before that point.
@@ -42,6 +42,8 @@ Everything in this format serves two correctness invariants:
   This invariant does not cover an arbitrary recursive copy of a live directory.
 - **R2 (no silent corruption).** Validation surfaces every detectable inconsistency
   (§11) rather than accepting or repairing it silently.
+  An archived transaction absent from the published ledger is inconsistent even when
+  SQLite integrity checks pass.
 
 Three structural properties deliver them:
 
@@ -51,12 +53,13 @@ Three structural properties deliver them:
    rename.
 2. **The pointer swap is the only commit.** A snapshot exists but is not *the store*
    until `current` names it, and `current` is replaced atomically.
-3. **Safety does not depend on exclusive lease ownership.** The publish lock (§7) only
-   reduces wasted work.
+3. **Publication requires exclusive lock ownership.** The publish lock (§7) remains
+   owned until its holder releases it; age MUST NOT authorize takeover.
    Exactly-once application is guaranteed by recording each applied transaction ID
    inside its snapshot and by publishing only from the still-current base (§6). Lock
-   holders can overlap after a stale-lock break; L5 states exactly what overlap can and
-   cannot do to a conforming store.
+   ownership serializes the check of `current` with the pointer replacement.
+   A token check followed by a rename is not an atomic compare-and-swap and cannot make
+   overlapping publishers safe.
 
 Each published snapshot remains an ordinary SQLite file: any SQLite binding in any
 language can open it with no fsqlite code at all.
@@ -389,15 +392,15 @@ Protocol:
      mtime, record its identity (device, inode, size, and mtime), hard-link it to the
      snapshot name (`link(2)`, which fails with `EEXIST` rather than replace), remove
      the build name, and fsync `snapshots/`. A replacing `rename()` MUST NOT be used for
-     this step, because an overlapping holder (L5) may already have committed or
-     published that name.
-     If the name exists: re-read `current`, and if it is ≥ base+1 a peer published
-     first, so discard and retry from F1. Otherwise the entry is another holder’s commit
-     in flight or an orphan of a crashed one.
-     An entry whose mtime is older than the lock’s stale window (L2) is an orphan:
-     remove it and link again.
-     A younger entry MUST NOT be removed; wait, re-checking `current` and fencing, until
-     it is published, removed, or stale, and fail loudly at the acquisition timeout.
+     this step, to preserve any existing generation and evidence of a previous
+     publication. If the name exists: re-read `current`, and if it is ≥ base+1 a peer
+     published first, so discard and retry from F1. Otherwise the entry is another
+     holder’s commit in flight or an orphan of a crashed one.
+     If `current` is still below that version, fail without deleting or replacing the
+     entry, regardless of age.
+     It may be an interrupted publish or evidence of a former published lineage after an
+     older client rolled back the pointer.
+     Stop all clients and run explicit repair before publishing again.
      Immediately before the pointer swap, re-check `current` == base, fencing (L3), and
      that the snapshot name still has the recorded identity.
      On any mismatch, remove the entry only while it is still this holder’s build and
@@ -412,16 +415,17 @@ Protocol:
    If it contains every envelope the build applied or found archivable, the published
    lineage is the build’s own: move the build’s quarantined envelopes that the ledger
    does not contain to `tx/quarantine/`, writing each a `QUARANTINE` file containing the
-   reason. Otherwise an overlapping holder moved `current` to a lineage the build never
-   saw (L5); every remaining envelope MUST stay in `tx/pending/` for the next reconcile
-   to classify against that lineage.
+   reason. Otherwise external interference moved `current` to a lineage the build never
+   saw; every remaining envelope MUST stay in `tx/pending/` for the next reconcile to
+   classify against that lineage.
    An implementation MUST NOT archive an envelope because its own build applied it.
    The reason MUST be written before the move; if it cannot be persisted, leave that
    envelope in place and fail loudly.
    A failure after the pointer swap (here, or a directory fsync after the pointer
    rename) MUST be reported as distinct from a failure before it, because a caller that
    reruns a write whose version is already published applies it twice.
-   The Node implementation sets a numeric `published` property on such errors.
+   The Node implementation reports this as `PostPublishError`, with the version in its
+   `published` property.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
    archivable on the next run.
 
@@ -500,96 +504,74 @@ tables; it is a client pattern, not a format feature.
 
 ## 7. The Publish Lock
 
-The publish lock is a **`mkdir` lease**. A conforming target filesystem MUST give
-exclusive directory creation semantics, so `mkdir(store-root/publish.lock)` succeeds for
-exactly one racing creator.
+The publish lock is an **exclusive `mkdir` lock**. A conforming target filesystem MUST
+give exclusive directory creation semantics, so `mkdir(store-root/publish.lock)`
+succeeds for exactly one racing creator.
 The environment must validate this capability rather than infer it from a filesystem
-label.
-The lease is held only around the publish step (F5), not around writer work or the
-build. (Informative: on NFSv4.1 and later the session reply cache gives non-idempotent
-operations such as `MKDIR` and `RENAME` exactly-once semantics, RFC 8881 §2.10.6, so a
-retransmitted `mkdir` is not misreported as `EEXIST`. NFSv3 relies on a best-effort
-duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
+label. SnapshotStore takes the lock only around publication (F5), not writer work or the
+build. DirectStore holds it through its complete write.
+Maintenance and read-lease acquisition also hold it while changing the state they
+coordinate. (Informative: on NFSv4.1 and later the session reply cache gives
+non-idempotent operations such as `MKDIR` and `RENAME` exactly-once semantics, RFC 8881
+§2.10.6, so a retransmitted `mkdir` is not misreported as `EEXIST`. NFSv3 relies on a
+best-effort duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
 
-- **L2.** Liveness is the lock dir’s **mtime**. A holder whose critical section has
-  several long steps (copying a head, running an application callback, an fsync,
-  scanning snapshots) SHOULD heartbeat at each step boundary by touching the dir once
-  its age reaches a fraction of the stale window (Node: a quarter), and SHOULD abandon
-  the attempt as soon as a heartbeat finds that it lost ownership.
-  A single step that outlasts the stale window can still be broken; the stale window
-  MUST exceed the longest single step, not the whole section.
-  A waiter MAY break a lock whose mtime is older than the stale window.
-  It MUST break it in three steps, because two waiters can judge the same lock stale and
-  a check-then-delete on `publish.lock` would remove a successor that re-acquired the
-  name in between: (1) read `owner.json` and the mtime and judge the lock stale; (2)
-  `rename()` the dir aside to `publish.lock.<hex10>.tmp`, which is atomic, so a second
-  breaker gets `ENOENT` and the holder can no longer refresh the moved dir; (3) remove
-  the moved dir only if it still carries the token read in step 1 and is still older
-  than the stale window.
-  Otherwise the moved dir is a successor’s live lock: the waiter MUST rename it back,
-  or, if another acquirer has completed a new lock in the meantime, remove it (its
-  former holder then fails every fencing check).
-  Then retry acquisition.
-  (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
-  An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
-  lock it could have waited for.
+- **L2.** The lock dir’s **mtime** is diagnostic liveness information only.
+  Holders SHOULD heartbeat at step boundaries.
+  A waiter MUST NOT remove, rename, or take over an existing lock because of its age,
+  missing metadata, or an apparently dead PID. It waits until the owner releases the
+  lock or the acquisition timeout expires.
+  Node defaults remain `staleMs` 20 s, `timeoutMs` 30 s, and `pollMs` 25 ms.
+  These options MUST be positive safe integers; Node retains `timeoutMs > staleMs` for
+  API compatibility. `onStaleBreak` is deprecated and never invoked.
 
-- **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
-  holder MUST re-read `owner.json` and verify its own token immediately before each
-  destructive step (F5b, every repair and GC deletion), and MUST abandon the step on a
-  mismatch. The Node implementation fences by verify, touch, verify: it checks its token,
-  refreshes the dir’s mtime, and checks the token again, so a fenced step begins with a
-  full stale window in which no conforming breaker (L2 step 3) can remove the lock.
+- **L3 (ownership checks).** A holder MUST re-read `owner.json` and verify its token
+  immediately before each destructive step, abandoning the step on a mismatch.
+  The Node implementation also refreshes mtime.
+  These checks detect accidental interference; they do not atomically fence a process
+  that pauses after the check.
 
-- **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
-  `owner.json` still carries its token, and MUST remove it through the same
-  rename-aside-and-recheck step as L2, so a successor that acquires between the token
-  check and the removal is restored rather than deleted.
-  A stale-broken holder must not delete a successor’s live lock because doing so would
-  admit a third concurrent holder.
+- **L4 (release).** A holder MUST finish its critical section before removing its lock
+  and MUST remove it only if `owner.json` still carries its token.
+  No other conforming client may remove that lock concurrently.
 
-- **L5.** Correctness MUST NOT depend on L1-L4 (see §1). Two holders can overlap after a
-  stale-lock break, for example when a holder pauses past the stale window and later
-  resumes mid-operation.
-  With F5c and F6 as specified, overlapping holders cannot:
-  - replace a snapshot another holder committed or published, because F5c commits
-    without replacing and reclaims only an entry older than the stale window;
-  - report another holder’s build as their own publication, because of the identity
-    checks around the pointer swap, so a DirectStore write that returns names a snapshot
-    that carries its callback;
-  - publish a version from a superseded base (F5a, and fencing before each step);
-  - apply an envelope twice (the ledger), or archive an envelope that the head `current`
-    names does not contain (F6).
+- **L5 (safety and recovery).** Correctness depends on exclusive ownership from
+  acquisition through the final pointer replacement or maintenance mutation.
+  The lock remains held across arbitrary process pauses.
+  This prevents both a late pointer rename from rolling back newer publications and
+  orphan reclamation from replacing a snapshot another publisher just committed.
+  A crashed holder leaves an abandoned lock and blocks mutation until **offline
+  recovery**: stop and prevent restart of every store client on every host, verify that
+  none can resume, remove only `publish.lock`, and run repair before restarting clients.
+  Age and owner metadata alone never establish this quiescence.
+  Read-only snapshot access remains available while an abandoned lock blocks mutation.
 
-  Overlap can still waste work: a fenced-out attempt rebuilds, and a DirectStore attempt
-  reruns its callback.
-  One window remains in `f1.0`. The pointer swap is a blind `rename()`, so a holder that
-  stalls longer than the stale window after its final pre-swap checks but before its
-  pointer rename, while at least two later versions are published, can on resuming
-  rename its older version over `current`. `current` then still names a complete,
-  integrity-gated snapshot, and envelopes not yet settled stay pending (F6), but
-  envelopes the newer versions’ publishers already archived, and DirectStore writes they
-  already returned, are absent from the restored lineage, and a later publisher reclaims
-  the newer snapshot as a stale orphan.
-  Step-boundary heartbeats (L2) mean such a stall needs a frozen process, not a slow
-  step. Open issue O6 tracks the structural fix.
-  Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
-  and OCC, not staleness precision, carry correctness.
-  (See Open issue O3.)
+The file layout remains `f1.0`, but a writer that automatically breaks old locks does
+not implement this safety rule.
+Upgrading an existing store requires stopping all clients and upgrading every writer and
+maintenance process together before restart.
+Do not mix automatic-takeover writers with these clients.
+Preserved snapshots and archives from an older store should be inspected before
+destructive cleanup; upgrading the locking rule cannot restore writes already lost by a
+previous pointer regression.
 
 ## 8. Read Leases and Garbage Collection
 
 GC deletes superseded snapshots.
 A **read lease** pins a version against GC while a packager/uploader reads it.
 
-- **RL1.** To take a lease: read `current` → v; write `leases/<token>.lease` containing
+- **RL1.** Acquire `publish.lock` before selecting and pinning a version, and hold it
+  through the existence check.
+  Then read `current` → v; write `leases/<token>.lease` containing
   `{version: v, pid, host, at}`; **then verify the snapshot file still exists**. If it
   does not, the lease lost a race with GC: remove the lease file and retry from a fresh
-  pointer read. (Publish-then-verify is the reader’s half of the race closure; G2’s
-  tombstone is GC’s half.)
+  pointer read. Release the lock before returning the lease.
+  Since GC holds the same exclusive lock, a successful lease cannot appear between GC’s
+  scan and snapshot removal, and its snapshot path cannot disappear temporarily during
+  tombstoning.
 - **RL2.** Lease liveness is the lease file’s mtime; holders of long leases SHOULD
   heartbeat by touching the file.
   GC MAY treat leases older than its staleness window (Node default 60 s) as abandoned
@@ -606,8 +588,9 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   routine on a live store and are never touched by GC): with a corrupt head, the older
   snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
   the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
-  `current` under the lock; if `current` moved backward since validation, repair
-  re-pointed the store and GC MUST refuse.
+  `current` under the lock.
+  If it differs from the validated version, GC MUST refuse and require a fresh
+  validation.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
 - **G2.** GC MUST delete each snapshot in two phases.
@@ -617,14 +600,12 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   snapshot name (without replacing) and keep it; otherwise it unlinks the tombstone.
   If the second scan fails (for example on an unreadable fresh lease), GC MUST restore
   the snapshot before failing.
-  A single re-scan followed by an unlink does not close the race: a reader can publish
-  its lease and pass its existence check between them.
-  With the tombstone, every interleaving is safe: a reader whose existence check runs
-  after the rename fails it and retries (RL1), and a lease published before the rename
-  is visible to the second scan.
-  A lease that lands just before the rename can see its snapshot vanish briefly, until
-  the second scan restores it; the newest `retain` versions are never collected, which
-  bounds RL1’s retries.
+  RL1 and GC hold the same exclusive lock, so a conforming reader cannot publish a new
+  lease between the first scan and the rename.
+  A successful live pin is therefore never tombstoned, even temporarily.
+  The second scan is a defensive check, not a substitute for serialization: tombstoning
+  alone would allow a successful lease holder to observe a missing path, or lose its pin
+  if GC crashed before restoring it.
 - **G3.** GC MAY also sweep *stale* transients (§2) at the store root, in `snapshots/`,
   in `tx/pending/`, and in `leases/`, but MUST NOT sweep *fresh* ones, which may belong
   to a live initializer, reconcile, DirectStore write, envelope capture, or read-lease
@@ -737,13 +718,19 @@ A conforming backup of a live store MUST pin or otherwise retain one published s
 and copy that immutable SQLite file, or use SQLite’s online backup or `VACUUM INTO`
 facilities.
 A `seal` or export MUST publish its output like a completed file: write it to
-a uniquely-named temp in the destination directory, validate it, fsync it, `rename()` it
-over the destination, and fsync that directory.
-`VACUUM INTO` writes in place and does not fsync its output, so it MUST target the temp,
-never the final path; a reader of the destination then sees the previous file or the
-complete export, and an interrupted seal leaves only its temp.
-The destination MUST NOT be a store-owned path (`current`, `fsqlite.json`,
-`publish.lock`, or anything under the store’s subdirectories).
+a uniquely-named temp in the destination directory, validate it, fsync it, commit it
+with a no-replace hard link to a new destination, remove the temp, and fsync that
+directory.
+`VACUUM INTO` writes in place and does not fsync its output, so it MUST target
+the temp, never the final path; a reader of the destination sees no file or the complete
+export. The destination MUST NOT exist or lie anywhere inside the store, including its
+root. It MUST NOT be in use by a SQLite connection or have a `-journal`, `-wal`, or
+`-shm` sidecar, since replaying an old journal or WAL into the new database could
+corrupt it. The reference implementation checks sidecars before building and immediately
+before committing the export.
+The caller must exclude concurrent SQLite users of the path.
+The no-replace commit also refuses existing files reached through case aliases or
+symlinks, and destinations created concurrently while the export is built.
 The reference implementation’s `seal()` also refuses to start while committed envelopes
 are pending; an export of the head alone copies a leased snapshot instead.
 This specification makes no guarantee about an arbitrary recursive directory copy racing
@@ -789,10 +776,9 @@ published snapshot was integrity-gated at publish and never modified (S6):
    snapshots.
 2. Acquire `publish.lock` through L1-L5 and revalidate its owner token immediately
    before every pointer write, snapshot deletion, transient deletion, and envelope move.
-   A fresh publisher lock makes repair refuse without mutation.
-   A stale lock MAY be reclaimed only through the normal fenced stale-break and
-   acquisition path in L2-L4; repair MUST then act only while its acquired token remains
-   valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
+   Any existing publisher lock makes repair refuse without mutation, regardless of age.
+   An abandoned lock requires offline recovery as defined in L5; repair MUST NOT remove
+   or reclaim it automatically.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
 4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
@@ -803,6 +789,14 @@ published snapshot was integrity-gated at publish and never modified (S6):
    remove the reason file and move the envelope back to `tx/pending/`. The writer’s
    write either lands in the moved dir, where that check sees it, or fails, so the
    writer never reports success for an envelope repair quarantined.
+
+Repair MUST refuse destructive cleanup when an otherwise integrity-clean current head
+conflicts with the transaction archive: an archived transaction missing from
+`applied_tx` may indicate a lost published lineage.
+Preserve snapshots and archives for operator recovery.
+After falling back from a physically corrupt head, repair may still report `corrupt`
+because archives are absent from the restored ledger; integrity recovery does not
+silently resolve that evidence.
 
 Repair MUST NOT delete committed pending envelopes because the next reconcile folds this
 unpublished work. Repair also MUST NOT modify any snapshot in place.
@@ -924,8 +918,9 @@ The same artifacts test every implementation.
 - **O3: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
-  Correctness never depends on these (L5), but liveness tuning on skewed clusters is
-  undocumented; the planned real-NFS gate and protocol model both probe this.
+  Publication does not expire lock ownership on age (L5). Read-lease and transient
+  expiry still require conservative clock and heartbeat assumptions; the planned
+  real-NFS gate and protocol model must probe them.
 
 - **O4: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
@@ -940,11 +935,12 @@ The same artifacts test every implementation.
 
 - **O6: Shared snapshot names and a blind pointer swap.** Every publisher of version N+1
   competes for the one path `snapshots/<N+1>`, and the pointer swap cannot fail on a
-  changed `current`. F5c and F6 make overlapping holders safe except for the
-  late-pointer window in L5. A future `f1.x` revision should publish builds under unique
-  names (for example `<version>-<hex10>.fsqlite.sqlite`) with `current` naming the file,
-  gated by a `required_features` entry, so builds never share a path and the pointer
-  identifies the exact build.
+  changed `current`. L5 therefore requires a non-stealable lock and offline recovery
+  after its owner crashes.
+  A future revision could permit safe automatic recovery by publishing builds under
+  unique names (for example `<version>-<hex10>.fsqlite.sqlite`) with `current` naming
+  the file, gated by a `required_features` entry, so builds never share a path and the
+  pointer identifies the exact build.
   Closing the late-pointer window additionally needs a pointer protocol that cannot move
   `current` backward, such as a no-replace commit of a per-version pointer record.
 

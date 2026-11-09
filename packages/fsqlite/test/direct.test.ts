@@ -307,7 +307,7 @@ for (const scenario of [
     matches: (path: string, dir: string) => path === join(dir, 'snapshots'),
   },
 ]) {
-  test(`DirectStore retries when its publication lease is stolen during ${scenario.name}`, () => {
+  test(`DirectStore refuses a foreign lock installed during ${scenario.name}`, () => {
     const { dir, cleanup } = tmpStore()
     let calls = 0
     try {
@@ -325,22 +325,26 @@ for (const scenario of [
         utimesSync(publishLock, old, old)
       })
 
-      const version = store.write(
-        (db) => {
-          calls++
-          db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
-        },
-        { lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 } },
+      assert.throws(
+        () =>
+          store.write(
+            (db) => {
+              calls++
+              db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+            },
+            { lockOpts: { staleMs: 1, timeoutMs: 60, pollMs: 1 } },
+          ),
+        /could not acquire/,
       )
 
-      assert.equal(version, 1)
-      assert.equal(calls, 2, 'the unfenced build is discarded and caller code is rerun')
+      assert.equal(store.currentVersion(), 0)
+      assert.equal(calls, 1, 'the unfenced build is discarded without stealing the foreign lock')
       assert.equal(
         store.read(
           (db) =>
             (db.prepare('SELECT COUNT(*) count FROM artifacts').get() as { count: number }).count,
         ),
-        1,
+        0,
       )
     } finally {
       scenario.setHook(null)

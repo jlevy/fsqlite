@@ -1,12 +1,12 @@
 // True process-kill (SIGKILL) tests: harsher than the crashAt tests (which throw an
 // exception with a finally). A real SIGKILL leaves no finally and no cleanup. These
-// prove the locking and recovery survive a hard kill: a holder killed mid-publish must
-// not permanently wedge the store (the single most important locking property).
+// prove the locking and recovery survive a hard kill: a holder killed mid-publish requires
+// verified offline lock recovery before mutations resume.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { ChildProcess } from 'node:child_process'
@@ -49,7 +49,7 @@ const seedWriters = (dir: string, writers: number, per: number): void => {
   }
 }
 
-test('a process SIGKILLed while holding publish.lock does not wedge the store', async () => {
+test('a SIGKILLed lock holder requires quiescent lock recovery before reconciliation', async () => {
   const { dir, cleanup } = tmpStore()
   let child: ChildProcess | null = null
   try {
@@ -65,8 +65,15 @@ test('a process SIGKILLed while holding publish.lock does not wedge the store', 
     // Hard kill: no finally, the lock dir is left behind (the stale-lock-on-crash case).
     await killHard(child)
 
-    // A fresh reconcile with a short stale window must reclaim the abandoned lock and
-    // recover all 12 tx exactly once. (timeoutMs must exceed staleMs.)
+    assert.throws(
+      () => store.reconcile({ lockOpts: { timeoutMs: 60, staleMs: 1, pollMs: 5 } }),
+      /could not acquire/,
+    )
+    assert.equal(artifactCount(store), 0)
+    // All worker processes exited and the lock holder is confirmed dead. This is the
+    // offline operator recovery procedure, never an age-based automatic takeover.
+    rmSync(store.publishLock, { recursive: true })
+    store.repair()
     let guard = 0
     while (store.pendingTxns().length > 0 && guard++ < 30) {
       store.reconcile({ lockOpts: { timeoutMs: 8000, staleMs: 1500, pollMs: 20 } })

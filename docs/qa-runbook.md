@@ -7,7 +7,7 @@ why) so the manual review can decide whether to accept the residual risk.
 
 The two correctness invariants that every check supports are:
 
-- **R1 (bounded loss):** a crash, stale-lock overlap, torn capture, or interrupted
+- **R1 (bounded loss):** a crash, paused publisher, torn capture, or interrupted
   protocol operation loses at most the unpublished tail and never a previously published
   snapshot. Live backup means a pinned immutable snapshot or a supported backup/seal
   operation, not an arbitrary recursive directory copy.
@@ -49,11 +49,11 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
-| `fencing.test.ts` | `C3`, `C5` | Lease acquisition, stale break, token fencing, heartbeat loss, and owner-write cleanup |
-| `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
+| `fencing.test.ts` | `C3`, `C5` | Exclusive acquisition, refusal to steal old locks, token checks, heartbeat loss, and owner-write cleanup |
+| `publication.test.ts` | `C5` | Paused publishers retain exclusive ownership at the pointer swap; no-replace commits, unexplained snapshot preservation, defensive identity checks, and archiving only what the published ledger holds |
 | `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, refuses store-owned destinations, and reports a corrupt head as corrupt |
-| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
-| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup (including init journals and lease temps), never quarantining a live or just-committed envelope, lock loss at acquisition, and a `planRepair()` dry run that changes nothing |
+| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; serialized lease acquisition against GC and two-phase tombstone failure recovery; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
+| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, existing-lock refusal, quiescent abandoned-lock recovery, mutation revalidation, transient cleanup (including init journals and lease temps), never quarantining a live or just-committed envelope, lock loss at acquisition, and a `planRepair()` dry run that changes nothing |
 | `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures, and a write reconcile could not publish reported as pending rather than retryable |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
@@ -64,7 +64,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states including every invalid-marker rule, feature/version gating, marker fencing, and mixed-store quarantine |
 | `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required hard links and directory fsync, and WAL negative control; mountinfo parsing (escaped paths, network and volatile filesystems) and the verdict rules |
 | `fsutil.test.ts` | `C3`, `C5` | Pointer-temp cleanup and fail-closed directory fsync behavior |
-| `errors.test.ts` | `C6`, `C11` | The typed error model: each `FsqliteError` code and `retryable` flag raised through the public API, and machine-coded quarantine reasons |
+| `errors.test.ts` | `C6`, `C11` | Typed errors, retry flags, and machine-coded quarantine reasons. The GC and retry suites cover lease I/O and captured transactions. |
 | `read-retry.test.ts` | `C4`, `C11` | A reader whose snapshot gc collects after the pointer read retries on the new head, within a bound, and a pointer to a missing snapshot stays corruption |
 | `cli.test.ts` | `C11` | The importable CLI runs nothing on import, returns exit codes, maps every state and error code to its exit code, and prints cause chains |
 | `examples.test.ts` | `C10`, `C11` | Both runnable examples complete and their own result checks pass |
@@ -288,10 +288,11 @@ use.
    check:** B4 confirms cross-tool *reads*; writers remain Node-only for now.
 4. **Long Publish Leases.** DirectStore and repair can hold the publish lease across
    synchronous O(snapshot size) work.
-   They renew the lease at step boundaries and fence before each destructive step, but a
-   single synchronous step (one head copy, one callback, one fsync) cannot be renewed
-   while it runs. **Manual check:** set `staleMs` above the measured worst-case single
-   step and keep `timeoutMs > staleMs`.
+   Heartbeats report liveness; a stale timestamp never permits takeover.
+   **Manual check:** pause a publisher beyond `staleMs` and verify contenders time out.
+   For crash recovery, stop and prevent restart of every client on every host, verify
+   none can resume, remove only the abandoned `publish.lock`, and run repair before
+   restarting. Never use lock age or PID metadata alone as proof of quiescence.
 5. **Platform and Thread Matrix.** POSIX publication is covered on macOS and Linux.
    Windows rename-replace races and the formal Worker Thread coordination contract are
    future gates. **Manual check:** do not extend the support claim beyond the published

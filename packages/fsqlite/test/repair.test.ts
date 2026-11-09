@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   utimesSync,
   writeFileSync,
@@ -137,9 +138,25 @@ test('repair removes a corrupt head snapshot and falls back to the prior good on
     writeFileSync(store.snapshotPath(2), 'totally-not-sqlite'.repeat(100))
     const res = store.repair()
     assert.equal(store.currentVersion(), 1, 'fell back to the prior integrity-clean snapshot')
-    assert.equal(store.validate().state, 'sealed')
+    assert.equal(res.state, 'corrupt', 'the archive exposes the missing v2 transaction')
     assert.ok(res.actions.some((a) => a.includes('removed corrupt snapshot 2')))
     assert.equal(count(store), 1, 'v1 (the last clean head) intact; v2 delta is the bounded loss')
+  } finally {
+    cleanup()
+  }
+})
+
+test('validation and maintenance preserve a newer snapshot after pointer regression', () => {
+  const { store, cleanup } = storeAt(2)
+  try {
+    writeFileSync(store.currentPath, '1')
+    const health = store.validate()
+    assert.equal(health.state, 'corrupt')
+    assert.ok(health.issues.includes('1 archived transaction(s) absent from the current ledger'))
+    assert.throws(() => store.planRepair(), /absent from the current ledger/)
+    assert.throws(() => store.repair(), /absent from the current ledger/)
+    assert.throws(() => store.gc(), /absent from the current ledger/)
+    assert.ok(existsSync(store.snapshotPath(2)))
   } finally {
     cleanup()
   }
@@ -178,7 +195,7 @@ test('repair refuses to mutate while a publisher lock is present', () => {
   }
 })
 
-test('repair reclaims a stale publisher lock before restoring the store', () => {
+test('repair refuses an old lock until the operator performs quiescent recovery', () => {
   const { store, cleanup } = storeAt(1)
   try {
     const transient = join(store.snapDir, '.build-abandoned.sqlite')
@@ -188,7 +205,13 @@ test('repair reclaims a stale publisher lock before restoring the store', () => 
     const old = new Date(Date.now() - 10_000)
     utimesSync(store.publishLock, old, old)
 
-    const result = store.repair({ lockOpts: { staleMs: 100, timeoutMs: 500, pollMs: 5 } })
+    const options = { lockOpts: { staleMs: 100, timeoutMs: 500, pollMs: 5 } }
+    assert.throws(() => store.repair(options), /stop every store client/)
+    assert.throws(() => store.planRepair(options), /stop every store client/)
+    assert.equal(existsSync(transient), true)
+    // The fixture has no live clients; only this verified offline step removes the lock.
+    rmSync(store.publishLock, { recursive: true })
+    const result = store.repair(options)
     assert.ok(result.actions.some((action) => action.includes('removed transient')))
     assert.equal(existsSync(transient), false)
     assert.equal(store.validate().state, 'sealed')

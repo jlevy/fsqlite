@@ -6,7 +6,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/cli/main.ts', 'src/cli/bin.ts'],
+  entry: ['src/index.ts', 'src/cli/index.ts', 'src/cli/bin.ts'],
   format: ['esm'],
   platform: 'node',
   target: 'node22',

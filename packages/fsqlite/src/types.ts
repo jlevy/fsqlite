@@ -112,6 +112,8 @@ export interface WriteWithRetryOptions {
 export interface ReadLeaseOptions {
   /** Re-reads of `current` after gc collects the version first read; at least 0, default 8. */
   maxRetries?: number
+  /** Lock options for claiming a lease without racing gc's snapshot removal. */
+  lockOpts?: LockOptions
 }
 
 /** Options for `gc()`. Invalid values throw a `TypeError` before anything is deleted. */

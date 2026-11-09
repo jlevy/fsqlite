@@ -23,8 +23,8 @@ stable release, not a promise that unsupported environments work today.
 
 - Run the correctness suite across at least two hosts on NFSv4.1/EFS, SMB, and
   representative managed shared filesystems.
-- Exercise clock skew, attribute caching, stale-lock breaks, close-to-open visibility,
-  and directory fsync behavior under real contention.
+- Exercise clock skew, attribute caching, abandoned-lock recovery, close-to-open
+  visibility, and directory fsync behavior under real contention.
 - Add block-device power-loss fault injection for snapshot and pointer publication.
 - Design an optional durable-envelope receipt mode for writes that must survive power
   loss before reconcile.
@@ -35,9 +35,8 @@ stable release, not a promise that unsupported environments work today.
   unless a separate replication and consistency protocol is validated.
 - Decide from the evidence whether a monotonic fence or single-host proxy lock is
   necessary.
-- Shorten the DirectStore critical section with an optimistic protocol (copy and
-  callback outside the lease) so a single step longer than the lease stale window does
-  not livelock; step-boundary heartbeats already cover multi-step operations.
+- Shorten the DirectStore critical section with an optimistic protocol that moves the
+  copy and callback outside the lock, reducing the wait for competing publishers.
 - Measure the `DELETE`, `TRUNCATE`, and `PERSIST` rollback-journal variants for
   DirectStore, keeping `DELETE` unless the evidence supports an alternative.
 - Close two narrow gc races: a stale-transient sweep that could delete a tombstone whose

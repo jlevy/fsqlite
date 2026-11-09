@@ -115,7 +115,8 @@ test('read-lease heartbeat reports when its lease has been lost', () => {
       },
       (error: unknown) =>
         error instanceof FsqliteError &&
-        error.code === 'retryable' &&
+        error.code === 'refused' &&
+        !error.retryable &&
         error.message.includes(`read lease on snapshot ${lease.version} was lost`) &&
         (error.cause as NodeJS.ErrnoException).code === 'ENOENT',
     )
@@ -291,9 +292,9 @@ test('gc rejects invalid options before deleting anything, even with a live leas
   }
 })
 
-test('a lease published at any point during gc never pins a deleted snapshot', () => {
-  // A reader read `current` when it was 1, several publishes ago, and publishes its lease
-  // while gc runs (spec RL1). Inject that lease before and after every lease scan gc makes.
+test('a read lease cannot return while gc may hide or remove its snapshot', () => {
+  // Try to acquire a lease at every scan boundary, including after the tombstone rename.
+  // A failed claim must leave no pin; after gc releases its lock a fresh claim succeeds.
   for (let scan = 1; ; scan++) {
     let injected = false
     for (const position of ['before', 'after'] as const) {
@@ -305,7 +306,15 @@ test('a lease published at any point during gc never pins a deleted snapshot', (
         const readCurrent = reader.currentVersion.bind(reader)
         // A stale pointer read until that snapshot disappears; RL1's retry reads afresh.
         reader.currentVersion = () => (existsSync(reader.snapshotPath(1)) ? 1 : readCurrent())
-        let lease: ReturnType<SnapshotStore['readLease']> | null = null
+        const state = { attempted: false }
+        const claim = (): void => {
+          state.attempted = true
+          assert.throws(
+            () => reader.readLease({ lockOpts: { timeoutMs: 5, staleMs: 1, pollMs: 1 } }),
+            LockTimeoutError,
+          )
+          assert.deepEqual(readdirSync(store.leaseDir), [])
+        }
         const scanLeases = (
           store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
         ).activeLeasedVersions.bind(store)
@@ -313,13 +322,13 @@ test('a lease published at any point during gc never pins a deleted snapshot', (
         Object.assign(store, {
           activeLeasedVersions: (ms: number): Set<number> => {
             scans++
-            const take = scans === scan && lease === null
+            const take = scans === scan && !state.attempted
             if (take && position === 'before') {
-              lease = reader.readLease()
+              claim()
             }
             const result = scanLeases(ms)
             if (take && position === 'after') {
-              lease = reader.readLease()
+              claim()
             }
             return result
           },
@@ -327,9 +336,9 @@ test('a lease published at any point during gc never pins a deleted snapshot', (
 
         store.gc({ retain: 0 })
 
-        const held = lease as ReturnType<SnapshotStore['readLease']> | null
-        if (held !== null) {
+        if (state.attempted) {
           injected = true
+          const held = reader.readLease()
           assert.ok(
             existsSync(store.snapshotPath(held.version)),
             `lease on ${held.version} injected ${position} scan ${scan} must keep it`,
@@ -446,21 +455,23 @@ test('gc reports a snapshot it could not remove and leaves every other version',
   }
 })
 
-test('gc refuses to delete after current moves back behind the version it validated', () => {
+test('gc refuses to delete when current differs from the version it validated', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     advance(store, 2)
-    // Model a repair that re-points current between gc's validation and its lock.
+    // Model a repair or publication between validation and acquiring the publish lock.
     const validate = store.validate.bind(store)
-    store.validate = () => ({ ...validate(), current: 3 })
-    assert.throws(
-      () => store.gc({ retain: 0 }),
-      (error: unknown) =>
-        error instanceof FsqliteError &&
-        error.code === 'retryable' &&
-        error.message.includes('current moved from 3 back to 2'),
-    )
+    for (const version of [1, 3]) {
+      store.validate = () => ({ ...validate(), current: version })
+      assert.throws(
+        () => store.gc({ retain: 0 }),
+        (error: unknown) =>
+          error instanceof FsqliteError &&
+          error.code === 'retryable' &&
+          error.message.includes(`current moved from ${version} to 2`),
+      )
+    }
     assert.deepEqual(snapshotFiles(store), [0, 1, 2])
   } finally {
     cleanup()

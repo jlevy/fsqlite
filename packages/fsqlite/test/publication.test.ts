@@ -1,9 +1,5 @@
-// Overlapping publishers. A holder paused past the lock's stale window can be broken
-// and later resume in the middle of its publication. Correctness must not depend on the
-// lock (spec L5), so these interleavings must never replace a published snapshot, publish
-// another holder's build as one's own, or archive an envelope the published ledger lacks.
-// Each test models the resumed holder at a real step boundary through a fault-injection
-// seam, and models any foreign build with real SQLite files.
+// Publication holds a non-stealable lock through the pointer rename. Tests also inject
+// out-of-protocol replacement to cover defensive identity and ledger checks.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -19,8 +15,9 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { DirectStore, SnapshotStore } from '../src/index.ts'
-import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
+import { DirectStore, LockTimeoutError, SnapshotStore } from '../src/index.ts'
+import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
+import { ownerOf } from '../src/lock.ts'
 import { setBeforeSnapshotLinkForTest } from '../src/publication.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -42,10 +39,61 @@ const ledgerOf = (path: string): string[] =>
   column(path, 'SELECT tx_id AS v FROM applied_tx ORDER BY 1')
 const txns = (dir: string): string[] => readdirSync(dir).filter((d) => d.endsWith('.txn'))
 
+for (const strategy of ['direct', 'snapshot'] as const) {
+  test(`${strategy}: a publisher paused after its final checks retains exclusive ownership`, () => {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new SnapshotStore(dir, STORE_OPTS).init()
+      const direct = new DirectStore(dir, STORE_OPTS)
+      if (strategy === 'snapshot') {
+        store.write('wx', insert('x'))
+      }
+      let reached = false
+      setAfterFsyncPathForTest((path) => {
+        if (!path.startsWith(`${store.currentPath}.`)) {
+          return
+        }
+        setAfterFsyncPathForTest(null)
+        reached = true
+        // This is the former rollback window: all OCC/token/identity checks passed,
+        // and the very next operation blindly renames this pointer over current.
+        const token = ownerOf(store.publishLock)
+        const past = new Date(Date.now() - 120_000)
+        utimesSync(store.publishLock, past, past)
+        const lockOpts = { staleMs: 1, timeoutMs: 40, pollMs: 2 }
+        for (let attempt = 0; attempt < 2; attempt++) {
+          assert.throws(
+            () =>
+              strategy === 'direct'
+                ? direct.write(insert('peer'), { lockOpts })
+                : store.reconcile({ lockOpts }),
+            LockTimeoutError,
+          )
+        }
+        assert.equal(ownerOf(store.publishLock), token)
+        assert.equal(store.currentVersion(), 0)
+        assert.deepEqual(rowsOf(store.snapshotPath(1)), ['x'])
+      })
+      const published =
+        strategy === 'direct' ? direct.write(insert('x')) : store.reconcile().published
+      assert.equal(reached, true)
+      assert.equal(published, 1)
+      assert.equal(direct.write(insert('y')), 2)
+      assert.equal(direct.write(insert('z')), 3)
+      assert.equal(store.currentVersion(), 3)
+      assert.deepEqual(rowsOf(store.snapshotPath(1)), ['x'])
+      assert.deepEqual(rowsOf(store.snapshotPath(3)), ['x', 'y', 'z'])
+    } finally {
+      setAfterFsyncPathForTest(null)
+      cleanup()
+    }
+  })
+}
+
 /**
  * A complete, valid build from snapshot 0 carrying one foreign row, as an overlapping
- * publisher would produce. It is aged past the default stale window so a later publisher
- * may reclaim it as an abandoned orphan.
+ * publisher would produce. It is aged past the default diagnostic window to prove that
+ * age never grants publication permission to reclaim it.
  */
 function foreignBuild(store: SnapshotStore | DirectStore, dir: string): string {
   const path = join(dir, 'foreign-build.sqlite')
@@ -131,12 +179,10 @@ test('a reconciler does not publish a foreign build that replaced its own before
       }
     })
 
-    const result = store.reconcile()
-
-    assert.equal(result.applied, 1)
-    assert.ok(ledgerOf(store.snapshotPath(store.currentVersion())).includes(x ?? ''))
-    assert.deepEqual(rowsOf(store.snapshotPath(store.currentVersion())), ['x'])
-    assert.deepEqual(txns(store.txPending), [])
+    assert.throws(() => store.reconcile(), /already exists ahead of current/)
+    assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(rowsOf(store.snapshotPath(1)), ['foreign'])
+    assert.deepEqual(txns(store.txPending), [`${x}.txn`])
   } finally {
     setAfterFsyncDirForTest(null)
     cleanup()
@@ -188,33 +234,37 @@ test('a DirectStore retry after committing its build leaves no orphan a later re
   }
 })
 
-test("a publisher never reclaims a fresh entry inside another holder's link-to-swap window", () => {
-  const { dir, cleanup } = tmpStore()
-  try {
-    const store = new SnapshotStore(dir, STORE_OPTS).init()
-    store.write('wx', insert('x'))
-    const occupant = foreignBuild(store, dir)
-    const future = new Date(Date.now() + 60_000) // stays fresh for the whole attempt
-    utimesSync(occupant, future, future)
-    renameSync(occupant, store.snapshotPath(1))
+for (const age of ['fresh', 'old'] as const) {
+  test(`a publisher preserves an unexplained ${age} entry ahead of current`, () => {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new SnapshotStore(dir, STORE_OPTS).init()
+      store.write('wx', insert('x'))
+      const occupant = foreignBuild(store, dir)
+      if (age === 'fresh') {
+        const future = new Date(Date.now() + 60_000)
+        utimesSync(occupant, future, future)
+      }
+      renameSync(occupant, store.snapshotPath(1))
 
-    assert.throws(
-      () => store.reconcile({ lockOpts: { staleMs: 50, timeoutMs: 100, pollMs: 5 } }),
-      /snapshot 1 is held by a publication that neither finished nor went stale/,
-    )
+      assert.throws(
+        () => store.reconcile({ lockOpts: { staleMs: 50, timeoutMs: 100, pollMs: 5 } }),
+        /snapshot 1 already exists ahead of current/,
+      )
 
-    assert.deepEqual(rowsOf(store.snapshotPath(1)), ['foreign'], 'the live entry is untouched')
-    assert.equal(store.currentVersion(), 0)
-    assert.equal(txns(store.txPending).length, 1, 'the envelope stays pending')
-    assert.deepEqual(
-      readdirSync(store.snapDir).filter((f) => f.startsWith('.build-')),
-      [],
-      'the abandoned build is removed',
-    )
-  } finally {
-    cleanup()
-  }
-})
+      assert.deepEqual(rowsOf(store.snapshotPath(1)), ['foreign'], 'the live entry is untouched')
+      assert.equal(store.currentVersion(), 0)
+      assert.equal(txns(store.txPending).length, 1, 'the envelope stays pending')
+      assert.deepEqual(
+        readdirSync(store.snapDir).filter((f) => f.startsWith('.build-')),
+        [],
+        'the abandoned build is removed',
+      )
+    } finally {
+      cleanup()
+    }
+  })
+}
 
 test('reconcile archives only envelopes the ledger of the head now named by current holds', () => {
   const { dir, cleanup } = tmpStore()
@@ -243,8 +293,8 @@ test('reconcile archives only envelopes the ledger of the head now named by curr
     )
     assert.deepEqual(txns(store.txApplied), [])
 
-    const past = new Date(Date.now() - 120_000)
-    utimesSync(store.snapshotPath(1), past, past) // the regressed build is now a stale orphan
+    assert.throws(() => store.reconcile(), /already exists ahead of current/)
+    store.repair() // no transaction was archived, so explicit recovery can retain the head
     const recovered = store.reconcile()
 
     assert.equal(recovered.applied, 1)

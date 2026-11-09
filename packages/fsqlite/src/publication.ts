@@ -1,9 +1,9 @@
 // publication.ts commits a fully built, fsynced snapshot under the next version name and
 // publishes it through the `current` pointer, for both write strategies (spec F5c, §9).
 //
-// The lock does not make publication safe on its own: a holder paused past the stale
-// window can be broken and resume between its last check and its next filesystem step
-// (spec L5). Three rules keep such overlap from losing published work:
+// Exclusive ownership is required through the pointer rename (spec L5). A timestamp or
+// token check cannot fence a paused process from a later unconditional rename. The lock
+// therefore cannot be stolen on age. Three additional checks defend against mistakes:
 //
 //   1. Commit without replacing. The build is hard-linked to `snapshots/<next>`, which
 //      fails with EEXIST instead of replacing whatever another holder put there, so no
@@ -18,7 +18,6 @@ import { closeSync, fstatSync, linkSync, openSync, statSync, unlinkSync, utimesS
 import type { Stats } from 'node:fs'
 import { FsqliteError, PostPublishError } from './errors.ts'
 import { fsyncDir, publishPointer } from './fsutil.ts'
-import { sleepSync } from './lock.ts'
 import type { LockLease } from './lock.ts'
 
 type BeforeSnapshotLinkHook = (dest: string) => void
@@ -148,71 +147,44 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
 }
 
 /**
- * Hard-link the build to `dest`, waiting out or reclaiming an entry that is already there.
+ * Hard-link the build to `dest`, preserving any entry that is already there.
  * Returns the build's identity, or null when the attempt must be retried from a new base.
  *
- * An existing entry belongs either to a publisher that already advanced `current` past
- * `base` (retry), to a holder inside its own link-to-swap window, or to a publisher that
- * crashed or abandoned there. A live holder touches its build immediately before linking
- * and swaps the pointer moments later, so an entry older than the stale window is an
- * orphan: the lock's own liveness rule (spec L2) applied to the entry.
+ * An entry ahead of current requires explicit repair. It may be an interrupted publish,
+ * or evidence of a formerly published lineage after an older client's pointer rollback.
+ * Its age cannot distinguish these cases, so publication never reclaims it automatically.
  */
 function linkBuild(c: SnapshotCommit, fd: number): BuildIdentity | null {
-  const deadline = Date.now() + c.lease.timeoutMs
-  for (;;) {
-    if (!c.lease.fence()) {
-      return null
-    }
-    const now = new Date()
-    utimesSync(c.build, now, now)
-    const expected = identityOf(fstatSync(fd))
-    beforeSnapshotLinkHook?.(c.dest)
-    try {
-      linkSync(c.build, c.dest)
-      return expected
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        throw error
-      }
-    }
-    if (c.readCurrent() >= c.next) {
-      return null // a peer published this version first
-    }
-    let existing: Stats
-    try {
-      existing = statSync(c.dest)
-    } catch (error) {
-      if (isEnoent(error)) {
-        continue
-      }
+  if (!c.lease.fence()) {
+    return null
+  }
+  const now = new Date()
+  utimesSync(c.build, now, now)
+  const expected = identityOf(fstatSync(fd))
+  beforeSnapshotLinkHook?.(c.dest)
+  try {
+    linkSync(c.build, c.dest)
+    return expected
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
       throw error
     }
-    if (Date.now() - existing.mtimeMs > c.lease.staleMs) {
-      try {
-        unlinkSync(c.dest)
-      } catch (error) {
-        if (!isEnoent(error)) {
-          throw error
-        }
-      }
-      continue
-    }
-    if (Date.now() >= deadline) {
-      throw new FsqliteError(
-        'in-flight',
-        `snapshot ${c.next} is held by a publication that neither finished nor went stale ` +
-          `within ${c.lease.timeoutMs}ms; if no publisher is running, run repair`,
-      )
-    }
-    sleepSync(c.lease.pollMs)
   }
+  if (c.readCurrent() >= c.next) {
+    return null // a peer published this version first
+  }
+  throw new FsqliteError(
+    'in-flight',
+    `snapshot ${c.next} already exists ahead of current; stop all store clients and ` +
+      'run repair before publishing; the existing snapshot was preserved',
+  )
 }
 
 /**
  * Remove `dest` only while it is still this holder's build and still ahead of `current`;
  * anything else there is another holder's entry or already published. When called while
  * an error is propagating, a cleanup failure must not hide that error: the entry is then a
- * recoverable orphan that a later publisher reclaims once stale, or that repair removes.
+ * recoverable orphan that requires explicit repair.
  */
 function removeOwnOrphan(c: SnapshotCommit, expected: BuildIdentity, pending?: unknown): void {
   try {

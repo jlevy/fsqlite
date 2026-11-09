@@ -44,10 +44,9 @@ In Node, a failed write looks like this:
 > ([`SQLITE_BUSY` (5)](https://sqlite.org/rescode.html#busy);
 > [SQLite source](https://github.com/sqlite/sqlite/blob/002d33d8c569ce25f5001ae627a4e73dd52bf98d/src/main.c#L1649-L1657))
 
-Waiting longer does not fix this: the NFS mount cannot supply the lock SQLite needs.
-[A busy timeout](https://sqlite.org/pragma.html#pragma_busy_timeout) helps when another
-process owns a working lock and will release it; it cannot make unavailable or
-unreliable NFS locking work.
+[A busy timeout](https://sqlite.org/pragma.html#pragma_busy_timeout) can ride out
+ordinary contention or a transient lock error.
+Persistent failures in the mount’s lock service need a different coordination mechanism.
 WAL is not a workaround because
 [SQLite does not support WAL across a network filesystem](https://sqlite.org/wal.html#overview).
 Some broken network locks can appear to work without coordinating clients correctly,
@@ -229,7 +228,7 @@ The `.fsqlite.sqlite` files are the data: each is a complete standard SQLite dat
 closed and published without `-wal` or `-shm` side files.
 `fsqlite.json`, `current`, `tx/`, and `leases/` are the coordination layer.
 During work or recovery, short-lived `publish.lock/`, `.build-*`, `.direct-*`,
-`.work-*`, and `*.tmp` paths may also appear.
+`.work-*`, `*.tmp`, and `*.tmp-journal` paths may also appear.
 
 The two write paths publish the same layout:
 
@@ -257,11 +256,16 @@ path.
 Replacing `current` is the store commit point.
 The snapshot is written and fsynced first, so readers see either the previous complete
 SQLite database or the next one.
-Fencing, optimistic checks on `current`, and an in-snapshot transaction ledger protect
-publication from racing publishers, stale leases, duplicate application, and process
-crashes.
-The protocol coordinates cooperative writers; processes that bypass fsqlite must
-treat published snapshots as read-only.
+An exclusive publication lock, optimistic checks on `current`, and an in-snapshot
+transaction ledger protect publication from racing publishers and duplicate application.
+The lock never expires on age: a crashed publisher blocks mutation until offline
+recovery. Stop every store client on every host before removing an abandoned lock, then
+run repair before restarting.
+See the [recovery protocol](docs/fsql-format-spec.md#7-the-publish-lock).
+Older clients that automatically break stale locks must be stopped and upgraded together
+with every writer and maintenance process; mixed locking rules are unsafe.
+The protocol coordinates cooperative writers; processes that bypass fsqlite must treat
+published snapshots as read-only.
 `SnapshotStore` provides deterministic write-set conflict handling rather than
 serializability across independently captured transactions.
 The [architecture design](docs/fsqlite-design.md#architecture) covers the complete store

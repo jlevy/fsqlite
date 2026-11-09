@@ -101,9 +101,10 @@ Options:
   --json        Print JSON instead of text
   -h, --help    Show this help
 
-repair deletes every transient file, so run it only when no writer or reconciler is
-active; it refuses while a live publisher holds publish.lock. Exits with the code of
-the resulting state (the current state with --dry-run).
+Run repair with all store clients stopped. Repair refuses an existing publish.lock.
+To recover an abandoned lock, prevent all clients on every host from restarting,
+verify none can resume, remove publish.lock, then run repair before restarting clients.
+Exits with the resulting state (the current state with --dry-run).
 
 Exit codes:
 ...
@@ -153,8 +154,7 @@ $ fsqlite help frobnicate
 
 ```console
 $ fsqlite --json stats store
-! fsqlite: unknown option '--json' before the command; options follow it, as in 'fsqlite <command> --json <path>'
-! Run `fsqlite --help` for usage.
+! {"error":{"code":"usage","message":"unknown option '--json' before the command; options follow it, as in 'fsqlite <command> --json <path>'","causes":[]}}
 ? 64
 ```
 
@@ -178,8 +178,7 @@ A flag is never taken as a path: `seal` does not write a file named `--json`.
 
 ```console
 $ fsqlite seal store --json
-! fsqlite: 'seal' needs <out.sqlite>
-! Run `fsqlite seal --help` for usage.
+! {"error":{"code":"usage","message":"'seal' needs <out.sqlite>","causes":[]}}
 ? 64
 ```
 

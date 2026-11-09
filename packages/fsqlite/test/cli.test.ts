@@ -61,6 +61,8 @@ test('every store state and error code maps to its documented exit code', () => 
     corrupt: 3,
     unsupported: 4,
     'in-flight': 2,
+    pending: 1,
+    'outcome-unknown': 1,
     conflict: 1,
     retryable: 1,
     'post-publish': 1,
@@ -72,6 +74,18 @@ test('every store state and error code maps to its documented exit code', () => 
     assert.equal(exitCodeForError(new FsqliteError(code as FsqliteErrorCode, code)), exit, code)
   }
   assert.equal(exitCodeForError(new Error('unclassified')), EXIT.failure)
+})
+
+test('usage errors honor --json without treating positional arguments as flags', () => {
+  const missing = cli('seal', 'store', '--json')
+  assert.equal(missing.code, EXIT.usage)
+  assert.deepEqual(
+    missing.err.map((line) => JSON.parse(line) as unknown),
+    [{ error: { code: 'usage', message: "'seal' needs <out.sqlite>", causes: [] } }],
+  )
+  const positional = cli('validate', 'store', '--', '--json')
+  assert.equal(positional.code, EXIT.usage)
+  assert.match(positional.err[0] ?? '', /^fsqlite: /)
 })
 
 test('an error prints its cause chain, as JSON under --json', () => {

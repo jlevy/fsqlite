@@ -56,6 +56,13 @@ that snapshot needs these changes:
 
 - **Trigger schemas:** `SnapshotStore` rejects them; use `DirectStore` for such a
   schema.
+- **Changeset keys and policies:** `SnapshotStore` rejects key clauses using
+  `ON CONFLICT REPLACE` or `IGNORE`, and nullable `INTEGER PRIMARY KEY DESC` keys.
+  A conflict-policy key naming an absent caller table fails initialization.
+- **Options and read leases:** invalid limits for garbage collection, reconciliation,
+  retries, lease acquisition, or envelope size throw `TypeError`. A lost read pin makes
+  `heartbeat()` throw.
+  A failed release reports `io`.
 - **Errors:** branch on `FsqliteError.code` and `retryable`, not on message text.
   `writeWithRetry()` throws a non-retryable `TransactionError` when it captured a write
   it could not publish.

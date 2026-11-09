@@ -91,6 +91,8 @@ export function exitCodeForError(error: unknown): number {
     case 'in-flight':
       return EXIT.inFlight
     case 'conflict':
+    case 'pending':
+    case 'outcome-unknown':
     case 'retryable':
     case 'post-publish':
     case 'incompatible':
@@ -207,7 +209,10 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     positionals: ['dir', 'out.sqlite'],
     options: {},
     optionHelp: [],
-    notes: ['The output is replaced atomically; a pending tail must be reconciled first.'],
+    notes: [
+      'Use a new destination outside the store with no SQLite sidecar files.',
+      'A pending tail must be reconciled first.',
+    ],
     run: runSeal,
   },
   repair: {
@@ -217,9 +222,10 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     options: { 'dry-run': { type: 'boolean' } },
     optionHelp: ['--dry-run     Print the steps repair would take, and change nothing'],
     notes: [
-      'repair deletes every transient file, so run it only when no writer or reconciler is',
-      'active; it refuses while a live publisher holds publish.lock. Exits with the code of',
-      'the resulting state (the current state with --dry-run).',
+      'Run repair with all store clients stopped. Repair refuses an existing publish.lock.',
+      'To recover an abandoned lock, prevent all clients on every host from restarting,',
+      'verify none can resume, remove publish.lock, then run repair before restarting clients.',
+      'Exits with the resulting state (the current state with --dry-run).',
     ],
     run: runRepair,
   },
@@ -231,8 +237,8 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     optionHelp: ['--fix         Run repair on an in-flight or corrupt store'],
     notes: [
       'Exits with the code of the final store state; a plain SQLite file exits 0 when',
-      'clean and 3 when it fails integrity validation. --fix runs repair, which deletes',
-      'every transient file, so use it only when no writer or reconciler is active.',
+      'clean and 3 when it fails integrity validation. Stop all store clients before',
+      'using --fix, which runs repair.',
     ],
     run: runDoctor,
   },
@@ -297,11 +303,16 @@ function commandHelp(name: string, spec: CommandSpec): string[] {
 
 /** Run one CLI invocation (`argv` excludes the node and script paths). */
 export function main(argv: readonly string[], io: CliIo = processIo): number {
-  const json = argv.includes('--json')
+  const endOfOptions = argv.indexOf('--')
+  const json = (endOfOptions === -1 ? argv : argv.slice(0, endOfOptions)).includes('--json')
   try {
     return dispatch(argv, io)
   } catch (error: unknown) {
     if (error instanceof UsageError) {
+      if (json) {
+        reportError(io, error, true)
+        return EXIT.usage
+      }
       io.err(`fsqlite: ${error.message}`)
       io.err(
         error.command === null
@@ -434,7 +445,12 @@ function reportError(io: CliIo, error: unknown, json: boolean): void {
     io.err(
       JSON.stringify({
         error: {
-          code: error instanceof FsqliteError ? error.code : null,
+          code:
+            error instanceof UsageError
+              ? 'usage'
+              : error instanceof FsqliteError
+                ? error.code
+                : null,
           message: errorMessage(error),
           causes,
         },
@@ -446,7 +462,12 @@ function reportError(io: CliIo, error: unknown, json: boolean): void {
       io.err(`  caused by: ${message}`)
     }
   }
-  if (process.env.FSQLITE_DEBUG === '1' && error instanceof Error && error.stack !== undefined) {
+  if (
+    !json &&
+    process.env.FSQLITE_DEBUG === '1' &&
+    error instanceof Error &&
+    error.stack !== undefined
+  ) {
     io.err(error.stack)
   }
 }

@@ -5,7 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SnapshotStore, TransactionError } from '../src/index.ts'
+import { LockTimeoutError, SnapshotStore, TransactionError } from '../src/index.ts'
 import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
@@ -148,7 +148,7 @@ test('writeWithRetry reports a write reconcile could not publish as pending, not
         }),
       (error: unknown) =>
         error instanceof TransactionError &&
-        error.code === 'in-flight' &&
+        error.code === 'pending' &&
         !error.retryable &&
         error.cause instanceof Error &&
         error.cause.message === 'injected build fsync failure' &&
@@ -165,5 +165,59 @@ test('writeWithRetry reports a write reconcile could not publish as pending, not
   } finally {
     setAfterFsyncPathForTest(null)
     cleanup()
+  }
+})
+
+test('writeWithRetry retains a non-retryable transaction identity when its outcome is unreadable', () => {
+  for (const published of [false, true]) {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new SnapshotStore(dir, OPTS).init()
+      store.writeWithRetry('seed', increment)
+      const reconcile = store.reconcile.bind(store)
+      const read = store.read.bind(store)
+      const inspectionError = Object.assign(new Error('ledger temporarily unreadable'), {
+        code: 'EIO',
+      })
+      store.reconcile = () => {
+        const result = published ? reconcile() : undefined
+        store.read = () => {
+          throw inspectionError
+        }
+        if (result === undefined) {
+          throw new LockTimeoutError('publish.lock', 30)
+        }
+        return result
+      }
+      let calls = 0
+      let txId: string | undefined
+      assert.throws(
+        () =>
+          store.writeWithRetry('w', (db) => {
+            calls++
+            increment(db)
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof TransactionError)
+          assert.equal(error.code, 'outcome-unknown')
+          assert.equal(error.retryable, false)
+          assert.ok(
+            published ? error.cause === inspectionError : error.cause instanceof AggregateError,
+          )
+          txId = error.txId
+          return true
+        },
+      )
+      assert.equal(calls, 1)
+      store.reconcile = reconcile
+      store.read = read
+      store.reconcile()
+      assert.equal(counter(store), 2, 'the captured increment lands exactly once')
+      assert.ok(
+        store.read((db) => db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId!)),
+      )
+    } finally {
+      cleanup()
+    }
   }
 })

@@ -1,31 +1,24 @@
-// lock.ts provides a fenced mkdir lease with an owner token.
+// lock.ts provides an exclusive mkdir lock with an owner token.
 //
 // Publication is fsqlite's only mutual-exclusion point. Writers do not hold the lease
 // while preparing changes. `mkdir(2)` provides cross-process coordination on filesystems
 // whose exclusive directory-creation semantics pass the required capability checks.
 //
-// Correctness rests on immutable snapshots, an atomic pointer swap, and the applied_tx
-// ledger. The lease reduces redundant work. Its owner token lets a holder revalidate
-// ownership immediately before each destructive step and abort if it lost the lease.
+// Publication correctness requires exclusive ownership until release: a timestamp cannot
+// distinguish a dead process from a paused one. An existing lock is never stolen on age.
+// Abandoned-lock recovery requires stopping every client on every host before removing it.
 
-import {
-  mkdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-  readFileSync,
-  utimesSync,
-} from 'node:fs'
+import { mkdirSync, rmSync, statSync, writeFileSync, readFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
+import { performance } from 'node:perf_hooks'
 import { LockTimeoutError } from './errors.ts'
 import { removeQuietly } from './fsutil.ts'
 
 /**
- * Publish-lock timing, in milliseconds. `timeoutMs` must exceed `staleMs`: a waiter must
- * be able to outwait the stale window, or it would break a lock it could have waited for.
+ * Publish-lock timing, in milliseconds. All timings are positive safe integers.
+ * `timeoutMs > staleMs` is retained for compatibility; age never permits lock takeover.
  */
 export interface LockOptions {
   /** How long to wait for the lock before throwing `LockTimeoutError`; default 30 s. */
@@ -33,11 +26,10 @@ export interface LockOptions {
   /** Delay between acquisition attempts; default 25 ms. */
   pollMs?: number
   /**
-   * Age after which an unrefreshed lock counts as abandoned and may be broken; default
-   * 20 s. Choose it longer than the longest single step a holder takes between renewals.
+   * Heartbeat and diagnostic age, default 20 s. Exceeding it never allows lock takeover.
    */
   staleMs?: number
-  /** Diagnostic callback run after this caller breaks a stale lock. */
+  /** Legacy callback accepted for compatibility. Automatic stale-lock breaking is disabled. */
   onStaleBreak?: ((meta: OwnerMeta | null) => void) | null
 }
 
@@ -52,19 +44,13 @@ export interface OwnerMeta {
 /**
  * A holder's handle on an acquired lock, passed to the `withLock` callback.
  *
- * Correctness never depends on the lock (spec L5), but a live holder keeps it fresh so
- * waiters do not break it during a long critical section, and it re-verifies ownership
- * immediately before every destructive step so a holder that was broken anyway backs off.
- * The callback runs synchronously, so renewal happens at step boundaries: a single step
- * (one copy, one application callback, one fsync) must still finish within `staleMs`.
+ * The lock remains exclusive across arbitrary pauses (spec L5). Heartbeats provide
+ * diagnostic liveness; token checks catch accidental out-of-protocol removal. They are
+ * not an atomic fence against concurrent lock removal or a substitute for exclusivity.
  */
 export interface LockLease {
   /** The random owner token this holder wrote to `owner.json`. */
   readonly token: string
-  /** The resolved stale window, acquisition timeout, and poll interval of this lock. */
-  readonly staleMs: number
-  readonly timeoutMs: number
-  readonly pollMs: number
   /**
    * Renew at a step boundary: refresh the lock's mtime once it is older than
    * {@link LEASE_RENEW_FRACTION} of `staleMs`. Returns false once this holder has lost the
@@ -81,10 +67,36 @@ export interface LockLease {
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_POLL_MS = 25
 export const DEFAULT_LOCK_STALE_MS = 20_000
+
+/** Validate timing before any caller examines or mutates a lock. */
+export function validateLockOptions(opts: unknown = {}): Required<LockOptions> {
+  if (typeof opts !== 'object' || opts === null || Array.isArray(opts)) {
+    throw new TypeError('lock options must be an object')
+  }
+  const {
+    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+    pollMs = DEFAULT_LOCK_POLL_MS,
+    staleMs = DEFAULT_LOCK_STALE_MS,
+    onStaleBreak = null,
+  } = opts as LockOptions
+  for (const [name, value] of Object.entries({ timeoutMs, pollMs, staleMs })) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError(`lock option ${name} must be a positive safe integer`)
+    }
+  }
+  if (timeoutMs <= staleMs) {
+    throw new TypeError(
+      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
+    )
+  }
+  if (onStaleBreak !== null && typeof onStaleBreak !== 'function') {
+    throw new TypeError('lock option onStaleBreak must be a function or null')
+  }
+  return { timeoutMs, pollMs, staleMs, onStaleBreak }
+}
 /**
  * A step-boundary heartbeat refreshes the lock once its age reaches this fraction of the
- * stale window. Renewing at a quarter keeps a holder at least three quarters of a window
- * away from any waiter's stale judgment, while a run of quick steps costs one stat each.
+ * diagnostic stale window. A run of quick steps costs one stat each.
  */
 export const LEASE_RENEW_FRACTION = 0.25
 
@@ -96,17 +108,10 @@ export const sleepSync = (ms: number): void => {
 
 type OwnerWriter = (path: string, data: string) => void
 let writeOwner: OwnerWriter = writeFileSync
-type StaleLockMover = (lockPath: string, gravePath: string) => void
-let moveStaleLock: StaleLockMover = renameSync
 
 /** Internal fault-injection seam; pass null to restore the filesystem writer. */
 export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
   writeOwner = writer ?? writeFileSync
-}
-
-/** Internal fault-injection seam; pass null to restore the rename that moves a stale lock aside. */
-export function setStaleLockMoverForTest(mover: StaleLockMover | null): void {
-  moveStaleLock = mover ?? renameSync
 }
 
 /**
@@ -114,30 +119,20 @@ export function setStaleLockMoverForTest(mover: StaleLockMover | null): void {
  * {@link LockLease}: it calls `lease.heartbeat()` between long steps and `lease.fence()`
  * immediately before each destructive step, abandoning the step when fencing fails.
  *
- * Invariant: timeoutMs > staleMs (you must be able to wait longer than the stale
- * window, or you would break a lock you could otherwise have waited for).
+ * Existing locks, including malformed or arbitrarily old ones, cause bounded waiting.
+ * Recovery must establish that all clients have stopped before removing an abandoned lock.
  */
 export function withLock<T>(
   lockPath: string,
   fn: (token: string, lease: LockLease) => T,
   opts: LockOptions = {},
 ): T {
-  const {
-    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
-    pollMs = DEFAULT_LOCK_POLL_MS,
-    staleMs = DEFAULT_LOCK_STALE_MS,
-    onStaleBreak = null,
-  } = opts
-  if (timeoutMs <= staleMs) {
-    throw new TypeError(
-      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
-    )
-  }
+  const { timeoutMs, pollMs, staleMs } = validateLockOptions(opts)
   const token = randomBytes(8).toString('hex')
   const meta = JSON.stringify({ token, pid: process.pid, host: hostname(), at: Date.now() })
-  const deadline = Date.now() + timeoutMs
+  const deadline = performance.now() + timeoutMs
   let held = false
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     try {
       mkdirSync(lockPath)
       try {
@@ -152,48 +147,17 @@ export function withLock<T>(
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') {
         throw e
       }
-      // Lock exists. Break it only if it is older than the stale window. This is the
-      // irreducible NFS hazard: a holder paused past the lease can be stolen out from
-      // under it. The defense is the holder's `lease.fence()` before each destructive step,
-      // its step-boundary heartbeats, and a staleMs value well above the longest single
-      // step, not aggressive breaking.
-      try {
-        const seen = observeLock(lockPath)
-        if (seen === null) {
-          continue // lock vanished between mkdir and stat: retry immediately
-        }
-        if (Date.now() - seen.mtimeMs > staleMs) {
-          // Two waiters can judge the same lock stale. Only the directory that was judged
-          // stale may be removed, never a successor that re-acquired the name in between.
-          const broken = removeLockIf(
-            lockPath,
-            (moved) =>
-              moved.meta?.token === seen.meta?.token && Date.now() - moved.mtimeMs > staleMs,
-          )
-          if (broken !== null) {
-            if (onStaleBreak) {
-              try {
-                onStaleBreak(broken.meta)
-              } catch {
-                /* a diagnostic callback must not change lock acquisition */
-              }
-            }
-            continue
-          }
-        }
-      } catch {
-        // An unreadable or unremovable lock is treated as held: back off and retry until
-        // the acquisition deadline rather than spinning.
-      }
-      sleepSync(pollMs)
+      // An old lock may belong to a paused publisher already past its last token check.
+      // Taking it over would let that publisher resume a blind pointer rename later and
+      // roll back acknowledged writes. Only its owner, or quiescent recovery, removes it.
+      sleepSync(Math.min(pollMs, Math.max(0, deadline - performance.now())))
     }
   }
   if (!held) {
     throw new LockTimeoutError(lockPath, timeoutMs)
   }
   // Verify, touch, verify: the first check avoids refreshing a successor's lock; the
-  // second proves the touched directory is still ours. A breaker re-checks staleness after
-  // moving a lock aside (L2), so a lock refreshed here cannot be broken for staleMs.
+  // second catches accidental replacement. Correctness requires no concurrent takeover.
   const refresh = (): boolean => {
     if (ownerOf(lockPath) !== token) {
       return false
@@ -211,9 +175,6 @@ export function withLock<T>(
   }
   const lease: LockLease = {
     token,
-    staleMs,
-    timeoutMs,
-    pollMs,
     heartbeat: () => {
       const seen = observeLock(lockPath)
       if (seen?.meta?.token !== token) {
@@ -226,12 +187,10 @@ export function withLock<T>(
   try {
     return fn(token, lease)
   } finally {
-    // Fence the release the same way as publication: remove the directory only if we
-    // still own it. A holder that stalled past staleMs and was stale-broken must not delete
-    // a successor's live lock (which would let a third holder acquire concurrently). If we
-    // lost ownership, leave the successor's lock alone; staleMs reclaims any true orphan.
+    // No conforming contender can remove this lock before its owner releases it.
+    // The token check also avoids deleting an accidentally installed foreign lock.
     if (ownerOf(lockPath) === token) {
-      removeLockIf(lockPath, (moved) => moved.meta?.token === token)
+      rmSync(lockPath, { recursive: true, force: true })
     }
   }
 }
@@ -252,49 +211,6 @@ function observeLock(path: string): LockObservation | null {
     }
     throw error
   }
-}
-
-/**
- * Remove the lock directory only while it is still the one the caller judged removable,
- * and return what was removed (null when nothing was).
- *
- * The directory is first renamed aside to a `.tmp` transient name. The rename is atomic, so
- * two breakers cannot both take the same directory, and once it is aside its holder can no
- * longer refresh it and no acquirer can reuse it. The moved directory is then judged again;
- * a check-then-delete on the lock path itself would race with a successor that re-acquires
- * the name between the check and the delete. If the moved directory no longer qualifies, it
- * is a successor's live lock and is renamed back. The rename back fails rather than replace
- * a lock another acquirer has since completed; that directory then belongs to no one (its
- * former holder fails every ownership check) and is removed.
- */
-function removeLockIf(
-  lockPath: string,
-  accept: (moved: LockObservation) => boolean,
-): LockObservation | null {
-  const grave = `${lockPath}.${randomBytes(5).toString('hex')}.tmp`
-  try {
-    moveStaleLock(lockPath, grave)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null // another breaker or releaser moved it first
-    }
-    throw error
-  }
-  const moved = observeLock(grave)
-  if (moved !== null && accept(moved)) {
-    rmSync(grave, { recursive: true, force: true })
-    return moved
-  }
-  try {
-    renameSync(grave, lockPath)
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code
-    if (code !== 'ENOTEMPTY' && code !== 'EEXIST') {
-      throw error
-    }
-    rmSync(grave, { recursive: true, force: true })
-  }
-  return null
 }
 
 /** The lock's owner record, or null when it is absent, unreadable, or malformed. */

@@ -95,9 +95,15 @@ paths publish the same layout.
 Replacing `current` is the store commit point.
 The snapshot is written and fsynced first, so readers see either the previous complete
 SQLite database or the next one.
-Fencing, optimistic checks on `current`, and an in-snapshot transaction ledger protect
-publication from racing publishers, stale leases, duplicate application, and process
-crashes. The
+An exclusive publication lock, optimistic checks on `current`, and an in-snapshot
+transaction ledger protect publication from racing publishers and duplicate application.
+The lock never expires on age.
+A crashed holder blocks mutation until offline recovery: stop and prevent restart of
+every store client on every host, verify none can resume, remove only `publish.lock`,
+and run repair before restarting.
+Older clients that break stale locks must be stopped and upgraded together with every
+writer and maintenance process; mixed locking rules are unsafe.
+The
 [architecture design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#architecture)
 covers the complete store layout, publication races, and consistency boundaries.
 
@@ -326,16 +332,18 @@ the store root `dir` without touching the filesystem.
 | `write(fn, { lockOpts, maxRetries })` | version | DirectStore: copies, mutates, validates, and publishes under the publish lock; may re-run `fn` after a lost race |
 | `read(fn)` | `fn`’s result | Runs `fn` on a read-only connection to the published head |
 | `currentVersion()` | version | The version `current` names |
-| `readLease({ maxRetries })` | `ReadLease` | Pins the head against `gc`; `heartbeat()` keeps the pin fresh, `release()` drops it |
+| `readLease({ maxRetries, lockOpts })` | `ReadLease` | Claims a pin under the publication lock; `heartbeat()` keeps it fresh, `release()` drops it |
 | `snapshotPath(version)` | path | The file of a published version |
 | `validate()` | `ValidateResult` | Classifies the store as `sealed`, `live`, `in-flight-capture`, `corrupt`, or a recognition failure, with issues |
 | `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses an unhealthy store |
 | `planRepair({ lockOpts })` | `RepairResult` | Lists the steps `repair()` would take without changing anything |
-| `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while a live publisher holds the lock |
+| `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while any publisher lock exists |
 | `seal(destPath)` | `destPath` | Writes an integrity-checked standalone copy of the head; refuses while envelopes are pending |
 
 `lockOpts` is a `LockOptions` with `timeoutMs` (default 30 s), `pollMs` (25 ms),
-`staleMs` (20 s), and an `onStaleBreak` callback.
+`staleMs` (20 s), and the deprecated `onStaleBreak` callback, which is never invoked.
+All timings must be positive safe integers, and `timeoutMs > staleMs` remains required.
+`staleMs` controls heartbeat and diagnostic age; it never permits lock takeover.
 `gc` keeps `DEFAULT_RETAINED_SNAPSHOTS` (3) predecessors by default and treats leases
 and transients older than 60 s as abandoned.
 A `ReadLease` is disposable, so `using lease = store.readLease()` releases it at the end
@@ -422,9 +430,11 @@ code of its error, so `gc` on an unsupported store exits `4` like `validate` doe
 or reconciler is active.
 Errors print their cause chain; set `FSQLITE_DEBUG=1` for the stack.
 
-`seal` produces a standalone SQLite copy and replaces its output path atomically, so
-that path holds either the previous file or the complete export; it refuses a
-destination the store owns.
+`seal` produces a standalone SQLite copy at a new path outside the store.
+It publishes the complete export atomically and refuses an existing destination,
+including symlinks, or a destination with `-journal`, `-wal`, or `-shm` sidecars.
+Choose a path no live SQLite connection uses; to replace an old export, choose a new
+filename and remove the old export only after the new one succeeds.
 `gc` holds the publish lock for every deletion and refuses a store whose head fails
 validation. `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
@@ -448,7 +458,9 @@ Argument mistakes throw `TypeError`.
 | `invalid` | `fsqlite.json` is malformed | Inspect the marker; nothing may mutate the store |
 | `unsupported` | A newer format version or required feature | Use a newer fsqlite |
 | `corrupt` | Torn or dangling pointer, identity mismatch, or a head that fails integrity checks | Run `repair` |
-| `in-flight` | A live publisher holds the lock, or a captured write is still pending | Wait, then retry (see `TransactionError`) |
+| `in-flight` | A live publisher holds the lock | Wait, then retry |
+| `pending` | A captured write is not yet published (`TransactionError.txId`) | Reconcile and inspect its outcome; never re-run the write |
+| `outcome-unknown` | The captured write’s outcome could not be read (`TransactionError.txId`) | Restore access and inspect that transaction; never re-run the write |
 | `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
 | `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |
 | `post-publish` | A step failed after `current` named the new version (`PostPublishError.published`) | Do not re-run the write |
@@ -459,6 +471,8 @@ Argument mistakes throw `TypeError`.
 `StoreFormatError` (the recognition codes, with `state`), `ConflictError` (with
 `conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`), and
 `TransactionError` (with `txId` and `quarantineReason`) are subclasses.
+A lost read-lease heartbeat is `refused` and non-retryable: take a new lease before
+reading further. Repeating a heartbeat cannot restore a released or collected pin.
 
 ## Correctness Model
 
@@ -529,9 +543,8 @@ is the normative protocol authority.
   Monitor free space and pending backlog.
 - DirectStore holds its lease across copy, callback, checks, fsync, and publication, and
   renews it at each step boundary.
-  Configure a stale window longer than the longest single step (one head copy, one
-  callback, or one fsync).
-  A stolen lease is fenced safely but can cause the callback to retry.
+  A slow or paused holder keeps the lock; contenders time out rather than steal it.
+  A crashed holder requires the offline recovery procedure above.
 - `seal()` pins one published snapshot and creates an integrity-checked point-in-time
   SQLite file while writers continue.
   It refuses to start while committed envelopes are pending, so reconcile first;

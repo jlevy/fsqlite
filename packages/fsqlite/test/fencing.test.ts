@@ -1,30 +1,33 @@
-// Fencing / lease semantics of the publish lock. The publish lock is the only
-// mutual-exclusion point, and correctness must not depend on it being perfect. These
-// tests pin the three properties that make that true:
-//   - revalidate-before-publish: a holder whose lease was stolen aborts (the
-//     ownerOf(lockPath) === token check) instead of writing under a new owner
-//   - stale-break: a lock older than staleMs is reclaimable (no permanent wedge)
-//   - the timeoutMs > staleMs invariant is enforced
+// Publication requires exclusive lock ownership across arbitrary process pauses.
+// Age is diagnostic only; abandoned-lock recovery requires verified quiescence.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
-import { ownerOf, setOwnerWriterForTest, setStaleLockMoverForTest, withLock } from '../src/lock.ts'
+import { ownerOf, setOwnerWriterForTest, withLock } from '../src/lock.ts'
 import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
+
+test('a poll interval longer than timeout does not extend the acquisition deadline', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    mkdirSync(lockPath)
+    const start = performance.now()
+    assert.throws(() => {
+      withLock(lockPath, () => undefined, { timeoutMs: 30, staleMs: 1, pollMs: 10_000 })
+    }, LockTimeoutError)
+    assert.ok(performance.now() - start < 2_000, 'the 10-second poll is capped by the deadline')
+  } finally {
+    cleanup()
+  }
+})
 
 test('withLock enforces timeoutMs > staleMs before touching the lock path', () => {
   const { dir, cleanup } = tmpStore()
@@ -65,7 +68,7 @@ test('a holder whose lease was stolen fails its fence and leaves the successor l
   }
 })
 
-test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', () => {
+test('an arbitrarily old lock is never stolen, including when a legacy callback is supplied', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   try {
@@ -75,76 +78,43 @@ test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', ()
     const oldTime = new Date(Date.now() - 10_000)
     utimesSync(lockPath, oldTime, oldTime)
     let ran = false
-    const out = withLock(
-      lockPath,
-      () => {
-        ran = true
-        return 'ok'
-      },
-      { timeoutMs: 3000, staleMs: 500, pollMs: 10 },
-    )
-    assert.equal(out, 'ok')
-    assert.equal(ran, true, 'a stale lock must be breakable so a live worker can proceed')
+    let broken = false
+    assert.throws(() => {
+      withLock(
+        lockPath,
+        () => {
+          ran = true
+        },
+        {
+          timeoutMs: 60,
+          staleMs: 1,
+          pollMs: 5,
+          onStaleBreak: () => {
+            broken = true
+          },
+        },
+      )
+    }, LockTimeoutError)
+    assert.equal(ran, false)
+    assert.equal(broken, false)
+    assert.equal(ownerOf(lockPath), 'dead-holder', 'age cannot prove that its owner is dead')
   } finally {
     cleanup()
   }
 })
 
-test('a failed stale-lock removal backs off until timeout', () => {
+test('a malformed old lock is retained until quiescent recovery', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   mkdirSync(lockPath)
   const oldTime = new Date(Date.now() - 10_000)
   utimesSync(lockPath, oldTime, oldTime)
-  let attempts = 0
-  setStaleLockMoverForTest(() => {
-    attempts++
-    const error = new Error('injected stale removal failure') as NodeJS.ErrnoException
-    error.code = 'EPERM'
-    throw error
-  })
   try {
     assert.throws(() => {
       withLock(lockPath, () => undefined, { timeoutMs: 80, staleMs: 1, pollMs: 20 })
     }, /could not acquire/)
-    assert.ok(attempts <= 5, `stale removal should poll rather than spin; attempts=${attempts}`)
+    assert.equal(existsSync(lockPath), true)
   } finally {
-    setStaleLockMoverForTest(null)
-    cleanup()
-  }
-})
-
-test('a stale-lock break never deletes a successor that re-acquired the lock first', () => {
-  const { dir, cleanup } = tmpStore()
-  const lockPath = join(dir, 'publish.lock')
-  mkdirSync(lockPath)
-  writeFileSync(join(lockPath, 'owner.json'), ownerRecord('dead-holder'))
-  const oldTime = new Date(Date.now() - 10_000)
-  utimesSync(lockPath, oldTime, oldTime)
-  setStaleLockMoverForTest((from, to) => {
-    setStaleLockMoverForTest(null)
-    // A second waiter judged the same lock stale, broke it first, and now holds a fresh
-    // lock (its mtime is in the future so it stays fresh for the whole test)...
-    rmSync(from, { recursive: true, force: true })
-    mkdirSync(from)
-    writeFileSync(join(from, 'owner.json'), ownerRecord('successor'))
-    const fresh = new Date(Date.now() + 60_000)
-    utimesSync(from, fresh, fresh)
-    // ...and only then does this waiter's own break land.
-    renameSync(from, to)
-  })
-  try {
-    assert.throws(() => {
-      withLock(lockPath, () => undefined, { timeoutMs: 150, staleMs: 100, pollMs: 5 })
-    }, LockTimeoutError)
-    assert.equal(ownerOf(lockPath), 'successor', "the successor's live lock survives the break")
-    assert.deepEqual(
-      readdirSync(dir).filter((entry) => entry !== 'publish.lock'),
-      [],
-      'no lock grave is left behind',
-    )
-  } finally {
-    setStaleLockMoverForTest(null)
     cleanup()
   }
 })
@@ -195,7 +165,7 @@ test('OCC on the pointer: a reconcile that builds against a superseded base conv
   }
 })
 
-test('SnapshotStore retries when its lease is stolen after the snapshot rename', () => {
+test('SnapshotStore refuses a foreign lock installed after its snapshot commit', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
@@ -214,14 +184,16 @@ test('SnapshotStore retries when its lease is stolen after the snapshot rename',
       utimesSync(store.publishLock, old, old)
     })
 
-    const result = store.reconcile({
-      lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 },
-    })
-
-    assert.equal(result.attempts, 2)
-    assert.equal(result.applied, 1)
-    assert.equal(artifactCount(store), 1)
-    assert.equal(store.validate().state, 'sealed')
+    assert.throws(
+      () =>
+        store.reconcile({
+          lockOpts: { staleMs: 1, timeoutMs: 60, pollMs: 1 },
+        }),
+      LockTimeoutError,
+    )
+    assert.equal(store.currentVersion(), 0)
+    assert.equal(artifactCount(store), 0)
+    assert.equal(ownerOf(store.publishLock), 'successor')
   } finally {
     setAfterFsyncDirForTest(null)
     cleanup()

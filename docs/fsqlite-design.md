@@ -171,7 +171,7 @@ of the promise.
 | `C2` | Ordinary operation needs no server or background service. | Processes coordinate through immutable files, envelopes, atomic rename, and a `mkdir` lease. | Applications schedule reconciliation themselves. | Spec F1-F6 and L1-L5; multiprocess suites |
 | `C3` | Safety must not depend on WAL, advisory locks, or one host’s memory. | Writers never mutate a shared SQLite head. Required filesystem capabilities are atomic exclusive `mkdir`, atomic rename-replace, no-replace hard links, visibility after close, and durable fsync ordering. Publication fails if a required directory fsync is unavailable. | Correctness is conditional on those capabilities. Cross-host NFS/SMB proof is still a pre-1.0 gate. | `fsinspect`; `nfs-sim.test.ts`; QA Part C |
 | `C4` | Readers do not take the publish lease, and independent writers can capture work concurrently. | Readers open immutable heads. `SnapshotStore` writers create unique transaction envelopes without the publish lease. | Cross-writer visibility occurs only after reconcile. | Spec W1-W4 and reader role; `concurrent.test.ts` |
-| `C5` | A crash cannot destroy a previously published state. | Immutable snapshots, durable snapshot-before-pointer ordering, no-replace snapshot commits with identity checks around the pointer swap, atomic pointer replacement, fencing, OCC on `current`, the in-snapshot ledger, and archiving only what the published ledger holds define one commit point. | Accepted envelopes are not power-loss durable until publication. Arbitrary recursive copies of a live store are outside the guarantee. A holder frozen between its final checks and its pointer rename can still move `current` backward (spec L5, O6). | Spec R1, P1-P3, F5, and section 10; crash, kill, and fencing suites |
+| `C5` | A crash cannot destroy a previously published state. | Immutable snapshots, durable snapshot-before-pointer ordering, no-replace snapshot commits with identity checks around the pointer swap, atomic pointer replacement, fencing, OCC on `current`, the in-snapshot ledger, and archiving only what the published ledger holds define one commit point. | Accepted envelopes are not power-loss durable until publication. Arbitrary recursive copies of a live store are outside the guarantee. A crashed publisher blocks mutation until verified offline lock recovery (spec L5). | Spec R1, P1-P3, F5, and section 10; crash, kill, and fencing suites |
 | `C6` | Detectable inconsistencies fail closed and repair never guesses. | Recognition separates absent, invalid, unsupported, and corrupt stores. Identity, digests, integrity, foreign keys, reserved tables, and schema compatibility are checked before destructive work or publication. | Undetectable hardware or protocol-bypassing corruption remains possible. Repair needs a verified clean recovery point. | Spec R2 and section 11; hardening, store-format, and repair suites |
 | `C7` | Merge results are deterministic, exactly once, and closed over declared SQLite constraints. | Envelopes apply in byte-sorted order; action passes are fixed as `replace`, `omit`, `strict`; data and ledger entry share one transaction; nonreplaceable conflicts quarantine the complete envelope; foreign keys are checked at envelope boundaries. | Same-primary-key DATA/CONFLICT cases still require an application policy. General business invariants need stronger patterns. | Spec F1-F6 and merge policy; `merge-constraints.test.ts` |
 | `C8` | A store and its evolution are self-identifying. | Root `fsqlite.json`, UUID `store_id`, format string `f1.0`, required features, snapshot metadata, SQLite application ID, and caller-schema identity cross-check one another. | Unknown features, unsupported versions, and a different caller-schema token block mutation. Format and schema migrations are separate explicit operations. | Spec M1-M5 and section 12; `store-format.test.ts`; `init.test.ts` |
@@ -200,7 +200,8 @@ publish lease.
 It publishes only if `current` still names the base and the lease token is
 still owned. A racing reconciler rebuilds from the winner’s head.
 
-Exactly-once behavior does not depend on a perfect lease.
+Exactly-once publication requires exclusive lock ownership through the pointer swap.
+A holder keeps the lock across arbitrary pauses; contenders never take it over on age.
 Each applied transaction ID is written into `applied_tx` in the same SQLite transaction
 as its data. A build cannot publish unless its base is still current.
 After a crash, a later reconciler either sees the ledgered transaction in the published
@@ -404,12 +405,16 @@ shared path can look local.
 
 The lease covers the copy, callback, checks, fsync, and publication.
 With the Node defaults, `staleMs` is 20 seconds and `timeoutMs` is 30 seconds.
-The writer renews the lease at each step boundary (after the copy, after the callback
-and checks, after the fsync) and fences before each destructive step, so the stale
-window must exceed the longest single step rather than the whole operation.
-Repair renews it after scanning each snapshot.
-A step that outlasts the window can still be broken, which costs a fenced retry, not
-data. The callback can run more than once after an OCC or fencing loss, so it must keep
+The writer renews its heartbeat at step boundaries and checks ownership before each
+destructive step. `staleMs` is diagnostic; it never authorizes takeover.
+A paused holder remains the owner, and contenders time out.
+A crashed holder requires offline recovery: stop and prevent restart of all store
+clients on every host, verify none can resume, remove only `publish.lock`, then run
+repair before restarting clients.
+Lock age or an apparently dead PID cannot establish quiescence.
+All clients must adopt this rule together; older automatic-takeover writers cannot
+safely share a store with it.
+The callback can run more than once after an OCC or ownership failure, so it must keep
 external side effects outside the retryable function or make them idempotent.
 An optimistic DirectStore that runs the copy and callback outside the lease remains a
 roadmap option.
@@ -448,8 +453,14 @@ records the measurement method and limits.
 
 Snapshot bytes determine the full-copy and integrity-check floor.
 Pending envelope count and bytes determine sorting, hashing, apply, and archive work.
+For schemas with foreign keys, reconciliation also scans the child tables for each
+envelope to decide whether to commit or quarantine it.
 The lifetime `applied_tx` count adds another growing term because reconcile loads the
 complete ledger into memory and every later snapshot carries it.
+
+Garbage collection validates the current head even when there are no snapshots to
+collect. On one Linux review host, a no-op collection against a 505 MiB head took about
+464 ms with a warm cache and 6.7 s with a cold cache.
 
 Capture without the publish lease permits concurrent agents, but `W` in-flight writers
 can require about `W` working copies of the head.
@@ -466,9 +477,9 @@ and burst shape.
 
 Batching several envelopes into one reconcile amortizes the build copy, integrity gate,
 fsync, and pointer publication.
-It does not amortize each writer’s seed copy.
-Reconcile after every small write only when the immediate visibility or durability
-boundary is worth both full-copy paths.
+Each writer still pays for its seed copy, and each envelope still pays for its
+foreign-key check. Reconcile after every small write only when the immediate visibility
+or durability boundary is worth both full-copy paths.
 
 ### Workload Fit
 
@@ -684,7 +695,7 @@ new DirectStore(dir, options).write((db) => {
 | `src/publication` | No-replace snapshot commit and identity-checked pointer swap shared by both strategies |
 | `src/conflictPolicy` | Deterministic policy routing and conflict classification |
 | `src/driver` | `node:sqlite` capability, changeset, integrity, `backupDatabase()`, and callback-boundary chokepoint |
-| `src/lock` | Fenced `mkdir` lease used for publication and maintenance |
+| `src/lock` | Exclusive `mkdir` lock used for publication and maintenance |
 | `src/errors` | The typed `FsqliteError` model and its stable codes |
 | `src/fsutil` | Fail-closed file and directory fsync, atomic pointer writes, and transient cleanup |
 | `src/fsinspect` | Filesystem capability probes and the `fsinspect` verdict |
@@ -700,7 +711,7 @@ The [QA runbook](qa-runbook.md) is the evidence index for `C1` through `C12`. Th
 [roadmap](roadmap.md) records the unresolved work without weakening the alpha contract.
 The most important remaining constraints are real cross-host filesystem validation,
 Windows mutation (blocked first by directory fsync and open-file rename and unlink, spec
-O1), single steps longer than the lease stale window, independent format conformance
+O1), availability during abandoned-lock recovery, independent format conformance
 fixtures, explicit upgrades, Worker Thread coordination, stronger isolation patterns,
 and large-store seeding efficiency.
 

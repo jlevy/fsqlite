@@ -36,7 +36,7 @@ import {
   statSync,
   utimesSync,
 } from 'node:fs'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import * as driver from './driver.ts'
@@ -53,7 +53,7 @@ import {
 import { fsyncPath, fsyncDir, publishPointer, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
-import { isLockFresh, withLock } from './lock.ts'
+import { validateLockOptions, withLock } from './lock.ts'
 import {
   createStoreMarker,
   hasStoreMarker,
@@ -177,13 +177,6 @@ function applyFailureReason(error: unknown): string {
 /** The machine code that opens a quarantine reason (`digest-mismatch`, `strict-conflict`). */
 const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]?.trim() ?? ''
 
-/** Store-root names a caller may never write: the marker, the pointer, and the lock. */
-const STORE_ROOT_ENTRIES: ReadonlySet<string> = new Set([
-  STORE_MARKER_FILENAME,
-  'current',
-  'publish.lock',
-])
-
 /** init found a lineage without `current`; only repair may choose the head to restore. */
 const missingPointerError = (versions: number[]): FsqliteError =>
   new FsqliteError(
@@ -208,7 +201,6 @@ const isTransientFile = (f: string): boolean =>
 
 // writerId is interpolated into filesystem paths (the working copy and the envelope dir),
 // so it must be a safe single path component: no separators, traversal, or oversize names.
-// The raw, unrestricted value is still recorded in the manifest for provenance.
 const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
 
 /** Default cap on a single changeset envelope before reconcile quarantines it (1 GiB). */
@@ -511,8 +503,8 @@ export function verifySnapshotForPublish(
  * publishes it with an atomic pointer swap, and readers (`read`) open only the published
  * snapshot. Writers need the session extension; readers need none. Shared filesystems must
  * provide the capabilities required by the format specification. Correctness rests on
- * immutable snapshots, the `applied_tx` ledger, and optimistic concurrency on `current`, not
- * on the publish lock being perfect.
+ * immutable snapshots, the `applied_tx` ledger, and exclusive publication ownership until
+ * release. The publish lock is never taken over on age alone.
  */
 export class SnapshotStore {
   /** The store root this handle was opened on. */
@@ -595,8 +587,8 @@ export class SnapshotStore {
       if (existsSync(this.currentPath)) {
         return
       } // another initializer won while we waited
-      // A marked store with snapshots but no pointer has lost `current`, not crashed in its
-      // first open (which leaves no snapshot). Building snapshot 0 here would roll it back.
+      // A snapshot can survive an interrupted first open or a later loss of `current`.
+      // Repair selects a recovery point without overwriting that snapshot.
       const lineage = this.snapshotVersions()
       if (lineage.length > 0) {
         throw missingPointerError(lineage)
@@ -842,18 +834,22 @@ export class SnapshotStore {
   }
 
   /**
-   * Pin the current version so reconcile's GC will not delete it while a
-   * packager/uploader reads it. Returns { version, heartbeat, release }.
+   * Pin the current version while holding the publication lock, so gc cannot hide its
+   * pathname between the lease's publication and return. Release the disposable lease
+   * after the packager or uploader finishes reading.
    */
-  readLease({ maxRetries = DEFAULT_READ_LEASE_RETRIES }: ReadLeaseOptions = {}): ReadLease {
+  readLease({
+    maxRetries = DEFAULT_READ_LEASE_RETRIES,
+    lockOpts = {},
+  }: ReadLeaseOptions = {}): ReadLease {
     requireSafeInteger('maxRetries', maxRetries, 0)
+    validateLockOptions(lockOpts)
     this.assertStoreIdentity()
-    // Optimistic claim, then verify: publish the lease *before* committing to read the
-    // version, then confirm the snapshot still exists. This closes the check-then-act race
-    // with gc. gc re-reads leases immediately before each unlink (see `gc`), so either it
-    // sees our lease and keeps the snapshot, or it deleted the snapshot before our lease was
-    // visible and our existence check fails, sending us to retry against the new head. The
-    // newest snapshots are inside gc's retain floor and never collected, so this terminates.
+    return withLock(this.publishLock, () => this.claimReadLease(maxRetries), lockOpts)
+  }
+
+  /** Publish and verify the pin while gc is excluded by the publication lock. */
+  private claimReadLease(maxRetries: number): ReadLease {
     for (let attempt = 0; ; attempt++) {
       const version = this.currentVersion()
       const token = `${pad(Date.now())}-${rand()}`
@@ -909,7 +905,7 @@ export class SnapshotStore {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
             throw new FsqliteError(
-              'retryable',
+              'refused',
               `read lease on snapshot ${version} was lost (released, or reaped by gc as ` +
                 'stale); take a new lease before reading further',
               { cause: error },
@@ -995,7 +991,7 @@ export class SnapshotStore {
    * If reconcile throws, the published ledger decides: when it already holds this
    * transaction (reconcile failed after publishing it), the call returns success, so `fn`
    * never runs again for a published transaction. When the envelope is still pending, the
-   * call throws a {@link TransactionError} with code `in-flight` and the reconcile error as
+   * call throws a {@link TransactionError} with code `pending` and the reconcile error as
    * its `cause`: a later reconcile folds that envelope, so running the write again would
    * apply its change twice. Reconcile and check the ledger for `txId` instead.
    */
@@ -1017,15 +1013,32 @@ export class SnapshotStore {
       } catch (error) {
         reconcileError = error
       }
-      const published =
-        reconcileError === null ? this.isPublished(txId) : this.isPublishedOr(txId, reconcileError)
+      let published: boolean
+      try {
+        published = this.isPublished(txId)
+      } catch (error) {
+        throw this.unknownTransactionOutcome(
+          txId,
+          reconcileError === null
+            ? error
+            : new AggregateError(
+                [reconcileError, error],
+                'reconcile and outcome inspection failed',
+              ),
+        )
+      }
       if (published) {
         return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
       }
       if (!existsSync(quarantinePath)) {
         throw this.unsettledTransaction(txId, reconcileError)
       }
-      const reason = readFileSync(quarantinePath, 'utf8')
+      let reason: string
+      try {
+        reason = readFileSync(quarantinePath, 'utf8')
+      } catch (error) {
+        throw this.unknownTransactionOutcome(txId, error)
+      }
       const reasonCode = quarantineReasonCode(reason)
       if (reasonCode !== 'strict-conflict') {
         throw new TransactionError(
@@ -1045,7 +1058,7 @@ export class SnapshotStore {
 
   /**
    * The error for a captured transaction that is neither published nor quarantined: still
-   * pending (`in-flight`, after a reconcile `failure` or a reconcile that left it for the
+   * pending (`pending`, after a reconcile `failure` or a reconcile that left it for the
    * next one), or gone from every envelope directory (`corrupt`).
    */
   private unsettledTransaction(txId: string, failure: unknown): TransactionError {
@@ -1056,7 +1069,7 @@ export class SnapshotStore {
           ? 'reconcile left it pending'
           : `reconcile failed before publishing it (${errorMessage(failure)})`
       return new TransactionError(
-        'in-flight',
+        'pending',
         txId,
         `writeWithRetry: transaction ${txId} is captured but not published: ${why}; a later ` +
           'reconcile folds it, so do not run the write again',
@@ -1073,16 +1086,16 @@ export class SnapshotStore {
     )
   }
 
-  /**
-   * Whether the head `current` names holds `txId`, consulted after `failure`. If the store
-   * cannot even be read, `failure` is the error to report, so it is rethrown instead.
-   */
-  private isPublishedOr(txId: string, failure: unknown): boolean {
-    try {
-      return this.isPublished(txId)
-    } catch {
-      throw failure
-    }
+  /** A captured envelope must never become a retryable write merely because inspection failed. */
+  private unknownTransactionOutcome(txId: string, cause: unknown): TransactionError {
+    return new TransactionError(
+      'outcome-unknown',
+      txId,
+      `writeWithRetry: transaction ${txId} was captured but its outcome could not be read; ` +
+        'inspect its published or quarantined outcome before proceeding; do not run the write again',
+      null,
+      { cause },
+    )
   }
 
   /** Whether the head `current` names holds `txId` in its ledger. */
@@ -1109,7 +1122,7 @@ export class SnapshotStore {
    * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
    * builder retry.
    *
-   * An error with a numeric `published` property (`PostPublishError`) was raised after
+   * A {@link PostPublishError} was raised after
    * the new version became current, for example while moving envelopes (spec F6); the data
    * is published and the leftovers are settled by the next reconcile. Any other error means
    * this call published nothing.
@@ -1119,6 +1132,7 @@ export class SnapshotStore {
     lockOpts = {},
   }: ReconcileOptions = {}): ReconcileResult {
     requireSafeInteger('maxRetries', maxRetries, 1)
+    validateLockOptions(lockOpts)
     const marker = readStoreMarker(this.dir)
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -1359,6 +1373,7 @@ export class SnapshotStore {
     requireSafeInteger('gc option retain', retain, 0)
     requireSafeInteger('gc option leaseStaleMs', leaseStaleMs, 1)
     requireSafeInteger('gc option transientStaleMs', transientStaleMs, 1)
+    validateLockOptions(lockOpts)
     // Validate outside the lock: the integrity check reads the whole head and must not
     // stall publishers. A recognition failure is refused before the lock dir is created.
     const health = this.validate()
@@ -1392,12 +1407,11 @@ export class SnapshotStore {
     }
     fence()
     const cur = this.currentVersion()
-    // A forward move is an ordinary integrity-gated publication. A backward move means
-    // repair re-pointed the store after validation, so the verdict no longer applies.
-    if (cur < validated) {
+    // The full integrity verdict applies only to the head that was validated.
+    if (cur !== validated) {
       throw new FsqliteError(
         'retryable',
-        `gc refused: current moved from ${validated} back to ${cur} after validation; run gc again`,
+        `gc refused: current moved from ${validated} to ${cur} after validation; run gc again`,
       )
     }
     const leased = this.activeLeasedVersions(leaseStaleMs)
@@ -1553,6 +1567,9 @@ export class SnapshotStore {
       return { state: recognition.state, issues: [recognition.issue] }
     }
     const marker = recognition.marker
+    // A peer archives only after publication. Observe the archive before the pointer so
+    // newly archived transactions cannot be compared with an older, still valid head.
+    const archived = this.archivedTransactions()
     if (!existsSync(this.currentPath)) {
       return { state: 'corrupt', issues: ['missing current pointer'] }
     }
@@ -1602,6 +1619,7 @@ export class SnapshotStore {
     // Integrity of the current head.
     const db = driver.openReadonly(this.snapshotPath(cur))
     let problems: string[]
+    let missingArchived: number
     try {
       try {
         verifySnapshotIdentity(db, marker)
@@ -1612,6 +1630,7 @@ export class SnapshotStore {
         }
       }
       problems = driver.integrityProblems(db)
+      missingArchived = problems.length === 0 ? this.countMissingArchived(db, archived) : 0
     } finally {
       db.close()
     }
@@ -1619,6 +1638,16 @@ export class SnapshotStore {
       return {
         state: 'corrupt',
         issues: [...issues, `snapshot ${cur} failed integrity validation: ${problems.join('; ')}`],
+      }
+    }
+    if (missingArchived > 0) {
+      return {
+        state: 'corrupt',
+        current: cur,
+        issues: [
+          ...issues,
+          `${missingArchived} archived transaction(s) absent from the current ledger`,
+        ],
       }
     }
 
@@ -1638,15 +1667,29 @@ export class SnapshotStore {
     return { state: 'sealed', current: cur, pending: 0, issues }
   }
 
+  private archivedTransactions(): string[] {
+    return existsSync(this.txApplied)
+      ? readdirSync(this.txApplied).filter((entry) => entry.endsWith('.txn'))
+      : []
+  }
+
+  private countMissingArchived(
+    db: ReturnType<typeof driver.openReadonly>,
+    archived: string[],
+  ): number {
+    const inLedger = db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?')
+    return archived.filter((entry) => !inLedger.get(txIdOf(entry))).length
+  }
+
   /**
    * Finalize the current snapshot into a clean single-file at `destPath` via VACUUM INTO
    * (no -wal/-shm, integrity-checked). Requires an empty pending tail.
    *
    * The export is published like any completed file: VACUUM INTO writes a temp beside the
    * destination (it writes in place and never fsyncs), which is integrity-checked, fsynced,
-   * renamed over `destPath`, and followed by a directory fsync. A reader of `destPath` sees
-   * the previous file or the complete export, and an interrupted seal leaves only its temp.
-   * The destination must not be a store-owned path: snapshots are never replaced (S6).
+   * linked to a new `destPath`, and followed by a directory fsync. The destination must not
+   * exist, have SQLite sidecars, or lie anywhere inside the store. The no-replace link also
+   * protects existing files reached through case aliases or a concurrent destination create.
    */
   seal(destPath: string): string {
     this.assertStoreIdentity()
@@ -1662,13 +1705,37 @@ export class SnapshotStore {
       throw new FsqliteError(
         'refused',
         `cannot seal into ${destPath}: the destination is a path inside the store that the ` +
-          'store owns; choose a path outside its subdirectories and reserved names',
+          'store owns; choose a new path outside the store',
       )
     }
+    const refuseSidecars = (): void => {
+      for (const suffix of ['-journal', '-wal', '-shm']) {
+        if (existsSync(`${destPath}${suffix}`)) {
+          throw new FsqliteError(
+            'refused',
+            `cannot seal: SQLite sidecar exists at ${destPath}${suffix}`,
+          )
+        }
+      }
+    }
+    refuseSidecars()
     const tmp = join(destDir, `.${basename(destPath)}.${rand()}.tmp`)
     const lease = this.readLease()
     try {
-      const db = driver.openReadonly(this.snapshotPath(lease.version))
+      let db: driver.DB
+      try {
+        db = driver.openReadonly(this.snapshotPath(lease.version))
+      } catch (error) {
+        if (!existsSync(this.snapshotPath(lease.version))) {
+          throw new FsqliteError(
+            'refused',
+            `cannot seal: snapshot ${lease.version} disappeared after the lease was claimed; ` +
+              'the lease may have expired; start a new export',
+            { cause: error },
+          )
+        }
+        throw error
+      }
       try {
         driver.vacuumInto(db, tmp)
       } catch (error) {
@@ -1697,7 +1764,22 @@ export class SnapshotStore {
         out.close()
       }
       fsyncPath(tmp)
-      renameSync(tmp, destPath)
+      refuseSidecars()
+      try {
+        linkSync(tmp, destPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          throw new FsqliteError(
+            'refused',
+            `cannot seal: destination already exists: ${destPath}`,
+            {
+              cause: error,
+            },
+          )
+        }
+        throw error
+      }
+      unlinkSync(tmp)
       fsyncDir(destDir)
     } catch (error) {
       removeQuietly(tmp)
@@ -1712,13 +1794,23 @@ export class SnapshotStore {
     return destPath
   }
 
-  /** Whether `path` is a reserved root entry of this store or lies inside a subdirectory. */
+  /** Whether `path` lies anywhere inside this store. */
   private isStoreOwnedPath(path: string): boolean {
-    const fromRoot = relative(realpathSync(this.dir), path)
-    if (fromRoot === '' || fromRoot === '..' || fromRoot.startsWith(`..${sep}`)) {
-      return fromRoot === ''
+    const root = statSync(this.dir)
+    // Compare directory identity rather than path spelling: case-insensitive filesystems
+    // and symlink aliases can give the same store several textual names.
+    let ancestor = dirname(path)
+    for (;;) {
+      const candidate = statSync(ancestor)
+      if (candidate.dev === root.dev && candidate.ino === root.ino) {
+        return true
+      }
+      const parent = dirname(ancestor)
+      if (parent === ancestor) {
+        return false
+      }
+      ancestor = parent
     }
-    return fromRoot.includes(sep) || STORE_ROOT_ENTRIES.has(fromRoot)
   }
 
   /**
@@ -1767,10 +1859,12 @@ export class SnapshotStore {
   }
 
   private refuseRepairUnderLiveLock(lockOpts: LockOptions): void {
-    if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
+    validateLockOptions(lockOpts)
+    if (existsSync(this.publishLock)) {
       throw new FsqliteError(
         'in-flight',
-        'repair refused: publish.lock is present and held by a live publisher',
+        'repair refused: publish.lock is present; stop every store client on every host, ' +
+          'verify none can resume, then remove the abandoned lock before repair',
       )
     }
   }
@@ -1861,6 +1955,22 @@ export class SnapshotStore {
           return `re-published current -> ${head}`
         },
       })
+    }
+
+    if (cur === good) {
+      // A clean but regressed head can make a previously published version look like an
+      // orphan. Keep every recovery candidate if the current ledger disagrees with the archive.
+      const db = driver.openReadonly(this.snapshotPath(good))
+      try {
+        if (this.countMissingArchived(db, this.archivedTransactions()) > 0) {
+          throw new FsqliteError(
+            'corrupt',
+            'repair refused: archived transactions are absent from the current ledger; preserve the snapshots and archive for recovery',
+          )
+        }
+      } finally {
+        db.close()
+      }
     }
 
     // Delete snapshots ahead of the restored pointer (rolled-back orphans) and transients.
@@ -1961,7 +2071,7 @@ export class SnapshotStore {
    *
    * Only envelopes in that ledger move to `tx/applied/`. When the ledger also holds every
    * envelope this build applied or found archivable, the published lineage is this build's
-   * own, so its quarantine decisions stand. Otherwise an overlapping holder moved `current`
+   * own, so its quarantine decisions stand. Otherwise external interference moved `current`
    * to a lineage this build never saw (spec L5): every other envelope stays pending, for
    * the next reconcile to classify against that lineage. Returns the counts actually moved.
    */

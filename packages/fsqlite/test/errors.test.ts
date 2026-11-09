@@ -1,6 +1,6 @@
 // The typed error model: every error fsqlite raises on purpose is an FsqliteError whose
 // stable `code` (and `retryable` flag) a caller can branch on without matching message
-// text. One case per category, each raised through the public API.
+// text. The GC and retry suites cover lease I/O and captured transactions.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

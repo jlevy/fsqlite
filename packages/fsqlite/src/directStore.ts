@@ -18,7 +18,7 @@ import { FsqliteError } from './errors.ts'
 import { fsyncPath, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
-import { withLock } from './lock.ts'
+import { validateLockOptions, withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { requireSafeInteger, SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
@@ -124,7 +124,7 @@ export class DirectStore {
    * publishing into the same store). Retries internally on a lost race, rerunning `fn`.
    * Returns the published version, which always carries this call's mutation.
    *
-   * An error with a numeric `published` property (`PostPublishError`) was raised after
+   * A {@link PostPublishError} was raised after
    * that version became current (for example a failed directory fsync after the pointer
    * rename): the write is visible and must not be re-run. Any other error published nothing.
    */
@@ -133,6 +133,7 @@ export class DirectStore {
     { lockOpts = {}, maxRetries = DEFAULT_DIRECT_WRITE_RETRIES }: DirectWriteOptions = {},
   ): number {
     requireSafeInteger('maxRetries', maxRetries, 1)
+    validateLockOptions(lockOpts)
     const marker = readStoreMarker(this.base.dir)
     this.base.read((db) => {
       verifySnapshotForPublish(db, marker, this.base.schemaVersion, this.base.schemaHash)
