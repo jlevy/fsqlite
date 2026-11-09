@@ -55,8 +55,12 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
 
       store.reconcile()
       assert.equal(count(store), 3, 'all 3 tx present exactly once after recovery')
-      assert.ok(store.pendingTxns().length === 0, 'pending tail drained')
-      assert.notEqual(store.validate().state, 'corrupt')
+      assert.deepEqual(store.pendingTxns(), [], 'pending tail drained')
+      // A crash runs no cleanup, so only the after-build crash leaves its build behind.
+      assert.equal(
+        store.validate().state,
+        crashAt === 'after-build' ? 'in-flight-capture' : 'sealed',
+      )
     } finally {
       setReconcileCrashForTest(null)
       cleanup()
@@ -69,9 +73,7 @@ test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', ()
   try {
     try {
       setReconcileCrashForTest('after-snapshot')
-      store.reconcile()
-    } catch {
-      /* expected */
+      assert.throws(() => store.reconcile(), /CRASH after-snapshot/)
     } finally {
       setReconcileCrashForTest(null)
     }

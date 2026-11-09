@@ -701,10 +701,8 @@ test('gc drops old snapshots but keeps current and retained snapshots', () => {
     }
     assert.equal(store.currentVersion(), 6)
     const r = store.gc({ retain: 2 })
-    assert.ok(r.removed >= 1)
-    assert.ok(existsSync(store.snapshotPath(6)), 'current kept')
-    assert.ok(existsSync(store.snapshotPath(5)), 'retained kept')
-    assert.ok(!existsSync(store.snapshotPath(0)), 'old dropped')
+    assert.deepEqual([r.removed, r.kept], [4, 3])
+    assert.deepEqual(store.snapshotVersions(), [4, 5, 6], 'current and exactly 2 predecessors')
   } finally {
     cleanup()
   }

@@ -395,7 +395,8 @@ test('gc reports a snapshot it could not remove and leaves every other version',
         error instanceof FsqliteError &&
         error.code === 'io' &&
         error.message.startsWith('gc failed to remove snapshot 0') &&
-        (error.cause as NodeJS.ErrnoException).code === 'EISDIR',
+        // POSIX lets unlink(2) of a directory fail with EPERM (macOS) as well as EISDIR (Linux).
+        ['EISDIR', 'EPERM'].includes((error.cause as NodeJS.ErrnoException).code ?? ''),
     )
     assert.ok(existsSync(store.snapshotPath(1)) && existsSync(store.snapshotPath(2)))
     assert.equal(

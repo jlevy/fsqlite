@@ -71,7 +71,7 @@ test('N concurrent writer processes lose zero committed tx after reconcile', asy
       store.reconcile()
     }
     assert.equal(count(store), WRITERS * PER, 'reconcile folded in every committed tx without loss')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }
@@ -101,7 +101,7 @@ test('racing reconciler processes publish exactly-once with an integrity-clean h
 
     assert.equal(count(store), WRITERS * PER, 'exactly-once: no tx lost, none double-applied')
     assert.equal(count(store, 'applied_tx'), WRITERS * PER, 'ledger has exactly one row per tx')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
     const totalApplied = results.reduce((s, r) => s + r.totalApplied, 0)
     assert.ok(totalApplied >= WRITERS * PER)
   } finally {
@@ -168,7 +168,7 @@ test('N concurrent direct-writer processes serialize via the lock with zero loss
       'every direct write published exactly once without loss',
     )
     assert.equal(store.currentVersion(), WRITERS * PER, 'one published version per direct write')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }

@@ -29,21 +29,22 @@ const increment = (db: DatabaseSync): void => {
 const counter = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT n FROM counters WHERE k=?').get('c') as { n: number }).n)
 
-test('writeWithRetry prevents a lost update on a strict read-modify-write', () => {
+test('writeWithRetry publishes each strict read-modify-write before returning', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const a = new SnapshotStore(dir, OPTS).init()
     a.writeWithRetry('seed', increment) // c = 1 (v1)
     assert.equal(counter(a), 1)
 
-    // Two separate handles both increment. Even if their writes interleave, retry makes
-    // the second re-seed from the first's published value rather than overwrite it.
+    // Each call returns only after its write is published, so the next handle seeds from it
+    // and neither needs a retry; the forced interleave below exercises the conflict path.
     const w1 = new SnapshotStore(dir, OPTS)
     const w2 = new SnapshotStore(dir, OPTS)
     const r1 = w1.writeWithRetry('w1', increment)
+    assert.equal(counter(w2), 2, 'the first increment is visible to another handle')
     const r2 = w2.writeWithRetry('w2', increment)
     assert.equal(counter(w1), 3, 'both increments landed: 1 → 2 → 3 (no lost update)')
-    assert.ok(r1.txId && r2.txId)
+    assert.deepEqual([r1.attempts, r1.conflicted, r2.attempts, r2.conflicted], [1, false, 1, false])
   } finally {
     cleanup()
   }

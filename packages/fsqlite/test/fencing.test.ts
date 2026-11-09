@@ -26,41 +26,40 @@ import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 const artifactCount = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
 
-test('withLock enforces timeoutMs > staleMs', () => {
-  assert.throws(
-    () => withLock('/tmp/x.lock', () => 0, { timeoutMs: 100, staleMs: 100 }),
-    /requires timeoutMs > staleMs/,
-  )
-})
-
-test('revalidate-before-publish: a holder whose lease was stolen aborts the destructive step', () => {
+test('withLock enforces timeoutMs > staleMs before touching the lock path', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   try {
-    let published = false
+    assert.throws(
+      () => withLock(lockPath, () => 0, { timeoutMs: 100, staleMs: 100 }),
+      (error: unknown) =>
+        error instanceof TypeError && error.message.includes('requires timeoutMs > staleMs'),
+    )
+    assert.equal(existsSync(lockPath), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a holder whose lease was stolen fails its fence and leaves the successor lock alone', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
     const result = withLock(
       lockPath,
-      (token) => {
-        // Simulate a stale break and lease theft by a second reconciler while paused:
+      (_token, lease) => {
+        // A stale break and re-acquisition by a second holder while this one was paused:
         // the lock dir is reclaimed and re-owned by a different token.
         rmSync(lockPath, { recursive: true, force: true })
         mkdirSync(lockPath)
-        writeFileSync(join(lockPath, 'owner.json'), ownerRecord('someone-else'))
-        // Our fencing check: only publish if we still own the lock.
-        if (ownerOf(lockPath) !== token) {
-          return 'aborted'
-        }
-        published = true
-        return 'published'
+        writeFileSync(join(lockPath, 'owner.json'), ownerRecord('successor'))
+        return { fenced: lease.fence(), renewed: lease.heartbeat() }
       },
       { timeoutMs: 5000, staleMs: 1000 },
     )
-    assert.equal(result, 'aborted')
-    assert.equal(
-      published,
-      false,
-      'must not perform the destructive publish after losing the lease',
-    )
+    assert.deepEqual(result, { fenced: false, renewed: false }, 'both checks report the loss')
+    // The fenced release removes the lock only while this holder owns it.
+    assert.equal(ownerOf(lockPath), 'successor', "the successor's lock survives the release")
   } finally {
     cleanup()
   }

@@ -3,27 +3,21 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { backupDatabase, capabilities } from '../src/index.ts'
 import { open, openBuild, openReadonly, integrityCheck } from '../src/driver.ts'
+import { tmpStore } from './fixture.ts'
 
-function withTmp(fn: (dir: string) => unknown): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'driver-cap-'))
-  const done = (): void => {
-    rmSync(dir, { recursive: true, force: true })
+/** Run `fn` in a fresh temporary directory, removed afterward. */
+async function withTmp(fn: (dir: string) => unknown): Promise<void> {
+  const { dir, cleanup } = tmpStore()
+  try {
+    await fn(dir)
+  } finally {
+    cleanup()
   }
-  return Promise.resolve(fn(dir)).then(
-    () => {
-      done()
-    },
-    (e: unknown) => {
-      done()
-      throw e
-    },
-  )
 }
 
 test('capabilities() reports session support on node:sqlite', () => {
@@ -128,11 +122,19 @@ test('backupDatabase() remains consistent while another connection writes', asyn
         await new Promise<void>((resolve) => setImmediate(resolve))
       }
     })()
-    const writesBeforeBackup = next
-    await Promise.all([backupDatabase(srcPath, dstPath, { rate: 1 }), writes])
+    // The row count the writer had reached at each backup step: if it grows between
+    // steps, the source changed while the backup was in progress.
+    const atStep: number[] = []
+    await Promise.all([
+      backupDatabase(srcPath, dstPath, { rate: 1, progress: () => atStep.push(next) }),
+      writes,
+    ])
     writer.close()
 
-    assert.ok(next > writesBeforeBackup, 'the source changed while backup was in progress')
+    assert.ok(
+      atStep.length > 1 && (atStep.at(-1) ?? 0) > (atStep[0] ?? 0),
+      `writes landed between backup steps: ${atStep[0] ?? '-'} .. ${atStep.at(-1) ?? '-'}`,
+    )
     const restored = open(dstPath)
     try {
       assert.equal(integrityCheck(restored), true)

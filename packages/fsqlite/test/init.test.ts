@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DirectStore, SnapshotStore } from '../src/index.ts'
+import { DirectStore, FsqliteError, SnapshotStore } from '../src/index.ts'
 import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
 import { runAsync } from './spawn.ts'
@@ -253,11 +253,12 @@ test('init rejects reopening a store with a divergent schema at the SAME version
   }
 })
 
-test('concurrent first-open with mismatched schemas: the losers reject, the store stays consistent', () => {
+test('first opens with mismatched schemas: only the creating schema initializes', () => {
   const { dir, cleanup } = tmpStore()
   try {
-    // Two distinct schemas race to create snapshot 0; exactly one wins, and every handle that
-    // reopens with a schema different from the winner's must fail _verifyCompatible.
+    // Two distinct schemas open one fresh store in turn: the first creates snapshot 0, and
+    // every handle with the other schema must be refused as incompatible. Racing processes
+    // are covered by the multiprocess first-open test below.
     const schemaA = 'CREATE TABLE a (k TEXT PRIMARY KEY NOT NULL);'
     const schemaB = 'CREATE TABLE b (k TEXT PRIMARY KEY NOT NULL);'
     const attempts = Array.from({ length: 8 }, (_, i) => (i % 2 === 0 ? schemaA : schemaB))
@@ -265,8 +266,11 @@ test('concurrent first-open with mismatched schemas: the losers reject, the stor
       try {
         new SnapshotStore(dir, { schema, schemaVersion: 1 }).init()
         return schema
-      } catch {
-        return null
+      } catch (error) {
+        if (error instanceof FsqliteError && error.code === 'incompatible') {
+          return null
+        }
+        throw error
       }
     })
     const winners = new Set(outcomes.filter((o) => o !== null))

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { DatabaseSync } from 'node:sqlite'
 import {
   ConflictError,
   FsqliteError,
@@ -33,7 +34,7 @@ const fsqliteError =
 
 const insertArtifact =
   (id: string) =>
-  (db: Parameters<Parameters<SnapshotStore['write']>[1]>[0]): void => {
+  (db: DatabaseSync): void => {
     db.prepare('INSERT INTO artifacts VALUES (?, ?, ?)').run(id, id, 't')
   }
 
