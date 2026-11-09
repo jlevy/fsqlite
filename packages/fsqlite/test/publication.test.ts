@@ -15,9 +15,9 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { DirectStore, LockTimeoutError, SnapshotStore } from '../src/index.ts'
+import { DirectStore, LockTimeoutError, PostPublishError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
-import { ownerOf } from '../src/lock.ts'
+import { ownerOf, setLockReleaserForTest, withLock } from '../src/lock.ts'
 import { setBeforeSnapshotLinkForTest } from '../src/publication.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -40,6 +40,41 @@ const ledgerOf = (path: string): string[] =>
 const txns = (dir: string): string[] => readdirSync(dir).filter((d) => d.endsWith('.txn'))
 
 for (const strategy of ['direct', 'snapshot'] as const) {
+  test(`${strategy}: a failed lock release reports publication without inviting a duplicate write`, () => {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new SnapshotStore(dir, STORE_OPTS).init()
+      const direct = new DirectStore(dir, STORE_OPTS)
+      if (strategy === 'snapshot') {
+        store.write('w', insert('once'))
+      }
+      const failure = Object.assign(new Error('injected lock release failure'), { code: 'EIO' })
+      setLockReleaserForTest(() => {
+        throw failure
+      })
+      assert.throws(
+        () => (strategy === 'direct' ? direct.write(insert('once')) : store.reconcile()),
+        (error: unknown) =>
+          error instanceof PostPublishError &&
+          error.published === 1 &&
+          error.cause === failure &&
+          !error.retryable,
+      )
+      assert.equal(store.currentVersion(), 1)
+      assert.deepEqual(rowsOf(store.snapshotPath(1)), ['once'])
+      assert.ok(
+        existsSync(store.publishLock),
+        'the failed release leaves a lock for offline recovery',
+      )
+      if (strategy === 'snapshot') {
+        assert.equal(txns(store.txPending).length, 1, 'post-publish settlement can resume later')
+      }
+    } finally {
+      setLockReleaserForTest(null)
+      cleanup()
+    }
+  })
+
   test(`${strategy}: a publisher paused after its final checks retains exclusive ownership`, () => {
     const { dir, cleanup } = tmpStore()
     try {
@@ -89,6 +124,30 @@ for (const strategy of ['direct', 'snapshot'] as const) {
     }
   })
 }
+
+test('a failed lock release cannot replace an existing callback outcome', () => {
+  for (const failure of [
+    new Error('callback failed'),
+    new PostPublishError(7, new Error('fsync failed')),
+  ]) {
+    const { dir, cleanup } = tmpStore()
+    try {
+      setLockReleaserForTest(() => {
+        throw new Error('release also failed')
+      })
+      assert.throws(
+        () =>
+          withLock(join(dir, 'publish.lock'), () => {
+            throw failure
+          }),
+        (error: unknown) => error === failure,
+      )
+    } finally {
+      setLockReleaserForTest(null)
+      cleanup()
+    }
+  }
+})
 
 /**
  * A complete, valid build from snapshot 0 carrying one foreign row, as an overlapping

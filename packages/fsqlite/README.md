@@ -98,11 +98,12 @@ SQLite database or the next one.
 An exclusive publication lock, optimistic checks on `current`, and an in-snapshot
 transaction ledger protect publication from racing publishers and duplicate application.
 The lock never expires on age.
-A crashed holder blocks mutation until offline recovery: stop and prevent restart of
-every store client on every host, verify none can resume, remove only `publish.lock`,
-and run repair before restarting.
-Older clients that break stale locks must be stopped and upgraded together with every
-writer and maintenance process; mixed locking rules are unsafe.
+A crashed holder blocks publication until offline recovery.
+Stop and prevent restart of every store client on every host, verify none can resume,
+remove only `publish.lock`, and run repair before restarting.
+Stop all clients before upgrading.
+Upgrade writers, maintenance processes, and clients that acquire read leases together
+before restarting them.
 The
 [architecture design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#architecture)
 covers the complete store layout, publication races, and consistency boundaries.

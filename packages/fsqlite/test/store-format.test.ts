@@ -12,7 +12,8 @@ import { STORE_OPTS, tmpStore } from './fixture.ts'
 const STORE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 test('a store is a self-identifying flat directory', () => {
-  const { dir, cleanup } = tmpStore()
+  const { dir: workspace, cleanup } = tmpStore()
+  const dir = join(workspace, 'store')
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     const marker = JSON.parse(readFileSync(join(dir, 'fsqlite.json'), 'utf8')) as Record<
@@ -62,7 +63,7 @@ test('a store is a self-identifying flat directory', () => {
       sqliteFacts(store.snapshotPath(reconciled.published)).applicationId,
       FSQLITE_APPLICATION_ID,
     )
-    const sealedPath = join(dir, 'sealed.sqlite')
+    const sealedPath = join(workspace, 'sealed.sqlite')
     store.seal(sealedPath)
     assert.equal(sqliteFacts(sealedPath).applicationId, FSQLITE_APPLICATION_ID)
   } finally {

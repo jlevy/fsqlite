@@ -17,7 +17,8 @@ CREATE TABLE url_index (url_hash TEXT PRIMARY KEY NOT NULL, normalized_url TEXT 
 `
 const POLICY = { url_index: 'lww', artifacts: 'lww', '*': 'strict' } as const
 
-const dir = mkdtempSync(join(tmpdir(), 'fsqlite-demo-'))
+const workspace = mkdtempSync(join(tmpdir(), 'fsqlite-demo-'))
+const dir = join(workspace, 'store')
 try {
   const store = new SnapshotStore(dir, {
     schema: SCHEMA,
@@ -71,10 +72,10 @@ try {
   const health = store.validate()
   console.log('\nvalidate:', JSON.stringify(health))
   assert.equal(health.state, 'sealed')
-  const sealed = join(dir, 'sealed.sqlite')
+  const sealed = join(workspace, 'sealed.sqlite')
   store.seal(sealed)
   assert.ok(existsSync(sealed), 'the sealed export exists')
   console.log('sealed single-file export →', sealed, '(openable by any sqlite3)')
 } finally {
-  rmSync(dir, { recursive: true, force: true })
+  rmSync(workspace, { recursive: true, force: true })
 }

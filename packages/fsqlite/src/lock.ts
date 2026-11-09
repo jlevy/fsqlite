@@ -108,10 +108,20 @@ export const sleepSync = (ms: number): void => {
 
 type OwnerWriter = (path: string, data: string) => void
 let writeOwner: OwnerWriter = writeFileSync
+type LockReleaser = (path: string) => void
+const removeLock: LockReleaser = (path) => {
+  rmSync(path, { recursive: true, force: true })
+}
+let releaseLock: LockReleaser = removeLock
 
 /** Internal fault-injection seam; pass null to restore the filesystem writer. */
 export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
   writeOwner = writer ?? writeFileSync
+}
+
+/** Internal fault-injection seam; pass null to restore lock removal. */
+export function setLockReleaserForTest(releaser: LockReleaser | null): void {
+  releaseLock = releaser ?? removeLock
 }
 
 /**
@@ -121,11 +131,14 @@ export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
  *
  * Existing locks, including malformed or arbitrarily old ones, cause bounded waiting.
  * Recovery must establish that all clients have stopped before removing an abandoned lock.
+ * A release failure preserves an existing callback error; after success, `releaseFailure`
+ * can classify it using the callback result (in particular, an acknowledged publication).
  */
 export function withLock<T>(
   lockPath: string,
   fn: (token: string, lease: LockLease) => T,
   opts: LockOptions = {},
+  releaseFailure?: (error: unknown, result: T) => unknown,
 ): T {
   const { timeoutMs, pollMs, staleMs } = validateLockOptions(opts)
   const token = randomBytes(8).toString('hex')
@@ -184,15 +197,31 @@ export function withLock<T>(
     },
     fence: refresh,
   }
-  try {
-    return fn(token, lease)
-  } finally {
+  const release = (): void => {
     // No conforming contender can remove this lock before its owner releases it.
     // The token check also avoids deleting an accidentally installed foreign lock.
     if (ownerOf(lockPath) === token) {
-      rmSync(lockPath, { recursive: true, force: true })
+      releaseLock(lockPath)
     }
   }
+  let result: T
+  try {
+    result = fn(token, lease)
+  } catch (error) {
+    try {
+      release()
+    } catch {
+      // Preserve the callback's outcome, especially a PostPublishError. Recovery can
+      // remove the leftover lock after all clients have stopped.
+    }
+    throw error
+  }
+  try {
+    release()
+  } catch (error) {
+    throw releaseFailure ? releaseFailure(error, result) : error
+  }
+  return result
 }
 
 interface LockObservation {

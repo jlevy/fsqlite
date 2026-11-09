@@ -412,8 +412,7 @@ A crashed holder requires offline recovery: stop and prevent restart of all stor
 clients on every host, verify none can resume, remove only `publish.lock`, then run
 repair before restarting clients.
 Lock age or an apparently dead PID cannot establish quiescence.
-All clients must adopt this rule together; older automatic-takeover writers cannot
-safely share a store with it.
+Writers, maintenance processes, and read-lease clients must adopt these rules together.
 The callback can run more than once after an OCC or ownership failure, so it must keep
 external side effects outside the retryable function or make them idempotent.
 An optimistic DirectStore that runs the copy and callback outside the lease remains a

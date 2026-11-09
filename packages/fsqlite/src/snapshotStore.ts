@@ -1349,6 +1349,7 @@ export class SnapshotStore {
         })
       },
       lockOpts,
+      (error, outcome) => (outcome === 'published' ? new PostPublishError(next, error) : error),
     )
   }
 

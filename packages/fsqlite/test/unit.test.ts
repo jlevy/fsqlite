@@ -615,14 +615,16 @@ test('an envelope whose manifest disagrees with the store or handle is quarantin
   }
 })
 
-test('seal produces a clean single-file snapshot that passes integrity_check', () => {
-  const { store, dir, cleanup } = freshStore()
+test('seal produces a clean single-file snapshot that passes integrity_check', (t) => {
+  const { store, cleanup } = freshStore()
+  const output = tmpStore()
+  t.after(output.cleanup)
   try {
     store.write('A', (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
     })
     store.reconcile()
-    const out = join(dir, 'sealed.sqlite')
+    const out = join(output.dir, 'sealed.sqlite')
     store.seal(out)
     assert.ok(existsSync(out))
     assert.ok(
@@ -634,8 +636,10 @@ test('seal produces a clean single-file snapshot that passes integrity_check', (
   }
 })
 
-test('seal pins its selected snapshot against concurrent aggressive gc', () => {
-  const { store, dir, cleanup } = freshStore()
+test('seal pins its selected snapshot against concurrent aggressive gc', (t) => {
+  const { store, cleanup } = freshStore()
+  const output = tmpStore()
+  t.after(output.cleanup)
   try {
     store.write('A', (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
@@ -668,7 +672,7 @@ test('seal pins its selected snapshot against concurrent aggressive gc', () => {
       }
     }
 
-    const out = join(dir, 'sealed-pinned.sqlite')
+    const out = join(output.dir, 'sealed-pinned.sqlite')
     store.seal(out)
     assert.equal(leaseCalls, 1)
     assert.equal(released, true)

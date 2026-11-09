@@ -394,10 +394,8 @@ Protocol:
      the build name, and fsync `snapshots/`. A replacing `rename()` MUST NOT be used for
      this step, to preserve any existing generation and evidence of a previous
      publication. If the name exists: re-read `current`, and if it is ≥ base+1 a peer
-     published first, so discard and retry from F1. Otherwise the entry is another
-     holder’s commit in flight or an orphan of a crashed one.
-     If `current` is still below that version, fail without deleting or replacing the
-     entry, regardless of age.
+     published first, so discard and retry from F1. If `current` is still below that
+     version, fail without deleting or replacing the entry, regardless of age.
      It may be an interrupted publish or evidence of a former published lineage after an
      older client rolled back the pointer.
      Stop all clients and run explicit repair before publishing again.
@@ -543,16 +541,18 @@ best-effort duplicate-request cache, one reason to run the multi-host gate on NF
   The lock remains held across arbitrary process pauses.
   This prevents both a late pointer rename from rolling back newer publications and
   orphan reclamation from replacing a snapshot another publisher just committed.
-  A crashed holder leaves an abandoned lock and blocks mutation until **offline
-  recovery**: stop and prevent restart of every store client on every host, verify that
-  none can resume, remove only `publish.lock`, and run repair before restarting clients.
+  A crashed holder leaves an abandoned lock and blocks publication and other operations
+  that take the lock until **offline recovery**. Stop and prevent restart of every store
+  client on every host, verify that none can resume, remove only `publish.lock`, and run
+  repair before restarting clients.
   Age and owner metadata alone never establish this quiescence.
-  Read-only snapshot access remains available while an abandoned lock blocks mutation.
+  Ordinary snapshot reads and independent envelope capture can continue while the lock
+  is present.
 
 The file layout remains `f1.0`, but a writer that automatically breaks old locks does
 not implement this safety rule.
-Upgrading an existing store requires stopping all clients and upgrading every writer and
-maintenance process together before restart.
+Upgrading an existing store requires stopping all clients and upgrading every writer,
+maintenance process, and read-lease client together before restart.
 Do not mix automatic-takeover writers with these clients.
 Preserved snapshots and archives from an older store should be inspected before
 destructive cleanup; upgrading the locking rule cannot restore writes already lost by a
@@ -758,7 +758,7 @@ layout, trusting no single file:
 | `sealed` | Pointer valid, head passes `integrity_check` and `foreign_key_check`, no committed pending envelopes, no in-flight tells |
 | `live` | As `sealed`, but committed pending envelopes await reconcile |
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
-| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity or required reserved schema/metadata mismatches the marker and format, or the head fails `integrity_check` or `foreign_key_check` |
+| `corrupt` | Pointer missing/torn/non-numeric, missing snapshot, identity or reserved schema mismatch, head fails SQLite integrity or foreign-key checks, or archived transactions are missing from the head ledger |
 
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
 `invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
@@ -782,8 +782,8 @@ published snapshot was integrity-gated at publish and never modified (S6):
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
 4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
-   transient stale window (G3), preserving evidence with a `QUARANTINE` reason file.
-   A younger one may be a live capture and MUST be left in place.
+   repair transient window (60 seconds in Node), preserving evidence with a `QUARANTINE`
+   reason file. A younger one may be a live capture and MUST be left in place.
    A writer’s `COMMITTED` write can land between repair’s check and its move, so repair
    MUST check for `COMMITTED` again after moving the envelope and, if it is there,
    remove the reason file and move the envelope back to `tx/pending/`. The writer’s

@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **206 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **219 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -113,7 +113,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 206` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 219` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

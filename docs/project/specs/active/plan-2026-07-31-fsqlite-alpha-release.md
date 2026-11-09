@@ -574,11 +574,11 @@ closes.
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 206 `node:test` cases
-including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
-fencing, NFS simulation, and fuzz, plus 78 tryscript CLI goldens and a package smoke
-test that packs, clean-installs the tarball, and exercises both the library entry and
-the `bin`.
+The current suite is the baseline and must stay green throughout.
+It includes real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
+fencing, NFS simulation, and fuzz, plus tryscript CLI goldens and a package smoke test
+that packs, clean-installs the tarball, and exercises both the library entry and the
+`bin`.
 
 That smoke test is the only check that proves the published contract, and it becomes
 more important once this repo publishes for real.

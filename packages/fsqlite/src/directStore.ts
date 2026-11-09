@@ -14,7 +14,7 @@ import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { FsqliteError } from './errors.ts'
+import { FsqliteError, PostPublishError } from './errors.ts'
 import { fsyncPath, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
@@ -204,6 +204,8 @@ export class DirectStore {
           return outcome === 'published' ? next : abandon()
         },
         lockOpts,
+        (error, result) =>
+          typeof result === 'number' ? new PostPublishError(result, error) : error,
       )
       if (out !== 'retry') {
         return out

@@ -108,41 +108,55 @@ export function commitSnapshot(c: SnapshotCommit): CommitOutcome {
   // Holding the build open pins its inode, so the number cannot be reused by another file
   // while this holder compares identities.
   const fd = openSync(c.build, 'r')
+  let outcome: CommitOutcome
   try {
-    const expected = linkBuild(c, fd)
-    if (expected === null) {
+    outcome = commitOpenBuild(c, fd)
+  } catch (error) {
+    try {
+      closeSync(fd)
+    } catch {
+      // Preserve the publication error if closing the descriptor also fails.
+    }
+    throw error
+  }
+  try {
+    closeSync(fd)
+  } catch (error) {
+    throw outcome === 'published' ? new PostPublishError(c.next, error) : error
+  }
+  return outcome
+}
+
+function commitOpenBuild(c: SnapshotCommit, fd: number): CommitOutcome {
+  const expected = linkBuild(c, fd)
+  if (expected === null) {
+    return 'retry'
+  }
+  try {
+    unlinkSync(c.build)
+    fsyncDir(c.snapDir)
+  } catch (error) {
+    removeOwnOrphan(c, expected, error)
+    throw error
+  }
+  c.afterLink?.()
+  try {
+    if (c.readCurrent() !== c.base || !c.lease.fence() || !namesBuild(c.dest, expected)) {
+      removeOwnOrphan(c, expected)
       return 'retry'
     }
-    try {
-      unlinkSync(c.build)
-      fsyncDir(c.snapDir)
-    } catch (error) {
+    publishPointer(c.storeDir, c.currentPath, c.next)
+  } catch (error) {
+    if (!(error instanceof PostPublishError)) {
       removeOwnOrphan(c, expected, error)
-      throw error
     }
-    c.afterLink?.()
-    try {
-      if (c.readCurrent() !== c.base || !c.lease.fence() || !namesBuild(c.dest, expected)) {
-        removeOwnOrphan(c, expected)
-        return 'retry'
-      }
-      publishPointer(c.storeDir, c.currentPath, c.next)
-    } catch (error) {
-      if (!(error instanceof PostPublishError)) {
-        removeOwnOrphan(c, expected, error)
-      }
-      throw error
-    }
-    // A holder that lost its lease can still finish a pointer rename it began before
-    // pausing. If the entry is no longer this build, `current` names another holder's
-    // snapshot, so this attempt published nothing of its own.
-    try {
-      return namesBuild(c.dest, expected) ? 'published' : 'retry'
-    } catch (error) {
-      throw new PostPublishError(c.next, error)
-    }
-  } finally {
-    closeSync(fd)
+    throw error
+  }
+  // Detect a nonconforming client replacing the entry during the pointer swap.
+  try {
+    return namesBuild(c.dest, expected) ? 'published' : 'retry'
+  } catch (error) {
+    throw new PostPublishError(c.next, error)
   }
 }
 
