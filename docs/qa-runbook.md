@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **226 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **226 `node:test` cases**, **80 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -76,7 +76,7 @@ Spawned as real child processes by the suites above, so the concurrency proofs a
 cross-process, not in-thread: `writer.ts`, `reader.ts`, `reconciler.ts`,
 `lock-holder.ts`, `direct-writer.ts`, `init-worker.ts`.
 
-### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 78 console cases)
+### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 80 console cases)
 
 Exercises the real CLI (`src/cli/bin.ts`) end to end with Node’s default warnings,
 asserting stdout, stderr, and the exit code: global and per-command help, `--version`,
@@ -86,8 +86,9 @@ output of `info`, `validate`, `stats`, `gc`, and `doctor`; the exit codes of sea
 live, in-flight, invalid, unsupported, corrupt, and not-a-store paths across commands,
 including `info` and `stats` on a corrupt store; `repair --dry-run` changing nothing and
 `repair`; `gc` refusing a corrupt head or a torn lease (with its cause) and deleting
-nothing; `seal` with a stock-`sqlite3`-readable header and its refusals, including a
-corrupt head; `doctor` on clean and corrupt plain SQLite files and `doctor --fix`; and
+nothing, and a `gc` with nothing to delete exiting 0 on a corrupt head that `validate`
+still reports; `seal` with a stock-`sqlite3`-readable header and its refusals, including
+a corrupt head; `doctor` on clean and corrupt plain SQLite files and `doctor --fix`; and
 `fsinspect`, whose machine-dependent report is checked for its shape and for an exit
 code that matches its verdict.
 
@@ -114,7 +115,7 @@ pnpm verify
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
   reports `ℹ tests 226` and `ℹ fail 0` (as root, one test reports skipped because it
-  needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
+  needs a non-root process); goldens `80 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.
 - **PASS:** `pnpm verify` exits 0 with the counts above.

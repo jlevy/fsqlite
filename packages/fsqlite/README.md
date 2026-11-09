@@ -336,7 +336,7 @@ the store root `dir` without touching the filesystem.
 | `readLease({ maxRetries, lockOpts })` | `ReadLease` | Claims a pin under the publication lock; `heartbeat()` keeps it fresh, `release()` drops it |
 | `snapshotPath(version)` | path | The file of a published version |
 | `validate()` | `ValidateResult` | Classifies the store as `sealed`, `live`, `in-flight-capture`, `corrupt`, or a recognition failure, with issues |
-| `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses an unhealthy store |
+| `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses to delete from a store whose head fails validation, and skips the full integrity check when nothing is old enough to delete, so it is not a corruption check (use `validate()`) |
 | `planRepair({ lockOpts })` | `RepairResult` | Lists the steps `repair()` would take without changing anything |
 | `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while any publisher lock exists |
 | `seal(destPath)` | `destPath` | Writes an integrity-checked standalone copy of the head; refuses while envelopes are pending |
@@ -436,9 +436,11 @@ It publishes the complete export atomically and refuses an existing destination,
 including symlinks, or a destination with `-journal`, `-wal`, or `-shm` sidecars.
 Choose a path no live SQLite connection uses; to replace an old export, choose a new
 filename and remove the old export only after the new one succeeds.
-`gc` holds the publish lock for every deletion and refuses a store whose head fails
-validation; it runs the full head check, which reads the whole head, only when it has a
-snapshot to delete. `stats` and `doctor` also accept a plain SQLite file.
+`gc` holds the publish lock for every deletion and refuses to delete from a store whose
+head fails validation; it runs the full head check, which reads the whole head, only
+when it has a snapshot to delete, so a gc that exits 0 has not proven the head clean.
+Use `validate` or `doctor` to detect corruption.
+`stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
 Its safe verdict requires working directory fsync and a filesystem whose fsync persists

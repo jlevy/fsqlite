@@ -32,12 +32,12 @@ publication validation are still pending.
   the published ledger holds them, and a failure after the new version is visible raises
   `PostPublishError` so callers do not re-run the write.
 - **Maintenance:** `validate()`; a non-destructive `repair()` with a `planRepair()` dry
-  run; a `gc()` that refuses an unhealthy store, holds the publish lock, and tombstones
-  snapshots so a racing read lease keeps its snapshot; a disposable `readLease()`; an
-  integrity-checked `seal()` that replaces its output atomically and refuses while
-  envelopes are pending; and `backupDatabase()`. `init()` refuses an unmarked non-empty
-  directory and a lineage that lost `current`, and reads retry when gc collects their
-  snapshot.
+  run; a `gc()` that refuses to delete from an unhealthy store, holds the publish lock,
+  and tombstones snapshots so a racing read lease keeps its snapshot; a disposable
+  `readLease()`; an integrity-checked `seal()` that replaces its output atomically and
+  refuses while envelopes are pending; and `backupDatabase()`. `init()` refuses an
+  unmarked non-empty directory and a lineage that lost `current`, and reads retry when
+  gc collects their snapshot.
 - **Typed errors:** every deliberate failure is an `FsqliteError` with a stable `code`
   and a `retryable` flag, with subclasses for recognition, conflicts, lock timeouts,
   post-publish failures, and unpublished `writeWithRetry` transactions.
