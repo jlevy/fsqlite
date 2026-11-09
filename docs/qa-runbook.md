@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **221 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
+Current status: **222 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -58,7 +58,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
 | `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, trigger support that SnapshotStore refuses to open, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
-| `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes, reconcile-build connection settings, defensive mode on every connection where the binding has it, and integrity-clean online backup |
+| `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes, reconcile-build and writer working-copy connection settings, defensive mode on every connection where the binding has it, and integrity-clean online backup |
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states including every invalid-marker rule, feature/version gating, marker fencing, and mixed-store quarantine |
@@ -113,7 +113,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 221` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 222` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

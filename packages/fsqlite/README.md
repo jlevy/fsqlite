@@ -526,9 +526,10 @@ is the normative protocol authority.
   store does not yet verify policy identity.
 - `SnapshotStore` seeds each default writer by copying the published snapshot, so write
   latency grows with snapshot size.
-  Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2
-  ms for 2.0 MiB and 163.8 to 164.6 ms for 21.7 MiB. Eight child processes issuing 40
-  total writes against 21.7 MiB took 8.4 to 8.9 seconds including startup.
+  Three runs of the maintained 2 KB-row benchmark on one cloud VM measured median
+  capture at 2.1 to 2.6 ms for 2.0 MiB and 13.4 to 14.6 ms for 21.7 MiB. In an earlier
+  calibration, eight child processes issuing 40 total writes against 21.7 MiB took 8.4
+  to 8.9 seconds including startup.
   Treat these hardware-specific measurements as sizing evidence, not a portable rate or
   performance guarantee.
   Any faster seed must preserve the data and constraints the callback observes; safe

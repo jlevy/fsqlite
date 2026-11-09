@@ -51,6 +51,11 @@ publication validation are still pending.
 
 ### Performance and Diagnostics
 
+- **Capture:** a `SnapshotStore` writer’s private working copy runs with SQLite
+  `synchronous = OFF`, so capture no longer fsyncs a head-sized file it deletes moments
+  later. On one cloud VM, median capture in the seed benchmark fell to about a third: 2.1
+  to 2.6 ms (from 7.7 to 8.1 ms) for a 2.0 MiB head and 13.4 to 14.6 ms (from 39.4 to
+  47.4 ms) for a 21.7 MiB head.
 - **No-op gc:** a `gc()` with no snapshot old enough to delete skips the head’s
   `integrity_check` and `foreign_key_check`, which read the whole head, and still
   refuses a store that fails recognition, the pointer, head identity, or the ledger

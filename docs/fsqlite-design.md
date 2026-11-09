@@ -428,8 +428,10 @@ it, so even a one-row fsqlite write has an O(snapshot size) I/O floor.
 SnapshotStore then pays another head-sized build during reconciliation.
 This is the main performance price of immutable publication in `f1.0`.
 
-Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2 ms
-for a 2.0 MiB head and 163.8 to 164.6 ms for a 21.7 MiB head.
+Three runs of the maintained 2 KB-row benchmark on one cloud VM measured median capture
+at 2.1 to 2.6 ms for a 2.0 MiB head and 13.4 to 14.6 ms for a 21.7 MiB head (November
+2026, after writer working copies stopped syncing; three runs with SQLite’s `FULL` syncs
+on the working copy took 7.7 to 8.1 ms and 39.4 to 47.4 ms).
 The algorithm has a linear copy floor, but the measurements do not establish a portable
 rate or justify a GiB extrapolation.
 

@@ -691,16 +691,18 @@ itself, on the file or directory, after the SQLite connection that wrote the fil
 closed. SQLite’s own syncs while it writes a transient build, working copy, or
 `VACUUM INTO` output are not barriers in this protocol, so SQLite’s `synchronous` and
 `fullfsync` settings do not affect publication durability.
-An implementation MAY therefore disable SQLite’s syncs on a reconcile build.
-The build is unreachable until F5c fsyncs it, links it, and fsyncs `snapshots/`, so a
-crash or power loss before then leaves only a discardable transient, whatever state
-SQLite left it in; the barrier fsync then flushes every page SQLite wrote without
-syncing. A rollback inside the live process reads the rollback journal back through the
-operating system’s cache, which needs no sync.
+An implementation MAY therefore disable SQLite’s syncs on a reconcile build or a writer
+working copy. A reconcile build is unreachable until F5c fsyncs it, links it, and fsyncs
+`snapshots/`, so a crash or power loss before then leaves only a discardable transient,
+whatever state SQLite left it in; the barrier fsync then flushes every page SQLite wrote
+without syncing. A rollback inside the live process reads the rollback journal back
+through the operating system’s cache, which needs no sync.
 The Node implementation runs reconcile builds with `synchronous = OFF`, which saves
 SQLite’s journal and database syncs on every applied envelope.
-It keeps SQLite’s `FULL` setting on writer working copies, DirectStore builds, and
-init’s snapshot-0 build.
+It also runs writer working copies with `synchronous = OFF`: a working copy is never
+published or synced at all, because it is private to its writer and deleted once the
+callback returns, and only the in-memory changeset outlives it (W4 needs no barrier).
+It keeps SQLite’s `FULL` setting on DirectStore builds and init’s snapshot-0 build.
 On Apple platforms `fsync(2)` flushes only to the drive’s cache; an implementation there
 MUST issue `fcntl(F_FULLFSYNC)` for each barrier, using the strongest weaker barrier
 only where the filesystem rejects it.

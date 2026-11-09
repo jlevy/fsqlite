@@ -990,7 +990,7 @@ export class SnapshotStore {
       copyFileSync(path, work)
     }).version
     let changeset: Uint8Array | null
-    const db = driver.open(work)
+    const db = driver.openWorkingCopy(work)
     try {
       driver.protectOwnedTables(db)
       const boundary = driver.captureCallbackBoundary(db)
