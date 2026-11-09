@@ -457,9 +457,17 @@ envelope to decide whether to commit or quarantine it.
 The lifetime `applied_tx` count adds another growing term because reconcile loads the
 complete ledger into memory and every later snapshot carries it.
 
-Garbage collection validates the current head even when there are no snapshots to
-collect. On one Linux review host, a no-op collection against a 505 MiB head took about
-464 ms with a warm cache and 6.7 s with a cold cache.
+Maintenance reads the head too.
+`validate()` runs `integrity_check` and `foreign_key_check` over the whole head, and
+`gc()` runs the same full check before it deletes any snapshot, so a collecting gc pays
+one head-sized read: on one Linux review host that took about 464 ms with a warm cache
+and 6.7 s with a cold cache for a 505 MiB head.
+A gc call with nothing old enough to delete skips that check and costs a directory
+listing, a lease scan, and reads of the head’s identity and ledger rows: on one local
+run with a 39.5 MiB head its median was about 1 ms, against about 20 ms with the full
+check. Frequent gc calls are therefore cheap until retained versions turn over.
+On a shared path the collecting read crosses the network, so schedule gc after
+reconciles rather than on a fixed fast timer.
 
 Capture without the publish lease permits concurrent agents, but `W` in-flight writers
 can require about `W` working copies of the head.

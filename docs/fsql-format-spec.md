@@ -587,10 +587,16 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   It MUST reject invalid parameters before touching the store (Node: `retain` a
   non-negative integer; `leaseStaleMs` and `transientStaleMs` positive integers, so a
   zero or negative window cannot turn every live lease or fresh transient into debris).
-  It MUST validate the store (§11) and refuse unless the head passed identity and
-  integrity validation (`sealed`, `live`, or `in-flight-capture`, whose tells are
-  routine on a live store and are never touched by GC): with a corrupt head, the older
-  snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
+  Before it deletes any snapshot, it MUST validate the store (§11) and refuse unless the
+  head passed identity and integrity validation (`sealed`, `live`, or
+  `in-flight-capture`, whose tells are routine on a live store and are never touched by
+  GC): with a corrupt head, the older snapshots may be the only recovery points repair
+  has (§11 step 1). A GC call that finds no snapshot old enough to delete MAY skip the
+  head’s `integrity_check` and `foreign_key_check`, which read the whole head, but MUST
+  still refuse a store that fails any other §11 check (recognition, the pointer, head
+  identity, or archived transactions missing from the head ledger).
+  Such a call MUST delete no snapshot and no GC tombstone (G2), which holds a
+  predecessor’s bytes; it MAY sweep the other stale transients (G3). It MUST then hold
   the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
   `current` under the lock.
   If it differs from the validated version, GC MUST refuse and require a fresh

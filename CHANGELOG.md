@@ -51,6 +51,10 @@ publication validation are still pending.
 
 ### Performance and Diagnostics
 
+- **No-op gc:** a `gc()` with no snapshot old enough to delete skips the head’s
+  `integrity_check` and `foreign_key_check`, which read the whole head, and still
+  refuses a store that fails recognition, the pointer, head identity, or the ledger
+  lineage. On a 39.5 MiB head its median fell from about 20 ms to about 1 ms.
 - **Pointer diagnostics:** `current` is read only up to 64 bytes, and an error quotes at
   most 32 characters of a corrupt pointer, so a large file renamed over `current` is
   never loaded or echoed whole into logs.

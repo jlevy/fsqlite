@@ -240,6 +240,9 @@ const isTransientFile = (f: string): boolean =>
   f.endsWith('.tmp') ||
   f.endsWith('.tmp-journal')
 
+/** A gc tombstone: a snapshot renamed aside by a gc that may have crashed (spec G2). */
+const isGcTombstone = (f: string): boolean => f.startsWith('.gc-') && f.endsWith('.tmp')
+
 // writerId is interpolated into filesystem paths (the working copy and the envelope dir),
 // so it must be a safe single path component: no separators, traversal, or oversize names.
 const SAFE_WRITER_ID = /^[A-Za-z0-9._-]{1,64}$/
@@ -1408,6 +1411,13 @@ export class SnapshotStore {
    * TypeError, a store that does not validate with an integrity-clean head is refused (its
    * older snapshots may be the only recovery points repair has), and every deletion runs
    * under the publish lock with a fenced token, so gc never interleaves with repair.
+   *
+   * The integrity check reads the whole head, so it runs only when some snapshot is old
+   * enough to delete. A call that would delete nothing still checks recognition, the
+   * pointer, the head's identity, and its lineage, and still requires `current` under the
+   * lock to equal the head it checked. It then sweeps stale transients other than gc
+   * tombstones, which hold a predecessor's bytes; snapshots that become collectable after
+   * that check, and those tombstones, wait for a call that runs the full check.
    */
   gc({
     retain = DEFAULT_RETAINED_SNAPSHOTS,
@@ -1421,7 +1431,13 @@ export class SnapshotStore {
     validateLockOptions(lockOpts)
     // Validate outside the lock: the integrity check reads the whole head and must not
     // stall publishers. A recognition failure is refused before the lock dir is created.
-    const health = this.validate()
+    // The cheap checks run first; the full one only when there is a snapshot to delete.
+    let health = this.classify(false)
+    const head = health.current
+    const collect = head !== undefined && this.snapshotVersions().some((v) => v < head - retain)
+    if (collect) {
+      health = this.validate()
+    }
     if (!GC_SAFE_STATES.has(health.state) || health.current === undefined) {
       const message =
         `gc refused: store is ${health.state}: ${health.issues.join('; ')}; ` +
@@ -1433,14 +1449,21 @@ export class SnapshotStore {
     const validated = health.current
     return withLock(
       this.publishLock,
-      (_token, lease) => this.gcLocked(lease, validated, retain, leaseStaleMs, transientStaleMs),
+      (_token, lease) =>
+        this.gcLocked(lease, validated, collect, retain, leaseStaleMs, transientStaleMs),
       lockOpts,
     )
   }
 
+  /**
+   * `validated` is the head gc checked. `collect` is whether that check was the full one,
+   * run because some snapshot was old enough to delete; without it gc deletes no snapshot
+   * and sweeps no tombstone, only the other stale transients.
+   */
   private gcLocked(
     lease: LockLease,
     validated: number,
+    collect: boolean,
     retain: number,
     leaseStaleMs: number,
     transientStaleMs: number,
@@ -1464,7 +1487,7 @@ export class SnapshotStore {
     const keepFloor = cur - retain
     let removed = 0
     for (const v of versions) {
-      if (v === cur || v >= keepFloor || leased.has(v)) {
+      if (!collect || v === cur || v >= keepFloor || leased.has(v)) {
         continue
       }
       // Re-scan leases right before the tombstone: a reader may have claimed v after we
@@ -1487,7 +1510,7 @@ export class SnapshotStore {
         return
       }
       for (const f of readdirSync(dir)) {
-        if (!isTransientFile(f)) {
+        if (!isTransientFile(f) || (!collect && isGcTombstone(f))) {
           continue
         }
         const p = join(dir, f)
@@ -1606,6 +1629,15 @@ export class SnapshotStore {
    * {@link StoreState} plus issues, rather than silently accepting it.
    */
   validate(): ValidateResult {
+    return this.classify(true)
+  }
+
+  /**
+   * {@link validate}'s classification. With `deep` false it skips the head's
+   * `integrity_check` and `foreign_key_check`, the only steps that read the whole head,
+   * and keeps every other check, including the head's identity and lineage.
+   */
+  private classify(deep: boolean): ValidateResult {
     const issues: string[] = []
     const recognition = recognizeStore(this.dir)
     if (recognition.state !== 'supported') {
@@ -1674,7 +1706,7 @@ export class SnapshotStore {
           issues: [...issues, errorMessage(error)],
         }
       }
-      problems = driver.integrityProblems(db)
+      problems = deep ? driver.integrityProblems(db) : []
       missingArchived = problems.length === 0 ? this.countMissingArchived(db, archived) : 0
     } finally {
       db.close()

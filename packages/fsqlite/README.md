@@ -437,7 +437,8 @@ including symlinks, or a destination with `-journal`, `-wal`, or `-shm` sidecars
 Choose a path no live SQLite connection uses; to replace an old export, choose a new
 filename and remove the old export only after the new one succeeds.
 `gc` holds the publish lock for every deletion and refuses a store whose head fails
-validation. `stats` and `doctor` also accept a plain SQLite file.
+validation; it runs the full head check, which reads the whole head, only when it has a
+snapshot to delete. `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
 Its safe verdict requires working directory fsync and a filesystem whose fsync persists
