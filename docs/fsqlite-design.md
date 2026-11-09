@@ -428,21 +428,20 @@ it, so even a one-row fsqlite write has an O(snapshot size) I/O floor.
 SnapshotStore then pays another head-sized build during reconciliation.
 This is the main performance price of immutable publication in `f1.0`.
 
-Three runs of the maintained 2 KB-row benchmark on one cloud VM measured median capture
-at 2.1 to 2.6 ms for a 2.0 MiB head and 13.4 to 14.6 ms for a 21.7 MiB head (November
-2026, after writer working copies stopped syncing; three runs with SQLite’s `FULL` syncs
-on the working copy took 7.7 to 8.1 ms and 39.4 to 47.4 ms).
-The algorithm has a linear copy floor, but the measurements do not establish a portable
-rate or justify a GiB extrapolation.
+Three runs of the maintained 2 KB-row benchmark on one cloud VM in November 2026
+measured median capture at 2.1 to 2.6 ms for a 2.0 MiB head and 13.4 to 14.6 ms for a
+21.7 MiB head. The algorithm has a linear copy floor, but the measurements do not
+establish a portable rate or justify a GiB extrapolation.
 
 Session setup and callback-boundary checks visit schema objects, and every table
 consumes some SQLite pages, but data and indexes usually dominate snapshot bytes.
-Two local calibration runs from 1 to 250 empty caller tables increased median capture
-from about 2.5 ms to about 16.3 ms while the snapshot itself grew from 28 KiB to 2.0
-MiB. Because the calibration changed table count and file bytes together, it does not
-isolate table count as the primary variable or establish an independent linear
-table-count law. Table count adds real schema work, but the severity must be measured
-with the target schema rather than inferred from a table total.
+Two calibration runs on one cloud VM in November 2026 from 1 to 250 empty caller tables
+increased median capture from about 1.4 ms to about 4.2 ms while the snapshot itself
+grew from 28 KiB to 2.0 MiB. Because the calibration changed table count and file bytes
+together, it does not isolate table count as the primary variable or establish an
+independent linear table-count law.
+Table count adds real schema work, but the severity must be measured with the target
+schema rather than inferred from a table total.
 
 Measure the target workload before adopting SnapshotStore for a large database.
 Safe copy-on-write, overlay, shared-base, and compaction designs remain on the roadmap.
@@ -499,10 +498,10 @@ The natural alpha workload is a few to a few dozen such cooperative agents, shor
 callbacks, a single-digit-MiB head, occasional writes, and batched reconciliation.
 A handful of agents against a head in the low tens of MiB can fit when background
 latency is acceptable, but it requires workload-specific measurement.
-In the maintained calibration, eight processes issuing 40 total writes against 21.7 MiB
-took 8.4 to 8.9 seconds including process startup.
-At 50 to 100 MiB, frequent capture or reconcile-after-write is a conditional to poor fit
-and needs capacity monitoring.
+In two runs of the maintained calibration on one cloud VM in November 2026, eight
+processes issuing 40 total writes against 21.7 MiB took 0.60 to 0.64 seconds including
+process startup. At 50 to 100 MiB, frequent capture or reconcile-after-write is a
+conditional to poor fit and needs capacity monitoring.
 Hundreds of MiB to GiB heads with frequent small writes, immediate global visibility, or
 high sustained transaction rates are poor default fits.
 

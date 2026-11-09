@@ -530,9 +530,9 @@ is the normative protocol authority.
 - `SnapshotStore` seeds each default writer by copying the published snapshot, so write
   latency grows with snapshot size.
   Three runs of the maintained 2 KB-row benchmark on one cloud VM measured median
-  capture at 2.1 to 2.6 ms for 2.0 MiB and 13.4 to 14.6 ms for 21.7 MiB. In an earlier
-  calibration, eight child processes issuing 40 total writes against 21.7 MiB took 8.4
-  to 8.9 seconds including startup.
+  capture at 2.1 to 2.6 ms for 2.0 MiB and 13.4 to 14.6 ms for 21.7 MiB. In two runs of
+  the maintained multi-process calibration on one cloud VM, eight child processes
+  issuing 40 total writes against 21.7 MiB took 0.60 to 0.64 seconds including startup.
   Treat these hardware-specific measurements as sizing evidence, not a portable rate or
   performance guarantee.
   Any faster seed must preserve the data and constraints the callback observes; safe
