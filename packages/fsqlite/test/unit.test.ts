@@ -4,9 +4,11 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -473,6 +475,142 @@ test('validate classifies sealed / live / in-flight states', () => {
     assert.equal(store.validate().state, 'in-flight-capture')
   } finally {
     cleanup()
+  }
+})
+
+test('validate reports each corrupt and in-flight tell with its issue', () => {
+  // Each case damages a fresh sealed store at v1 and names the state and issue it yields.
+  const cases: [string, (store: SnapshotStore) => void, string, RegExp][] = [
+    [
+      'a missing pointer',
+      (s) => {
+        rmSync(s.currentPath)
+      },
+      'corrupt',
+      /^missing current pointer$/,
+    ],
+    [
+      'a pointer to a missing snapshot',
+      (s) => {
+        writeFileSync(s.currentPath, '7')
+      },
+      'corrupt',
+      /^current points at missing snapshot 7$/,
+    ],
+    [
+      'a stamped format version that disagrees with the marker',
+      (s) => {
+        setMeta(s, 'format_version', 'f0.9')
+      },
+      'corrupt',
+      /snapshot format version f0\.9 does not match fsqlite\.json f1\.0/,
+    ],
+    [
+      'a missing identity stamp',
+      (s) => {
+        setMeta(s, 'tool_version', null)
+      },
+      'corrupt',
+      /missing required fsqlite_meta key tool_version/,
+    ],
+    [
+      'a leftover publish lock',
+      (s) => {
+        mkdirSync(s.publishLock)
+      },
+      'in-flight-capture',
+      /publish\.lock present/,
+    ],
+    [
+      'SQLite side files beside the snapshots',
+      (s) => {
+        writeFileSync(`${s.snapshotPath(1)}-wal`, '')
+      },
+      'in-flight-capture',
+      /live SQLite side files present/,
+    ],
+  ]
+  for (const [label, damage, state, issue] of cases) {
+    const { store, cleanup } = freshStore()
+    try {
+      store.write('A', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'),
+      )
+      store.reconcile()
+      damage(store)
+      const v = store.validate()
+      assert.equal(v.state, state, label)
+      assert.match(v.issues.join('; '), issue, label)
+    } finally {
+      cleanup()
+    }
+  }
+})
+
+/** Rewrite (or, with null, delete) one fsqlite_meta row of the head, as damage would. */
+function setMeta(store: SnapshotStore, key: string, value: string | null): void {
+  const db = new DatabaseSync(store.snapshotPath(store.currentVersion()))
+  try {
+    if (value === null) {
+      db.prepare('DELETE FROM fsqlite_meta WHERE key = ?').run(key)
+    } else {
+      db.prepare('UPDATE fsqlite_meta SET value = ? WHERE key = ?').run(value, key)
+    }
+  } finally {
+    db.close()
+  }
+}
+
+test('a callback that changes nothing captures no envelope', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    assert.equal(
+      store.write('A', () => undefined),
+      null,
+    )
+    let calls = 0
+    assert.deepEqual(
+      store.writeWithRetry('A', () => {
+        calls++
+      }),
+      { txId: null, attempts: 1, conflicted: false },
+    )
+    assert.equal(calls, 1)
+    assert.deepEqual(store.pendingTxns(), [])
+  } finally {
+    cleanup()
+  }
+})
+
+test('an envelope whose manifest disagrees with the store or handle is quarantined', () => {
+  const cases: [string, Record<string, unknown>, string][] = [
+    ['format_version', { format_version: 'f9.9' }, 'format-version-mismatch'],
+    ['changeset', { changeset: 'other.bin' }, 'changeset-filename-mismatch'],
+    ['schema_version', { schema_version: 2 }, 'schema-version-mismatch'],
+    ['schema_hash', { schema_hash: '0000000000000000' }, 'schema-hash-mismatch'],
+  ]
+  for (const [field, patch, reason] of cases) {
+    const { store, cleanup } = freshStore()
+    try {
+      const txId = store.write('A', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'),
+      )
+      const manifestPath = join(store.txPending, `${txId ?? ''}.txn`, 'manifest.json')
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+      writeFileSync(manifestPath, JSON.stringify({ ...manifest, ...patch }))
+
+      assert.deepEqual(
+        [store.reconcile().applied, count(store, 'artifacts')],
+        [0, 0],
+        `${field}: nothing applied`,
+      )
+      assert.equal(
+        readFileSync(join(store.txQuarantine, `${txId ?? ''}.txn`, 'QUARANTINE'), 'utf8'),
+        reason,
+      )
+    } finally {
+      cleanup()
+    }
   }
 })
 

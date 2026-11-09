@@ -9,6 +9,7 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
+  rmSync,
   openSync,
   readdirSync,
   writeFileSync,
@@ -17,7 +18,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
+import { FsqliteError, LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const readVersionCount = (store: SnapshotStore, version: number): number => {
@@ -367,6 +368,77 @@ test('gc restores a tombstoned snapshot when the re-scan after the tombstone fai
       [],
       'no tombstone is left for a later sweep to delete',
     )
+  } finally {
+    cleanup()
+  }
+})
+
+test('gc reports a snapshot it could not remove and leaves every other version', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 2)
+    // A directory under a snapshot's name can be renamed to its tombstone but not unlinked,
+    // so the second phase of the two-phase delete fails.
+    rmSync(store.snapshotPath(0))
+    mkdirSync(store.snapshotPath(0))
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'io' &&
+        error.message.startsWith('gc failed to remove snapshot 0') &&
+        (error.cause as NodeJS.ErrnoException).code === 'EISDIR',
+    )
+    assert.ok(existsSync(store.snapshotPath(1)) && existsSync(store.snapshotPath(2)))
+    assert.equal(
+      store.validate().state,
+      'in-flight-capture',
+      'the tombstone is a visible transient',
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('gc refuses to delete after current moves back behind the version it validated', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 2)
+    // Model a repair that re-points current between gc's validation and its lock.
+    const validate = store.validate.bind(store)
+    store.validate = () => ({ ...validate(), current: 3 })
+    assert.throws(
+      () => store.gc({ retain: 0 }),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message.includes('current moved from 3 back to 2'),
+    )
+    assert.deepEqual(snapshotFiles(store), [0, 1, 2])
+  } finally {
+    cleanup()
+  }
+})
+
+test('readLease gives up with a retryable error once its retries are spent', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    // Every attempt reads a pointer whose snapshot is already gone, as when gc keeps
+    // winning the race between the pointer read and the existence check.
+    const currentVersion = store.currentVersion.bind(store)
+    let calls = 0
+    store.currentVersion = () => (++calls > 1 ? 99 : currentVersion())
+    assert.throws(
+      () => store.readLease({ maxRetries: 2 }),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message.includes('snapshot 99 was collected under contention after 2 retries'),
+    )
+    assert.deepEqual(readdirSync(store.leaseDir), [], 'every losing lease was withdrawn')
   } finally {
     cleanup()
   }

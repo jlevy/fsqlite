@@ -154,6 +154,50 @@ test('recognition distinguishes a missing marker from malformed metadata', () =>
   }
 })
 
+test('each marker rule classifies a violation as invalid, and only then as unsupported', () => {
+  const valid = {
+    format: 'fsqlite',
+    format_version: 'f1.0',
+    required_features: [],
+    store_id: randomUUID(),
+  }
+  const cases: [string, unknown, 'invalid' | 'unsupported', RegExp][] = [
+    ['a JSON array', [], 'invalid', /expected a JSON object/],
+    ['JSON null', null, 'invalid', /expected a JSON object/],
+    ['another format', { ...valid, format: 'sqlite' }, 'invalid', /format must be "fsqlite"/],
+    ['a non-string version', { ...valid, format_version: 1 }, 'invalid', /f<major>\.<minor>/],
+    ['a malformed version', { ...valid, format_version: 'f1.01' }, 'invalid', /f<major>\.<minor>/],
+    ['features not an array', { ...valid, required_features: 'x' }, 'invalid', /array of strings/],
+    ['an empty feature name', { ...valid, required_features: [''] }, 'invalid', /array of strings/],
+    ['duplicate features', { ...valid, required_features: ['a', 'a'] }, 'invalid', /duplicates/],
+    [
+      'a non-UUID store_id',
+      { ...valid, store_id: 'store-1' },
+      'invalid',
+      /store_id must be a UUID/,
+    ],
+    // A newer version is unsupported only once the marker is otherwise well formed.
+    [
+      'a newer version, bad id',
+      { ...valid, format_version: 'f2.0', store_id: 'x' },
+      'invalid',
+      /UUID/,
+    ],
+    ['a newer version', { ...valid, format_version: 'f1.1' }, 'unsupported', /"f1\.1"/],
+  ]
+  const { dir, cleanup } = tmpStore()
+  try {
+    for (const [label, marker, state, issue] of cases) {
+      writeFileSync(join(dir, 'fsqlite.json'), JSON.stringify(marker))
+      const recognition = recognizeStore(dir)
+      assert.equal(recognition.state, state, label)
+      assert.match('issue' in recognition ? recognition.issue : '', issue, label)
+    }
+  } finally {
+    cleanup()
+  }
+})
+
 test('a replaced marker is detected before maintenance can mutate the store', () => {
   const { dir, cleanup } = tmpStore()
   try {

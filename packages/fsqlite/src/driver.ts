@@ -259,6 +259,22 @@ export function foreignKeyCheck(db: DatabaseSync): void {
   }
 }
 
+/** SQLite primary result codes that mean the file itself is damaged or not a database. */
+const SQLITE_CORRUPT = 11
+const SQLITE_NOTADB = 26
+/** Extended result codes carry the primary code in their low byte. */
+const PRIMARY_RESULT_CODE_MASK = 0xff
+
+/** Whether `error` is SQLite reporting a damaged database file. */
+export function isSqliteCorruption(error: unknown): boolean {
+  const errcode = (error as { errcode?: unknown } | null)?.errcode
+  if (typeof errcode !== 'number') {
+    return false
+  }
+  const primary = errcode & PRIMARY_RESULT_CODE_MASK
+  return primary === SQLITE_CORRUPT || primary === SQLITE_NOTADB
+}
+
 /** Cheap integrity gate run before publishing a candidate snapshot. */
 export function quickCheck(db: DatabaseSync): void {
   if (!pragmaOk(db, 'quick_check')) {

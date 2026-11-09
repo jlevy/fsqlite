@@ -1625,6 +1625,16 @@ export class SnapshotStore {
       const db = driver.openReadonly(this.snapshotPath(lease.version))
       try {
         driver.vacuumInto(db, tmp)
+      } catch (error) {
+        if (driver.isSqliteCorruption(error)) {
+          throw new FsqliteError(
+            'corrupt',
+            `cannot seal: snapshot ${lease.version} is corrupt (${errorMessage(error)}); ` +
+              'run validate and repair',
+            { cause: error },
+          )
+        }
+        throw error
       } finally {
         db.close()
       }

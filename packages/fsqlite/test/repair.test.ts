@@ -14,6 +14,7 @@ import {
 } from 'node:fs'
 import { basename, join } from 'node:path'
 import { FsqliteError, SnapshotStore } from '../src/index.ts'
+import { setOwnerWriterForTest } from '../src/lock.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
@@ -362,6 +363,30 @@ test('repair leaves a fresh uncommitted envelope to its possibly live writer', (
     assert.equal(existsSync(join(store.txQuarantine, txn)), false)
     assert.equal(result.state, 'in-flight-capture', 'the capture in progress is still reported')
   } finally {
+    cleanup()
+  }
+})
+
+test('repair that loses publish.lock as it acquires it mutates nothing', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    copyFileSync(store.snapshotPath(1), store.snapshotPath(2)) // an orphan repair would remove
+    // A successor's token lands in owner.json as repair takes the lock, so its first fence
+    // check fails before any step.
+    setOwnerWriterForTest((path) => {
+      writeFileSync(path, JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: 0 }))
+    })
+    assert.throws(
+      () => store.repair(),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message === 'repair lost ownership of publish.lock before mutation',
+    )
+    assert.equal(existsSync(store.snapshotPath(2)), true, 'the orphan remains for a fenced retry')
+    assert.equal(readFileSync(store.currentPath, 'utf8'), '1')
+  } finally {
+    setOwnerWriterForTest(null)
     cleanup()
   }
 })

@@ -542,6 +542,21 @@ $ ls damaged/snapshots
 ? 0
 ```
 
+# Test: Seal Refuses a Head That Fails Integrity Validation (Exit 3)
+
+```console
+$ fsqlite seal damaged damaged.sqlite
+! fsqlite: cannot seal: snapshot 2 is corrupt ([..]); run validate and repair
+!   caused by: [..]
+? 3
+```
+
+```console
+$ test ! -e damaged.sqlite && echo 'no export'
+no export
+? 0
+```
+
 # Test: GC Fails Closed on a Torn Fresh Lease and Reports the Cause
 
 ```console

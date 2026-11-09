@@ -5,10 +5,18 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { SnapshotStore } from '../src/index.ts'
+import { FsqliteError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -96,6 +104,39 @@ test('seal refuses a destination the store owns', () => {
 
     assert.deepEqual(readFileSync(store.snapshotPath(0)), published, 'snapshot 0 is unchanged')
     assert.equal(readFileSync(store.currentPath, 'utf8'), pointer)
+  } finally {
+    cleanup()
+  }
+})
+
+test('seal refuses a head that fails integrity validation as corrupt and leaves no temp', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = storeWithOneRow(dir)
+    store.write('w', (db) => {
+      const insert = db.prepare('INSERT INTO artifacts VALUES (?,?,?)')
+      for (let i = 0; i < 400; i++) {
+        insert.run(`b${i}`, `t${i}`.repeat(8), 't')
+      }
+    })
+    store.reconcile()
+    // Scribble a page deep in the head: its identity rows still read, its b-tree does not.
+    const fd = openSync(store.snapshotPath(2), 'r+')
+    try {
+      writeSync(fd, Buffer.alloc(2048, 0xff), 0, 2048, 4096)
+    } finally {
+      closeSync(fd)
+    }
+    const out = exportDir(dir)
+    assert.throws(
+      () => store.seal(join(out, 'sealed.sqlite')),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'corrupt' &&
+        error.message.startsWith('cannot seal: snapshot 2 is corrupt'),
+    )
+    assert.deepEqual(readdirSync(out), [], 'no export and no temp')
+    assert.deepEqual(readdirSync(store.leaseDir), [], 'the seal lease was released')
   } finally {
     cleanup()
   }

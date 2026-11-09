@@ -26,7 +26,7 @@ Run from the repository root after `pnpm install --frozen-lockfile`. Every comma
 resolves tools from this workspace’s lockfile; the gate performs no network-time tool
 download.
 
-Current status: **193 `node:test` cases**, **76 CLI golden cases**, `tsc` clean,
+Current status: **202 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -37,29 +37,33 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 
 | Suite | Constraints | Guarantee it protects |
 | --- | --- | --- |
-| `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, malformed-manifest, wrong-schema admission, quarantine-write, NOTFOUND quarantine, validation-state, envelope-size handling, and seal/GC pinning; a reconcile that fails before publication removes its build |
+| `unit.test.ts` | `C5-C8`, `C11` | Core round-trip; immutable heads; all merge policies; deny-by-default policy; idempotent reconcile; atomic data-and-ledger commit; digest, transaction identity, malformed-manifest, wrong-schema and manifest-field admission, quarantine-write, NOTFOUND quarantine, every corrupt and in-flight validation state, envelope-size handling, no-op writes, and seal/GC pinning; a reconcile that fails before publication removes its build |
 | `merge-constraints.test.ts` | `C7` | Fixed filtered-pass order, UNIQUE and foreign-key closure at envelope and publication boundaries, foreign-key actions applied once from their recorded effects, a merge-created dangling reference quarantined, and policy routing by own keys only, so tables or actions named like `Object.prototype` members never drop changes |
-| `init.test.ts` | `C5-C8` | Non-null primary-key contract, including the nullable `INTEGER PRIMARY KEY DESC` quirk; SnapshotStore trigger rejection; schema-version range and schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
+| `init.test.ts` | `C5-C8` | Non-null primary-key contract, including the nullable `INTEGER PRIMARY KEY DESC` quirk; SnapshotStore trigger and key `ON CONFLICT REPLACE`/`IGNORE` rejection; schema-version, envelope-size, retry, and policy-table option validation; schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
 | `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, and read-lease protection from concurrent GC |
-| `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, torn-read-free readers, and serialized DirectStore writers with zero loss |
+| `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, readers that overlap many publishes without a failed, torn, or regressing read, and serialized DirectStore writers with zero loss |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
 | `fencing.test.ts` | `C3`, `C5` | Lease acquisition, stale break, token fencing, heartbeat loss, and owner-write cleanup |
 | `publication.test.ts` | `C5` | Overlapping publishers after a stale break: no-replace snapshot commit, identity checks around the pointer swap, waiting on a fresh entry, no orphan after a DirectStore retry, and archiving only what the published ledger holds |
-| `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, and refuses store-owned destinations |
-| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving |
-| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup (including init journals and lease temps), and never quarantining a live or just-committed envelope |
-| `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures |
+| `seal.test.ts` | `C5`, `C11` | Atomic, fsynced seal output that replaces a partial file, leaves the previous file on a failure before commit, refuses store-owned destinations, and reports a corrupt head as corrupt |
+| `gc-lease.test.ts` | `C4`, `C6`, `C11` | Retention of current, recent, and leased snapshots; malformed lease failure; safe transient sweep; refusal on an integrity-corrupt head; publish-lock fencing; option validation; two-phase tombstone unlink against every lease interleaving; a failed unlink, a pointer moved back during gc, and readLease retry exhaustion |
+| `repair.test.ts` | `C5`, `C6`, `C11` | Non-destructive recovery-point selection, live-lock refusal, stale-lock fencing, mutation revalidation, transient cleanup (including init journals and lease temps), never quarantining a live or just-committed envelope, lock loss at acquisition, and a `planRepair()` dry run that changes nothing |
+| `retry.test.ts` | `C7`, `C10` | Strict point-row optimistic compare and retry without retrying permanent failures, and a write reconcile could not publish reported as pending rather than retryable |
 | `nfs-sim.test.ts` | `C3` | Network-shaped close-to-open visibility plus rename and directory-creation semantics |
 | `portability.test.ts` | `C1` | A published snapshot opens as plain SQLite across bindings |
 | `direct.test.ts` | `C5`, `C8-C10` | DirectStore publication, format interoperability, trigger support that SnapshotStore refuses to open, schema admission before callbacks, retry fencing, callback boundary, and owned-metadata protection |
 | `driver-capabilities.test.ts` | `C1`, `C12` | Session and backup capability probes, reconcile-build connection settings, defensive mode on every connection where the binding has it, and integrity-clean online backup |
 | `adoption.test.ts` | `C7`, `C10` | A realistic multi-table schema and policy through the public API |
 | `sqlite-facts.test.ts` | `C1`, `C11` | Schema-agnostic inspection and integrity reports for plain SQLite files |
-| `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states, feature/version gating, marker fencing, and mixed-store quarantine |
+| `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states including every invalid-marker rule, feature/version gating, marker fencing, and mixed-store quarantine |
 | `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required hard links and directory fsync, and WAL negative control; mountinfo parsing (escaped paths, network and volatile filesystems) and the verdict rules |
 | `fsutil.test.ts` | `C3`, `C5` | Pointer-temp cleanup and fail-closed directory fsync behavior |
+| `errors.test.ts` | `C6`, `C11` | The typed error model: each `FsqliteError` code and `retryable` flag raised through the public API, and machine-coded quarantine reasons |
+| `read-retry.test.ts` | `C4`, `C11` | A reader whose snapshot gc collects after the pointer read retries on the new head, within a bound, and a pointer to a missing snapshot stays corruption |
+| `cli.test.ts` | `C11` | The importable CLI runs nothing on import, returns exit codes, maps every state and error code to its exit code, and prints cause chains |
+| `cli-bin.test.ts` | `C11` | The bin keeps the exit code when stdout or stderr closes early and hides only node:sqlite's experimental notice |
 
 ### Multiprocess Worker Harness (`workers/`)
 
@@ -67,7 +71,7 @@ Spawned as real child processes by the suites above, so the concurrency proofs a
 cross-process, not in-thread: `writer.ts`, `reader.ts`, `reconciler.ts`,
 `lock-holder.ts`, `direct-writer.ts`, `init-worker.ts`.
 
-### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 76 console cases)
+### CLI Golden Tests (`test/cli-golden/cli.tryscript.md`, 78 console cases)
 
 Exercises the real CLI (`src/cli/bin.ts`) end to end with Node’s default warnings,
 asserting stdout, stderr, and the exit code: global and per-command help, `--version`,
@@ -77,7 +81,8 @@ output of `info`, `validate`, `stats`, `gc`, and `doctor`; the exit codes of sea
 live, in-flight, invalid, unsupported, corrupt, and not-a-store paths across commands,
 including `info` and `stats` on a corrupt store; `repair --dry-run` changing nothing and
 `repair`; `gc` refusing a corrupt head or a torn lease (with its cause) and deleting
-nothing; `seal` with a stock-`sqlite3`-readable header and its refusals; `doctor` on
+nothing; `seal` with a stock-`sqlite3`-readable header and its refusals, including a
+corrupt head; `doctor` on
 clean and corrupt plain SQLite files and `doctor --fix`; and `fsinspect`, whose
 machine-dependent report is checked for its shape and for an exit code that matches its
 verdict.
@@ -103,7 +108,7 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
-- **Expect:** node:test reports `# pass 193` / `# fail 0`; goldens `76 passed`; build
+- **Expect:** node:test reports `# pass 202` / `# fail 0`; goldens `78 passed`; build
   emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
