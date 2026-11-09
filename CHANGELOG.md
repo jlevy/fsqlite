@@ -61,7 +61,9 @@ publication validation are still pending.
   refuses a store that fails recognition, the pointer, head identity, or the ledger
   lineage. `GcResult.integrityChecked` and the `integrity check:` field of `fsqlite gc`
   say whether the full check ran.
-  On a 39.5 MiB head its median fell from about 20 ms to about 1 ms.
+  On a 39.5 MiB head with few archived transactions its median fell from about 20 ms to
+  about 1 ms; each archived transaction still adds one ledger lookup (about 4 µs), so a
+  store with 30,000 archived transactions still pays about 125 ms.
 - **Pointer diagnostics:** `current` content longer than 64 bytes or naming a version
   above 2^53 − 1 is corruption (spec P1), only ASCII whitespace around the digits is
   trimmed, and an error quotes at most 32 characters of a corrupt pointer, escaped, so a

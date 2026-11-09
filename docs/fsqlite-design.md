@@ -463,12 +463,23 @@ Maintenance reads the head too.
 `gc()` runs the same full check before it deletes any snapshot, so a collecting gc pays
 one head-sized read: on one Linux review host that took about 464 ms with a warm cache
 and 6.7 s with a cold cache for a 505 MiB head.
-A gc call with nothing old enough to delete skips that check and costs a directory
-listing, a lease scan, and reads of the head’s identity and ledger rows: on one local
-run with a 39.5 MiB head its median was about 1 ms, against about 20 ms with the full
-check. Frequent gc calls are therefore cheap until retained versions turn over.
-On a shared path the collecting read crosses the network, so schedule gc after
-reconciles rather than on a fixed fast timer.
+A gc call with nothing old enough to delete skips that check.
+It still pays directory listings, a lease scan, a publish-lock round trip, a read of the
+head’s identity rows, and one ledger lookup per archived transaction, because every
+classification checks that the head’s ledger holds each envelope in `tx/applied/`, and
+nothing prunes that archive.
+On one local run with a 39.5 MiB head and few archived transactions its median was about
+1 ms, against about 20 ms with the full check.
+On one cloud VM a no-op gc on a small head took 0.7 to 0.9 ms with no archived
+transactions and 123 to 126 ms with 30,000, about 4 µs per lookup, and the lock round
+trip was about 0.14 ms there; on a shared path it costs a few network round trips.
+Frequent gc calls are therefore cheap only while the archive is small, and only until
+retained versions turn over.
+A collecting gc pays one full head read however many snapshots it deletes, and each
+publish makes at most one more version old enough to delete, so a gc after every
+reconcile, or on a timer faster than publishing, pays that read once per publish.
+To amortize it, collect less often than you publish, for example after every tenth
+reconcile; on a shared path the full read crosses the network.
 
 Capture without the publish lease permits concurrent agents, but `W` in-flight writers
 can require about `W` working copies of the head.
