@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzk2hj73aj9fepwqv6yf4t
 title: "PR #5 B6 (Low): `init()` refuses after a first open that crashed between the snapshot-0 commit and the pointer publish, and the comment says that cannot happen"
 kind: task
-status: open
+status: in_progress
 priority: 3
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:30.097Z
-updated_at: 2026-11-09T01:43:30.097Z
+updated_at: 2026-11-09T01:54:01.140Z
+started_at: 2026-11-09T01:54:01.140Z
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
 
