@@ -63,7 +63,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `errors.test.ts` | `C6`, `C11` | The typed error model: each `FsqliteError` code and `retryable` flag raised through the public API, and machine-coded quarantine reasons |
 | `read-retry.test.ts` | `C4`, `C11` | A reader whose snapshot gc collects after the pointer read retries on the new head, within a bound, and a pointer to a missing snapshot stays corruption |
 | `cli.test.ts` | `C11` | The importable CLI runs nothing on import, returns exit codes, maps every state and error code to its exit code, and prints cause chains |
-| `cli-bin.test.ts` | `C11` | The bin keeps the exit code when stdout or stderr closes early and hides only node:sqlite's experimental notice |
+| `cli-bin.test.ts` | `C11` | The bin keeps the exit code when stdout or stderr closes early and hides only node:sqlite’s experimental notice |
 
 ### Multiprocess Worker Harness (`workers/`)
 
@@ -82,10 +82,9 @@ live, in-flight, invalid, unsupported, corrupt, and not-a-store paths across com
 including `info` and `stats` on a corrupt store; `repair --dry-run` changing nothing and
 `repair`; `gc` refusing a corrupt head or a torn lease (with its cause) and deleting
 nothing; `seal` with a stock-`sqlite3`-readable header and its refusals, including a
-corrupt head; `doctor` on
-clean and corrupt plain SQLite files and `doctor --fix`; and `fsinspect`, whose
-machine-dependent report is checked for its shape and for an exit code that matches its
-verdict.
+corrupt head; `doctor` on clean and corrupt plain SQLite files and `doctor --fix`; and
+`fsinspect`, whose machine-dependent report is checked for its shape and for an exit
+code that matches its verdict.
 
 ### Clean-Room Package Smoke (`scripts/package-smoke.mjs`)
 
@@ -109,8 +108,8 @@ pnpm test:all && pnpm lint:check && pnpm typecheck
 ```
 
 - **Expect:** node:test reports `# pass 203` / `# fail 0`; goldens `78 passed`; build
-  emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
-  `package smoke test passed`; lint and typecheck exit 0.
+  emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`;
+  package smoke prints `package smoke test passed`; lint and typecheck exit 0.
 - **PASS:** every stage exits 0 with the counts above.
 
 ### B2. Library Round Trip by Hand
@@ -147,8 +146,8 @@ node packages/fsqlite/src/cli/bin.ts doctor   "$QA/cli"
   `format_version: "f1.0"`, and a UUID `store_id`; `info` prints `state: sealed` and
   `current: 1` (add `--json` for JSON); `validate` prints `sealed` and `exit=0`; `stats`
   reports `kind: fsqlite-store` with deterministic `application_id`/`user_version`/table
-  counts; `gc` prints what it removed and kept; `seal` writes the export; `doctor` prints
-  binding capabilities and `store: sealed`.
+  counts; `gc` prints what it removed and kept; `seal` writes the export; `doctor`
+  prints binding capabilities and `store: sealed`.
 - **PASS:** no errors; exit codes and states as above.
 
 ### B4. Cross-Tool Readback with Stock `sqlite3`
@@ -252,9 +251,10 @@ node packages/fsqlite/src/cli/bin.ts fsinspect "$QA"; echo "exit=$?"
 ```
 
 - **Expect:** a capability report; `fsqlite-safe` verdict on a normal local FS
-  (`exit=0`, and `exit=5` when the filesystem cannot host a store). On a WAL-hostile filesystem the WAL negative control is expected to fail
-  while the fsqlite primitives still pass: that is the intended signal, not a
-  regression. A tmpfs, ramfs, or `volatile` overlayfs target fails `durableFsync`.
+  (`exit=0`, and `exit=5` when the filesystem cannot host a store).
+  On a WAL-hostile filesystem the WAL negative control is expected to fail while the
+  fsqlite primitives still pass: that is the intended signal, not a regression.
+  A tmpfs, ramfs, or `volatile` overlayfs target fails `durableFsync`.
 - **PASS:** the report matches the filesystem you are on; record the verdict for the
   target deploy environment.
 

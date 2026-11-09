@@ -213,15 +213,15 @@ Requirements:
   conflict handler, so REPLACE deletes the existing row and IGNORE drops the incoming
   change, both while the envelope is ledgered as applied and whatever the table’s
   policy. Initialization and every open by a Writer or Reconciler MUST reject such a
-  schema, naming the table; DirectStore permits it. A `NOT NULL` conflict clause is
-  permitted, because capture already substituted its default.
-  Foreign-key actions (`ON DELETE`/`ON UPDATE` `CASCADE`, `SET NULL`, `SET DEFAULT`) are
-  permitted for both strategies; F3 applies their recorded effects without running them
-  again. The `f1.0` Writer role does not support virtual tables: SQLite sessions do not
-  capture them, and their implementation-owned shadow tables do not satisfy this
-  caller-table contract.
-  Derived indexes that use virtual tables belong outside the envelope writer path and
-  must be rebuildable from published data.
+  schema, naming the table; DirectStore permits it.
+  A `NOT NULL` conflict clause is permitted, because capture already substituted its
+  default. Foreign-key actions (`ON DELETE`/`ON UPDATE` `CASCADE`, `SET NULL`,
+  `SET DEFAULT`) are permitted for both strategies; F3 applies their recorded effects
+  without running them again.
+  The `f1.0` Writer role does not support virtual tables: SQLite sessions do not capture
+  them, and their implementation-owned shadow tables do not satisfy this caller-table
+  contract. Derived indexes that use virtual tables belong outside the envelope writer
+  path and must be rebuildable from published data.
 
 - **S5.** A published snapshot MUST NOT have live `-wal`/`-shm` side files.
   (Snapshots are built and committed in rollback-journal mode and are closed before
@@ -657,10 +657,10 @@ snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
 The callback runs on the build with foreign keys enforced, so its triggers and
-foreign-key actions fire exactly once; S4’s trigger and conflict-clause prohibitions
-do not apply.
-The writer **does not require the session extension**, so the strategy runs on any
-SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
+foreign-key actions fire exactly once; S4’s trigger and conflict-clause prohibitions do
+not apply.
+The writer **does not require the session extension**, so the strategy runs on
+any SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
 composes safely with SnapshotStore reconcilers publishing into the same store.
 Because a lost OCC or fencing race retries the complete operation, the application
 callback MAY run more than once and MUST be safe to retry.
@@ -877,8 +877,8 @@ upgrade implementation is post-alpha work.
   corruption, and SHOULD re-read the pointer and retry: GC may have collected it after a
   stale read. On network mounts, directory-entry and attribute caching can delay
   visibility of a new `current` (Linux NFS: up to `acdirmax`, default 60 s), which
-  widens that window. The Node reader re-reads the pointer and retries a bounded number of
-  times, and reports a pointer that still names a missing snapshot as corruption.
+  widens that window. The Node reader re-reads the pointer and retries a bounded number
+  of times, and reports a pointer that still names a missing snapshot as corruption.
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
 **Writer**: W1-W4, S2-S4 callback and schema validation, the compatibility check of §3,

@@ -502,9 +502,10 @@ Every durability barrier is a file or directory fsync that fsqlite issues throug
 after SQLite has closed the file, so SQLite’s own sync settings do not matter for
 publication. On macOS, Node’s fsync uses `F_FULLFSYNC`, which plain `fsync(2)` does not
 (spec section 10). Directory fsync is part of the safe verdict and publication fails
-closed when it is unavailable. The verdict also refuses a filesystem whose fsync does
-not persist (tmpfs, ramfs, and overlayfs mounted with `volatile`), and warns on other
-overlayfs mounts about the O7 directory-rename limitation.
+closed when it is unavailable.
+The verdict also refuses a filesystem whose fsync does not persist (tmpfs, ramfs, and
+overlayfs mounted with `volatile`), and warns on other overlayfs mounts about the O7
+directory-rename limitation.
 Neither is a substitute for the pending two-host NFS/SMB gate.
 The alpha supplies a protocol design, a reference implementation, and local evidence;
 universal shared-filesystem certification remains outside that scope.

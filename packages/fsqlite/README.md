@@ -341,10 +341,9 @@ Every table must have a non-null primary key.
 The `f1.0` writer contract does not support virtual tables or DDL inside write
 callbacks. `SnapshotStore` also rejects a schema that declares triggers, because
 reconciliation would fire them a second time, and an `ON CONFLICT REPLACE` or `IGNORE`
-clause on a primary key or `UNIQUE` constraint, which would let reconciliation resolve
-a clash silently instead of applying the merge policy; use `DirectStore` for such a
-schema.
-Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
+clause on a primary key or `UNIQUE` constraint, which would let reconciliation resolve a
+clash silently instead of applying the merge policy; use `DirectStore` for such a
+schema. Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
 Give tables that concurrent `SnapshotStore` writers insert into caller-generated keys,
 such as UUIDs: writers seeded from the same snapshot allocate the same next rowid or
 `AUTOINCREMENT` value, so their inserts always conflict.
@@ -478,9 +477,9 @@ fsqlite doctor    <path> [--fix]
 fsqlite fsinspect <dir>
 ```
 
-Every command takes `--json` and `--help`; `fsqlite --help` and `fsqlite --version`
-work too. Arguments are parsed strictly: an unknown command or option, a missing or
-extra argument, or an invalid `--retain` is a usage error that changes nothing.
+Every command takes `--json` and `--help`; `fsqlite --help` and `fsqlite --version` work
+too. Arguments are parsed strictly: an unknown command or option, a missing or extra
+argument, or an invalid `--retain` is a usage error that changes nothing.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -496,8 +495,8 @@ A command that reports on a store (`info`, `validate`, `stats`, `doctor`, `repai
 exits with the code of the state it reports, and a command that fails exits with the
 code of its error, so `gc` on an unsupported store exits `4` like `validate` does.
 `repair --dry-run` prints the steps repair would take without changing anything.
-`repair` and `doctor --fix` delete every transient file, so run them only when no
-writer or reconciler is active.
+`repair` and `doctor --fix` delete every transient file, so run them only when no writer
+or reconciler is active.
 Errors print their cause chain; set `FSQLITE_DEBUG=1` for the stack.
 `import { main } from 'fsqlite/cli'` runs the same CLI in-process and returns the exit
 code.
@@ -506,8 +505,7 @@ code.
 that path holds either the previous file or the complete export; it refuses a
 destination the store owns.
 `gc` holds the publish lock for every deletion and refuses a store whose head fails
-validation.
-`stats` and `doctor` also accept a plain SQLite file.
+validation. `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
 Its safe verdict requires working directory fsync and a filesystem whose fsync persists
