@@ -1,17 +1,22 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
-import { arch, cpus, platform, release, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import type { StoreOptions } from '../src/types.ts'
+import {
+  BENCHMARK_SCHEMA_VERSION,
+  MEASURED_CAPTURES,
+  MEDIAN_PERCENTILE,
+  P95_PERCENTILE,
+  ROW_BYTES,
+  WARMUP_CAPTURES,
+  benchmarkEnvironment,
+  elapsedMs,
+  percentile,
+} from './common.ts'
 
-const BENCHMARK_SCHEMA_VERSION = 1
-const ROW_BYTES = 2048
 const SMALL_HEAD_ROWS = 500
 const LARGE_HEAD_ADDITIONAL_ROWS = 5000
-const WARMUP_CAPTURES = 5
-const MEASURED_CAPTURES = 30
-const MEDIAN_PERCENTILE = 0.5
-const P95_PERCENTILE = 0.95
 
 const options: StoreOptions = {
   schema:
@@ -39,7 +44,7 @@ try {
     store.write('benchmark', (db) =>
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`write-${sequence++}`, blob, 't'),
     )
-    return Number(process.hrtime.bigint() - started) / 1e6
+    return elapsedMs(started)
   }
   const measure = (warmups: number, iterations: number): number[] => {
     for (let index = 0; index < warmups; index++) {
@@ -50,10 +55,6 @@ try {
       samples.push(capture())
     }
     return samples
-  }
-  const percentile = (samples: number[], fraction: number): number => {
-    const sorted = [...samples].sort((left, right) => left - right)
-    return sorted[Math.ceil(sorted.length * fraction) - 1] ?? 0
   }
   const summarize = (samples: number[]): { medianMs: number; p95Ms: number } => ({
     medianMs: percentile(samples, MEDIAN_PERCENTILE),
@@ -69,13 +70,7 @@ try {
   console.log(
     JSON.stringify(
       {
-        environment: {
-          node: process.version,
-          platform: platform(),
-          release: release(),
-          arch: arch(),
-          cpu: cpus()[0]?.model ?? 'unknown',
-        },
+        environment: benchmarkEnvironment(),
         method: {
           rowBytes: blob.length,
           warmups: WARMUP_CAPTURES,

@@ -1,19 +1,24 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
-import { arch, cpus, platform, release, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import type { StoreOptions } from '../src/types.ts'
+import {
+  BENCHMARK_SCHEMA_VERSION,
+  MEASURED_CAPTURES,
+  MEDIAN_PERCENTILE,
+  P95_PERCENTILE,
+  ROW_BYTES,
+  WARMUP_CAPTURES,
+  benchmarkEnvironment,
+  elapsedMs,
+  percentile,
+} from './common.ts'
 
-const ROW_BYTES = 2048
-const WARMUPS = 5
-const CAPTURES = 30
 const WRITES_PER_AGENT = 5
 const ROWS_PER_WRITE = 2
-const BENCHMARK_SCHEMA_VERSION = 1
-const MEDIAN_PERCENTILE = 0.5
-const P95_PERCENTILE = 0.95
 const TABLE_COUNTS = [1, 10, 50, 100, 250] as const
 const AGENT_SCENARIOS = [
   { seedRows: 500, agentCounts: [1, 4, 8, 16] },
@@ -25,15 +30,6 @@ const agentOptions: StoreOptions = {
   schema: 'CREATE TABLE artifacts (artifact_id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);',
   schemaVersion: BENCHMARK_SCHEMA_VERSION,
   conflictPolicy: { '*': 'strict' },
-}
-
-function elapsedMs(started: bigint): number {
-  return Number(process.hrtime.bigint() - started) / 1e6
-}
-
-function percentile(samples: number[], fraction: number): number {
-  const sorted = [...samples].sort((left, right) => left - right)
-  return sorted[Math.ceil(sorted.length * fraction) - 1] ?? 0
 }
 
 function snapshotBytes(store: SnapshotStore): number {
@@ -62,11 +58,11 @@ function measureTableCount(root: string, tableCount: number): Record<string, num
     )
     return elapsedMs(started)
   }
-  for (let index = 0; index < WARMUPS; index++) {
+  for (let index = 0; index < WARMUP_CAPTURES; index++) {
     capture()
   }
   const samples: number[] = []
-  for (let index = 0; index < CAPTURES; index++) {
+  for (let index = 0; index < MEASURED_CAPTURES; index++) {
     samples.push(capture())
   }
   return {
@@ -157,17 +153,11 @@ async function main(): Promise<void> {
     console.log(
       JSON.stringify(
         {
-          environment: {
-            node: process.version,
-            platform: platform(),
-            release: release(),
-            arch: arch(),
-            cpu: cpus()[0]?.model ?? 'unknown',
-          },
+          environment: benchmarkEnvironment(),
           tableCountMethod: {
             rowBytes: ROW_BYTES,
-            warmups: WARMUPS,
-            captures: CAPTURES,
+            warmups: WARMUP_CAPTURES,
+            captures: MEASURED_CAPTURES,
             reconciliation: false,
           },
           agentMethod: {
