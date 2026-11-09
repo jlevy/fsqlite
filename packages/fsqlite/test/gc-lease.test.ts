@@ -239,6 +239,9 @@ test('gc that has nothing to delete skips the full head check but not the cheap 
     assert.deepEqual(store.gc(), { removed: 0, kept: 2, leased: [] })
     assert.equal(existsSync(debris), false, 'the stale transient was swept')
     assert.equal(existsSync(tombstone), true, 'a tombstone waits for a gc that checked the head')
+    // At the retain boundary the oldest snapshot is exactly current - retain, which G1
+    // keeps, so this is still the steady state after a collecting gc: no full check.
+    assert.deepEqual(store.gc({ retain: 1 }), { removed: 0, kept: 2, leased: [] })
 
     // With a snapshot to delete, the full check runs and refuses (no recovery point lost).
     assert.throws(() => store.gc({ retain: 0 }), /gc refused: store is corrupt: .*integrity/)
