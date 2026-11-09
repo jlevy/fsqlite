@@ -8,8 +8,8 @@ for at least 14 days before they can enter the lockfile.
 
 - pnpm is pinned by `packageManager` in `package.json`, and the development and release
   Node version by `.nvmrc`.
-- The Markdown formatter runs as `uvx --isolated --from flowmark-rs==X.Y.Z`, an exact
-  pin with no dependencies of its own.
+- The Markdown formatter runs as `uvx --isolated --no-build --from flowmark-rs==X.Y.Z`.
+  It uses a wheel of the pinned release and has no dependencies of its own.
 - CI pins the `uv` release it installs, so the tool that fetches the formatter does not
   float to a release inside the cool-off.
 - GitHub Actions are pinned to full commit SHAs, with the release tag in a trailing
@@ -32,6 +32,11 @@ Prefer the previous release over an exclusion; the one exclusion is recorded und
 decide fail the install; `esbuild` and `lefthook` are the only packages in the graph
 with install scripts, and both are denied because their platform binaries ship as
 optional dependencies.
+
+`pnpm verify` checks the configuration pnpm reports.
+It requires a strict cool-off of at least 14 days, publish timestamps, lockfile policy
+verification, the trust policy and build-script controls described above, registry-only
+transitive sources, and engine checks.
 
 ## Release Controls
 
@@ -75,8 +80,7 @@ version.
 `pnpm verify`, which also gates the publish workflow, runs
 `scripts/check-supply-chain.mjs`. It finds every GHSA or CVE ID anywhere in
 `pnpm-workspace.yaml`, in any letter case or YAML form, and fails unless those IDs are
-exactly the ones `pnpm config get audit --json` reports (it skips only this comparison,
-with a message, when pnpm is not installed).
+exactly the ones `pnpm config get audit --json` reports.
 pnpm reports the IDs it acts on under `audit.ignore` whichever key set them, so IDs left
 under the deprecated `auditConfig.ignoreGhsas` still count; when both keys are set, pnpm
 uses only `audit.ignore`, and the gate fails on the IDs it drops.

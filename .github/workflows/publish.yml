@@ -23,6 +23,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       dist-tag: ${{ steps.release.outputs.dist-tag }}
       node-version: ${{ steps.release.outputs.node-version }}
+      tarball-sha512: ${{ steps.pack.outputs.sha512 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,6 +72,8 @@ jobs:
           node scripts/package-smoke.mjs
       - name: Pack and smoke-test the release tarball
         if: github.ref_name != 'v0.1.0'
+        id: pack
+        shell: bash
         working-directory: packages/fsqlite
         env:
           FSQLITE_SMOKE_PACKAGE: ${{ runner.temp }}/release/fsqlite-${{ steps.release.outputs.version }}.tgz
@@ -78,6 +81,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/release"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/release"
           node scripts/package-smoke.mjs
+          digest="$(sha512sum "$FSQLITE_SMOKE_PACKAGE" | cut -d ' ' -f 1)"
+          printf 'sha512=%s\n' "$digest" >> "$GITHUB_OUTPUT"
       - name: Upload the release tarball
         if: github.ref_name != 'v0.1.0'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -111,9 +116,28 @@ jobs:
           name: npm-package
           path: ${{ runner.temp }}/release
       - name: Stage the release with trusted publishing
+        shell: bash
         env:
           DIST_TAG: ${{ needs.build.outputs.dist-tag }}
+          EXPECTED_SHA512: ${{ needs.build.outputs.tarball-sha512 }}
           TARBALL: ${{ runner.temp }}/release/fsqlite-${{ needs.build.outputs.version }}.tgz
-          # Fail instead of staging without provenance.
-          NPM_CONFIG_PROVENANCE: 'true'
-        run: npm stage publish "$TARBALL" --access public --tag "$DIST_TAG"
+        run: |
+          digest="$(sha512sum "$TARBALL" | cut -d ' ' -f 1)"
+          if [[ "$digest" != "$EXPECTED_SHA512" ]]; then
+            echo "Release tarball differs from the verified build artifact" >&2
+            exit 1
+          fi
+          printf 'Release tarball SHA-512: %s\n' "$digest"
+          tar -xOzf "$TARBALL" package/package.json | node -e '
+            const { name, version, publishConfig } = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            if (name !== "fsqlite" || "v" + version !== process.env.GITHUB_REF_NAME) {
+              throw new Error("Release tarball name or version does not match this tag");
+            }
+            if (publishConfig !== undefined &&
+                (!publishConfig || typeof publishConfig !== "object" || Array.isArray(publishConfig) ||
+                 Object.keys(publishConfig).some((key) => key !== "access" && key !== "tag"))) {
+              throw new Error("Release tarball has unexpected publishConfig settings");
+            }
+          '
+          # npm lets tarball settings override environment config, but CLI flags win.
+          npm stage publish "$TARBALL" --provenance --registry https://registry.npmjs.org/ --access public --tag "$DIST_TAG"

@@ -107,10 +107,16 @@ For a later release during the alpha phase:
    and verify it in a clean checkout with `pnpm verify`.
 3. Create the exact matching `v*` tag on that commit (`git tag v<version> <merged-sha>`)
    and push it.
-4. Watch the Publish workflow; the `stage` job logs the staged version and its stage ID.
-5. With npm 11.15 or later, review the staged release with `npm stage list fsqlite` and,
-   if needed, `npm stage download <stage-id>`. Then run `npm stage approve <stage-id>`,
-   which prompts for 2FA, or `npm stage reject <stage-id>` to discard it.
+4. Watch the Publish workflow.
+   The `stage` job checks and logs the verified tarball’s SHA-512 digest, and npm logs
+   the staged version and its stage ID.
+5. With npm 11.15 or later, find the staged release with `npm stage list fsqlite` and
+   fetch its tarball with `npm stage download <stage-id>`. Use `shasum -a 512 <tarball>`
+   to compare its bytes against the digest in the stage log.
+   To check the build itself, independently pack the tagged source in a trusted
+   environment that matches CI and compare the tarballs.
+   Run `npm stage approve <stage-id>` after review.
+   npm prompts for 2FA. Use `npm stage reject <stage-id>` to discard a staged release.
 6. Verify the npm version, `npm view fsqlite dist-tags` (see [Dist-Tags](#dist-tags)),
    provenance (`npm view fsqlite@<version> dist.attestations`), and a fresh consumer
    install.

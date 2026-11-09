@@ -5,10 +5,58 @@ import {
   checkAuditExceptions,
   checkTrustPolicyExclusions,
   crossCheckPnpmAudit,
+  crossCheckPnpmPolicyFloor,
   crossCheckPnpmTrustPolicy,
   findAdvisoryIds,
   findTrustPolicyExcludes,
 } from './supply-chain-exceptions.mjs'
+
+describe('crossCheckPnpmPolicyFloor', () => {
+  const floor = {
+    minimumReleaseAge: 20160,
+    minimumReleaseAgeStrict: true,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    trustPolicy: 'no-downgrade',
+    engineStrict: true,
+    strictDepBuilds: true,
+    blockExoticSubdeps: true,
+    allowBuilds: { esbuild: false, lefthook: false },
+  }
+  const checkFloor = (overrides) =>
+    crossCheckPnpmPolicyFloor(JSON.stringify({ ...floor, ...overrides }))
+
+  test('accepts the policy floor or a longer cool-off', () => {
+    assert.deepEqual(checkFloor({}), [])
+    assert.deepEqual(checkFloor({ minimumReleaseAge: 30000, minimumReleaseAgeExclude: [] }), [])
+  })
+
+  for (const [key, value] of Object.entries({
+    minimumReleaseAge: 0,
+    minimumReleaseAgeExclude: ['*'],
+    minimumReleaseAgeStrict: false,
+    minimumReleaseAgeIgnoreMissingTime: true,
+    trustPolicy: undefined,
+    trustPolicyIgnoreAfter: 1,
+    trustLockfile: true,
+    engineStrict: false,
+    strictDepBuilds: undefined,
+    blockExoticSubdeps: false,
+    allowBuilds: { esbuild: true },
+    dangerouslyAllowAllBuilds: true,
+  })) {
+    test(`rejects a weaker ${key} setting`, () => {
+      const errors = checkFloor({ [key]: value })
+      assert.equal(errors.length, 1)
+      assert.ok(errors[0].includes(key), errors[0])
+    })
+  }
+
+  test('rejects missing, malformed, and non-object config output', () => {
+    for (const output of ['', '{', '[]']) {
+      assert.match(crossCheckPnpmPolicyFloor(output)[0], /pnpm config list --json/)
+    }
+  })
+})
 
 const TODAY = '2026-11-08'
 const RECORDED = 'GHSA-g3hv-75wg-m249'
