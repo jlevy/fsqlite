@@ -15,7 +15,7 @@ import {
 import { basename, join } from 'node:path'
 import { FsqliteError, SnapshotStore } from '../src/index.ts'
 import { setOwnerWriterForTest } from '../src/lock.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
   store.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
@@ -106,7 +106,7 @@ test('planRepair refuses whenever repair would', () => {
   const { store, cleanup } = storeAt(1)
   try {
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
     assert.throws(
       () => store.planRepair(),
       (error: unknown) => error instanceof FsqliteError && error.code === 'in-flight',
@@ -168,7 +168,7 @@ test('repair refuses to mutate while a publisher lock is present', () => {
     const transient = join(store.snapDir, '.build-live.sqlite')
     writeFileSync(transient, 'live work')
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
 
     assert.throws(() => store.repair(), /repair refused: publish\.lock is present/)
     assert.equal(existsSync(transient), true)
@@ -184,7 +184,7 @@ test('repair reclaims a stale publisher lock before restoring the store', () => 
     const transient = join(store.snapDir, '.build-abandoned.sqlite')
     writeFileSync(transient, 'abandoned work')
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'dead' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('dead'))
     const old = new Date(Date.now() - 10_000)
     utimesSync(store.publishLock, old, old)
 
@@ -204,9 +204,9 @@ test('repair revalidates its fence before every destructive step', () => {
     // A successor takes the lock after repair's last snapshot scan (and heartbeat) but
     // before its first mutation: listing the transient directories is the plan's last
     // read-only step.
-    const internal = store as unknown as { _transientDirs: () => string[] }
-    const transientDirs = internal._transientDirs.bind(store)
-    internal._transientDirs = (): string[] => {
+    const internal = store as unknown as { transientDirs: () => string[] }
+    const transientDirs = internal.transientDirs.bind(store)
+    internal.transientDirs = (): string[] => {
       writeFileSync(
         join(store.publishLock, 'owner.json'),
         JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
@@ -268,7 +268,7 @@ test('root pointer transients are surfaced, swept by gc, and removed by repair',
     writeFileSync(fresh, '{}')
     const grave = join(store.dir, 'publish.lock.deadbeef00.tmp')
     mkdirSync(grave)
-    writeFileSync(join(grave, 'owner.json'), JSON.stringify({ token: 'broken' }))
+    writeFileSync(join(grave, 'owner.json'), ownerRecord('broken'))
     store.repair()
     assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
     assert.equal(existsSync(grave), false, 'repair removes a lock moved aside by a crashed break')
@@ -331,11 +331,11 @@ test('repair keeps an envelope that commits between its check and its quarantine
   const { store, cleanup } = storeAt(1)
   try {
     const txn = uncommittedEnvelope(store, 120_000)
-    const move = (store as unknown as { _move: (txns: string[], dest: string) => void })._move.bind(
+    const move = (store as unknown as { move: (txns: string[], dest: string) => void }).move.bind(
       store,
     )
     Object.assign(store, {
-      _move: (txns: string[], dest: string): void => {
+      move: (txns: string[], dest: string): void => {
         writeFileSync(join(store.txPending, txn, 'COMMITTED'), '') // the writer finishes here
         move(txns, dest)
       },

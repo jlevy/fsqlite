@@ -21,7 +21,7 @@ import { join } from 'node:path'
 import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
 import { ownerOf, setOwnerWriterForTest, setStaleLockMoverForTest, withLock } from '../src/lock.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
@@ -45,7 +45,7 @@ test('revalidate-before-publish: a holder whose lease was stolen aborts the dest
         // the lock dir is reclaimed and re-owned by a different token.
         rmSync(lockPath, { recursive: true, force: true })
         mkdirSync(lockPath)
-        writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'someone-else' }))
+        writeFileSync(join(lockPath, 'owner.json'), ownerRecord('someone-else'))
         // Our fencing check: only publish if we still own the lock.
         if (ownerOf(lockPath) !== token) {
           return 'aborted'
@@ -72,7 +72,7 @@ test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', ()
   try {
     // A crashed holder left the lock dir behind with an old mtime, past the stale window.
     mkdirSync(lockPath)
-    writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'dead-holder' }))
+    writeFileSync(join(lockPath, 'owner.json'), ownerRecord('dead-holder'))
     const oldTime = new Date(Date.now() - 10_000)
     utimesSync(lockPath, oldTime, oldTime)
     let ran = false
@@ -119,7 +119,7 @@ test('a stale-lock break never deletes a successor that re-acquired the lock fir
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   mkdirSync(lockPath)
-  writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'dead-holder' }))
+  writeFileSync(join(lockPath, 'owner.json'), ownerRecord('dead-holder'))
   const oldTime = new Date(Date.now() - 10_000)
   utimesSync(lockPath, oldTime, oldTime)
   setStaleLockMoverForTest((from, to) => {
@@ -128,7 +128,7 @@ test('a stale-lock break never deletes a successor that re-acquired the lock fir
     // lock (its mtime is in the future so it stays fresh for the whole test)...
     rmSync(from, { recursive: true, force: true })
     mkdirSync(from)
-    writeFileSync(join(from, 'owner.json'), JSON.stringify({ token: 'successor' }))
+    writeFileSync(join(from, 'owner.json'), ownerRecord('successor'))
     const fresh = new Date(Date.now() + 60_000)
     utimesSync(from, fresh, fresh)
     // ...and only then does this waiter's own break land.
@@ -210,7 +210,7 @@ test('SnapshotStore retries when its lease is stolen after the snapshot rename',
       setAfterFsyncDirForTest(null)
       rmSync(store.publishLock, { recursive: true, force: true })
       mkdirSync(store.publishLock)
-      writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+      writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('successor'))
       const old = new Date(Date.now() - 10_000)
       utimesSync(store.publishLock, old, old)
     })
@@ -225,6 +225,22 @@ test('SnapshotStore retries when its lease is stolen after the snapshot rename',
     assert.equal(store.validate().state, 'sealed')
   } finally {
     setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})
+
+test('a malformed owner record names no owner, so no holder can fence on it', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    mkdirSync(lockPath)
+    for (const record of ['{"token":"partial"}', '{"token":7,"pid":1,"host":"h","at":0}', '[]']) {
+      writeFileSync(join(lockPath, 'owner.json'), record)
+      assert.equal(ownerOf(lockPath), null, record)
+    }
+    writeFileSync(join(lockPath, 'owner.json'), ownerRecord('complete'))
+    assert.equal(ownerOf(lockPath), 'complete')
+  } finally {
     cleanup()
   }
 })

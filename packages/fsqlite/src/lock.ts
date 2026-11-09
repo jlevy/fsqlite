@@ -296,12 +296,24 @@ function removeLockIf(
   return null
 }
 
+/** The lock's owner record, or null when it is absent, unreadable, or malformed. */
 function readOwner(lockPath: string): OwnerMeta | null {
+  let value: unknown
   try {
-    return JSON.parse(readFileSync(join(lockPath, 'owner.json'), 'utf8')) as OwnerMeta
+    value = JSON.parse(readFileSync(join(lockPath, 'owner.json'), 'utf8'))
   } catch {
     return null
   }
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const { token, pid, host, at } = value as Record<string, unknown>
+  return typeof token === 'string' &&
+    typeof pid === 'number' &&
+    typeof host === 'string' &&
+    typeof at === 'number'
+    ? { token, pid, host, at }
+    : null
 }
 
 /** Current owner token of a held lock, or null. Used to revalidate before publish. */

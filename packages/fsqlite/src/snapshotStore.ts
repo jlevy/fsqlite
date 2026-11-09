@@ -223,13 +223,14 @@ const DEFAULT_MAX_ENVELOPE_BYTES = 1 << 30
  * NULL in a non-integer PRIMARY KEY).
  */
 function validatePrimaryKeys(db: driver.DB): void {
+  const owned: readonly string[] = driver.OWNED_TABLES
   const tables = (
     db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('applied_tx', 'fsqlite_meta')",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[]
-  ).map((r) => r.name)
+  )
+    .map((r) => r.name)
+    .filter((name) => !owned.includes(name))
   for (const t of tables) {
     const quoted = `"${t.replace(/"/g, '""')}"`
     const cols = db.prepare(`PRAGMA table_info(${quoted})`).all() as {
@@ -539,7 +540,7 @@ export class SnapshotStore {
   readonly conflictPolicy: NormalizedPolicy
   readonly toolVersion: string
   readonly maxEnvelopeBytes: number
-  private _clock: number
+  private clock: number
 
   constructor(dir: string, opts: StoreOptions = {}) {
     this.dir = dir
@@ -563,7 +564,7 @@ export class SnapshotStore {
       opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES,
       1,
     )
-    this._clock = 0
+    this.clock = 0
   }
 
   /**
@@ -590,7 +591,7 @@ export class SnapshotStore {
         marker = createStoreMarker(this.dir)
       }
 
-      this._createStoreDirs()
+      this.createStoreDirs()
       if (existsSync(this.currentPath)) {
         return
       } // another initializer won while we waited
@@ -652,7 +653,7 @@ export class SnapshotStore {
         throw e
       }
     })
-    this._verifyCompatible()
+    this.verifyCompatible()
     return this
   }
 
@@ -661,7 +662,7 @@ export class SnapshotStore {
    * deepest first, so a power loss cannot drop `tx/pending` or `leases/` from a store whose
    * marker and pointer survived (spec section 10).
    */
-  private _createStoreDirs(): void {
+  private createStoreDirs(): void {
     const parents = new Set<string>()
     for (const d of [
       this.snapDir,
@@ -693,9 +694,9 @@ export class SnapshotStore {
    * user_version (the foreign-readable capability pragmas) and the stamped schema_hash, which
    * catches divergent caller DDL even when the caller forgets to increment schema_version.
    */
-  private _verifyCompatible(): void {
+  private verifyCompatible(): void {
     const marker = readStoreMarker(this.dir)
-    const db = this._openCurrent()
+    const db = this.openCurrent()
     try {
       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
       this.assertStrategySchema(db)
@@ -755,7 +756,7 @@ export class SnapshotStore {
   /** Refuse store operations if the marker and published snapshot do not identify the same store. */
   private assertStoreIdentity(): void {
     const marker = readStoreMarker(this.dir)
-    const db = this._openCurrent()
+    const db = this.openCurrent()
     try {
       verifySnapshotIdentity(db, marker)
     } finally {
@@ -768,9 +769,9 @@ export class SnapshotStore {
     return join(this.snapDir, `${pad(v)}.fsqlite.sqlite`)
   }
 
-  /** Open the snapshot `current` names read-only; see {@link _withCurrentSnapshot}. */
-  private _openCurrent(): driver.DB {
-    return this._withCurrentSnapshot((path) => driver.openReadonly(path)).result
+  /** Open the snapshot `current` names read-only; see {@link withCurrentSnapshot}. */
+  private openCurrent(): driver.DB {
+    return this.withCurrentSnapshot((path) => driver.openReadonly(path)).result
   }
 
   /**
@@ -779,7 +780,7 @@ export class SnapshotStore {
    * so the pointer is read again (spec section 13). A pointer that still names a missing
    * snapshot is corruption.
    */
-  private _withCurrentSnapshot<R>(step: (path: string) => R): { version: number; result: R } {
+  private withCurrentSnapshot<R>(step: (path: string) => R): { version: number; result: R } {
     for (let attempt = 0; ; attempt++) {
       const version = this.currentVersion()
       beforeSnapshotOpenHook?.(version)
@@ -831,7 +832,7 @@ export class SnapshotStore {
    */
   read<T>(fn: ReadFn<T>): T {
     const marker = readStoreMarker(this.dir)
-    const db = this._openCurrent()
+    const db = this.openCurrent()
     try {
       verifySnapshotIdentity(db, marker)
       return fn(db)
@@ -874,7 +875,7 @@ export class SnapshotStore {
         })
       }
       if (existsSync(this.snapshotPath(version))) {
-        return this._lease(version, path)
+        return this.lease(version, path)
       }
       rmSync(path, { force: true }) // lost the race to gc; drop the stale lease and retry
       if (attempt >= maxRetries) {
@@ -886,7 +887,7 @@ export class SnapshotStore {
     }
   }
 
-  private _lease(version: number, path: string): ReadLease {
+  private lease(version: number, path: string): ReadLease {
     const release = (): void => {
       try {
         rmSync(path, { force: true }) // an already-dropped pin is fine
@@ -937,12 +938,12 @@ export class SnapshotStore {
         `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
       )
     }
-    this._verifyCompatible()
+    this.verifyCompatible()
     driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
     const marker = readStoreMarker(this.dir)
     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
     // SAFE: the source snapshot is immutable.
-    const base = this._withCurrentSnapshot((path) => {
+    const base = this.withCurrentSnapshot((path) => {
       copyFileSync(path, work)
     }).version
     let changeset: Uint8Array | null
@@ -962,7 +963,7 @@ export class SnapshotStore {
       return null
     }
 
-    const txId = `${pad(Date.now())}-${pad(this._clock++)}-${writerId}-${rand()}`
+    const txId = `${pad(Date.now())}-${pad(this.clock++)}-${writerId}-${rand()}`
     const txDir = join(this.txPending, `${txId}.txn`)
     mkdirSync(txDir, { recursive: true })
     writeFileSync(join(txDir, CHANGESET_FILENAME), changeset)
@@ -1017,14 +1018,12 @@ export class SnapshotStore {
         reconcileError = error
       }
       const published =
-        reconcileError === null
-          ? this._isPublished(txId)
-          : this._isPublishedOr(txId, reconcileError)
+        reconcileError === null ? this.isPublished(txId) : this.isPublishedOr(txId, reconcileError)
       if (published) {
         return { txId, attempts: attempt + 1, conflicted: attempt > 0 }
       }
       if (!existsSync(quarantinePath)) {
-        throw this._unsettledTransaction(txId, reconcileError)
+        throw this.unsettledTransaction(txId, reconcileError)
       }
       const reason = readFileSync(quarantinePath, 'utf8')
       const reasonCode = quarantineReasonCode(reason)
@@ -1049,7 +1048,7 @@ export class SnapshotStore {
    * pending (`in-flight`, after a reconcile `failure` or a reconcile that left it for the
    * next one), or gone from every envelope directory (`corrupt`).
    */
-  private _unsettledTransaction(txId: string, failure: unknown): TransactionError {
+  private unsettledTransaction(txId: string, failure: unknown): TransactionError {
     const options = failure === null ? {} : { cause: failure }
     if (existsSync(join(this.txPending, `${txId}.txn`))) {
       const why =
@@ -1078,16 +1077,16 @@ export class SnapshotStore {
    * Whether the head `current` names holds `txId`, consulted after `failure`. If the store
    * cannot even be read, `failure` is the error to report, so it is rethrown instead.
    */
-  private _isPublishedOr(txId: string, failure: unknown): boolean {
+  private isPublishedOr(txId: string, failure: unknown): boolean {
     try {
-      return this._isPublished(txId)
+      return this.isPublished(txId)
     } catch {
       throw failure
     }
   }
 
   /** Whether the head `current` names holds `txId` in its ledger. */
-  private _isPublished(txId: string): boolean {
+  private isPublished(txId: string): boolean {
     return this.read((db) =>
       Boolean(db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId)),
     )
@@ -1124,7 +1123,7 @@ export class SnapshotStore {
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const base = this.currentVersion()
-      this._verifyCompatible()
+      this.verifyCompatible()
       const pending = this.pendingTxns()
       if (pending.length === 0) {
         return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
@@ -1136,7 +1135,7 @@ export class SnapshotStore {
       // A crash seam models a dead process, which runs no cleanup.
       let crashed = false
       try {
-        fold = this._fold(tmp, base, pending, marker)
+        fold = this.fold(tmp, base, pending, marker)
         if (fold.applied.length === 0) {
           result = 'nothing-applied'
         } else {
@@ -1144,7 +1143,7 @@ export class SnapshotStore {
             crashed = true
             throw new Error('CRASH after-build')
           } // tmp orphaned; current unchanged
-          result = this._publishBuild(tmp, base, lockOpts, crashAt)
+          result = this.publishBuild(tmp, base, lockOpts, crashAt)
         }
       } finally {
         // Every exit before or from the publish step discards the build. Once committed,
@@ -1158,7 +1157,7 @@ export class SnapshotStore {
         continue
       }
       if (result === 'nothing-applied') {
-        const settled = this._settle(fold.applied, fold.archivable, fold.quarantined)
+        const settled = this.settle(fold.applied, fold.archivable, fold.quarantined)
         return {
           published: base,
           applied: 0,
@@ -1173,7 +1172,7 @@ export class SnapshotStore {
 
       let settled: { applied: number; quarantined: number }
       try {
-        settled = this._settle(fold.applied, fold.archivable, fold.quarantined)
+        settled = this.settle(fold.applied, fold.archivable, fold.quarantined)
       } catch (error) {
         throw new PostPublishError(next, error)
       }
@@ -1196,7 +1195,7 @@ export class SnapshotStore {
    * (already in the base lineage), or quarantined with a reason; one bad envelope never
    * aborts the batch. A gate failure throws, and the caller discards the build.
    */
-  private _fold(tmp: string, base: number, pending: string[], marker: StoreMarker): FoldResult {
+  private fold(tmp: string, base: number, pending: string[], marker: StoreMarker): FoldResult {
     copyFileSync(this.snapshotPath(base), tmp)
     const applied: string[] = []
     const archivable: string[] = []
@@ -1215,7 +1214,7 @@ export class SnapshotStore {
           archivable.push(txn)
           continue
         } // already in this lineage
-        const admitted = this._admitEnvelope(txn, marker)
+        const admitted = this.admitEnvelope(txn, marker)
         if (typeof admitted === 'string') {
           quarantined.push([txn, admitted])
           continue
@@ -1244,7 +1243,7 @@ export class SnapshotStore {
    * F3 admission: read envelope `txn` and check it against the store and this handle. Returns
    * its changeset and manifest, or the quarantine reason.
    */
-  private _admitEnvelope(
+  private admitEnvelope(
     txn: string,
     marker: StoreMarker,
   ): { changeset: Uint8Array; manifest: Manifest } | string {
@@ -1300,7 +1299,7 @@ export class SnapshotStore {
    * F5: fsync the build, then commit it as `base + 1` and swap the pointer under the publish
    * lock. Returns `retry` when another publisher won or this one was fenced out.
    */
-  private _publishBuild(
+  private publishBuild(
     tmp: string,
     base: number,
     lockOpts: LockOptions,
@@ -1374,12 +1373,12 @@ export class SnapshotStore {
     const validated = health.current
     return withLock(
       this.publishLock,
-      (_token, lease) => this._gcLocked(lease, validated, retain, leaseStaleMs, transientStaleMs),
+      (_token, lease) => this.gcLocked(lease, validated, retain, leaseStaleMs, transientStaleMs),
       lockOpts,
     )
   }
 
-  private _gcLocked(
+  private gcLocked(
     lease: LockLease,
     validated: number,
     retain: number,
@@ -1401,7 +1400,7 @@ export class SnapshotStore {
         `gc refused: current moved from ${validated} back to ${cur} after validation; run gc again`,
       )
     }
-    const leased = this._activeLeasedVersions(leaseStaleMs)
+    const leased = this.activeLeasedVersions(leaseStaleMs)
     const versions = this.snapshotVersions()
     const keepFloor = cur - retain
     let removed = 0
@@ -1411,11 +1410,11 @@ export class SnapshotStore {
       }
       // Re-scan leases right before the tombstone: a reader may have claimed v after we
       // computed `leased` (readLease publishes the lease before reading).
-      if (this._activeLeasedVersions(leaseStaleMs).has(v)) {
+      if (this.activeLeasedVersions(leaseStaleMs).has(v)) {
         continue
       }
       fence()
-      if (this._collectSnapshot(v, leaseStaleMs)) {
+      if (this.collectSnapshot(v, leaseStaleMs)) {
         removed++
       } else {
         leased.add(v)
@@ -1443,7 +1442,7 @@ export class SnapshotStore {
       }
     }
     fence()
-    for (const dir of this._transientDirs()) {
+    for (const dir of this.transientDirs()) {
       sweepStaleTransients(dir)
     }
     return { removed, kept: versions.length - removed, leased: [...leased] }
@@ -1457,7 +1456,7 @@ export class SnapshotStore {
    * fails and it retries; a lease published before the rename is visible to the re-scan.
    * Returns true if the snapshot was deleted, false if a lease kept it.
    */
-  private _collectSnapshot(v: number, leaseStaleMs: number): boolean {
+  private collectSnapshot(v: number, leaseStaleMs: number): boolean {
     const path = this.snapshotPath(v)
     const tombstone = join(this.snapDir, `.gc-${pad(v)}-${rand()}.tmp`)
     const restore = (): void => {
@@ -1473,7 +1472,7 @@ export class SnapshotStore {
     }
     let leasedNow: boolean
     try {
-      leasedNow = this._activeLeasedVersions(leaseStaleMs).has(v)
+      leasedNow = this.activeLeasedVersions(leaseStaleMs).has(v)
     } catch (error) {
       restore() // fail closed: an unreadable lease must not cost the snapshot it may pin
       throw error
@@ -1492,7 +1491,7 @@ export class SnapshotStore {
     return true
   }
 
-  private _activeLeasedVersions(staleMs: number): Set<number> {
+  private activeLeasedVersions(staleMs: number): Set<number> {
     const out = new Set<number>()
     if (!existsSync(this.leaseDir)) {
       return out
@@ -1558,7 +1557,7 @@ export class SnapshotStore {
 
     // In-flight tells.
     const snapFiles = existsSync(this.snapDir) ? readdirSync(this.snapDir) : []
-    const transients = this._transientDirs().flatMap((dir) =>
+    const transients = this.transientDirs().flatMap((dir) =>
       existsSync(dir) ? readdirSync(dir).filter(isTransientFile) : [],
     )
     if (transients.length) {
@@ -1648,7 +1647,7 @@ export class SnapshotStore {
       )
     }
     const destDir = dirname(resolve(destPath))
-    if (this._isStoreOwnedPath(join(realpathSync(destDir), basename(destPath)))) {
+    if (this.isStoreOwnedPath(join(realpathSync(destDir), basename(destPath)))) {
       throw new FsqliteError(
         'refused',
         `cannot seal into ${destPath}: the destination is a path inside the store that the ` +
@@ -1703,7 +1702,7 @@ export class SnapshotStore {
   }
 
   /** Whether `path` is a reserved root entry of this store or lies inside a subdirectory. */
-  private _isStoreOwnedPath(path: string): boolean {
+  private isStoreOwnedPath(path: string): boolean {
     const fromRoot = relative(realpathSync(this.dir), path)
     if (fromRoot === '' || fromRoot === '..' || fromRoot.startsWith(`..${sep}`)) {
       return fromRoot === ''
@@ -1718,7 +1717,7 @@ export class SnapshotStore {
    */
   repair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
-    this._refuseRepairUnderLiveLock(lockOpts)
+    this.refuseRepairUnderLiveLock(lockOpts)
     const actions = withLock(
       this.publishLock,
       (_token, lease) => {
@@ -1736,11 +1735,11 @@ export class SnapshotStore {
             throw repairLostOwnership()
           }
         }
-        return this._planRepair(marker, renew).map((step) => step.apply(assertOwnership))
+        return this.repairSteps(marker, renew).map((step) => step.apply(assertOwnership))
       },
       lockOpts,
     )
-    return { actions, state: this._recognizedState('repair ended with') }
+    return { actions, state: this.recognizedState('repair ended with') }
   }
 
   /**
@@ -1751,12 +1750,12 @@ export class SnapshotStore {
    */
   planRepair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
     const marker = readStoreMarker(this.dir)
-    this._refuseRepairUnderLiveLock(lockOpts)
-    const actions = this._planRepair(marker, () => undefined).map((step) => step.planned)
-    return { actions, state: this._recognizedState('repair plan found') }
+    this.refuseRepairUnderLiveLock(lockOpts)
+    const actions = this.repairSteps(marker, () => undefined).map((step) => step.planned)
+    return { actions, state: this.recognizedState('repair plan found') }
   }
 
-  private _refuseRepairUnderLiveLock(lockOpts: LockOptions): void {
+  private refuseRepairUnderLiveLock(lockOpts: LockOptions): void {
     if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
       throw new FsqliteError(
         'in-flight',
@@ -1766,7 +1765,7 @@ export class SnapshotStore {
   }
 
   /** The store's validated state, which repair and its plan require to be recognized. */
-  private _recognizedState(context: string): StoreState {
+  private recognizedState(context: string): StoreState {
     const state = this.validate().state
     if (isRecognitionFailure(state)) {
       throw new StoreFormatError(state, `${context} an unrecognized store: ${state}`)
@@ -1779,7 +1778,7 @@ export class SnapshotStore {
    * consistent point (spec section 11). `renew` runs after each snapshot scan; each step's
    * `apply` revalidates ownership through the callback it is given before it mutates.
    */
-  private _planRepair(marker: StoreMarker, renew: () => void): RepairStep[] {
+  private repairSteps(marker: StoreMarker, renew: () => void): RepairStep[] {
     const steps: RepairStep[] = []
     const versions = this.snapshotVersions()
     const identityMatches = (v: number): boolean => {
@@ -1867,7 +1866,7 @@ export class SnapshotStore {
         })
       }
     }
-    for (const dir of this._transientDirs()) {
+    for (const dir of this.transientDirs()) {
       if (!existsSync(dir)) {
         continue
       }
@@ -1902,7 +1901,7 @@ export class SnapshotStore {
         }
         steps.push({
           planned: `quarantine uncommitted ${d}`,
-          apply: (assertOwnership) => this._quarantineUncommitted(d, assertOwnership),
+          apply: (assertOwnership) => this.quarantineUncommitted(d, assertOwnership),
         })
       }
     }
@@ -1910,12 +1909,12 @@ export class SnapshotStore {
   }
 
   /** Move abandoned uncommitted envelope `d` to quarantine; returns the action taken. */
-  private _quarantineUncommitted(d: string, assertOwnership: () => void): string {
+  private quarantineUncommitted(d: string, assertOwnership: () => void): string {
     const pendingDir = join(this.txPending, d)
     assertOwnership()
     writeFileSync(join(pendingDir, 'QUARANTINE'), 'uncommitted-at-repair')
     assertOwnership()
-    this._move([d], this.txQuarantine)
+    this.move([d], this.txQuarantine)
     // A writer can still write COMMITTED between the plan's check and the move. Its write
     // either landed in the moved dir, seen here, or failed with ENOENT and the writer
     // reported failure, so this check after the move has no race window.
@@ -1929,7 +1928,7 @@ export class SnapshotStore {
   }
 
   /** Every directory that can hold transients (spec section 2), for validate, gc, and repair. */
-  private _transientDirs(): string[] {
+  private transientDirs(): string[] {
     return [this.dir, this.snapDir, this.txPending, this.leaseDir]
   }
 
@@ -1955,12 +1954,12 @@ export class SnapshotStore {
    * to a lineage this build never saw (spec L5): every other envelope stays pending, for
    * the next reconcile to classify against that lineage. Returns the counts actually moved.
    */
-  private _settle(
+  private settle(
     applied: string[],
     archivable: string[],
     quarantined: [string, string][],
   ): { applied: number; quarantined: number } {
-    const db = this._openCurrent()
+    const db = this.openCurrent()
     const ledgered = new Set<string>()
     try {
       const inLedger = db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?')
@@ -1974,19 +1973,19 @@ export class SnapshotStore {
     }
     const lineageIsOurs = [...applied, ...archivable].every((txn) => ledgered.has(txn))
     const toQuarantine = lineageIsOurs ? quarantined.filter(([txn]) => !ledgered.has(txn)) : []
-    this._archive([...ledgered])
-    this._quarantine(toQuarantine)
+    this.archive([...ledgered])
+    this.quarantine(toQuarantine)
     return {
       applied: applied.filter((txn) => ledgered.has(txn)).length,
       quarantined: toQuarantine.length,
     }
   }
 
-  private _archive(txns: string[]): void {
-    this._move(txns, this.txApplied)
+  private archive(txns: string[]): void {
+    this.move(txns, this.txApplied)
   }
 
-  private _quarantine(pairs: [string, string][]): void {
+  private quarantine(pairs: [string, string][]): void {
     for (const [txn, reason] of pairs) {
       const txDir = join(this.txPending, txn)
       try {
@@ -2000,13 +1999,13 @@ export class SnapshotStore {
         }
       }
     }
-    this._move(
+    this.move(
       pairs.map((p) => p[0]),
       this.txQuarantine,
     )
   }
 
-  private _move(txns: string[], destDir: string): void {
+  private move(txns: string[], destDir: string): void {
     for (const txn of txns) {
       try {
         renameSync(join(this.txPending, txn), join(destDir, txn))

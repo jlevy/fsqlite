@@ -19,7 +19,7 @@ import {
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { FsqliteError, LockTimeoutError, SnapshotStore } from '../src/index.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const readVersionCount = (store: SnapshotStore, version: number): number => {
   const db = new DatabaseSync(store.snapshotPath(version), { readOnly: true })
@@ -216,7 +216,7 @@ test('gc waits for the publish lock instead of deleting under a live publisher o
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     advance(store, 3)
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'repairing' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('repairing'))
     const fresh = new Date(Date.now() + 60_000) // the holder stays live for the whole test
     utimesSync(store.publishLock, fresh, fresh)
 
@@ -236,15 +236,15 @@ test('gc revalidates its lock token before each snapshot deletion', () => {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     advance(store, 4)
     const scanLeases = (
-      store as unknown as { _activeLeasedVersions: (ms: number) => Set<number> }
-    )._activeLeasedVersions.bind(store)
+      store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
+    ).activeLeasedVersions.bind(store)
     let scans = 0
     Object.assign(store, {
-      _activeLeasedVersions: (ms: number): Set<number> => {
+      activeLeasedVersions: (ms: number): Set<number> => {
         scans++
         if (scans === 2 && existsSync(store.publishLock)) {
           // A peer stale-broke gc's lock and now holds it.
-          writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'peer' }))
+          writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('peer'))
         }
         return scanLeases(ms)
       },
@@ -307,11 +307,11 @@ test('a lease published at any point during gc never pins a deleted snapshot', (
         reader.currentVersion = () => (existsSync(reader.snapshotPath(1)) ? 1 : readCurrent())
         let lease: ReturnType<SnapshotStore['readLease']> | null = null
         const scanLeases = (
-          store as unknown as { _activeLeasedVersions: (ms: number) => Set<number> }
-        )._activeLeasedVersions.bind(store)
+          store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
+        ).activeLeasedVersions.bind(store)
         let scans = 0
         Object.assign(store, {
-          _activeLeasedVersions: (ms: number): Set<number> => {
+          activeLeasedVersions: (ms: number): Set<number> => {
             scans++
             const take = scans === scan && lease === null
             if (take && position === 'before') {
@@ -352,10 +352,10 @@ test('gc restores a tombstoned snapshot when the re-scan after the tombstone fai
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     advance(store, 3)
     const scanLeases = (
-      store as unknown as { _activeLeasedVersions: (ms: number) => Set<number> }
-    )._activeLeasedVersions.bind(store)
+      store as unknown as { activeLeasedVersions: (ms: number) => Set<number> }
+    ).activeLeasedVersions.bind(store)
     Object.assign(store, {
-      _activeLeasedVersions: (ms: number): Set<number> => {
+      activeLeasedVersions: (ms: number): Set<number> => {
         // Once snapshot 0 is tombstoned, a fresh lease that cannot be read appears.
         if (!existsSync(store.snapshotPath(0))) {
           writeFileSync(join(store.leaseDir, 'torn.lease'), '{')

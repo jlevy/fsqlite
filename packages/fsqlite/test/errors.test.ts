@@ -19,7 +19,7 @@ import {
   readStoreMarker,
 } from '../src/index.ts'
 import type { FsqliteErrorCode } from '../src/index.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 /** An assert.throws validator for an FsqliteError with `code` and `retryable`. */
 const fsqliteError =
@@ -115,7 +115,7 @@ test('repair under a live publisher lock is an in-flight, retryable refusal', ()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
     assert.throws(() => store.repair(), fsqliteError('in-flight', true))
   } finally {
     cleanup()
@@ -127,7 +127,7 @@ test('a lock timeout is retryable and names the lock and the timeout', () => {
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
     const fresh = new Date(Date.now() + 60_000)
     utimesSync(store.publishLock, fresh, fresh)
     assert.throws(

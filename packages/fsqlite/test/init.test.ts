@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
 import { runAsync } from './spawn.ts'
 import { setOwnerWriterForTest } from '../src/lock.ts'
@@ -333,7 +333,7 @@ test('init abandons snapshot-0 publication after losing its lock token', () => {
       const lock = join(dir, 'publish.lock')
       rmSync(lock, { recursive: true, force: true })
       mkdirSync(lock)
-      writeFileSync(join(lock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+      writeFileSync(join(lock, 'owner.json'), ownerRecord('successor'))
     })
     assert.throws(() => new SnapshotStore(dir, STORE_OPTS).init(), /lost ownership|publish lock/i)
     assert.equal(readdirSync(join(dir, 'snapshots')).length, 0, 'no unfenced snapshot is published')

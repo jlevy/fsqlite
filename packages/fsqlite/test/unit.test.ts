@@ -317,10 +317,10 @@ test('quarantine tolerates another reconciler consuming the envelope first', () 
     renameSync(pendingDir, join(store.txQuarantine, txn))
 
     const internal = store as unknown as {
-      _quarantine(pairs: [string, string][]): void
+      quarantine(pairs: [string, string][]): void
     }
     assert.doesNotThrow(() => {
-      internal._quarantine([[txn, 'unreadable-envelope']])
+      internal.quarantine([[txn, 'unreadable-envelope']])
     })
     assert.equal(
       readFileSync(join(store.txQuarantine, txn, 'QUARANTINE'), 'utf8'),

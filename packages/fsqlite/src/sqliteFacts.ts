@@ -7,9 +7,13 @@ import * as driver from './driver.ts'
 
 const SQLITE_MAGIC = 'SQLite format 3\0'
 
+/** A missing path, or one under a non-directory, is simply not a SQLite file. */
+const NOT_FOUND_CODES: ReadonlySet<string | undefined> = new Set(['ENOENT', 'ENOTDIR'])
+
 /**
- * True if `path` is a regular file that starts with the SQLite magic header. A path that
- * cannot be read is reported as not a SQLite file.
+ * True if `path` is a regular file that starts with the SQLite magic header. A missing
+ * path is not one; any other failure to read it, such as EACCES, throws, so a permission
+ * problem is not reported as the wrong kind of file.
  */
 export function isSqliteFile(path: string): boolean {
   let fd: number
@@ -18,8 +22,11 @@ export function isSqliteFile(path: string): boolean {
       return false
     }
     fd = openSync(path, 'r')
-  } catch {
-    return false
+  } catch (error) {
+    if (NOT_FOUND_CODES.has((error as NodeJS.ErrnoException).code)) {
+      return false
+    }
+    throw error
   }
   try {
     const buf = Buffer.alloc(SQLITE_MAGIC.length)

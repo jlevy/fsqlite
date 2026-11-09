@@ -544,7 +544,7 @@ Goal: a stranger can find, understand, install, and use this.
 
 ## Testing Strategy
 
-The current suite is the baseline and must stay green throughout: 202 `node:test` cases
+The current suite is the baseline and must stay green throughout: 203 `node:test` cases
 including real multi-process concurrency, crash injection, `SIGKILL` recovery, lease
 fencing, NFS simulation, and fuzz, plus 78 tryscript CLI goldens and a package smoke
 test that packs, clean-installs the tarball, and exercises both the library entry and

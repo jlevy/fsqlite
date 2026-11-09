@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { isLockFresh } from '../src/lock.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 test('direct write → read round-trips and increments the version synchronously', () => {
   const { dir, cleanup } = tmpStore()
@@ -320,7 +320,7 @@ for (const scenario of [
         scenario.setHook(null)
         rmSync(publishLock, { recursive: true, force: true })
         mkdirSync(publishLock)
-        writeFileSync(join(publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+        writeFileSync(join(publishLock, 'owner.json'), ownerRecord('successor'))
         const old = new Date(Date.now() - 10_000)
         utimesSync(publishLock, old, old)
       })
