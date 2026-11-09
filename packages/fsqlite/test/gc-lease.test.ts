@@ -109,9 +109,16 @@ test('read-lease heartbeat reports when its lease has been lost', () => {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
     const lease = store.readLease()
     lease.release()
-    assert.throws(() => {
-      lease.heartbeat()
-    }, /ENOENT/)
+    assert.throws(
+      () => {
+        lease.heartbeat()
+      },
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message.includes(`read lease on snapshot ${lease.version} was lost`) &&
+        (error.cause as NodeJS.ErrnoException).code === 'ENOENT',
+    )
   } finally {
     cleanup()
   }
@@ -439,6 +446,34 @@ test('readLease gives up with a retryable error once its retries are spent', () 
         error.message.includes('snapshot 99 was collected under contention after 2 retries'),
     )
     assert.deepEqual(readdirSync(store.leaseDir), [], 'every losing lease was withdrawn')
+  } finally {
+    cleanup()
+  }
+})
+
+test('a read lease is disposable, and release reports a pin it could not drop', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const disposed = store.readLease()
+    disposed[Symbol.dispose]()
+    assert.deepEqual(readdirSync(store.leaseDir), [], 'disposal drops the pin')
+    disposed.release() // releasing twice is harmless
+
+    // A pin that cannot be removed would hold gc off for leaseStaleMs; say so instead.
+    const stuck = store.readLease()
+    const [name = ''] = readdirSync(store.leaseDir)
+    rmSync(join(store.leaseDir, name))
+    mkdirSync(join(store.leaseDir, name, 'blocker'), { recursive: true })
+    assert.throws(
+      () => {
+        stuck.release()
+      },
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'io' &&
+        error.message.includes('could not release the read lease'),
+    )
   } finally {
     cleanup()
   }

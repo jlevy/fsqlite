@@ -57,6 +57,7 @@ test('seal replaces a partial file left by an interrupted seal with a durable ex
       db.close()
     }
     assert.deepEqual(readdirSync(out), ['sealed.sqlite'], 'no temp is left beside the export')
+    assert.deepEqual(readdirSync(store.leaseDir), [], 'the seal released its read lease')
     assert.ok(
       synced.some((entry) => entry.startsWith(`file:${out}`) && entry.endsWith('.tmp')),
       `the export is fsynced before it is renamed into place: ${synced.join(', ')}`,

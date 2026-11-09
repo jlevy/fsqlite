@@ -887,19 +887,38 @@ export class SnapshotStore {
   }
 
   private _lease(version: number, path: string): ReadLease {
+    const release = (): void => {
+      try {
+        rmSync(path, { force: true }) // an already-dropped pin is fine
+      } catch (error) {
+        throw new FsqliteError(
+          'io',
+          `could not release the read lease on snapshot ${version} (${path}); gc keeps ` +
+            'that snapshot until the lease goes stale',
+          { cause: error },
+        )
+      }
+    }
     return {
       version,
       heartbeat: () => {
-        const n = new Date()
-        utimesSync(path, n, n)
-      },
-      release: () => {
+        const now = new Date()
         try {
-          rmSync(path, { force: true })
-        } catch {
-          /* ignore */
+          utimesSync(path, now, now)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new FsqliteError(
+              'retryable',
+              `read lease on snapshot ${version} was lost (released, or reaped by gc as ` +
+                'stale); take a new lease before reading further',
+              { cause: error },
+            )
+          }
+          throw error
         }
       },
+      release,
+      [Symbol.dispose]: release,
     }
   }
 
@@ -1670,13 +1689,17 @@ export class SnapshotStore {
       fsyncPath(tmp)
       renameSync(tmp, destPath)
       fsyncDir(destDir)
-      return destPath
     } catch (error) {
       removeQuietly(tmp)
+      try {
+        lease.release()
+      } catch {
+        // Keep the seal failure; the unreleased pin goes stale on its own.
+      }
       throw error
-    } finally {
-      lease.release()
     }
+    lease.release()
+    return destPath
   }
 
   /** Whether `path` is a reserved root entry of this store or lies inside a subdirectory. */

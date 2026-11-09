@@ -151,15 +151,21 @@ export interface RepairResult {
 /**
  * A pin on a published version so `gc` will not delete it while a packager reads it.
  * `heartbeat()` refreshes the pin; `release()` drops it. A lease that stops heartbeating
- * past `leaseStaleMs` self-clears so a dead packager cannot wedge `gc`.
+ * past `leaseStaleMs` self-clears so a dead packager cannot wedge `gc`. A lease is
+ * disposable, so `using lease = store.readLease()` releases it at the end of the scope.
  */
 export interface ReadLease {
   /** The pinned version. */
   version: number
-  /** Refresh the pin's liveness. */
+  /**
+   * Refresh the pin's liveness. Throws a `retryable` FsqliteError once the pin is gone
+   * (released, or reaped by gc as stale), because the snapshot is no longer protected.
+   */
   heartbeat: () => void
-  /** Drop the pin. */
+  /** Drop the pin; idempotent. Throws an `io` FsqliteError when the pin cannot be removed. */
   release: () => void
+  /** The same as `release()`, for `using` declarations. */
+  [Symbol.dispose]: () => void
 }
 
 /**
