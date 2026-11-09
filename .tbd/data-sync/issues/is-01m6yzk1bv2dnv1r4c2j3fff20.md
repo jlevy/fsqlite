@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzk1bv2dnv1r4c2j3fff20
 title: "PR #5 B2 (Medium): `seal()` replacing an existing destination corrupts the export when a hot SQLite journal sits beside it"
 kind: task
-status: open
+status: in_progress
 priority: 2
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:28.890Z
-updated_at: 2026-11-09T01:43:28.890Z
+updated_at: 2026-11-09T01:48:24.780Z
+started_at: 2026-11-09T01:48:24.780Z
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
 

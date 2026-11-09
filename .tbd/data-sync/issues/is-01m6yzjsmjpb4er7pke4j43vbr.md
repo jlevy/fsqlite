@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzjsmjpb4er7pke4j43vbr
 title: "PR #5 A1 (High): `in-flight` means \"safe to retry\" in one place and \"never retry\" in another, and the README's remedy re-applies a write"
 kind: task
-status: open
+status: in_progress
 priority: 1
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:20.977Z
-updated_at: 2026-11-09T01:43:20.977Z
+updated_at: 2026-11-09T01:48:24.702Z
+started_at: 2026-11-09T01:48:24.701Z
 ---
 Review A at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWu-f2Q
 

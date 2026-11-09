@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzk1z3sqs18h4qkr9yg02e
 title: "PR #5 B4 (Low): a lease holder's open can fail while its snapshot is tombstoned; `seal()` would throw a raw SQLite error"
 kind: task
-status: open
+status: in_progress
 priority: 3
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:29.506Z
-updated_at: 2026-11-09T01:43:29.506Z
+updated_at: 2026-11-09T01:48:24.793Z
+started_at: 2026-11-09T01:48:24.793Z
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
 

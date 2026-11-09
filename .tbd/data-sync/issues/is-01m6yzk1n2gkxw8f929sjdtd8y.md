@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzk1n2gkxw8f929sjdtd8y
 title: "PR #5 B3 (Medium): the DirectStore heartbeat test passes with the heartbeat removed"
 kind: task
-status: open
+status: in_progress
 priority: 2
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:29.185Z
-updated_at: 2026-11-09T01:43:29.185Z
+updated_at: 2026-11-09T01:48:24.787Z
+started_at: 2026-11-09T01:48:24.787Z
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
 

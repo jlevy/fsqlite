@@ -3,15 +3,19 @@ type: is
 id: is-01m6yzk12hxtqmpesqj6a5s8ss
 title: "PR #5 B1 (High): the O6 window's outcome is silent permanent loss that `validate()` reports as `sealed` and `repair()` completes; two spec statements about it are imprecise"
 kind: task
-status: open
+status: in_progress
 priority: 1
-version: 1
+version: 2
+delegate: codex@spud10
 labels:
   - pr-5-review
 dependencies: []
 parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
+hold: null
+hold_until: null
 created_at: 2026-11-09T01:43:28.592Z
-updated_at: 2026-11-09T01:43:28.592Z
+updated_at: 2026-11-09T01:48:24.774Z
+started_at: 2026-11-09T01:48:24.774Z
 ---
 Review B at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-PRR_kwDOS5UOe88AAAABWvBZRg
 
