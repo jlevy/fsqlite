@@ -536,6 +536,10 @@ duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
   (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
   An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
   lock it could have waited for.
+  It MUST also reject a stale window, timeout, or poll interval that is not a positive
+  finite duration before touching the store: a zero, negative, or undefined (NaN) stale
+  window would judge a live holder’s lock, or its build in F5c, stale, and a zero poll
+  interval would spin.
 
 - **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
   holder MUST re-read `owner.json` and verify its own token immediately before each

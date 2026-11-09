@@ -336,6 +336,9 @@ the store root `dir` without touching the filesystem.
 
 `lockOpts` is a `LockOptions` with `timeoutMs` (default 30 s), `pollMs` (25 ms),
 `staleMs` (20 s), and an `onStaleBreak` callback.
+Each window must be a positive finite number of milliseconds and `timeoutMs` must exceed
+`staleMs`; every method that takes `lockOpts` throws `TypeError` otherwise, before it
+touches the store.
 `gc` keeps `DEFAULT_RETAINED_SNAPSHOTS` (3) predecessors by default and treats leases
 and transients older than 60 s as abandoned.
 A `ReadLease` is disposable, so `using lease = store.readLease()` releases it at the end

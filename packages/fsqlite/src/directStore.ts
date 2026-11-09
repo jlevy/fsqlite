@@ -18,7 +18,7 @@ import { FsqliteError } from './errors.ts'
 import { fsyncPath, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
-import { withLock } from './lock.ts'
+import { resolveLockOptions, withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
 import { requireSafeInteger, SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
@@ -133,6 +133,7 @@ export class DirectStore {
     { lockOpts = {}, maxRetries = DEFAULT_DIRECT_WRITE_RETRIES }: DirectWriteOptions = {},
   ): number {
     requireSafeInteger('maxRetries', maxRetries, 1)
+    resolveLockOptions(lockOpts)
     const marker = readStoreMarker(this.base.dir)
     this.base.read((db) => {
       verifySnapshotForPublish(db, marker, this.base.schemaVersion, this.base.schemaHash)

@@ -53,7 +53,7 @@ import {
 import { fsyncPath, fsyncDir, publishPointer, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
-import { isLockFresh, withLock } from './lock.ts'
+import { isLockFresh, resolveLockOptions, withLock } from './lock.ts'
 import {
   createStoreMarker,
   hasStoreMarker,
@@ -1119,6 +1119,7 @@ export class SnapshotStore {
     lockOpts = {},
   }: ReconcileOptions = {}): ReconcileResult {
     requireSafeInteger('maxRetries', maxRetries, 1)
+    resolveLockOptions(lockOpts)
     const marker = readStoreMarker(this.dir)
     const crashAt = reconcileCrashAtForTest
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -1359,6 +1360,7 @@ export class SnapshotStore {
     requireSafeInteger('gc option retain', retain, 0)
     requireSafeInteger('gc option leaseStaleMs', leaseStaleMs, 1)
     requireSafeInteger('gc option transientStaleMs', transientStaleMs, 1)
+    resolveLockOptions(lockOpts)
     // Validate outside the lock: the integrity check reads the whole head and must not
     // stall publishers. A recognition failure is refused before the lock dir is created.
     const health = this.validate()
@@ -1727,8 +1729,9 @@ export class SnapshotStore {
    * {@link planRepair} to see the steps without taking them.
    */
   repair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
+    const lock = resolveLockOptions(lockOpts)
     const marker = readStoreMarker(this.dir)
-    this.refuseRepairUnderLiveLock(lockOpts)
+    this.refuseRepairUnderLiveLock(lock.staleMs)
     const actions = withLock(
       this.publishLock,
       (_token, lease) => {
@@ -1748,7 +1751,7 @@ export class SnapshotStore {
         }
         return this.repairSteps(marker, renew).map((step) => step.apply(assertOwnership))
       },
-      lockOpts,
+      lock,
     )
     return { actions, state: this.recognizedState('repair ended with') }
   }
@@ -1760,14 +1763,15 @@ export class SnapshotStore {
    * take, and `state` is the store's state now. The store can change before a later repair.
    */
   planRepair({ lockOpts = {} }: RepairOptions = {}): RepairResult {
+    const { staleMs } = resolveLockOptions(lockOpts)
     const marker = readStoreMarker(this.dir)
-    this.refuseRepairUnderLiveLock(lockOpts)
+    this.refuseRepairUnderLiveLock(staleMs)
     const actions = this.repairSteps(marker, () => undefined).map((step) => step.planned)
     return { actions, state: this.recognizedState('repair plan found') }
   }
 
-  private refuseRepairUnderLiveLock(lockOpts: LockOptions): void {
-    if (isLockFresh(this.publishLock, lockOpts.staleMs)) {
+  private refuseRepairUnderLiveLock(staleMs: number): void {
+    if (isLockFresh(this.publishLock, staleMs)) {
       throw new FsqliteError(
         'in-flight',
         'repair refused: publish.lock is present and held by a live publisher',

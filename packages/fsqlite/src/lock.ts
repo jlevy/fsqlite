@@ -24,8 +24,9 @@ import { LockTimeoutError } from './errors.ts'
 import { removeQuietly } from './fsutil.ts'
 
 /**
- * Publish-lock timing, in milliseconds. `timeoutMs` must exceed `staleMs`: a waiter must
- * be able to outwait the stale window, or it would break a lock it could have waited for.
+ * Publish-lock timing, in milliseconds. Each window is a positive finite number, and
+ * `timeoutMs` must exceed `staleMs`: a waiter must be able to outwait the stale window,
+ * or it would break a lock it could have waited for. Invalid values throw a `TypeError`.
  */
 export interface LockOptions {
   /** How long to wait for the lock before throwing `LockTimeoutError`; default 30 s. */
@@ -88,6 +89,51 @@ export const DEFAULT_LOCK_STALE_MS = 20_000
  */
 export const LEASE_RENEW_FRACTION = 0.25
 
+/** {@link LockOptions} with every default applied and every value validated. */
+export interface ResolvedLockOptions {
+  timeoutMs: number
+  pollMs: number
+  staleMs: number
+  onStaleBreak: ((meta: OwnerMeta | null) => void) | null
+}
+
+function lockWindow(name: string, value: unknown, fallback: number): number {
+  const ms = value === undefined ? fallback : value
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) {
+    throw new TypeError(
+      `lockOpts.${name} must be a positive finite number of milliseconds; received ` +
+        (typeof ms === 'number' ? String(ms) : typeof ms),
+    )
+  }
+  return ms
+}
+
+/**
+ * Validate `opts` and apply the defaults. Every entry point that takes `lockOpts` calls
+ * this before it touches the store: a zero, negative, or NaN stale window would let a
+ * caller judge a live holder's lock or build stale, and a zero poll would spin.
+ */
+export function resolveLockOptions(opts: LockOptions = {}): ResolvedLockOptions {
+  if (typeof opts !== 'object' || (opts as LockOptions | null) === null) {
+    throw new TypeError(`lockOpts must be an object; received ${typeof opts}`)
+  }
+  const timeoutMs = lockWindow('timeoutMs', opts.timeoutMs, DEFAULT_LOCK_TIMEOUT_MS)
+  const pollMs = lockWindow('pollMs', opts.pollMs, DEFAULT_LOCK_POLL_MS)
+  const staleMs = lockWindow('staleMs', opts.staleMs, DEFAULT_LOCK_STALE_MS)
+  const onStaleBreak = opts.onStaleBreak ?? null
+  if (onStaleBreak !== null && typeof onStaleBreak !== 'function') {
+    throw new TypeError(
+      `lockOpts.onStaleBreak must be a function or null; received ${typeof onStaleBreak}`,
+    )
+  }
+  if (timeoutMs <= staleMs) {
+    throw new TypeError(
+      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
+    )
+  }
+  return { timeoutMs, pollMs, staleMs, onStaleBreak }
+}
+
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.
 export const sleepSync = (ms: number): void => {
@@ -122,17 +168,7 @@ export function withLock<T>(
   fn: (token: string, lease: LockLease) => T,
   opts: LockOptions = {},
 ): T {
-  const {
-    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
-    pollMs = DEFAULT_LOCK_POLL_MS,
-    staleMs = DEFAULT_LOCK_STALE_MS,
-    onStaleBreak = null,
-  } = opts
-  if (timeoutMs <= staleMs) {
-    throw new TypeError(
-      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
-    )
-  }
+  const { timeoutMs, pollMs, staleMs, onStaleBreak } = resolveLockOptions(opts)
   const token = randomBytes(8).toString('hex')
   const meta = JSON.stringify({ token, pid: process.pid, host: hostname(), at: Date.now() })
   const deadline = Date.now() + timeoutMs

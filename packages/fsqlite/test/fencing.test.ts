@@ -18,9 +18,10 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
+import { DirectStore, LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
 import { ownerOf, setOwnerWriterForTest, setStaleLockMoverForTest, withLock } from '../src/lock.ts'
+import type { LockOptions } from '../src/lock.ts'
 import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
@@ -36,6 +37,50 @@ test('withLock enforces timeoutMs > staleMs before touching the lock path', () =
         error instanceof TypeError && error.message.includes('requires timeoutMs > staleMs'),
     )
     assert.equal(existsSync(lockPath), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('every lockOpts entry point rejects an invalid window before touching a live lock or build', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const direct = new DirectStore(dir, STORE_OPTS)
+    store.write('w', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
+    // A live publisher: a fresh lock and its build in flight.
+    mkdirSync(store.publishLock)
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
+    const build = join(store.snapDir, '.build-live.sqlite')
+    writeFileSync(build, 'a live build')
+    const invalid: LockOptions[] = [
+      { staleMs: 0 },
+      { staleMs: -1 },
+      { staleMs: Number.NaN },
+      { pollMs: 0 },
+      { pollMs: Number.NaN },
+      { timeoutMs: Number.POSITIVE_INFINITY },
+      { onStaleBreak: 'log' as unknown as null },
+    ]
+    const entryPoints: Record<string, (lockOpts: LockOptions) => unknown> = {
+      reconcile: (lockOpts) => store.reconcile({ lockOpts }),
+      gc: (lockOpts) => store.gc({ retain: 0, lockOpts }),
+      repair: (lockOpts) => store.repair({ lockOpts }),
+      planRepair: (lockOpts) => store.planRepair({ lockOpts }),
+      'DirectStore.write': (lockOpts) => direct.write(() => undefined, { lockOpts }),
+    }
+    for (const lockOpts of invalid) {
+      for (const [name, run] of Object.entries(entryPoints)) {
+        assert.throws(
+          () => run(lockOpts),
+          (error: unknown) => error instanceof TypeError && error.message.includes('lockOpts'),
+          `${name} accepted ${String(Object.values(lockOpts)[0])}`,
+        )
+      }
+    }
+    assert.equal(ownerOf(store.publishLock), 'live', 'the live lock was not broken')
+    assert.ok(existsSync(build), 'the live build was not removed')
+    assert.equal(store.pendingTxns().length, 1, 'nothing was reconciled')
   } finally {
     cleanup()
   }
