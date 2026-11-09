@@ -77,12 +77,13 @@ upgrade:
 4. Run `pnpm test:project-hooks`, then `tbd doctor`. A “user-owned” warning for Codex
    hooks is expected.
 
-`.claude/agents/tbd-strong-max.md` is a project-owned override that runs the strong-max
-tier on Fable at `max`. Setup keeps it because its generated marker was removed, so it
-no longer receives upstream body changes; compare it with a freshly generated copy after
-each upgrade. `AGENTS.md` is excluded from flowmark because flowmark would rewrap the
-tbd-managed block, which `tbd doctor` then reports as stale; the repository dash,
-footer, and link checks still cover it.
+`.claude/agents/tbd-strong-max.md` is a project-owned override of the strong-max tier’s
+model, chosen by the maintainer.
+Setup keeps it because its generated marker was removed, so it no longer receives
+upstream body changes; compare it with a freshly generated copy after each upgrade.
+`AGENTS.md` is excluded from flowmark because flowmark would rewrap the tbd-managed
+block, which `tbd doctor` then reports as stale; the repository dash, footer, and link
+checks still cover it.
 
 ## Releasing
 
