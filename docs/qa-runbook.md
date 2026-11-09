@@ -14,17 +14,21 @@ The two correctness invariants that every check supports are:
 - **R2 (no silent corruption):** every inconsistency is detectable and surfaced by
   `validate`, never silently accepted.
 
-Run the whole automated gate with:
+Run the whole automated gate, the same one CI and the publish workflow run, with:
 
 ```bash
-pnpm test:all      # doc checks, node:test, CLI goldens, build, and clean-room package smoke
-pnpm lint:check    # zero-warning eslint
-pnpm typecheck     # tsc --noEmit
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm verify
 ```
 
-Run from the repository root after `pnpm install --frozen-lockfile`. Every command
-resolves tools from this workspace’s lockfile; the gate performs no network-time tool
-download.
+`pnpm verify` runs, in order: the Prettier and flowmark format checks, zero-warning
+ESLint, `tsc --noEmit`, the project-hook tests, the supply-chain gate, and `test:all`
+(doc and link checks, `node:test`, CLI goldens, the build with publint, and the
+clean-room package smoke).
+Run it from the repository root.
+The JavaScript tools resolve from this workspace’s lockfile.
+The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
+first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
 Current status: **206 `node:test` cases**, **78 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
@@ -33,7 +37,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 
 ## Part A: Automated Coverage Map
 
-### `node:test` Suites (`test/*.test.ts`)
+### `node:test` Suites (`packages/fsqlite/test/*.test.ts`)
 
 | Suite | Constraints | Guarantee it protects |
 | --- | --- | --- |
@@ -105,13 +109,15 @@ Use a scratch dir: `export QA=$(mktemp -d)`.
 ### B1. Full Automated Gate
 
 ```bash
-pnpm test:all && pnpm lint:check && pnpm typecheck
+pnpm verify
 ```
 
-- **Expect:** node:test reports `# tests 206` / `# fail 0`; goldens `78 passed`; build
-  emits `dist/index.mjs`, `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`;
-  package smoke prints `package smoke test passed`; lint and typecheck exit 0.
-- **PASS:** every stage exits 0 with the counts above.
+- **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
+  reports `ℹ tests 206` and `ℹ fail 0` (as root, one test reports skipped because it
+  needs a non-root process); goldens `78 passed`; build emits `dist/index.mjs`,
+  `dist/index.d.mts`, `dist/cli/main.mjs`, `dist/cli/bin.mjs`; package smoke prints
+  `package smoke test passed`.
+- **PASS:** `pnpm verify` exits 0 with the counts above.
 
 ### B2. Library Round Trip by Hand
 
@@ -124,7 +130,7 @@ const s = new SnapshotStore(process.env.QA + "/store", {
 }).init();
 s.write("w1", db => db.prepare("INSERT INTO kv VALUES (?,?)").run("a","1"));
 console.log("applied", s.reconcile().applied);
-console.log("read", s.read(db => db.prepare("SELECT v FROM kv WHERE k=?").get("a")));
+console.log("read", s.read(db => ({ ...db.prepare("SELECT v FROM kv WHERE k=?").get("a") })));
 '
 ```
 

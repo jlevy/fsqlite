@@ -33,6 +33,22 @@ decide fail the install; `esbuild` and `lefthook` are the only packages in the g
 with install scripts, and both are denied because their platform binaries ship as
 optional dependencies.
 
+## Release Controls
+
+- No npm token is stored in GitHub.
+  Releases use npm trusted publishing: the Publish workflow’s `stage` job alone gets
+  `id-token: write`, and only inside the GitHub environment `npm`, which accepts only
+  `v*` tags.
+- The `build` job, which installs and runs the development dependencies, has no OIDC
+  permission. It runs `pnpm verify`, packs the tarball, and smoke-tests that exact file;
+  the `stage` job checks out and installs nothing and stages that tarball.
+- `npm stage publish` requires provenance, and a staged version stays private until an
+  owner approves it with `npm stage approve`, which requires 2FA.
+- CI runs `pnpm audit --audit-level=moderate` and `pnpm audit signatures` on every
+  change and weekly.
+
+The [release runbook](docs/releasing.md) has the one-time setup and the release steps.
+
 ## Time-Limited Audit Exception
 
 `pnpm audit` reports

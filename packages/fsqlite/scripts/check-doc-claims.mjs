@@ -187,7 +187,7 @@ export function checkDocClaims(nodeTests) {
     {
       label: 'node:test',
       expected: nodeTests,
-      patterns: [/(\d+)\s+`node:test`\s+cases/giu, /node:test reports `# tests (\d+)`/giu],
+      patterns: [/(\d+)\s+`node:test`\s+cases/giu, /node:test reports `(?:#|ℹ) tests (\d+)`/giu],
     },
     {
       label: 'CLI golden',
