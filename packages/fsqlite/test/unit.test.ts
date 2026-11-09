@@ -4,18 +4,27 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { SnapshotStore } from '../src/index.ts'
+import { applyWithPolicy, normalize } from '../src/conflictPolicy.ts'
+import * as driver from '../src/driver.ts'
+import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore, table: string): number =>
   store.read((db) => (db.prepare(`SELECT COUNT(*) c FROM ${table}`).get() as { c: number }).c)
+
+const buildFiles = (store: SnapshotStore): string[] =>
+  readdirSync(store.snapDir).filter((f) => f.startsWith('.build-'))
 
 function freshStore() {
   const { dir, cleanup } = tmpStore()
@@ -169,6 +178,66 @@ test('an envelope whose manifest tx_id differs from its directory is quarantined
   }
 })
 
+test('a manifest that is not a JSON object is quarantined without blocking its siblings', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const malformed = ['null', '[]', '"manifest"', '7'].map((json, i) => {
+      const txId = store.write('A', (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run(`bad-${i}`, 'bad', 't')
+      })
+      assert.ok(txId)
+      writeFileSync(join(store.txPending, `${txId}.txn`, 'manifest.json'), json)
+      return txId
+    })
+    store.write('B', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('good', 'good', 't')
+    })
+
+    const result = store.reconcile()
+
+    assert.deepEqual(
+      { applied: result.applied, quarantined: result.quarantined },
+      { applied: 1, quarantined: malformed.length },
+    )
+    for (const txId of malformed) {
+      assert.equal(
+        readFileSync(join(store.txQuarantine, `${txId}.txn`, 'QUARANTINE'), 'utf8'),
+        'malformed-manifest',
+      )
+    }
+    assert.equal(count(store, 'artifacts'), 1)
+    assert.deepEqual(buildFiles(store), [])
+  } finally {
+    cleanup()
+  }
+})
+
+test('a reconcile that fails before publication removes its build', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const txId = store.write('A', (db) => {
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    setAfterFsyncPathForTest((path) => {
+      if (basename(path).startsWith('.build-')) {
+        throw new Error('injected build fsync failure')
+      }
+    })
+    try {
+      assert.throws(() => store.reconcile(), /injected build fsync failure/)
+    } finally {
+      setAfterFsyncPathForTest(null)
+    }
+
+    assert.deepEqual(buildFiles(store), [])
+    assert.equal(store.currentVersion(), 0)
+    assert.deepEqual(store.pendingTxns(), [`${txId}.txn`])
+    assert.equal(store.reconcile().applied, 1)
+  } finally {
+    cleanup()
+  }
+})
+
 test('an envelope that targets an fsqlite-owned table is quarantined', () => {
   const { store, dir, cleanup } = freshStore()
   try {
@@ -248,10 +317,10 @@ test('quarantine tolerates another reconciler consuming the envelope first', () 
     renameSync(pendingDir, join(store.txQuarantine, txn))
 
     const internal = store as unknown as {
-      _quarantine(pairs: [string, string][]): void
+      quarantine(pairs: [string, string][]): void
     }
     assert.doesNotThrow(() => {
-      internal._quarantine([[txn, 'unreadable-envelope']])
+      internal.quarantine([[txn, 'unreadable-envelope']])
     })
     assert.equal(
       readFileSync(join(store.txQuarantine, txn, 'QUARANTINE'), 'utf8'),
@@ -320,39 +389,33 @@ test('a strict-table conflict quarantines the whole tx', () => {
 })
 
 test('changeset data rolls back when its applied_tx ledger insert fails', () => {
+  // Reconcile inserts the ledger row in applyWithPolicy's beforeCommit step, inside the
+  // apply transaction. A trigger cannot inject the failure: SnapshotStore rejects them.
   const { dir, cleanup } = tmpStore()
-  const store = new SnapshotStore(dir, {
-    ...STORE_OPTS,
-    schema:
-      (STORE_OPTS.schema ?? '') +
-      `\nCREATE TRIGGER fail_second_ledger_insert
-       BEFORE INSERT ON applied_tx
-       WHEN (SELECT COUNT(*) FROM applied_tx) >= 1
-       BEGIN SELECT RAISE(FAIL, 'ledger insert failed'); END;`,
-  }).init()
+  const writer = driver.open(join(dir, 'writer.sqlite'))
+  const target = driver.open(join(dir, 'target.sqlite'))
   try {
-    store.write('A', (db) => {
+    for (const db of [writer, target]) {
+      db.exec(STORE_OPTS.schema ?? '')
+    }
+    const changeset = driver.recordChangeset(writer, (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('first', 'First', 't')
     })
-    store.write('B', (db) => {
-      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('second', 'Second', 't')
-    })
+    assert.ok(changeset)
 
-    const result = store.reconcile()
-    assert.equal(result.applied, 1)
-    assert.equal(result.quarantined, 1)
-    assert.deepEqual(
-      store.read((db) =>
-        (
-          db.prepare('SELECT artifact_id FROM artifacts ORDER BY artifact_id').all() as {
-            artifact_id: string
-          }[]
-        ).map(({ artifact_id }) => artifact_id),
-      ),
-      ['first'],
+    assert.throws(() => {
+      applyWithPolicy(target, changeset, normalize(STORE_OPTS.conflictPolicy), () => {
+        throw new Error('ledger insert failed')
+      })
+    }, /ledger insert failed/)
+    assert.equal(
+      (target.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c,
+      0,
       'the failed ledger insert and its changeset data must share one rollback boundary',
     )
   } finally {
+    writer.close()
+    target.close()
     cleanup()
   }
 })
@@ -416,14 +479,152 @@ test('validate classifies sealed / live / in-flight states', () => {
   }
 })
 
-test('seal produces a clean single-file snapshot that passes integrity_check', () => {
-  const { store, dir, cleanup } = freshStore()
+test('validate reports each corrupt and in-flight tell with its issue', () => {
+  // Each case damages a fresh sealed store at v1 and names the state and issue it yields.
+  const cases: [string, (store: SnapshotStore) => void, string, RegExp][] = [
+    [
+      'a missing pointer',
+      (s) => {
+        rmSync(s.currentPath)
+      },
+      'corrupt',
+      /^missing current pointer$/,
+    ],
+    [
+      'a pointer to a missing snapshot',
+      (s) => {
+        writeFileSync(s.currentPath, '7')
+      },
+      'corrupt',
+      /^current points at missing snapshot 7$/,
+    ],
+    [
+      'a stamped format version that disagrees with the marker',
+      (s) => {
+        setMeta(s, 'format_version', 'f0.9')
+      },
+      'corrupt',
+      /snapshot format version f0\.9 does not match fsqlite\.json f1\.0/,
+    ],
+    [
+      'a missing identity stamp',
+      (s) => {
+        setMeta(s, 'tool_version', null)
+      },
+      'corrupt',
+      /missing required fsqlite_meta key tool_version/,
+    ],
+    [
+      'a leftover publish lock',
+      (s) => {
+        mkdirSync(s.publishLock)
+      },
+      'in-flight-capture',
+      /publish\.lock present/,
+    ],
+    [
+      'SQLite side files beside the snapshots',
+      (s) => {
+        writeFileSync(`${s.snapshotPath(1)}-wal`, '')
+      },
+      'in-flight-capture',
+      /live SQLite side files present/,
+    ],
+  ]
+  for (const [label, damage, state, issue] of cases) {
+    const { store, cleanup } = freshStore()
+    try {
+      store.write('A', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'),
+      )
+      store.reconcile()
+      damage(store)
+      const v = store.validate()
+      assert.equal(v.state, state, label)
+      assert.match(v.issues.join('; '), issue, label)
+    } finally {
+      cleanup()
+    }
+  }
+})
+
+/** Rewrite (or, with null, delete) one fsqlite_meta row of the head, as damage would. */
+function setMeta(store: SnapshotStore, key: string, value: string | null): void {
+  const db = new DatabaseSync(store.snapshotPath(store.currentVersion()))
+  try {
+    if (value === null) {
+      db.prepare('DELETE FROM fsqlite_meta WHERE key = ?').run(key)
+    } else {
+      db.prepare('UPDATE fsqlite_meta SET value = ? WHERE key = ?').run(value, key)
+    }
+  } finally {
+    db.close()
+  }
+}
+
+test('a callback that changes nothing captures no envelope', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    assert.equal(
+      store.write('A', () => undefined),
+      null,
+    )
+    let calls = 0
+    assert.deepEqual(
+      store.writeWithRetry('A', () => {
+        calls++
+      }),
+      { txId: null, attempts: 1, conflicted: false },
+    )
+    assert.equal(calls, 1)
+    assert.deepEqual(store.pendingTxns(), [])
+  } finally {
+    cleanup()
+  }
+})
+
+test('an envelope whose manifest disagrees with the store or handle is quarantined', () => {
+  const cases: [string, Record<string, unknown>, string][] = [
+    ['format_version', { format_version: 'f9.9' }, 'format-version-mismatch'],
+    ['changeset', { changeset: 'other.bin' }, 'changeset-filename-mismatch'],
+    ['schema_version', { schema_version: 2 }, 'schema-version-mismatch'],
+    ['schema_hash', { schema_hash: '0000000000000000' }, 'schema-hash-mismatch'],
+  ]
+  for (const [field, patch, reason] of cases) {
+    const { store, cleanup } = freshStore()
+    try {
+      const txId = store.write('A', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'),
+      )
+      const manifestPath = join(store.txPending, `${txId ?? ''}.txn`, 'manifest.json')
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
+      writeFileSync(manifestPath, JSON.stringify({ ...manifest, ...patch }))
+
+      assert.deepEqual(
+        [store.reconcile().applied, count(store, 'artifacts')],
+        [0, 0],
+        `${field}: nothing applied`,
+      )
+      assert.equal(
+        readFileSync(join(store.txQuarantine, `${txId ?? ''}.txn`, 'QUARANTINE'), 'utf8'),
+        reason,
+      )
+    } finally {
+      cleanup()
+    }
+  }
+})
+
+test('seal produces a clean single-file snapshot that passes integrity_check', (t) => {
+  const { store, cleanup } = freshStore()
+  const output = tmpStore()
+  t.after(output.cleanup)
   try {
     store.write('A', (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
     })
     store.reconcile()
-    const out = join(dir, 'sealed.sqlite')
+    const out = join(output.dir, 'sealed.sqlite')
     store.seal(out)
     assert.ok(existsSync(out))
     assert.ok(
@@ -435,8 +636,10 @@ test('seal produces a clean single-file snapshot that passes integrity_check', (
   }
 })
 
-test('seal pins its selected snapshot against concurrent aggressive gc', () => {
-  const { store, dir, cleanup } = freshStore()
+test('seal pins its selected snapshot against concurrent aggressive gc', (t) => {
+  const { store, cleanup } = freshStore()
+  const output = tmpStore()
+  t.after(output.cleanup)
   try {
     store.write('A', (db) => {
       db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
@@ -469,7 +672,7 @@ test('seal pins its selected snapshot against concurrent aggressive gc', () => {
       }
     }
 
-    const out = join(dir, 'sealed-pinned.sqlite')
+    const out = join(output.dir, 'sealed-pinned.sqlite')
     store.seal(out)
     assert.equal(leaseCalls, 1)
     assert.equal(released, true)
@@ -502,10 +705,8 @@ test('gc drops old snapshots but keeps current and retained snapshots', () => {
     }
     assert.equal(store.currentVersion(), 6)
     const r = store.gc({ retain: 2 })
-    assert.ok(r.removed >= 1)
-    assert.ok(existsSync(store.snapshotPath(6)), 'current kept')
-    assert.ok(existsSync(store.snapshotPath(5)), 'retained kept')
-    assert.ok(!existsSync(store.snapshotPath(0)), 'old dropped')
+    assert.deepEqual([r.removed, r.kept], [4, 3])
+    assert.deepEqual(store.snapshotVersions(), [4, 5, 6], 'current and exactly 2 predecessors')
   } finally {
     cleanup()
   }

@@ -1,25 +1,39 @@
-// lock.ts provides a fenced mkdir lease with an owner token.
+// lock.ts provides an exclusive mkdir lock with an owner token.
 //
 // Publication is fsqlite's only mutual-exclusion point. Writers do not hold the lease
 // while preparing changes. `mkdir(2)` provides cross-process coordination on filesystems
 // whose exclusive directory-creation semantics pass the required capability checks.
 //
-// Correctness rests on immutable snapshots, an atomic pointer swap, and the applied_tx
-// ledger. The lease reduces redundant work. Its owner token lets a holder revalidate
-// ownership immediately before publication and abort if it lost the lease.
+// Publication correctness requires exclusive ownership until release: a timestamp cannot
+// distinguish a dead process from a paused one. An existing lock is never stolen on age.
+// Abandoned-lock recovery requires stopping every client on every host before removing it.
 
 import { mkdirSync, rmSync, statSync, writeFileSync, readFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
+import { performance } from 'node:perf_hooks'
+import { LockTimeoutError } from './errors.ts'
+import { removeQuietly } from './fsutil.ts'
 
+/**
+ * Publish-lock timing, in milliseconds. All timings are positive safe integers.
+ * `timeoutMs > staleMs` is retained for compatibility; age never permits lock takeover.
+ */
 export interface LockOptions {
+  /** How long to wait for the lock before throwing `LockTimeoutError`; default 30 s. */
   timeoutMs?: number
+  /** Delay between acquisition attempts; default 25 ms. */
   pollMs?: number
+  /**
+   * Heartbeat and diagnostic age, default 20 s. Exceeding it never allows lock takeover.
+   */
   staleMs?: number
+  /** Legacy callback accepted for compatibility. Automatic stale-lock breaking is disabled. */
   onStaleBreak?: ((meta: OwnerMeta | null) => void) | null
 }
 
+/** The owner record (`owner.json`) a lock holder writes inside the lock directory. */
 export interface OwnerMeta {
   token: string
   pid: number
@@ -27,70 +41,117 @@ export interface OwnerMeta {
   at: number
 }
 
-export class LockTimeoutError extends Error {
-  constructor(p: string, ms: number) {
-    super(`could not acquire ${p} within ${ms}ms`)
-    this.name = 'LockTimeoutError'
-  }
+/**
+ * A holder's handle on an acquired lock, passed to the `withLock` callback.
+ *
+ * The lock remains exclusive across arbitrary pauses (spec L5). Heartbeats provide
+ * diagnostic liveness; token checks catch accidental out-of-protocol removal. They are
+ * not an atomic fence against concurrent lock removal or a substitute for exclusivity.
+ */
+export interface LockLease {
+  /** The random owner token this holder wrote to `owner.json`. */
+  readonly token: string
+  /**
+   * Renew at a step boundary: refresh the lock's mtime once it is older than
+   * {@link LEASE_RENEW_FRACTION} of `staleMs`. Returns false once this holder has lost the
+   * lock, so long work can stop early instead of finishing a doomed attempt.
+   */
+  heartbeat: () => boolean
+  /**
+   * Refresh the lock and re-verify ownership immediately before a destructive step (spec
+   * L3). Returns false when this holder no longer owns the lock and must abandon the step.
+   */
+  fence: () => boolean
 }
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000
 const DEFAULT_LOCK_POLL_MS = 25
 export const DEFAULT_LOCK_STALE_MS = 20_000
 
+/** Validate timing before any caller examines or mutates a lock. */
+export function validateLockOptions(opts: unknown = {}): Required<LockOptions> {
+  if (typeof opts !== 'object' || opts === null || Array.isArray(opts)) {
+    throw new TypeError('lock options must be an object')
+  }
+  const {
+    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+    pollMs = DEFAULT_LOCK_POLL_MS,
+    staleMs = DEFAULT_LOCK_STALE_MS,
+    onStaleBreak = null,
+  } = opts as LockOptions
+  for (const [name, value] of Object.entries({ timeoutMs, pollMs, staleMs })) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError(`lock option ${name} must be a positive safe integer`)
+    }
+  }
+  if (timeoutMs <= staleMs) {
+    throw new TypeError(
+      `withLock requires timeoutMs > staleMs; received timeoutMs ${timeoutMs}, staleMs ${staleMs}`,
+    )
+  }
+  if (onStaleBreak !== null && typeof onStaleBreak !== 'function') {
+    throw new TypeError('lock option onStaleBreak must be a function or null')
+  }
+  return { timeoutMs, pollMs, staleMs, onStaleBreak }
+}
+/**
+ * A step-boundary heartbeat refreshes the lock once its age reaches this fraction of the
+ * diagnostic stale window. A run of quick steps costs one stat each.
+ */
+export const LEASE_RENEW_FRACTION = 0.25
+
 // Synchronous sleep without a busy-loop (works without async, matches node:sqlite's
 // synchronous API). Uses Atomics.wait on a throwaway SharedArrayBuffer.
-const sleepSync = (ms: number): void => {
+export const sleepSync = (ms: number): void => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
 type OwnerWriter = (path: string, data: string) => void
 let writeOwner: OwnerWriter = writeFileSync
-type StaleLockRemover = (path: string) => void
-const removeLockDirectory: StaleLockRemover = (path) => {
+type LockReleaser = (path: string) => void
+const removeLock: LockReleaser = (path) => {
   rmSync(path, { recursive: true, force: true })
 }
-let removeStaleLock = removeLockDirectory
+let releaseLock: LockReleaser = removeLock
 
 /** Internal fault-injection seam; pass null to restore the filesystem writer. */
 export function setOwnerWriterForTest(writer: OwnerWriter | null): void {
   writeOwner = writer ?? writeFileSync
 }
 
-/** Internal fault-injection seam; pass null to restore stale-lock removal. */
-export function setStaleLockRemoverForTest(remover: StaleLockRemover | null): void {
-  removeStaleLock = remover ?? removeLockDirectory
+/** Internal fault-injection seam; pass null to restore lock removal. */
+export function setLockReleaserForTest(releaser: LockReleaser | null): void {
+  releaseLock = releaser ?? removeLock
 }
 
 /**
- * Acquire the lock dir, run fn(token), release. `fn` receives the owner token so it
- * can revalidate ownership via `ownerOf(lockPath) === token` immediately before a
- * destructive publish.
+ * Acquire the lock dir, run fn(token, lease), release. `fn` receives the owner token and a
+ * {@link LockLease}: it calls `lease.heartbeat()` between long steps and `lease.fence()`
+ * immediately before each destructive step, abandoning the step when fencing fails.
  *
- * Invariant: timeoutMs > staleMs (you must be able to wait longer than the stale
- * window, or you would break a lock you could otherwise have waited for).
+ * Existing locks, including malformed or arbitrarily old ones, cause bounded waiting.
+ * Recovery must establish that all clients have stopped before removing an abandoned lock.
+ * A release failure preserves an existing callback error; after success, `releaseFailure`
+ * can classify it using the callback result (in particular, an acknowledged publication).
  */
-export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: LockOptions = {}): T {
-  const {
-    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
-    pollMs = DEFAULT_LOCK_POLL_MS,
-    staleMs = DEFAULT_LOCK_STALE_MS,
-    onStaleBreak = null,
-  } = opts
-  if (timeoutMs <= staleMs) {
-    throw new Error('withLock requires timeoutMs > staleMs')
-  }
+export function withLock<T>(
+  lockPath: string,
+  fn: (token: string, lease: LockLease) => T,
+  opts: LockOptions = {},
+  releaseFailure?: (error: unknown, result: T) => unknown,
+): T {
+  const { timeoutMs, pollMs, staleMs } = validateLockOptions(opts)
   const token = randomBytes(8).toString('hex')
   const meta = JSON.stringify({ token, pid: process.pid, host: hostname(), at: Date.now() })
-  const deadline = Date.now() + timeoutMs
+  const deadline = performance.now() + timeoutMs
   let held = false
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     try {
       mkdirSync(lockPath)
       try {
         writeOwner(join(lockPath, 'owner.json'), meta)
       } catch (error) {
-        rmSync(lockPath, { recursive: true, force: true })
+        removeQuietly(lockPath)
         throw error
       }
       held = true
@@ -99,61 +160,106 @@ export function withLock<T>(lockPath: string, fn: (token: string) => T, opts: Lo
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') {
         throw e
       }
-      // Lock exists. Break it only if it is older than the stale window. This is the
-      // irreducible NFS hazard: a holder paused past the lease can be stolen out from
-      // under it. The defense is `ownerOf()` revalidation in `fn` and a staleMs value
-      // well above the maximum critical section, not aggressive breaking.
-      try {
-        const st = statSync(lockPath)
-        if (Date.now() - st.mtimeMs > staleMs) {
-          if (onStaleBreak) {
-            try {
-              onStaleBreak(readOwner(lockPath))
-            } catch {
-              /* ignore */
-            }
-          }
-          removeStaleLock(lockPath)
-          continue
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          continue // lock vanished between exists-check and stat: retry immediately
-        }
-        sleepSync(pollMs)
-        continue
-      }
-      sleepSync(pollMs)
+      // An old lock may belong to a paused publisher already past its last token check.
+      // Taking it over would let that publisher resume a blind pointer rename later and
+      // roll back acknowledged writes. Only its owner, or quiescent recovery, removes it.
+      sleepSync(Math.min(pollMs, Math.max(0, deadline - performance.now())))
     }
   }
   if (!held) {
     throw new LockTimeoutError(lockPath, timeoutMs)
   }
-  try {
-    return fn(token)
-  } finally {
-    // Fence the release the same way as publication: remove the directory only if we
-    // still own it. A holder that stalled past staleMs and was stale-broken must not delete
-    // a successor's live lock (which would let a third holder acquire concurrently). If we
-    // lost ownership, leave the successor's lock alone; staleMs reclaims any true orphan.
-    if (ownerOf(lockPath) === token) {
-      rmSync(lockPath, { recursive: true, force: true })
+  // Verify, touch, verify: the first check avoids refreshing a successor's lock; the
+  // second catches accidental replacement. Correctness requires no concurrent takeover.
+  const refresh = (): boolean => {
+    if (ownerOf(lockPath) !== token) {
+      return false
     }
+    try {
+      const now = new Date()
+      utimesSync(lockPath, now, now)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false
+      }
+      throw error
+    }
+    return ownerOf(lockPath) === token
+  }
+  const lease: LockLease = {
+    token,
+    heartbeat: () => {
+      const seen = observeLock(lockPath)
+      if (seen?.meta?.token !== token) {
+        return false
+      }
+      return Date.now() - seen.mtimeMs < staleMs * LEASE_RENEW_FRACTION || refresh()
+    },
+    fence: refresh,
+  }
+  const release = (): void => {
+    // No conforming contender can remove this lock before its owner releases it.
+    // The token check also avoids deleting an accidentally installed foreign lock.
+    if (ownerOf(lockPath) === token) {
+      releaseLock(lockPath)
+    }
+  }
+  let result: T
+  try {
+    result = fn(token, lease)
+  } catch (error) {
+    try {
+      release()
+    } catch {
+      // Preserve the callback's outcome, especially a PostPublishError. Recovery can
+      // remove the leftover lock after all clients have stopped.
+    }
+    throw error
+  }
+  try {
+    release()
+  } catch (error) {
+    throw releaseFailure ? releaseFailure(error, result) : error
+  }
+  return result
+}
+
+interface LockObservation {
+  meta: OwnerMeta | null
+  mtimeMs: number
+}
+
+/** The owner metadata and liveness mtime of a lock directory, or null if it is absent. */
+function observeLock(path: string): LockObservation | null {
+  const meta = readOwner(path)
+  try {
+    return { meta, mtimeMs: statSync(path).mtimeMs }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
   }
 }
 
-/** Touch the lock dir mtime so a slow-but-alive holder is not considered stale. */
-export function heartbeat(lockPath: string): void {
-  const now = new Date()
-  utimesSync(lockPath, now, now)
-}
-
+/** The lock's owner record, or null when it is absent, unreadable, or malformed. */
 function readOwner(lockPath: string): OwnerMeta | null {
+  let value: unknown
   try {
-    return JSON.parse(readFileSync(join(lockPath, 'owner.json'), 'utf8')) as OwnerMeta
+    value = JSON.parse(readFileSync(join(lockPath, 'owner.json'), 'utf8'))
   } catch {
     return null
   }
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const { token, pid, host, at } = value as Record<string, unknown>
+  return typeof token === 'string' &&
+    typeof pid === 'number' &&
+    typeof host === 'string' &&
+    typeof at === 'number'
+    ? { token, pid, host, at }
+    : null
 }
 
 /** Current owner token of a held lock, or null. Used to revalidate before publish. */

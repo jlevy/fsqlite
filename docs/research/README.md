@@ -49,6 +49,8 @@ Two source evidence records complement those reports:
   SQLite file identifier
 
 This material is dated evidence.
+The primary report’s ecosystem, version, and link facts were last re-checked on
+2026-11-08; its “2026-11 update” notes record what changed since June.
 The current [design constraints](../fsqlite-design.md#design-constraints), normative
 format specification, QA runbook, and roadmap supersede any recommendation or future
 work described in the report.

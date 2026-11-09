@@ -2,7 +2,8 @@
 // project with no development tooling, and exercise the published contract: the library
 // import (`fsqlite`) and the CLI bin (`fsqlite`). This test verifies what npm
 // consumers actually get, independent of the source checkout. It normally requires
-// `dist/`; the release workflow can instead verify an exact registry package spec.
+// `dist/`; the release workflow can instead verify an exact registry package spec or the
+// release tarball it packed.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -65,8 +66,8 @@ function publishedVersion(output) {
   return value.current
 }
 
-// By default, pack exactly what would publish. The release workflow can instead pass
-// an exact registry spec to verify the first owner-authenticated publication.
+// By default, pack exactly what would publish. The release workflow can instead pass an
+// exact registry spec (the first owner-authenticated publication) or a packed tarball.
 const tarball =
   registryPackage === undefined
     ? packedFilename(run('npm', ['pack', '--json'], { cwd: pkgDir, env: npmEnv }))
@@ -90,34 +91,115 @@ try {
       'installed package is missing dist/index.mjs',
     )
 
-    // Exercise the library entry through the package name to verify exports and types.
+    // Exercise the library entry through the package name to verify its runtime exports.
     const storeDir = join(proj, 'store')
     writeFileSync(
       join(proj, 'use-lib.mjs'),
       [
-        "import { SnapshotStore, DirectStore, inspect } from 'fsqlite'",
+        "import { SnapshotStore, DirectStore, inspectFilesystem } from 'fsqlite'",
         "import assert from 'node:assert/strict'",
         `const s = new SnapshotStore(${JSON.stringify(storeDir)}, { schema: 'CREATE TABLE kv(k TEXT PRIMARY KEY NOT NULL, v TEXT)', conflictPolicy: { '*': 'lww' } }).init()`,
         "s.write('w1', (db) => db.prepare('INSERT INTO kv VALUES (?,?)').run('a', '1'))",
         's.reconcile()',
         "assert.equal(s.read((db) => db.prepare('SELECT v FROM kv WHERE k=?').get('a')).v, '1')",
         "assert.equal(typeof DirectStore, 'function')",
-        "assert.equal(typeof inspect, 'function')",
+        "assert.equal(typeof inspectFilesystem, 'function')",
         "console.log('  library import and write/reconcile/read OK')",
       ].join('\n'),
     )
     process.stdout.write(run('node', ['use-lib.mjs'], { cwd: proj }))
 
+    // The `default` export condition also serves CommonJS consumers through require(esm).
+    writeFileSync(
+      join(proj, 'use-require.cjs'),
+      [
+        "const assert = require('node:assert/strict')",
+        "const { SnapshotStore, DirectStore, inspectFilesystem } = require('fsqlite')",
+        "assert.equal(typeof SnapshotStore, 'function')",
+        "assert.equal(typeof DirectStore, 'function')",
+        "assert.equal(typeof inspectFilesystem, 'function')",
+        "console.log('  library require OK')",
+      ].join('\n'),
+    )
+    process.stdout.write(run('node', ['use-require.cjs'], { cwd: proj }))
+
+    // Type-check a TypeScript consumer against the published declarations, including the
+    // `./cli` subpath, with library checks on, using this checkout's compiler and Node types.
+    const tsc = join(pkgDir, 'node_modules', '.bin', 'tsc')
+    assert.ok(existsSync(tsc), 'the TypeScript compiler is missing: install dev dependencies')
+    writeFileSync(
+      join(proj, 'consumer.ts'),
+      [
+        "import { DirectStore, FsqliteError, SnapshotStore, inspectFilesystem } from 'fsqlite'",
+        "import type { FsqliteErrorCode, GcResult, ReadLease, StoreOptions } from 'fsqlite'",
+        "import { main } from 'fsqlite/cli'",
+        "const options: StoreOptions = { schema: '', conflictPolicy: { '*': 'lww' } }",
+        "const store = new SnapshotStore('store', options)",
+        "const txId: string | null = store.write('w', (db) => { db.prepare('SELECT 1').get() })",
+        'const gc: GcResult = store.gc({ retain: 1 })',
+        'const lease: ReadLease = store.readLease()',
+        'lease[Symbol.dispose]()',
+        "const code: number = main(['--help'], { out: () => undefined, err: () => undefined })",
+        'try {',
+        '  store.validate()',
+        '} catch (error) {',
+        '  if (error instanceof FsqliteError) {',
+        '    const category: FsqliteErrorCode = error.code',
+        '    console.log(category, error.retryable)',
+        '  }',
+        '}',
+        '// @ts-expect-error the store layout is not part of the published API',
+        'console.log(store.snapDir)',
+        "new DirectStore('direct', { schema: '' })",
+        'console.log(txId, gc, code, typeof inspectFilesystem)',
+      ].join('\n'),
+    )
+    writeFileSync(
+      join(proj, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'es2023',
+          module: 'nodenext',
+          moduleResolution: 'nodenext',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: false,
+          types: ['node'],
+          typeRoots: [join(pkgDir, 'node_modules', '@types')],
+        },
+        files: ['consumer.ts'],
+      }),
+    )
+    run(tsc, ['-p', proj], { cwd: proj })
+    console.log('  TypeScript consumer type-checks against the published declarations')
+
+    // The `fsqlite/cli` export is importable: it runs no command and leaves the exit code.
+    writeFileSync(
+      join(proj, 'use-cli.mjs'),
+      [
+        "import { main } from 'fsqlite/cli'",
+        "import assert from 'node:assert/strict'",
+        "assert.equal(typeof main, 'function')",
+        'assert.equal(process.exitCode, undefined)',
+        'const out = []',
+        `assert.equal(main(['validate', ${JSON.stringify(storeDir)}], { out: (l) => out.push(l), err: () => {} }), 0)`,
+        "assert.deepEqual(out, ['sealed'])",
+        "console.log('  CLI module import and main() OK')",
+      ].join('\n'),
+    )
+    process.stdout.write(run('node', ['use-cli.mjs'], { cwd: proj }))
+
     // Exercise the installed CLI to verify its bin entry and shebang.
     const bin = join(proj, 'node_modules', '.bin', 'fsqlite')
     assert.match(run(bin, ['--help'], { cwd: proj }), /usage: fsqlite/, 'CLI --help')
+    assert.match(run(bin, ['--version'], { cwd: proj }), /^\d+\.\d+\.\d+/, 'CLI --version')
     assert.equal(
-      publishedVersion(run(bin, ['info', storeDir], { cwd: proj })),
+      publishedVersion(run(bin, ['info', storeDir, '--json'], { cwd: proj })),
       1,
-      'CLI info reports published head',
+      'CLI info --json reports published head',
     )
     run(bin, ['validate', storeDir], { cwd: proj }) // exits 0 on a healthy store
-    console.log('  CLI bin help, info, and validate OK')
+    console.log('  CLI bin help, version, info --json, and validate OK')
 
     console.log('package smoke test passed')
   } finally {

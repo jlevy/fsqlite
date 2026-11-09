@@ -3,36 +3,29 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
 import * as driver from '../src/driver.ts'
 import { isSqliteFile, sqliteFacts, integrityReport } from '../src/sqliteFacts.ts'
-
-function tmp() {
-  const dir = mkdtempSync(join(tmpdir(), 'fsqlite-stats-'))
-  return {
-    dir,
-    cleanup: () => {
-      rmSync(dir, { recursive: true, force: true })
-    },
-  }
-}
+import { tmpStore } from './fixture.ts'
 
 function makePlainDb(path: string, rows = 3): void {
   const db = driver.open(path)
   db.exec('PRAGMA application_id = 305419896;') // 0x12345678
   db.exec('PRAGMA user_version = 7;')
   db.exec('CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT);')
+  // One transaction: an autocommit insert per row syncs the file each time.
+  db.exec('BEGIN')
   const ins = db.prepare('INSERT INTO widgets VALUES (?,?)')
   for (let i = 0; i < rows; i++) {
     ins.run(i, `w${i}`.padEnd(40, 'x'))
   }
+  db.exec('COMMIT')
   db.close()
 }
 
 test('isSqliteFile detects a SQLite file vs other paths', () => {
-  const { dir, cleanup } = tmp()
+  const { dir, cleanup } = tmpStore()
   try {
     const db = join(dir, 'x.db')
     makePlainDb(db)
@@ -48,7 +41,7 @@ test('isSqliteFile detects a SQLite file vs other paths', () => {
 })
 
 test('sqliteFacts reports header/page/schema facts for a plain SQLite file', () => {
-  const { dir, cleanup } = tmp()
+  const { dir, cleanup } = tmpStore()
   try {
     const db = join(dir, 'x.db')
     makePlainDb(db, 5)
@@ -69,7 +62,7 @@ test('sqliteFacts reports header/page/schema facts for a plain SQLite file', () 
 })
 
 test('integrityReport is empty for a clean db and non-empty for a corrupted one', () => {
-  const { dir, cleanup } = tmp()
+  const { dir, cleanup } = tmpStore()
   try {
     const db = join(dir, 'x.db')
     makePlainDb(db, 1000) // enough rows to span several pages

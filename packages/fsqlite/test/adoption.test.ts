@@ -5,6 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import type { DatabaseSync } from 'node:sqlite'
 import { SnapshotStore } from '../src/index.ts'
 import { tmpStore } from './fixture.ts'
 import { CATALOG_SCHEMA, CATALOG_POLICY } from '../examples/document-catalog.ts'
@@ -90,7 +91,7 @@ test('content_blobs is content-addressed: a duplicate blob_id insert is a union 
     const cat = new SnapshotStore(dir, STORE).init()
     const ins =
       (id: string) =>
-      (db: Parameters<Parameters<SnapshotStore['write']>[1]>[0]): void => {
+      (db: DatabaseSync): void => {
         db.prepare('INSERT INTO content_blobs VALUES (?,?,?,?,?,?,?)').run(
           id,
           'sha',

@@ -11,7 +11,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync }
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { isLockFresh } from '../src/lock.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 test('direct write → read round-trips and increments the version synchronously', () => {
   const { dir, cleanup } = tmpStore()
@@ -98,6 +99,40 @@ test('direct writer with divergent schema fails before invoking its callback', (
     )
     assert.equal(callbackRan, false)
     assert.equal(rogue.currentVersion(), 0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('DirectStore supports triggers, and SnapshotStore refuses to open that store', () => {
+  const { dir, cleanup } = tmpStore()
+  const options = {
+    schema: `
+      CREATE TABLE doc (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TABLE audit (id TEXT PRIMARY KEY NOT NULL);
+      CREATE TRIGGER doc_audit AFTER INSERT ON doc BEGIN INSERT INTO audit VALUES (NEW.id); END;
+    `,
+    schemaVersion: 1,
+  }
+  try {
+    const direct = new DirectStore(dir, options).init()
+    direct.write((db) => {
+      db.prepare('INSERT INTO doc VALUES (?)').run('d1')
+    })
+    assert.deepEqual(
+      direct.read((db) =>
+        db
+          .prepare('SELECT id FROM audit')
+          .all()
+          .map((row) => ({ ...row })),
+      ),
+      [{ id: 'd1' }],
+    )
+
+    const engine = new SnapshotStore(dir, options)
+    for (const open of [() => engine.init(), () => engine.write('w', () => undefined)]) {
+      assert.throws(open, /SnapshotStore does not support triggers/)
+    }
   } finally {
     cleanup()
   }
@@ -272,7 +307,7 @@ for (const scenario of [
     matches: (path: string, dir: string) => path === join(dir, 'snapshots'),
   },
 ]) {
-  test(`DirectStore retries when its publication lease is stolen during ${scenario.name}`, () => {
+  test(`DirectStore refuses a foreign lock installed during ${scenario.name}`, () => {
     const { dir, cleanup } = tmpStore()
     let calls = 0
     try {
@@ -285,27 +320,31 @@ for (const scenario of [
         scenario.setHook(null)
         rmSync(publishLock, { recursive: true, force: true })
         mkdirSync(publishLock)
-        writeFileSync(join(publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+        writeFileSync(join(publishLock, 'owner.json'), ownerRecord('successor'))
         const old = new Date(Date.now() - 10_000)
         utimesSync(publishLock, old, old)
       })
 
-      const version = store.write(
-        (db) => {
-          calls++
-          db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
-        },
-        { lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 } },
+      assert.throws(
+        () =>
+          store.write(
+            (db) => {
+              calls++
+              db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+            },
+            { lockOpts: { staleMs: 1, timeoutMs: 60, pollMs: 1 } },
+          ),
+        /could not acquire/,
       )
 
-      assert.equal(version, 1)
-      assert.equal(calls, 2, 'the unfenced build is discarded and caller code is rerun')
+      assert.equal(store.currentVersion(), 0)
+      assert.equal(calls, 1, 'the unfenced build is discarded without stealing the foreign lock')
       assert.equal(
         store.read(
           (db) =>
             (db.prepare('SELECT COUNT(*) count FROM artifacts').get() as { count: number }).count,
         ),
-        1,
+        0,
       )
     } finally {
       scenario.setHook(null)
@@ -313,3 +352,43 @@ for (const scenario of [
     }
   })
 }
+
+test('a DirectStore write renews its publish lease at step boundaries', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  const staleMs = 1_000
+  // Age the lock as if the step that just ran took twice the stale window. A waiter would
+  // break any lock still this old, so each later step boundary must have renewed it.
+  const ageLock = (): void => {
+    const past = new Date(Date.now() - 2 * staleMs)
+    utimesSync(lockPath, past, past)
+  }
+  const observed: string[] = []
+  try {
+    const store = new DirectStore(dir, STORE_OPTS).init()
+    setAfterFsyncPathForTest((path) => {
+      if (path.includes('.direct-')) {
+        observed.push(`after callback: fresh=${isLockFresh(lockPath, staleMs)}`)
+        ageLock() // a slow snapshot fsync
+      }
+    })
+    setAfterFsyncDirForTest((path) => {
+      if (path === join(dir, 'snapshots')) {
+        observed.push(`after fsync: fresh=${isLockFresh(lockPath, staleMs)}`)
+      }
+    })
+    const version = store.write(
+      (db) => {
+        db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+        ageLock() // a slow callback
+      },
+      { lockOpts: { staleMs, timeoutMs: 2 * staleMs, pollMs: 5 } },
+    )
+    assert.equal(version, 1)
+    assert.deepEqual(observed, ['after callback: fresh=true', 'after fsync: fresh=true'])
+  } finally {
+    setAfterFsyncPathForTest(null)
+    setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})

@@ -1,7 +1,7 @@
 {
   "name": "fsqlite",
   "version": "0.1.0",
-  "description": "SQLite packaged for concurrent local agents, retaining its portable, stable file format with session changesets and server-free publication",
+  "description": "Portable, stable SQLite packaged for concurrent agents with session changesets and server-free publication",
   "type": "module",
   "license": "MIT",
   "author": "Joshua Levy",
@@ -15,9 +15,11 @@
     "url": "https://github.com/jlevy/fsqlite/issues"
   },
   "engines": {
-    "node": ">=22.18.0 <23 || >=24.0.0"
+    "node": ">=22.18.0 <23 || ^24.0.0 || >=26.0.0"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/cli/bin.mjs"
+  ],
   "publishConfig": {
     "access": "public",
     "tag": "alpha"
@@ -25,18 +27,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "default": "./dist/index.mjs"
     },
     "./cli": {
       "types": "./dist/cli/index.d.mts",
-      "import": "./dist/cli/index.mjs"
+      "default": "./dist/cli/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "fsqlite": "./dist/cli/index.mjs"
+    "fsqlite": "./dist/cli/bin.mjs"
   },
   "files": [
     "dist",
@@ -46,16 +48,17 @@
   "scripts": {
     "build": "tsdown",
     "prepublishOnly": "pnpm build",
-    "cli": "node src/cli/index.ts",
+    "cli": "node src/cli/bin.ts",
     "demo": "node examples/demo.ts",
     "benchmark:seed": "node benchmarks/seed.ts",
     "benchmark:workload-fit": "node benchmarks/workload-fit.ts",
     "example:catalog": "node examples/document-catalog.ts",
     "test": "node scripts/run-tests.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
     "test:golden": "tryscript run 'test/cli-golden/*.tryscript.md'",
     "test:golden:update": "tryscript run --update 'test/cli-golden/*.tryscript.md'",
     "test:package": "node scripts/package-smoke.mjs",
-    "test:all": "pnpm test && pnpm test:golden && pnpm build && pnpm test:package",
+    "test:all": "pnpm check:docs && pnpm test && pnpm test:golden && pnpm build && pnpm test:package",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -64,15 +67,15 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@types/node": "22.20.1",
-    "eslint": "10.7.0",
-    "eslint-config-prettier": "10.1.5",
-    "prettier": "3.9.5",
-    "publint": "0.3.21",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.10",
+    "publint": "0.3.25",
     "tryscript": "0.3.1",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.64.0"
+    "typescript-eslint": "8.72.0"
   },
   "keywords": [
     "sqlite",

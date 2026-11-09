@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { openSync, writeSync, closeSync, statSync } from 'node:fs'
+import { closeSync, existsSync, openSync, statSync, writeSync } from 'node:fs'
 import { SnapshotStore } from '../src/index.ts'
 import * as driver from '../src/driver.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
@@ -20,7 +20,6 @@ test('the writer guard fails loudly when the binding lacks session support', () 
       session: false,
       applyChangeset: true,
       backup: true,
-      loadExtension: false,
       rebaser: false,
     }))
   }, /require the SQLite session extension/)
@@ -76,12 +75,11 @@ test('integrityProblems returns [] for a clean snapshot and validate surfaces di
     }
     const res = store.validate()
     assert.equal(res.state, 'corrupt', 'a scribbled page is detected as corrupt')
-    const detail = res.issues.find((i) => i.includes('integrity_check'))
-    assert.ok(detail, 'the corrupt verdict carries an integrity_check issue')
-    assert.notEqual(
-      detail,
-      `snapshot ${cur} failed integrity_check: `,
-      'and the issue carries specific diagnostics, not an empty list',
+    const detail = res.issues.find((i) => i.includes('failed integrity validation'))
+    assert.match(
+      detail ?? '',
+      new RegExp(`^snapshot ${cur} failed integrity validation: \\S`),
+      'the corrupt verdict carries specific integrity diagnostics, not an empty list',
     )
   } finally {
     cleanup()
@@ -110,25 +108,22 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
     }
     const held = store.gc({ retain: 1 })
     assert.ok(held.leased.includes(leasedVersion), 'gc reports the leased version as protected')
-    // the leased snapshot is still present and readable through the lease
-    const title = new SnapshotStore(store.dir, STORE_OPTS)
-    assert.equal(
-      title.read(
-        (db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c,
-      ) >= 0,
-      true,
-    )
-    assert.doesNotThrow(() => {
-      driver.openReadonly(store.snapshotPath(leasedVersion)).close()
-    })
-    // once released, gc may collect it
+    // the leased snapshot is still present and holds exactly the rows it was leased with
+    const pinned = driver.openReadonly(store.snapshotPath(leasedVersion))
+    try {
+      assert.equal((pinned.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c, 3)
+    } finally {
+      pinned.close()
+    }
+    // once released, gc collects it
     lease.release()
-    store.gc({ retain: 1 })
+    assert.equal(store.gc({ retain: 1 }).leased.length, 0)
     assert.equal(
-      store.validate().state === 'corrupt',
+      existsSync(store.snapshotPath(leasedVersion)),
       false,
-      'store stays healthy after collection',
+      'the unpinned version is collected',
     )
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }

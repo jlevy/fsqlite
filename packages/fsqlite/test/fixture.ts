@@ -50,3 +50,7 @@ export function tmpStore(): { dir: string; cleanup: () => void } {
     },
   }
 }
+
+/** A complete `owner.json` record for a lock held by `token`, as withLock writes it. */
+export const ownerRecord = (token: string): string =>
+  JSON.stringify({ token, pid: 1, host: 'test-host', at: Date.now() })

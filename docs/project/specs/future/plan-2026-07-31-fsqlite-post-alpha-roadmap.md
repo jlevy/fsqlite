@@ -78,6 +78,13 @@ plan tracks work and does not redefine them.
 | `fsq-a0ct` | SQLite URI and store-path portability validation |
 | `fsq-ffdq` | Heartbeat or critical-section redesign for long publish-lock operations |
 | `fsq-dwwg` | Remove redundant marker and snapshot identity reads from hot paths |
+| `fsq-wb1v` | Bind or verify conflict-policy identity for each store epoch (spec O5) |
+| `fsq-as4h` | Review and freeze the 1.0 public API surface |
+| `fsq-aud7` | Unique snapshot filenames and a monotonic pointer in `f1.1` (spec O6) |
+| `fsq-gz6z` | Copy-then-remove fallback when envelope moves hit `EXDEV` (spec O7) |
+| `fsq-xe5w` | `setAuthorizer()` enforcement of the no-DDL callback boundary |
+| `fsq-a4gg` | Drop Node 22 support at its end of life or at 1.0 |
+| `fsq-kyyx` | Decide whether repair age-gates transients (spec §11 step 3) |
 
 ### Conformance and Format Evolution
 
@@ -93,8 +100,8 @@ plan tracks work and does not redefine them.
 
 - Run real cross-host contention on NFSv4.1/EFS, SMB, and representative managed shared
   filesystems.
-- Exercise clock skew, attribute caching, stale-lock breaks, close-to-open visibility,
-  and directory fsync behavior.
+- Exercise clock skew, attribute caching, abandoned-lock recovery, close-to-open
+  visibility, and directory fsync behavior.
 - Add block-device power-loss fault injection for snapshot and pointer publication.
 - Specify an optional durable-envelope receipt mode for callers that need accepted
   writes to survive power loss before reconcile.
@@ -108,14 +115,16 @@ plan tracks work and does not redefine them.
   explicit alternative.
 - Research replay-based bit-rot recovery without making repair destructive or
   speculative.
-- Add a safe heartbeat or shorter optimistic critical section for DirectStore and repair
-  operations that may exceed the lease stale window.
+- Shorten the critical sections for DirectStore and repair to reduce the time other
+  clients wait for the publish lock.
 
 ### Platform and Runtime Portability
 
-- Implement and validate atomic rename-replace on Windows under racing publishers.
+- Resolve the Windows blockers in spec O1 (no directory fsync from Node; snapshots
+  opened without `FILE_SHARE_DELETE`) through a native helper or a reader-only
+  declaration, then validate publication under racing publishers.
 - Test packed artifacts across supported operating systems, architectures, and the exact
-  runtime floor.
+  runtime floors, including Node 26 and each October Node alpha line.
 - Prove changeset compatibility across SQLite versions and session-capable bindings
   before claiming cross-language writer parity.
 - Implement Python, Rust, or Go writers only after they pass the same conformance
@@ -163,9 +172,11 @@ plan tracks work and does not redefine them.
    so the two migration classes cannot be conflated.
 5. Stronger isolation and binding enhancements can proceed independently after the alpha
    API settles.
-6. Performance and recovery investigations begin from conformance fixtures so an
+6. The real multi-host gate (`fsq-at6m`) supplies the evidence that expanded `fsinspect`
+   diagnostics (`fsq-qeak`) build on.
+7. Performance and recovery investigations begin from conformance fixtures so an
    optimization or repair proposal cannot silently redefine the format.
-7. Ledger checkpointing depends on conformance fixtures that replay old envelopes and
+8. Ledger checkpointing depends on conformance fixtures that replay old envelopes and
    interrupt every checkpoint boundary.
 
 ## Validation
@@ -189,11 +200,14 @@ plan tracks work and does not redefine them.
 
 ## Stable-Release Outcomes
 
-Before 1.0, the project must have a settled public API, independent conformance fixtures
-and verifier, real cross-host filesystem evidence, explicit whole-format upgrade
-semantics, a supported caller-schema maintenance protocol, bounded or explicitly
-rollover-managed ledger growth, and validated publication on every claimed operating
-system.
+Before 1.0, the project must have a settled public API (`fsq-as4h`), independent
+conformance fixtures and verifier, real cross-host filesystem evidence, power-loss
+fault-injection evidence (`fsq-hm6r`), changeset compatibility across admitted SQLite
+releases (`fsq-out1`), explicit whole-format upgrade semantics, a supported
+caller-schema maintenance protocol, a verified conflict-policy identity (`fsq-wb1v`),
+bounded or explicitly rollover-managed ledger growth, and validated publication on every
+claimed operating system.
+The user-facing description of this work is in `docs/roadmap.md`.
 
 ## Non-Goals
 

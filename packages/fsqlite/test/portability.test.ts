@@ -62,7 +62,7 @@ test('a published snapshot carries application_id and user_version for foreign c
 test('a sealed single-file export is also a standard SQLite file', () => {
   const { dir, cleanup } = tmpStore()
   try {
-    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    const store = new SnapshotStore(join(dir, 'store'), STORE_OPTS).init()
     store.write('A', (db) => db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't'))
     store.reconcile()
     const out = join(dir, 'export.sqlite')

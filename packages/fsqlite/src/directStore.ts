@@ -10,27 +10,59 @@
 // Both strategies produce the same snapshots and current pointer, so readers and writers
 // can use either strategy without changing the store format.
 
-import { copyFileSync, rmSync, renameSync } from 'node:fs'
+import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { fsyncPath, fsyncDir, publishPointer } from './fsutil.ts'
-import { withLock, ownerOf } from './lock.ts'
+import { FsqliteError, PostPublishError } from './errors.ts'
+import { fsyncPath, removeQuietly } from './fsutil.ts'
+import { commitSnapshot } from './publication.ts'
+import type { CommitOutcome } from './publication.ts'
+import { validateLockOptions, withLock } from './lock.ts'
 import type { LockOptions } from './lock.ts'
-import { SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
+import { requireSafeInteger, SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
 import { readStoreMarker } from './storeFormat.ts'
 import type {
   StoreOptions,
   WorkFn,
   ReadFn,
   ValidateResult,
+  GcOptions,
   GcResult,
   ReadLease,
+  ReadLeaseOptions,
+  RepairOptions,
   RepairResult,
 } from './types.ts'
 
+/**
+ * DirectStore's configuration: the schema and its identity. It applies no changesets, so
+ * it takes no merge policy and no envelope-size cap.
+ */
+export type DirectStoreOptions = Omit<StoreOptions, 'conflictPolicy' | 'maxEnvelopeBytes'>
+
+/** Options for `DirectStore.write()`. Invalid values throw a `TypeError`. */
+export interface DirectWriteOptions {
+  /** Publish-lock options; `staleMs` must exceed the longest single step of a write. */
+  lockOpts?: LockOptions
+  /** Attempts after a lost publication race; an integer of at least 1, default 8. */
+  maxRetries?: number
+}
+
 const rand = (): string => randomBytes(5).toString('hex')
 const DEFAULT_DIRECT_WRITE_RETRIES = 8
+
+/** The shared store engine under DirectStore's caller-schema rules. */
+class DirectStrategyStore extends SnapshotStore {
+  protected override assertStrategySchema(): void {
+    // DirectStore never applies a changeset: a trigger fires once, inside the callback's own
+    // transaction on the build, so trigger schemas are supported.
+  }
+
+  protected override assertPolicyTables(): void {
+    // DirectStore never consults a conflict policy.
+  }
+}
 
 /**
  * The serialized-writer strategy. Cooperative callers may contend for `write`, but the
@@ -40,35 +72,48 @@ const DEFAULT_DIRECT_WRITE_RETRIES = 8
 export class DirectStore {
   private base: SnapshotStore
 
-  constructor(dir: string, opts: StoreOptions = {}) {
-    this.base = new SnapshotStore(dir, opts)
+  constructor(dir: string, opts: DirectStoreOptions = {}) {
+    this.base = new DirectStrategyStore(dir, opts)
   }
 
+  /** Create the store if absent, otherwise verify it is schema-compatible; see `SnapshotStore#init`. */
   init(): this {
     this.base.init()
     return this
   }
+  /** Read the published head; see `SnapshotStore#read`. */
   read<T>(fn: ReadFn<T>): T {
     return this.base.read(fn)
   }
+  /** The version `current` names; see `SnapshotStore#currentVersion`. */
   currentVersion(): number {
     return this.base.currentVersion()
   }
+  /** Classify the store's health; see `SnapshotStore#validate`. */
   validate(): ValidateResult {
     return this.base.validate()
   }
+  /** Export the head as a standalone SQLite file; see `SnapshotStore#seal`. */
   seal(dest: string): string {
     return this.base.seal(dest)
   }
-  gc(opts?: { retain?: number; leaseStaleMs?: number; transientStaleMs?: number }): GcResult {
+  /** Delete superseded snapshots; see `SnapshotStore#gc`. */
+  gc(opts?: GcOptions): GcResult {
     return this.base.gc(opts)
   }
-  repair(opts?: { lockOpts?: LockOptions }): RepairResult {
+  /** Restore the last consistent point; see `SnapshotStore#repair`. */
+  repair(opts?: RepairOptions): RepairResult {
     return this.base.repair(opts)
   }
-  readLease(): ReadLease {
-    return this.base.readLease()
+  /** The steps `repair` would take, without taking them; see `SnapshotStore#planRepair`. */
+  planRepair(opts?: RepairOptions): RepairResult {
+    return this.base.planRepair(opts)
   }
+  /** Pin the head against gc; see `SnapshotStore#readLease`. */
+  readLease(opts?: ReadLeaseOptions): ReadLease {
+    return this.base.readLease(opts)
+  }
+  /** The path of snapshot `v`, whether or not it exists. */
   snapshotPath(v: number): string {
     return this.base.snapshotPath(v)
   }
@@ -76,15 +121,19 @@ export class DirectStore {
   /**
    * Synchronous copy, mutate, publish under the publish lock, with OCC on the
    * `current` pointer (so it also composes safely with a SnapshotStore reconcile
-   * publishing into the same store). Retries internally on a lost race.
+   * publishing into the same store). Retries internally on a lost race, rerunning `fn`.
+   * Returns the published version, which always carries this call's mutation.
+   *
+   * A {@link PostPublishError} was raised after
+   * that version became current (for example a failed directory fsync after the pointer
+   * rename): the write is visible and must not be re-run. Any other error published nothing.
    */
   write(
     fn: WorkFn,
-    {
-      lockOpts = {},
-      maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
-    }: { lockOpts?: LockOptions; maxRetries?: number } = {},
+    { lockOpts = {}, maxRetries = DEFAULT_DIRECT_WRITE_RETRIES }: DirectWriteOptions = {},
   ): number {
+    requireSafeInteger('maxRetries', maxRetries, 1)
+    validateLockOptions(lockOpts)
     const marker = readStoreMarker(this.base.dir)
     this.base.read((db) => {
       verifySnapshotForPublish(db, marker, this.base.schemaVersion, this.base.schemaHash)
@@ -92,11 +141,18 @@ export class DirectStore {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const out = withLock(
         this.base.publishLock,
-        (token): number | 'retry' => {
+        (_token, lease): number | 'retry' => {
           const base = this.base.currentVersion()
           const next = base + 1
           const tmp = join(this.base.snapDir, `.direct-${rand()}.sqlite`)
+          const abandon = (): 'retry' => {
+            rmSync(tmp, { force: true })
+            return 'retry'
+          }
           copyFileSync(this.base.snapshotPath(base), tmp)
+          if (!lease.heartbeat()) {
+            return abandon()
+          }
           const db = driver.open(tmp)
           try {
             driver.protectOwnedTables(db)
@@ -113,44 +169,51 @@ export class DirectStore {
             db.exec('COMMIT')
             driver.quickCheck(db)
           } catch (e) {
-            try {
-              db.exec('ROLLBACK')
-            } catch {
-              /* ignore */
-            }
+            driver.rollbackQuietly(db)
             db.close()
-            rmSync(tmp, { force: true })
+            removeQuietly(tmp)
             throw e
           }
           db.close()
-          // Revalidate fencing and optimistic concurrency before publication.
-          if (this.base.currentVersion() !== base) {
-            rmSync(tmp, { force: true })
-            return 'retry'
-          }
-          if (ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          // Revalidate fencing and optimistic concurrency before publication. The fence
+          // also renews the lease the callback and checks may have run down.
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
           fsyncPath(tmp) // durable snapshot before it can be named by current
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
-            rmSync(tmp, { force: true })
-            return 'retry'
+          if (this.base.currentVersion() !== base || !lease.fence()) {
+            return abandon()
           }
-          renameSync(tmp, this.base.snapshotPath(next))
-          fsyncDir(this.base.snapDir)
-          if (this.base.currentVersion() !== base || ownerOf(this.base.publishLock) !== token) {
-            return 'retry'
+          let outcome: CommitOutcome
+          try {
+            outcome = commitSnapshot({
+              storeDir: this.base.dir,
+              currentPath: this.base.currentPath,
+              snapDir: this.base.snapDir,
+              build: tmp,
+              dest: this.base.snapshotPath(next),
+              base,
+              next,
+              readCurrent: () => this.base.currentVersion(),
+              lease,
+            })
+          } catch (error) {
+            removeQuietly(tmp) // only the uncommitted `.direct-` name, never a committed entry
+            throw error
           }
-          publishPointer(this.base.dir, this.base.currentPath, next)
-          return next
+          return outcome === 'published' ? next : abandon()
         },
         lockOpts,
+        (error, result) =>
+          typeof result === 'number' ? new PostPublishError(result, error) : error,
       )
       if (out !== 'retry') {
         return out
       }
     }
-    throw new Error('DirectStore.write exceeded retries (excessive publish contention)')
+    throw new FsqliteError(
+      'retryable',
+      `DirectStore.write exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
+    )
   }
 }

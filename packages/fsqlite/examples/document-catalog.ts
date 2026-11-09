@@ -8,9 +8,11 @@
 //
 //   node examples/document-catalog.ts
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import assert from 'node:assert/strict'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { SnapshotStore } from '../src/index.ts'
 import type { ConflictPolicyInput } from '../src/types.ts'
 
@@ -70,9 +72,26 @@ export const openCatalog = (catalogDir: string): SnapshotStore =>
     toolVersion: 'example-catalog',
   }).init()
 
-// --- Demo: two writers update one catalog concurrently -----------------------
-if (import.meta.url === `file://${process.argv[1]}`) {
+/**
+ * Whether this module is the script Node was asked to run. Comparing real paths, not URL
+ * strings, holds for symlinked directories, percent-encoded characters, and Windows paths.
+ */
+const isMainModule = (): boolean => {
+  const script = process.argv[1]
+  return script !== undefined && fileURLToPath(import.meta.url) === realpathSync(script)
+}
+
+// Demo: two writers update one catalog concurrently.
+if (isMainModule()) {
   const dir = mkdtempSync(join(tmpdir(), 'catalog-'))
+  try {
+    runDemo(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function runDemo(dir: string): void {
   const cat = openCatalog(dir)
   const now = (): string => new Date().toISOString()
 
@@ -143,21 +162,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const read1 = <T>(sql: string, ...args: (string | number)[]): T =>
     cat.read((db) => db.prepare(sql).get(...args) as T)
   console.log('reconcile:', JSON.stringify(res))
-  console.log(
-    'url_index[urlh_1] →',
-    read1<{ blob_id: string }>('SELECT blob_id FROM url_index WHERE url_hash=?', 'urlh_1').blob_id,
-    '(expect blob_sha256_bbb: last-writer-wins)',
-  )
-  console.log(
-    'relationships count →',
-    read1<{ c: number }>('SELECT COUNT(*) c FROM relationships').c,
-    '(expect 1: set-union deduped the duplicate edge)',
-  )
-  console.log(
-    'content_blobs count →',
-    read1<{ c: number }>('SELECT COUNT(*) c FROM content_blobs').c,
-    '(expect 2)',
-  )
-  console.log('validate:', JSON.stringify(cat.validate()))
-  rmSync(dir, { recursive: true, force: true })
+  const blob = read1<{ blob_id: string }>(
+    'SELECT blob_id FROM url_index WHERE url_hash=?',
+    'urlh_1',
+  ).blob_id
+  console.log('url_index[urlh_1] →', blob, '(last-writer-wins: the newer fetch)')
+  assert.equal(blob, 'blob_sha256_bbb')
+  const edges = read1<{ c: number }>('SELECT COUNT(*) c FROM relationships').c
+  console.log('relationships count →', edges, '(set-union dropped the duplicate edge)')
+  assert.equal(edges, 1)
+  const blobs = read1<{ c: number }>('SELECT COUNT(*) c FROM content_blobs').c
+  console.log('content_blobs count →', blobs)
+  assert.equal(blobs, 2)
+  const health = cat.validate()
+  console.log('validate:', JSON.stringify(health))
+  assert.equal(health.state, 'sealed')
 }

@@ -2,10 +2,21 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs'
-import { join } from 'node:path'
-import { SnapshotStore } from '../src/index.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, join } from 'node:path'
+import { FsqliteError, SnapshotStore } from '../src/index.ts'
+import { setOwnerWriterForTest } from '../src/lock.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const count = (store: SnapshotStore): number =>
   store.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
@@ -30,6 +41,8 @@ test('repair clears an in-flight capture (orphan snapshot, transient, and uncomm
     const txn = join(store.txPending, '999-uncommitted.txn')
     mkdirSync(txn, { recursive: true })
     writeFileSync(join(txn, 'changeset.bin'), 'partial') // no COMMITTED marker
+    const abandoned = new Date(Date.now() - 120_000) // a capture that died long ago
+    utimesSync(txn, abandoned, abandoned)
 
     assert.equal(store.validate().state, 'in-flight-capture')
     const res = store.repair()
@@ -41,6 +54,63 @@ test('repair clears an in-flight capture (orphan snapshot, transient, and uncomm
     assert.ok(
       existsSync(join(store.txQuarantine, '999-uncommitted.txn')),
       'uncommitted tx quarantined',
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+/** Every path below `dir` with its size and mtime, to prove a dry run changed nothing. */
+function tree(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .sort()
+    .map((entry) => {
+      const st = statSync(join(dir, entry))
+      return `${entry} ${st.isDirectory() ? 'dir' : String(st.size)} ${st.mtimeMs}`
+    })
+}
+
+test('planRepair reports the steps repair would take and changes nothing', () => {
+  const { store, dir, cleanup } = storeAt(1)
+  try {
+    copyFileSync(store.snapshotPath(1), store.snapshotPath(2)) // orphan ahead of pointer
+    writeFileSync(join(store.snapDir, '.build-xyz.sqlite'), 'x')
+    const txn = join(store.txPending, '999-uncommitted.txn')
+    mkdirSync(txn, { recursive: true })
+    const abandoned = new Date(Date.now() - 120_000)
+    utimesSync(txn, abandoned, abandoned)
+    writeFileSync(store.currentPath, 'torn')
+    const before = tree(dir)
+
+    const plan = store.planRepair()
+    assert.equal(plan.state, 'corrupt')
+    assert.deepEqual(plan.actions, [
+      're-publish current -> 2',
+      'remove transient .build-xyz.sqlite',
+      'quarantine uncommitted 999-uncommitted.txn',
+    ])
+    assert.deepEqual(tree(dir), before, 'a plan takes no lock and changes no file')
+    assert.equal(readFileSync(store.currentPath, 'utf8'), 'torn')
+
+    assert.deepEqual(store.repair().actions, [
+      're-published current -> 2',
+      'removed transient .build-xyz.sqlite',
+      'quarantined uncommitted 999-uncommitted.txn',
+    ])
+    assert.deepEqual(store.planRepair(), { actions: [], state: 'sealed' })
+  } finally {
+    cleanup()
+  }
+})
+
+test('planRepair refuses whenever repair would', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    mkdirSync(store.publishLock)
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
+    assert.throws(
+      () => store.planRepair(),
+      (error: unknown) => error instanceof FsqliteError && error.code === 'in-flight',
     )
   } finally {
     cleanup()
@@ -68,9 +138,25 @@ test('repair removes a corrupt head snapshot and falls back to the prior good on
     writeFileSync(store.snapshotPath(2), 'totally-not-sqlite'.repeat(100))
     const res = store.repair()
     assert.equal(store.currentVersion(), 1, 'fell back to the prior integrity-clean snapshot')
-    assert.equal(store.validate().state, 'sealed')
+    assert.equal(res.state, 'corrupt', 'the archive exposes the missing v2 transaction')
     assert.ok(res.actions.some((a) => a.includes('removed corrupt snapshot 2')))
     assert.equal(count(store), 1, 'v1 (the last clean head) intact; v2 delta is the bounded loss')
+  } finally {
+    cleanup()
+  }
+})
+
+test('validation and maintenance preserve a newer snapshot after pointer regression', () => {
+  const { store, cleanup } = storeAt(2)
+  try {
+    writeFileSync(store.currentPath, '1')
+    const health = store.validate()
+    assert.equal(health.state, 'corrupt')
+    assert.ok(health.issues.includes('1 archived transaction(s) absent from the current ledger'))
+    assert.throws(() => store.planRepair(), /absent from the current ledger/)
+    assert.throws(() => store.repair(), /absent from the current ledger/)
+    assert.throws(() => store.gc(), /absent from the current ledger/)
+    assert.ok(existsSync(store.snapshotPath(2)))
   } finally {
     cleanup()
   }
@@ -99,7 +185,7 @@ test('repair refuses to mutate while a publisher lock is present', () => {
     const transient = join(store.snapDir, '.build-live.sqlite')
     writeFileSync(transient, 'live work')
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'live' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('live'))
 
     assert.throws(() => store.repair(), /repair refused: publish\.lock is present/)
     assert.equal(existsSync(transient), true)
@@ -109,17 +195,23 @@ test('repair refuses to mutate while a publisher lock is present', () => {
   }
 })
 
-test('repair reclaims a stale publisher lock before restoring the store', () => {
+test('repair refuses an old lock until the operator performs quiescent recovery', () => {
   const { store, cleanup } = storeAt(1)
   try {
     const transient = join(store.snapDir, '.build-abandoned.sqlite')
     writeFileSync(transient, 'abandoned work')
     mkdirSync(store.publishLock)
-    writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'dead' }))
+    writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('dead'))
     const old = new Date(Date.now() - 10_000)
     utimesSync(store.publishLock, old, old)
 
-    const result = store.repair({ lockOpts: { staleMs: 100, timeoutMs: 500, pollMs: 5 } })
+    const options = { lockOpts: { staleMs: 100, timeoutMs: 500, pollMs: 5 } }
+    assert.throws(() => store.repair(options), /stop every store client/)
+    assert.throws(() => store.planRepair(options), /stop every store client/)
+    assert.equal(existsSync(transient), true)
+    // The fixture has no live clients; only this verified offline step removes the lock.
+    rmSync(store.publishLock, { recursive: true })
+    const result = store.repair(options)
     assert.ok(result.actions.some((action) => action.includes('removed transient')))
     assert.equal(existsSync(transient), false)
     assert.equal(store.validate().state, 'sealed')
@@ -132,17 +224,17 @@ test('repair revalidates its fence before every destructive step', () => {
   const { store, cleanup } = storeAt(1)
   try {
     copyFileSync(store.snapshotPath(1), store.snapshotPath(2))
-    const snapshotVersions = store.snapshotVersions.bind(store)
-    let calls = 0
-    store.snapshotVersions = (): number[] => {
-      calls += 1
-      if (calls === 2) {
-        writeFileSync(
-          join(store.publishLock, 'owner.json'),
-          JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
-        )
-      }
-      return snapshotVersions()
+    // A successor takes the lock after repair's last snapshot scan (and heartbeat) but
+    // before its first mutation: listing the transient directories is the plan's last
+    // read-only step.
+    const internal = store as unknown as { transientDirs: () => string[] }
+    const transientDirs = internal.transientDirs.bind(store)
+    internal.transientDirs = (): string[] => {
+      writeFileSync(
+        join(store.publishLock, 'owner.json'),
+        JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: Date.now() }),
+      )
+      return transientDirs()
     }
 
     assert.throws(() => store.repair(), /repair lost ownership of publish\.lock before mutation/)
@@ -197,10 +289,127 @@ test('root pointer transients are surfaced, swept by gc, and removed by repair',
 
     const fresh = join(store.dir, 'fsqlite.json.deadbeef.tmp')
     writeFileSync(fresh, '{}')
+    const grave = join(store.dir, 'publish.lock.deadbeef00.tmp')
+    mkdirSync(grave)
+    writeFileSync(join(grave, 'owner.json'), ownerRecord('broken'))
     store.repair()
     assert.equal(existsSync(fresh), false, 'repair removes fresh root transient')
+    assert.equal(existsSync(grave), false, 'repair removes a lock moved aside by a crashed break')
     assert.equal(store.validate().state, 'sealed')
   } finally {
+    cleanup()
+  }
+})
+
+test('init journal and lease temps are surfaced, swept by gc, and removed by repair', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    // SQLite's journal for init's snapshot-0 temp, and a crashed readLease's lease temp.
+    const debris = () => [
+      join(store.snapDir, '000000000000.fsqlite.sqlite.deadbeef00.tmp-journal'),
+      join(store.leaseDir, '000001762600000-deadbeef00.lease.abcdef0123.tmp'),
+    ]
+    const plant = (ageMs: number): void => {
+      const at = new Date(Date.now() - ageMs)
+      for (const path of debris()) {
+        writeFileSync(path, 'x')
+        utimesSync(path, at, at)
+      }
+    }
+    plant(120_000)
+    const validation = store.validate()
+    assert.equal(validation.state, 'in-flight-capture')
+    for (const path of debris()) {
+      assert.ok(
+        validation.issues.some((issue) => issue.includes(basename(path))),
+        `validate names ${basename(path)}: ${JSON.stringify(validation.issues)}`,
+      )
+    }
+
+    store.gc({ transientStaleMs: 60_000 })
+    assert.deepEqual(debris().filter(existsSync), [], 'gc sweeps both stale transients')
+
+    plant(0)
+    store.repair()
+    assert.deepEqual(debris().filter(existsSync), [], 'repair removes both transients')
+    assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+/** An envelope dir a writer began but has not committed, `ageMs` after its last write. */
+function uncommittedEnvelope(store: SnapshotStore, ageMs: number): string {
+  const txn = '000001762600000000-000000000000-w-deadbeef00.txn'
+  const txDir = join(store.txPending, txn)
+  mkdirSync(txDir)
+  writeFileSync(join(txDir, 'changeset.bin'), 'partial')
+  writeFileSync(join(txDir, 'manifest.json'), '{}')
+  const at = new Date(Date.now() - ageMs)
+  utimesSync(txDir, at, at)
+  return txn
+}
+
+test('repair keeps an envelope that commits between its check and its quarantine move', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const txn = uncommittedEnvelope(store, 120_000)
+    const move = (store as unknown as { move: (txns: string[], dest: string) => void }).move.bind(
+      store,
+    )
+    Object.assign(store, {
+      move: (txns: string[], dest: string): void => {
+        writeFileSync(join(store.txPending, txn, 'COMMITTED'), '') // the writer finishes here
+        move(txns, dest)
+      },
+    })
+
+    const result = store.repair()
+
+    assert.equal(existsSync(join(store.txPending, txn, 'COMMITTED')), true, 'still pending')
+    assert.equal(existsSync(join(store.txPending, txn, 'QUARANTINE')), false)
+    assert.equal(existsSync(join(store.txQuarantine, txn)), false)
+    assert.ok(result.actions.some((action) => action.includes(`kept ${txn}`)))
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair leaves a fresh uncommitted envelope to its possibly live writer', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    const txn = uncommittedEnvelope(store, 0)
+
+    const result = store.repair()
+
+    assert.equal(existsSync(join(store.txPending, txn)), true)
+    assert.equal(existsSync(join(store.txQuarantine, txn)), false)
+    assert.equal(result.state, 'in-flight-capture', 'the capture in progress is still reported')
+  } finally {
+    cleanup()
+  }
+})
+
+test('repair that loses publish.lock as it acquires it mutates nothing', () => {
+  const { store, cleanup } = storeAt(1)
+  try {
+    copyFileSync(store.snapshotPath(1), store.snapshotPath(2)) // an orphan repair would remove
+    // A successor's token lands in owner.json as repair takes the lock, so its first fence
+    // check fails before any step.
+    setOwnerWriterForTest((path) => {
+      writeFileSync(path, JSON.stringify({ token: 'successor', pid: 1, host: 'other', at: 0 }))
+    })
+    assert.throws(
+      () => store.repair(),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message === 'repair lost ownership of publish.lock before mutation',
+    )
+    assert.equal(existsSync(store.snapshotPath(2)), true, 'the orphan remains for a fenced retry')
+    assert.equal(readFileSync(store.currentPath, 'utf8'), '1')
+  } finally {
+    setOwnerWriterForTest(null)
     cleanup()
   }
 })

@@ -13,8 +13,19 @@ const ADVISORY_ID_SOURCE = 'GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}|CVE-[0-9]{4
 // Any GHSA or CVE ID in the text, in any case, not embedded in a longer token.
 const ADVISORY_ID = new RegExp(`(?<![0-9a-z])(?:${ADVISORY_ID_SOURCE})(?![0-9a-z])`, 'gi')
 const EXACT_ADVISORY_ID = new RegExp(`^(?:${ADVISORY_ID_SOURCE})$`, 'i')
-const AUDIT_CONFIG_MENTION = /audit-?config|ignore-?ghsas|ignore-?cves/i
+// An audit settings section: the `audit` key pnpm 11.16 introduced, as a block or flow
+// mapping key, quoted or not, or `audit.ignore`; or the deprecated `auditConfig`, whose
+// `ignoreGhsas` pnpm still honors when `audit.ignore` is unset (pnpm 11 no longer reads
+// `ignoreCves`). Mentions in comments count too.
+const AUDIT_SECTION =
+  /(?:^|[{,])\s*["']?audit["']?\s*:|audit\.ignore|audit-?config|ignore-?ghsas|ignore-?cves/im
+// An advisory ignore list in such a section: `audit.ignore`, the deprecated `ignoreGhsas`
+// or `ignoreCves`, or an `ignore` key. Other audit settings, such as `level`, name no IDs.
+const AUDIT_IGNORE_LIST =
+  /audit\.ignore|ignore-?ghsas|ignore-?cves|(?:^|[{,])\s*["']?ignore["']?\s*:/im
 const TIME_LIMITED_HEADING = /time[-\s]limited/i
+const TRUST_POLICY_HEADING = /trust[-\s]policy\s+exclusion/i
+const TRUST_POLICY_EXCLUDE_KEY = /^trustPolicyExclude\s*:(.*)$/m
 const REVIEW_PHRASE = /review\s+this\s+exception\s+by\b/gi
 const REVIEW_DATE = /review\s+this\s+exception\s+by\s+([0-9]{4}-[0-9]{2}-[0-9]{2})(?![0-9])/i
 const REVIEW_TARGET = /review\s+this\s+exception\s+by\s+([^\s,;:)]*)/i
@@ -56,10 +67,12 @@ const addDays = (date, days) =>
 
 /**
  * Splits Markdown into one section per heading, each marked by whether that heading or
- * an enclosing one says "Time-Limited". Headings inside code fences are ignored.
+ * an enclosing one matches `marker` (by default, says "Time-Limited"). Headings inside
+ * code fences are ignored.
  * @param {string} markdown
+ * @param {RegExp} [marker]
  */
-const policySections = (markdown) => {
+const policySections = (markdown, marker = TIME_LIMITED_HEADING) => {
   /** @type {{ level: number, title: string }[]} */
   const headings = []
   /** @type {{ timeLimited: boolean, lines: string[] }[]} */
@@ -77,7 +90,7 @@ const policySections = (markdown) => {
       }
       headings.push({ level, title: heading[2] })
       sections.push({
-        timeLimited: headings.some(({ title }) => TIME_LIMITED_HEADING.test(title)),
+        timeLimited: headings.some(({ title }) => marker.test(title)),
         lines: [line],
       })
     } else {
@@ -104,6 +117,10 @@ const reviewDatePassedMessage = (id, reviewBy, today) =>
  * Checks that every advisory ID in pnpm-workspace.yaml has exactly one exception record
  * under a "Time-Limited" heading of SUPPLY-CHAIN-SECURITY.md, and that the record's review
  * date is a real calendar date, not in the past, and at most EXCEPTION_WINDOW_DAYS ahead.
+ * The ID scan is key-agnostic, so IDs under `audit.ignore`, the deprecated
+ * `auditConfig.ignoreGhsas`, or anywhere else in the file all count. The date rules apply
+ * only to these advisory IDs; other records, such as a `trustPolicyExclude` entry, are
+ * not exceptions to them.
  * @param {{ workspaceText: string, policyText: string, today: string }} input
  *   `today` is a UTC `YYYY-MM-DD` date.
  * @returns {{ ids: string[], errors: string[] }}
@@ -115,11 +132,15 @@ export const checkAuditExceptions = ({ workspaceText, policyText, today }) => {
   const ids = findAdvisoryIds(workspaceText)
   /** @type {string[]} */
   const errors = []
-  if (ids.length === 0 && AUDIT_CONFIG_MENTION.test(workspaceText)) {
+  if (
+    ids.length === 0 &&
+    AUDIT_SECTION.test(workspaceText) &&
+    AUDIT_IGNORE_LIST.test(workspaceText)
+  ) {
     errors.push(
-      'pnpm-workspace.yaml configures auditConfig, but no GHSA-xxxx-xxxx-xxxx or ' +
-        'CVE-YYYY-NNNN advisory ID was found in it; write each ignored advisory by ID, or ' +
-        'remove the empty auditConfig.',
+      'pnpm-workspace.yaml configures audit (or the deprecated auditConfig), but no ' +
+        'GHSA-xxxx-xxxx-xxxx or CVE-YYYY-NNNN advisory ID was found in it; write each ' +
+        'ignored advisory by ID under audit.ignore, or remove the empty audit settings.',
     )
   }
   const records = policySections(policyText).filter(({ timeLimited }) => timeLimited)
@@ -164,15 +185,23 @@ export const checkAuditExceptions = ({ workspaceText, policyText, today }) => {
   return { ids, errors }
 }
 
+/** The command whose output crossCheckPnpmAudit reads. */
+export const PNPM_AUDIT_COMMAND = ['config', 'get', 'audit', '--json']
+const PNPM_AUDIT_COMMAND_TEXT = `pnpm ${PNPM_AUDIT_COMMAND.join(' ')}`
+
 /**
  * Compares the advisories pnpm actually ignores, as printed by
- * `pnpm config get auditConfig --json`, with the IDs the text scan found, so an ignore
- * that pnpm reads from somewhere the scan does not look, or in a form it does not
- * recognize, still fails the gate.
+ * `pnpm config get audit --json`, with the IDs the text scan found, so an ignore that
+ * pnpm reads from somewhere the scan does not look, or in a form it does not recognize,
+ * still fails the gate. Since 11.23, pnpm reports the effective `audit` section whichever
+ * key set it: `{ "ignore": [...] }` for `audit.ignore` or the deprecated
+ * `auditConfig.ignoreGhsas`, and `audit.ignore` alone when both are set. Every array in
+ * the output is read as a list of advisory IDs, so the deprecated `auditConfig` shape
+ * (`ignoreGhsas`, `ignoreCves`) is accepted too; other values, such as `level`, are not.
  * @param {{ ids: string[], pnpmOutput: string }} input
  * @returns {string[]} errors
  */
-export const crossCheckPnpmAuditConfig = ({ ids, pnpmOutput }) => {
+export const crossCheckPnpmAudit = ({ ids, pnpmOutput }) => {
   const output = pnpmOutput.trim()
   /** @type {unknown} */
   let config = {}
@@ -180,11 +209,11 @@ export const crossCheckPnpmAuditConfig = ({ ids, pnpmOutput }) => {
     try {
       config = JSON.parse(output)
     } catch {
-      return [`Cannot parse \`pnpm config get auditConfig --json\` output: ${output}`]
+      return [`Cannot parse \`${PNPM_AUDIT_COMMAND_TEXT}\` output: ${output}`]
     }
   }
   if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-    return [`pnpm reports an auditConfig that is not an object: ${output}`]
+    return [`pnpm reports audit settings that are not an object: ${output}`]
   }
   /** @type {string[]} */
   const errors = []
@@ -198,8 +227,8 @@ export const crossCheckPnpmAuditConfig = ({ ids, pnpmOutput }) => {
         reported.add(normalizeAdvisoryId(entry.trim()))
       } else {
         errors.push(
-          `pnpm reports auditConfig.${key} entry ${JSON.stringify(entry)}, which is not a ` +
-            'GHSA or CVE advisory ID.',
+          `pnpm reports audit ${key} entry ${JSON.stringify(entry)}, which is not a GHSA or ` +
+            'CVE advisory ID.',
         )
       }
     }
@@ -216,10 +245,132 @@ export const crossCheckPnpmAuditConfig = ({ ids, pnpmOutput }) => {
   for (const id of ids) {
     if (!reported.has(id)) {
       errors.push(
-        `pnpm-workspace.yaml names ${id}, but pnpm does not report it as ignored; fix the ` +
-          'auditConfig entry, or remove the ID if it appears only in a comment.',
+        `pnpm-workspace.yaml names ${id}, but pnpm does not report it as ignored; list it ` +
+          'under audit.ignore (pnpm drops the deprecated auditConfig when audit.ignore is ' +
+          'set), or remove the ID if it appears only in a comment.',
       )
     }
   }
   return errors
+}
+
+/** @param {string} value */
+const unquote = (value) => value.trim().replace(/^(["'])(.*)\1$/, '$2')
+
+/** @param {string} line */
+const withoutComment = (line) => line.replace(/\s+#.*$|^\s*#.*$/, '')
+
+/**
+ * The entries of the `trustPolicyExclude` list in pnpm-workspace.yaml, written as a block
+ * sequence or a flow list, with quotes and comments removed.
+ * @param {string} workspaceText
+ * @returns {string[]}
+ */
+export const findTrustPolicyExcludes = (workspaceText) => {
+  const key = TRUST_POLICY_EXCLUDE_KEY.exec(workspaceText)
+  if (key === null) {
+    return []
+  }
+  const inline = withoutComment(key[1] ?? '').trim()
+  if (inline.startsWith('[')) {
+    const flow = inline.slice(1, inline.indexOf(']') < 0 ? undefined : inline.indexOf(']'))
+    return flow
+      .split(',')
+      .map(unquote)
+      .filter((entry) => entry !== '')
+  }
+  /** @type {string[]} */
+  const entries = []
+  const after = workspaceText
+    .slice(key.index + key[0].length)
+    .split(/\r?\n/)
+    .slice(1)
+  for (const line of after) {
+    const code = withoutComment(line)
+    if (code.trim() === '') {
+      continue
+    }
+    const item = /^\s+-\s+(.*)$/.exec(code)
+    if (item === null) {
+      break
+    }
+    entries.push(unquote(item[1] ?? ''))
+  }
+  return entries
+}
+
+/** @param {string} entry */
+const escapeRegExp = (entry) => entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Checks that every `trustPolicyExclude` entry in pnpm-workspace.yaml is named, at its
+ * exact version, in a section of SUPPLY-CHAIN-SECURITY.md under a heading that says
+ * "Trust-Policy Exclusion", so an exclusion is never added without a recorded reason.
+ * @param {{ workspaceText: string, policyText: string }} input
+ * @returns {{ entries: string[], errors: string[] }}
+ */
+export const checkTrustPolicyExclusions = ({ workspaceText, policyText }) => {
+  const entries = findTrustPolicyExcludes(workspaceText)
+  const records = policySections(policyText, TRUST_POLICY_HEADING).filter(
+    ({ timeLimited }) => timeLimited,
+  )
+  /** @type {string[]} */
+  const errors = []
+  for (const entry of entries) {
+    // The exact entry, not a longer version or name that starts with it.
+    const named = new RegExp(`(?<![\\w@./-])${escapeRegExp(entry)}(?![\\w@-]|\\.[0-9A-Za-z])`)
+    if (!records.some(({ text }) => named.test(text))) {
+      errors.push(
+        `${entry} is excluded from trustPolicy in pnpm-workspace.yaml but has no record under ` +
+          'a "Trust-Policy Exclusion" heading in SUPPLY-CHAIN-SECURITY.md; record why it is ' +
+          'excluded and when to remove it, or drop the exclusion.',
+      )
+    }
+  }
+  return { entries, errors }
+}
+
+/** The command whose output crossCheckPnpmTrustPolicy reads. */
+export const PNPM_TRUST_POLICY_COMMAND = ['config', 'get', 'trustPolicyExclude', '--json']
+
+/**
+ * Compares the exclusions pnpm applies, as printed by
+ * `pnpm config get trustPolicyExclude --json`, with the entries the text scan found, so an
+ * exclusion pnpm reads from somewhere the scan does not look still fails the gate.
+ * @param {{ entries: string[], pnpmOutput: string }} input
+ * @returns {string[]} errors
+ */
+export const crossCheckPnpmTrustPolicy = ({ entries, pnpmOutput }) => {
+  const output = pnpmOutput.trim()
+  /** @type {unknown} */
+  let reported = []
+  if (output !== '' && output !== 'undefined') {
+    try {
+      reported = JSON.parse(output)
+    } catch {
+      return [`Cannot parse \`pnpm ${PNPM_TRUST_POLICY_COMMAND.join(' ')}\` output: ${output}`]
+    }
+  }
+  if (!Array.isArray(reported) || !reported.every((entry) => typeof entry === 'string')) {
+    return [`pnpm reports a trustPolicyExclude that is not a list of strings: ${output}`]
+  }
+  const scanned = new Set(entries)
+  const applied = new Set(/** @type {string[]} */ (reported))
+  return [
+    ...[...applied]
+      .filter((entry) => !scanned.has(entry))
+      .sort()
+      .map(
+        (entry) =>
+          `pnpm excludes ${entry} from trustPolicy, but the scan of pnpm-workspace.yaml did ` +
+          'not find it; list every exclusion under trustPolicyExclude there.',
+      ),
+    ...entries
+      .filter((entry) => !applied.has(entry))
+      .map(
+        (entry) =>
+          `pnpm-workspace.yaml names ${entry}, but pnpm does not exclude it from trustPolicy; ` +
+          'check the trustPolicyExclude list syntax.',
+      ),
+  ]
 }

@@ -38,11 +38,19 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
       } else {
         assert.equal(afterCrash, before, 'a crash before the pointer swap leaves current intact')
       }
+      if (crashAt === 'after-snapshot') {
+        assert.throws(() => store.reconcile(), /already exists ahead of current/)
+        store.repair() // the fixture has no live clients; classify the orphan explicitly
+      }
 
       store.reconcile()
       assert.equal(count(store), 3, 'all 3 tx present exactly once after recovery')
-      assert.ok(store.pendingTxns().length === 0, 'pending tail drained')
-      assert.notEqual(store.validate().state, 'corrupt')
+      assert.deepEqual(store.pendingTxns(), [], 'pending tail drained')
+      // A crash runs no cleanup, so only the after-build crash leaves its build behind.
+      assert.equal(
+        store.validate().state,
+        crashAt === 'after-build' ? 'in-flight-capture' : 'sealed',
+      )
     } finally {
       setReconcileCrashForTest(null)
       cleanup()
@@ -50,14 +58,12 @@ for (const crashAt of ['after-build', 'after-snapshot', 'after-pointer'] as cons
   })
 }
 
-test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', () => {
+test('an orphan snapshot ahead of the pointer blocks publication until explicit repair', () => {
   const { store, cleanup } = storeWith(2)
   try {
     try {
       setReconcileCrashForTest('after-snapshot')
-      store.reconcile()
-    } catch {
-      /* expected */
+      assert.throws(() => store.reconcile(), /CRASH after-snapshot/)
     } finally {
       setReconcileCrashForTest(null)
     }
@@ -67,6 +73,9 @@ test('an orphan snapshot ahead of the pointer is harmless and cleaned by gc', ()
       'orphan snapshot ahead of pointer exists after the crash',
     )
     assert.equal(store.validate().state, 'in-flight-capture')
+    assert.throws(() => store.reconcile(), /already exists ahead of current/)
+    assert.ok(existsSync(store.snapshotPath(cur + 1)), 'failed publication preserved evidence')
+    store.repair()
     store.reconcile()
     store.gc({ retain: 0 })
     const ahead = readdirSync(store.snapDir)

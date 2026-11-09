@@ -10,7 +10,7 @@
     "allowJs": true,
     "checkJs": true,
     // Source uses explicit `.ts` import specifiers so Node's native type-stripping can
-    // resolve them at runtime (`node src/cli/index.ts`); tsc needs this to allow them.
+    // resolve them at runtime (`node src/cli/bin.ts`); tsc needs this to allow them.
     "allowImportingTsExtensions": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
@@ -19,6 +19,9 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "erasableSyntaxOnly": true,
+    // The published declarations omit members marked @internal, such as the store layout
+    // paths, which tests and the CLI use but callers should not depend on.
+    "stripInternal": true,
     "types": ["node"]
   },
   "include": ["src", "test", "workers", "examples", "benchmarks", "scripts", "tsdown.config.ts"]

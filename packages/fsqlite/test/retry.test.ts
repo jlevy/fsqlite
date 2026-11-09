@@ -5,7 +5,8 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SnapshotStore } from '../src/index.ts'
+import { LockTimeoutError, SnapshotStore, TransactionError } from '../src/index.ts'
+import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { tmpStore } from './fixture.ts'
 import type { StoreOptions } from '../src/types.ts'
 import type { DatabaseSync } from 'node:sqlite'
@@ -28,21 +29,22 @@ const increment = (db: DatabaseSync): void => {
 const counter = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT n FROM counters WHERE k=?').get('c') as { n: number }).n)
 
-test('writeWithRetry prevents a lost update on a strict read-modify-write', () => {
+test('writeWithRetry publishes each strict read-modify-write before returning', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const a = new SnapshotStore(dir, OPTS).init()
     a.writeWithRetry('seed', increment) // c = 1 (v1)
     assert.equal(counter(a), 1)
 
-    // Two separate handles both increment. Even if their writes interleave, retry makes
-    // the second re-seed from the first's published value rather than overwrite it.
+    // Each call returns only after its write is published, so the next handle seeds from it
+    // and neither needs a retry; the forced interleave below exercises the conflict path.
     const w1 = new SnapshotStore(dir, OPTS)
     const w2 = new SnapshotStore(dir, OPTS)
     const r1 = w1.writeWithRetry('w1', increment)
+    assert.equal(counter(w2), 2, 'the first increment is visible to another handle')
     const r2 = w2.writeWithRetry('w2', increment)
     assert.equal(counter(w1), 3, 'both increments landed: 1 → 2 → 3 (no lost update)')
-    assert.ok(r1.txId && r2.txId)
+    assert.deepEqual([r1.attempts, r1.conflicted, r2.attempts, r2.conflicted], [1, false, 1, false])
   } finally {
     cleanup()
   }
@@ -114,10 +116,108 @@ test('writeWithRetry does not rerun caller code after a permanent UNIQUE conflic
           calls++
           db.prepare('INSERT INTO url_index VALUES (?,?)').run('b', 'https://example.com')
         }),
-      /permanently quarantined: apply-failed: permanent conflict \(CONSTRAINT\)/,
+      (error: unknown) =>
+        error instanceof TransactionError &&
+        error.code === 'conflict' &&
+        error.quarantineReason === 'permanent-conflict: CONSTRAINT' &&
+        error.message.includes('permanently quarantined: permanent-conflict: CONSTRAINT'),
     )
     assert.equal(calls, 1, 'a permanent changeset conflict must not rerun caller code')
   } finally {
     cleanup()
+  }
+})
+
+test('writeWithRetry reports a write reconcile could not publish as pending, not retryable', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, OPTS).init()
+    store.writeWithRetry('seed', increment) // c = 1
+    let failures = 0
+    setAfterFsyncPathForTest((path) => {
+      if (path.includes('.build-') && failures++ === 0) {
+        throw Object.assign(new Error('injected build fsync failure'), { code: 'EIO' })
+      }
+    })
+    let calls = 0
+    assert.throws(
+      () =>
+        store.writeWithRetry('w', (db) => {
+          calls++
+          increment(db)
+        }),
+      (error: unknown) =>
+        error instanceof TransactionError &&
+        error.code === 'pending' &&
+        !error.retryable &&
+        error.cause instanceof Error &&
+        error.cause.message === 'injected build fsync failure' &&
+        store.pendingTxns().includes(`${error.txId}.txn`),
+    )
+    assert.equal(calls, 1)
+    assert.equal(counter(store), 1, 'nothing was published')
+
+    // The captured envelope is still pending, so the write lands exactly once when the
+    // next reconcile folds it; running the write again would have incremented twice.
+    store.reconcile()
+    assert.equal(counter(store), 2)
+    assert.deepEqual(store.pendingTxns(), [])
+  } finally {
+    setAfterFsyncPathForTest(null)
+    cleanup()
+  }
+})
+
+test('writeWithRetry retains a non-retryable transaction identity when its outcome is unreadable', () => {
+  for (const published of [false, true]) {
+    const { dir, cleanup } = tmpStore()
+    try {
+      const store = new SnapshotStore(dir, OPTS).init()
+      store.writeWithRetry('seed', increment)
+      const reconcile = store.reconcile.bind(store)
+      const read = store.read.bind(store)
+      const inspectionError = Object.assign(new Error('ledger temporarily unreadable'), {
+        code: 'EIO',
+      })
+      store.reconcile = () => {
+        const result = published ? reconcile() : undefined
+        store.read = () => {
+          throw inspectionError
+        }
+        if (result === undefined) {
+          throw new LockTimeoutError('publish.lock', 30)
+        }
+        return result
+      }
+      let calls = 0
+      let txId: string | undefined
+      assert.throws(
+        () =>
+          store.writeWithRetry('w', (db) => {
+            calls++
+            increment(db)
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof TransactionError)
+          assert.equal(error.code, 'outcome-unknown')
+          assert.equal(error.retryable, false)
+          assert.ok(
+            published ? error.cause === inspectionError : error.cause instanceof AggregateError,
+          )
+          txId = error.txId
+          return true
+        },
+      )
+      assert.equal(calls, 1)
+      store.reconcile = reconcile
+      store.read = read
+      store.reconcile()
+      assert.equal(counter(store), 2, 'the captured increment lands exactly once')
+      assert.ok(
+        store.read((db) => db.prepare('SELECT 1 FROM applied_tx WHERE tx_id = ?').get(txId!)),
+      )
+    } finally {
+      cleanup()
+    }
   }
 })

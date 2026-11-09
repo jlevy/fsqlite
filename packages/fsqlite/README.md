@@ -3,119 +3,46 @@
 [![Follow @ojoshe on X](https://img.shields.io/badge/follow_%40ojoshe-black?logo=x&logoColor=white)](https://x.com/ojoshe)
 [![CI](https://github.com/jlevy/fsqlite/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/fsqlite/actions/workflows/ci.yml)
 
-**Portable, stable SQLite, packaged for concurrent local agents.**
+**Portable, stable SQLite, packaged for concurrent agents.**
 
-fsqlite packages SQLite for workflows with many local agents: install this
-zero-runtime-dependency Node.js library, point cooperative processes at a store
-directory, and use familiar SQL, schemas, constraints, tools, and SQLite files.
-SQLite itself runs every transaction, and each immutable generation is a complete
-standard SQLite database that ordinary tools and bindings can open directly.
-This package is the first reference implementation of a language-independent commit
-protocol for independent transaction capture and server-free publication.
-It has no install-time scripts.
+fsqlite is ordinary SQLite with a file-level coordination layer for concurrent agents.
+It publishes complete databases as immutable versions, so writers do not share one live
+SQLite file.
 
-> **Alpha phase:** `0.1.0` defines the first public API and the draft `f1.0` store
-> format. Both may change before 1.0. The multi-process suite is extensive, but the real
-> cross-host NFS/SMB validation gate is still pending.
+You keep SQLite’s engine, SQL, transactions, portable file format, standard tools, and
+server-free operation.
+fsqlite adds concurrency-safe publication for cooperative writers.
+`seal()` can make a consistent point-in-time copy while publication continues; a
+successful copy contains one complete version, and later work is outside that copy.
+
+This zero-runtime-dependency package uses SQLite built into Node 22.18+ on 22.x, Node
+24, or Node 26 and later, through the built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html) module.
+It requires no separate SQLite installation or native build.
+fsqlite and direct `node:sqlite` calls use the same SQLite library; this package is the
+first implementation of the language-independent `f1.0` commit protocol.
+
+> **Alpha phase:** `0.1.0` defines the first public API and draft `f1.0` format.
+> Both may change before 1.0. Local POSIX multi-process behavior has extensive automated
+> coverage, but the real cross-host NFS/SMB gate and Windows publication-race validation
+> are still pending.
 
 ## Why fsqlite Exists
 
-A single computer can run many independent database clients.
-A local workspace may have an interactive application, coding agents, background
-indexers, research agents, and automation processes updating the same knowledge base,
-task graph, document catalog, or cache.
-Those writers may have substantial contention even though every process is local, and
-running a database server beside every workspace is often disproportionate.
-
-fsqlite targets the gap between a shared live SQLite file and a database service.
-
-## Core Properties
-
-- **Portable SQLite files:** Every published generation is a complete database in the
-  standard SQLite format.
-  It moves unchanged across architectures and operating systems, opens with ordinary
-  SQLite tools and bindings, and can be sealed as a plain file for archival or migration
-  between environments.
-- **Stable SQLite foundation:** The SQLite 3 file format has been
-  [backward compatible since 2004](https://sqlite.org/formatchng.html), and the SQLite
-  project [plans support through 2050](https://sqlite.org/lts.html).
-  fsqlite retains SQLite’s [widely deployed](https://sqlite.org/mostdeployed.html)
-  engine, SQL, transactions, schema, constraints, tooling, and file ecosystem.
-- **SQLite-native change capture:** `SnapshotStore` uses SQLite’s official
-  [session extension](https://sqlite.org/sessionintro.html) to record row transactions
-  in private copies and apply them with SQLite’s conflict-aware changeset API. Sessions
-  are less familiar than WAL, but this upstream feature has shipped in the SQLite
-  amalgamation since 3.13.0 in 2016. For cooperative local clients that write
-  independently in separate copies, sessions are SQLite’s native way to capture and
-  merge row changes; fsqlite adds the atomic publication protocol around them.
-- **Concurrency-safe publication:** Immutable generations, an atomic `current` pointer,
-  fencing, optimistic publication, and an exactly-once ledger protect published state
-  through process crashes and racing publishers.
-- **Server-free operation:** Deployment needs only cooperative processes and a store
-  directory; no database server, daemon, or background service is required.
-- **Language-independent protocol:** The on-disk format and commit protocol can be
-  implemented in any language; Node.js is the first reference implementation.
-
-## What fsqlite Adds to SQLite
-
-fsqlite keeps SQLite intact and adds a file-level coordination layer:
-
-| Layer | Supplied by | Role |
-| --- | --- | --- |
-| Database engine and file format | SQLite | SQL, transactions, schemas, constraints, queries, and complete portable database files |
-| Logical change capture | SQLite session extension | Records row changes and applies them later with conflict detection |
-| Store and commit protocol | [`f1.0`](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md) | Transaction envelopes, immutable generations, `current`, fencing, validation, an exactly-once ledger, and quarantine |
-| Reference package | TypeScript on built-in `node:sqlite` | A convenient npm library and CLI that implements the protocol for Node applications and agents |
-
-The durable artifact is a standard SQLite database plus the surrounding `f1.0` directory
-protocol. fsqlite defines no new storage engine or SQL dialect.
-Ordinary readers open the published SQLite file directly; cooperative writers use
-fsqlite to coordinate which complete file is current and how independent changes reach
-it.
-
-### Why This Is Practical Now
-
-SQLite’s session extension has been upstream since 2016, but it is compile-time optional
-and remains absent from many common bindings.
-That kept logical changesets less visible than WAL and page replication.
-Node’s built-in `node:sqlite` now exposes sessions, changeset application, backup, and
-ordinary SQLite access together, which makes a small zero-dependency package practical.
-
-Most distributed SQLite systems chose a different deployment model: WAL or page
-replication, a primary or daemon, consensus, a storage service, or custom readers.
-fsqlite combines SQLite’s row-level changesets with immutable generations and an atomic
-filesystem commit point.
-The individual pieces are established; the `f1.0` protocol and their server-free
-integration are the new contribution.
 The
-[research report](https://github.com/jlevy/fsqlite/blob/main/docs/research/research-2026-06-06-portable-concurrent-sqlite.md)
-contains the source analysis, prior-art review, and comparison matrix behind this
-design.
+[project README](https://github.com/jlevy/fsqlite/blob/main/README.md#why-fsqlite-exists)
+explains the shared-filesystem failure fsqlite addresses, its
+[core properties](https://github.com/jlevy/fsqlite/blob/main/README.md#core-properties),
+[what it adds to SQLite](https://github.com/jlevy/fsqlite/blob/main/README.md#what-fsqlite-adds-to-sqlite),
+and
+[why it is practical now](https://github.com/jlevy/fsqlite/blob/main/README.md#why-fsqlite-is-practical-now).
 
 ## Should You Use fsqlite?
 
-Choose a storage model from the way writers coordinate and when updates must become
-visible. A single machine can have many independent writers, while several callers can
-sometimes share one serialized writer lane.
-Writer independence, visibility, isolation, snapshot size, and write cadence determine
-the fit:
-
-Here, an “agent” is an independently running cooperative process with its own store
-handle. Threads sharing one SQLite connection belong to a different coordination model.
-
-| Situation | Default choice | Why |
-| --- | --- | --- |
-| One embedded application owns a database on a reliable local filesystem | Ordinary SQLite, often with WAL | It is simpler, provides immediate serializable transactions, and writes changed pages instead of copying a complete snapshot. |
-| Several independent local agents update compact shared state, captures may overlap, and visibility may wait for reconciliation | `SnapshotStore` | Each agent captures its transaction without the publish lease or a shared writable SQLite file; reconciliation merges and publishes the next immutable generation. |
-| Cooperative callers can serialize the complete callback, need each return to be immediately published, and specifically value immutable generations or the fsqlite format | `DirectStore` | A filesystem lease serializes copy, transaction, validation, and publication. Multiple callers may queue, but only one write lane runs at a time. |
-| Many writers need low-latency globally visible commits, high sustained throughput, rolling schemas, or serializable range and cross-row invariants | A client/server database or coordinator | Those requirements need a live coordination service or a different concurrency-control model. |
-
-`SnapshotStore` is the main fsqlite strategy for the common multi-agent case.
-It trades immediate visibility and serializability for independent capture and
-file-native handoff.
-`DirectStore` serves workloads that value immutable generations and immediate
-publication enough to serialize every complete callback.
-Ordinary SQLite remains the simpler choice for a single embedded owner.
+The
+[storage-model guide](https://github.com/jlevy/fsqlite/blob/main/README.md#choose-a-storage-model)
+compares ordinary SQLite, `SnapshotStore`, `DirectStore`, and a client/server database
+by writer independence, visibility, isolation, snapshot size, and write cadence.
 
 The
 [coordination-model design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#choose-by-coordination-model)
@@ -129,11 +56,15 @@ visibility, more transient disk use, and a multi-writer merge model that is not
 serializable. Agent count alone does not determine fit: snapshot bytes multiplied by
 write rate and burst size determine most of the cost.
 
-### Shared Filesystems and Cloud Agents
+## Shared Filesystems and Cloud Agents
 
-Safety on shared network storage depends on the capabilities of the exact mount.
-Both fsqlite strategies require correct exclusive directory creation, atomic
-rename-replace, close-to-open visibility, and file and directory fsync behavior.
+fsqlite targets shared paths that cannot provide SQLite’s live-file locking contract but
+can provide the `f1.0` publication contract.
+The
+[project README](https://github.com/jlevy/fsqlite/blob/main/README.md#shared-filesystems-and-cloud-agents)
+lists the filesystem behavior both strategies require and why it matters in cloud-agent
+sandboxes.
+
 The alpha’s one-host `fsinspect` result is useful diagnostic evidence, not proof that an
 arbitrary NFS or SMB deployment is safe across hosts.
 Once a shared mount has real multi-host evidence, prefer `SnapshotStore` when local or
@@ -157,55 +88,42 @@ explains the required filesystem evidence and deployment choices in detail.
 
 ## Architecture
 
-An fsqlite store is a directory containing immutable SQLite generations, a `current`
-pointer, and optional transaction envelopes:
-
-```mermaid
-flowchart LR
-  A["Agent A"] -->|"SnapshotStore capture"| E["Committed session changesets"]
-  B["Agent B"] -->|"SnapshotStore capture"| E
-  E --> R["Reconcile"]
-  R --> U["Fenced publication"]
-  D["Serialized caller"] -->|"DirectStore"| U
-  U -->|"write and fsync"| G[("Immutable SQLite files")]
-  U -->|"atomic replace"| P["current"]
-  P -.->|"names the head"| G
-  Q["Ordinary SQLite readers"] -->|"open named generation"| G
-```
-
-`SnapshotStore.write()` runs a normal SQLite transaction on a private copy and records
-the result with SQLite’s session extension.
-It commits that changeset as a uniquely named envelope, so independent captures can
-overlap. `reconcile()` applies accepted envelopes to another private copy, validates the
-result, and publishes the next generation.
-`DirectStore` skips the envelope step and serializes the complete copy-mutate-publish
-path.
+The [project README](https://github.com/jlevy/fsqlite/blob/main/README.md#architecture)
+shows a typical store directory, its data and coordination files, and how the two write
+paths publish the same layout.
 
 Replacing `current` is the store commit point.
 The snapshot is written and fsynced first, so readers see either the previous complete
 SQLite database or the next one.
-Fencing, optimistic checks on `current`, and an in-snapshot transaction ledger protect
-publication from racing publishers, stale leases, duplicate application, and process
-crashes. The
+An exclusive publication lock, optimistic checks on `current`, and an in-snapshot
+transaction ledger protect publication from racing publishers and duplicate application.
+The lock never expires on age.
+A crashed holder blocks publication until offline recovery.
+Stop and prevent restart of every store client on every host, verify none can resume,
+remove only `publish.lock`, and run repair before restarting.
+Stop all clients before upgrading.
+Upgrade writers, maintenance processes, and clients that acquire read leases together
+before restarting them.
+The
 [architecture design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#architecture)
 covers the complete store layout, publication races, and consistency boundaries.
 
-### Reference Implementation
+## Reference Implementation
 
-This package is a small set of TypeScript modules built for npm.
-It has zero runtime dependencies and runs on Node’s built-in
-[`node:sqlite`](https://nodejs.org/api/sqlite.html), filesystem, and cryptography APIs.
-`node:sqlite` supplies SQLite, session changesets, and online backup without a native
-add-on or prebuilt binary.
+This package’s reference implementation is roughly 4,100 lines of TypeScript code
+(November 2026), including the CLI and excluding tests and generated output.
+It uses only Node built-ins and has zero runtime dependencies.
+Supported Node releases include SQLite and expose it through the built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html) module; fsqlite uses that module
+with Node’s filesystem and cryptography APIs.
+Node supplies the database engine and native integration, while the npm package supplies
+the `f1.0` protocol implementation and CLI. Installing it requires no separate SQLite
+installation, native add-on, or install-time build.
 
-The `f1.0` format is language-independent, with Node serving as the first
-implementation. Any SQLite binding can read a published generation.
-A `SnapshotStore` implementation in another language needs SQLite session and changeset
-support; a `DirectStore` implementation needs ordinary SQLite.
-Either can implement the same filesystem protocol and interoperate through the same
-store. The
-[upstream source confirmations](https://github.com/jlevy/fsqlite/blob/main/docs/upstream-source-confirmations.md)
-record the exact SQLite and Node capabilities behind the reference package.
+The
+[project README](https://github.com/jlevy/fsqlite/blob/main/README.md#reference-implementation)
+describes what an implementation in another language needs to read or write the same
+store.
 
 ## Install
 
@@ -213,43 +131,70 @@ record the exact SQLite and Node capabilities behind the reference package.
 npm install fsqlite@alpha
 ```
 
-Requires Node `>=22.18.0 <23 || >=24.0.0`. The split range is intentional: fsqlite
-statically imports the `node:sqlite` backup API introduced in Node 22.16, and its source
-development loop also relies on type stripping stabilized in Node 22.18. Node 23 is not
-an LTS line and versions before 23.8 cannot load the package.
+Requires Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`. The split range is intentional:
+fsqlite statically imports the `node:sqlite` backup API introduced in Node 22.16, and
+its source development loop also relies on type stripping stabilized in Node 22.18. Node
+23 is not an LTS line and versions before 23.8 cannot load the package.
+Node 25, a non-LTS line, reached end of life on 2026-06-01 and is excluded too.
+
+Prefer Node 24.22 or later, or Node 26.8 or later: those releases carry the 2026
+`node:sqlite` memory-safety fixes, including the guard against closing a database from
+inside a SQLite callback.
+Node 26 has been the Active LTS line since 2026-10-28, and Node 24 has been in
+Maintenance since 2026-10-20; both lines mark `node:sqlite` as a release candidate and
+print no experimental warning.
+Node 22 (Maintenance, end of life 2027-04-30) lacks those fixes, still marks
+`node:sqlite` as in active development, and prints
+`ExperimentalWarning: SQLite is an experimental feature` once per process.
+The warning comes from Node, not from fsqlite; the `fsqlite` CLI hides that one notice,
+and an application can start Node with `--disable-warning=ExperimentalWarning`. See the
+[Node release schedule](https://github.com/nodejs/Release) and the
+[`node:sqlite` stability notes](https://nodejs.org/api/sqlite.html).
 
 ## Quick Start
 
 ```ts
 import { SnapshotStore } from 'fsqlite'
 
-const store = new SnapshotStore('./example.fsqlite', {
+const store = new SnapshotStore('./knowledge.fsqlite', {
   schema: `
-    CREATE TABLE kv (
+    CREATE TABLE facts (
       key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
     )
   `,
   schemaVersion: 1,
-  conflictPolicy: { kv: 'lww', '*': 'strict' },
+  conflictPolicy: { facts: 'lww', '*': 'strict' },
 }).init()
 
 // A writer records an envelope without taking the publish lease.
-store.write('worker-a', (db) => {
-  db.prepare('INSERT INTO kv VALUES (?, ?)').run('answer', '42')
+store.write('research-agent', (db) => {
+  db.prepare(
+    'INSERT INTO facts VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+  ).run('answer', '42')
 })
 
 // Reconciliation folds pending envelopes into a new immutable snapshot.
 store.reconcile()
 
-const row = store.read((db) => db.prepare('SELECT value FROM kv WHERE key = ?').get('answer'))
-console.log(row)
+const answer = store.read(
+  (db) => db.prepare('SELECT value FROM facts WHERE key = ?').get('answer')?.value,
+)
+console.log(answer) // 42
 ```
 
 Every table must have a non-null primary key.
 The `f1.0` writer contract does not support virtual tables or DDL inside write
-callbacks. Conflict actions are `lww` (replace), `union` (keep the existing row), and
-`strict` (quarantine the conflicting envelope).
+callbacks. `SnapshotStore` also rejects a schema that declares triggers, because
+reconciliation would fire them a second time, and an `ON CONFLICT REPLACE` or `IGNORE`
+clause on a primary key or `UNIQUE` constraint, which would let reconciliation resolve a
+clash silently instead of applying the merge policy; use `DirectStore` for such a
+schema. Foreign-key actions such as `ON DELETE CASCADE` work with both strategies.
+Give tables that concurrent `SnapshotStore` writers insert into caller-generated keys,
+such as UUIDs: writers seeded from the same snapshot allocate the same next rowid or
+`AUTOINCREMENT` value, so their inserts always conflict.
+Conflict actions are `lww` (replace), `union` (keep the existing row), and `strict`
+(quarantine the conflicting envelope).
 The `'*'` default is `strict` when omitted.
 The policy is deployment configuration rather than stamped `f1.0` store metadata, so
 every reconciler for one store epoch must use the same effective policy.
@@ -258,9 +203,11 @@ a causal or globally clock-ordered last-write guarantee across hosts.
 
 Call `init()` on each application handle before ordinary use.
 On an existing store it verifies the exact caller-schema identity rather than executing
-the DDL again. `schemaVersion` is an integer from 0 through 2,147,483,647. Incrementing
-it does not migrate a store; a different version or exact schema string is incompatible
-until a future explicit migration protocol exists.
+the DDL again. If the store still holds snapshots but has lost `current`, `init()`
+refuses to create a new empty snapshot 0; run `fsqlite repair` to restore the pointer.
+`schemaVersion` is an integer from 0 through 2,147,483,647. Incrementing it does not
+migrate a store; a different version or exact schema string is incompatible until a
+future explicit migration protocol exists.
 
 ## Choose a Write Strategy
 
@@ -361,6 +308,92 @@ The
 [store-layout specification](https://github.com/jlevy/fsqlite/blob/main/docs/fsql-format-spec.md#2-store-layout)
 defines the complete directory identity and structure.
 
+## API Reference
+
+Everything below is exported from `fsqlite`, along with every option and result type
+named here. Invalid arguments throw `TypeError`; every other deliberate failure is an
+[`FsqliteError`](#errors).
+
+### Store Handles
+
+`new SnapshotStore(dir, options)` and `new DirectStore(dir, options)` create handles on
+the store root `dir` without touching the filesystem.
+`StoreOptions` holds `schema` (the caller DDL), `schemaVersion` (default 1),
+`conflictPolicy` (SnapshotStore only), `toolVersion` (recorded on envelopes), and
+`maxEnvelopeBytes` (SnapshotStore only; default 1 GiB). `DirectStoreOptions` is
+`StoreOptions` without the last two.
+
+| Method | Returns | Contract |
+| --- | --- | --- |
+| `init()` | the handle | Creates the store in an empty or missing directory, or verifies the exact schema identity of an existing one |
+| `write(writerId, fn)` | tx id or `null` | SnapshotStore: runs `fn` on a private copy and commits its changeset as a pending envelope; `null` when `fn` changed nothing |
+| `writeWithRetry(writerId, fn, { maxRetries })` | `WriteWithRetryResult` | SnapshotStore: writes, reconciles, and re-runs `fn` on a newer head after a `strict` conflict (default 5 attempts) |
+| `reconcile({ maxRetries, lockOpts })` | `ReconcileResult` | SnapshotStore: folds the pending tail into the next published version (`published`, `applied`, `quarantined`, `attempts`) |
+| `pendingTxns()` | `string[]` | SnapshotStore: committed pending envelope names in the order reconcile applies them |
+| `write(fn, { lockOpts, maxRetries })` | version | DirectStore: copies, mutates, validates, and publishes under the publish lock; may re-run `fn` after a lost race |
+| `read(fn)` | `fn`’s result | Runs `fn` on a read-only connection to the published head |
+| `currentVersion()` | version | The version `current` names |
+| `readLease({ maxRetries, lockOpts })` | `ReadLease` | Claims a pin under the publication lock; `heartbeat()` keeps it fresh, `release()` drops it |
+| `snapshotPath(version)` | path | The file of a published version |
+| `validate()` | `ValidateResult` | Classifies the store as `sealed`, `live`, `in-flight-capture`, `corrupt`, or a recognition failure, with issues |
+| `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses an unhealthy store |
+| `planRepair({ lockOpts })` | `RepairResult` | Lists the steps `repair()` would take without changing anything |
+| `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while any publisher lock exists |
+| `seal(destPath)` | `destPath` | Writes an integrity-checked standalone copy of the head; refuses while envelopes are pending |
+
+`lockOpts` is a `LockOptions` with `timeoutMs` (default 30 s), `pollMs` (25 ms),
+`staleMs` (20 s), and the deprecated `onStaleBreak` callback, which is never invoked.
+All timings must be positive safe integers, and `timeoutMs > staleMs` remains required.
+`staleMs` controls heartbeat and diagnostic age; it never permits lock takeover.
+`gc` keeps `DEFAULT_RETAINED_SNAPSHOTS` (3) predecessors by default and treats leases
+and transients older than 60 s as abandoned.
+A `ReadLease` is disposable, so `using lease = store.readLease()` releases it at the end
+of the scope where the runtime supports `using` declarations (Node 22 does not).
+
+A `DirectStore` write returns the version it published:
+
+```ts
+import { DirectStore } from 'fsqlite'
+
+const direct = new DirectStore('./catalog.fsqlite', {
+  schema: 'CREATE TABLE items (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL)',
+  schemaVersion: 1,
+}).init()
+
+const version = direct.write((db) => {
+  db.prepare('INSERT OR REPLACE INTO items VALUES (?, ?)').run('a1', 'First item')
+})
+console.log(version, direct.read((db) => db.prepare('SELECT count(*) AS n FROM items').get()?.n))
+```
+
+A lease pins a version while another tool copies it:
+
+```ts
+import { copyFileSync } from 'node:fs'
+
+const lease = store.readLease()
+try {
+  copyFileSync(store.snapshotPath(lease.version), './backup.sqlite')
+} finally {
+  lease.release()
+}
+```
+
+### Helpers
+
+| Export | Contract |
+| --- | --- |
+| `recognizeStore(dir)` | Returns `{ state: 'supported', marker }` or a `not-a-store`, `invalid`, or `unsupported` state with an issue, without throwing |
+| `readStoreMarker(dir)` | Returns the `StoreMarker` or throws `StoreFormatError` |
+| `backupDatabase(source, dest, { rate, progress })` | Copies a live SQLite database with SQLite’s online backup API (async) |
+| `isSqliteFile(path)`, `sqliteFacts(path)`, `integrityReport(path)` | Schema-agnostic facts and integrity problems for any SQLite file |
+| `inspectFilesystem(dir)`, `formatInspectReport(report)` | The `fsinspect` probes and verdict for an existing directory, and their text rendering |
+| `capabilities()` | Whether the `node:sqlite` binding has the session extension, changeset apply, backup, and a rebaser |
+| `FSQLITE_APPLICATION_ID`, `STORE_FORMAT_NAME`, `STORE_FORMAT_VERSION`, `STORE_MARKER_FILENAME` | The `f1.0` identity constants |
+
+`fsqlite/cli` exports `main(argv)`, which runs one CLI invocation in-process (with
+`argv` excluding the node and script paths) and returns its exit code.
+
 ## CLI
 
 The CLI can inspect and maintain a store without application schema code:
@@ -368,25 +401,79 @@ The CLI can inspect and maintain a store without application schema code:
 ```text
 fsqlite info      <dir>
 fsqlite validate  <dir>
-fsqlite stats     <path> [--json]
+fsqlite stats     <path>
 fsqlite gc        <dir> [--retain N]
 fsqlite seal      <dir> <out.sqlite>
-fsqlite repair    <dir>
-fsqlite doctor    <path> [--json] [--fix]
-fsqlite fsinspect <dir> [--json]
+fsqlite repair    <dir> [--dry-run]
+fsqlite doctor    <path> [--fix]
+fsqlite fsinspect <dir>
 ```
 
-Recognition and health have distinct exit codes: healthy `0`, in-flight `2`, invalid or
-corrupt `3`, unsupported `4`, and not an fsqlite store `64`.
+Every command takes `--json` and `--help`; `fsqlite --help` and `fsqlite --version` work
+too. Arguments are parsed strictly: an unknown command or option, a missing or extra
+argument, or an invalid `--retain` is a usage error that changes nothing.
 
-`seal` produces a standalone SQLite copy.
-`stats` and `doctor` also accept a plain SQLite file.
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Success; a reported store is `sealed` or `live` |
+| `1` | The operation failed |
+| `2` | In flight: a capture, publication, or maintenance step is mid-flight |
+| `3` | The store is invalid or corrupt |
+| `4` | The store needs a newer format version or feature |
+| `5` | `fsinspect`: the filesystem cannot host a store |
+| `64` | Usage error, or the path is not an fsqlite store |
+
+A command that reports on a store (`info`, `validate`, `stats`, `doctor`, `repair`)
+exits with the code of the state it reports, and a command that fails exits with the
+code of its error, so `gc` on an unsupported store exits `4` like `validate` does.
+`repair --dry-run` prints the steps repair would take without changing anything.
+`repair` and `doctor --fix` delete every transient file, so run them only when no writer
+or reconciler is active.
+Errors print their cause chain; set `FSQLITE_DEBUG=1` for the stack.
+
+`seal` produces a standalone SQLite copy at a new path outside the store.
+It publishes the complete export atomically and refuses an existing destination,
+including symlinks, or a destination with `-journal`, `-wal`, or `-shm` sidecars.
+Choose a path no live SQLite connection uses; to replace an old export, choose a new
+filename and remove the old export only after the new one succeeds.
+`gc` holds the publish lock for every deletion and refuses a store whose head fails
+validation. `stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
-Its safe verdict requires working directory fsync as well as the coordination
-primitives. The QA runbook includes a
+Its safe verdict requires working directory fsync and a filesystem whose fsync persists
+as well as the coordination primitives, so it refuses tmpfs, ramfs, and overlayfs
+mounted with `volatile`. It probes an existing directory and never creates one.
+The QA runbook includes a
 [manual CLI walkthrough](https://github.com/jlevy/fsqlite/blob/main/docs/qa-runbook.md#b3-cli-walkthrough-on-a-real-store)
 and filesystem capability check.
+
+## Errors
+
+Every error fsqlite raises on purpose is an `FsqliteError` with a stable `code` and a
+`retryable` flag, so callers branch on those rather than on message text.
+Argument mistakes throw `TypeError`.
+
+| `code` | Meaning | What to do |
+| --- | --- | --- |
+| `not-a-store` | The path has no `fsqlite.json` | Check the path |
+| `invalid` | `fsqlite.json` is malformed | Inspect the marker; nothing may mutate the store |
+| `unsupported` | A newer format version or required feature | Use a newer fsqlite |
+| `corrupt` | Torn or dangling pointer, identity mismatch, or a head that fails integrity checks | Run `repair` |
+| `in-flight` | A live publisher holds the lock | Wait, then retry |
+| `pending` | A captured write is not yet published (`TransactionError.txId`) | Reconcile and inspect its outcome; never re-run the write |
+| `outcome-unknown` | The captured write’s outcome could not be read (`TransactionError.txId`) | Restore access and inspect that transaction; never re-run the write |
+| `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
+| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |
+| `post-publish` | A step failed after `current` named the new version (`PostPublishError.published`) | Do not re-run the write |
+| `incompatible` | The handle’s schema, schema version, or SQLite binding cannot serve the store | Fix the caller |
+| `refused` | A precondition failed, such as sealing a pending tail or a callback that changed the schema | Fix the call |
+| `io` | A required filesystem step failed; `cause` holds the system error | Fix the environment |
+
+`StoreFormatError` (the recognition codes, with `state`), `ConflictError` (with
+`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`), and
+`TransactionError` (with `txId` and `quarantineReason`) are subclasses.
+A lost read-lease heartbeat is `refused` and non-retryable: take a new lease before
+reading further. Repeating a heartbeat cannot restore a released or collected pin.
 
 ## Correctness Model
 
@@ -455,13 +542,19 @@ is the normative protocol authority.
   addition to retained snapshots, read leases, a reconcile build, and envelopes.
   Reconcile also loads the lifetime `applied_tx` ledger, which is not yet checkpointed.
   Monitor free space and pending backlog.
-- DirectStore holds its lease across copy, callback, checks, fsync, and publication.
-  Configure a stale window longer than the worst-case operation.
-  A stolen lease is fenced safely but can cause the callback to retry.
-- Use `readLease()`, `seal()`, or the backup helpers for live backups.
-  `seal()` acquires its own read lease for the selected snapshot.
-  An arbitrary recursive directory copy racing publication or garbage collection is not
-  a supported backup contract.
+- DirectStore holds its lease across copy, callback, checks, fsync, and publication, and
+  renews it at each step boundary.
+  A slow or paused holder keeps the lock; contenders time out rather than steal it.
+  A crashed holder requires the offline recovery procedure above.
+- `seal()` pins one published snapshot and creates an integrity-checked point-in-time
+  SQLite file while writers continue.
+  It refuses to start while committed envelopes are pending, so reconcile first;
+  envelopes committed and versions published after it selects the snapshot are outside
+  that export. Use `readLease()` or `backupDatabase()` for other live-copy workflows; an
+  arbitrary recursive directory copy racing publication or garbage collection is not
+  supported. The
+  [backup and copying design](https://github.com/jlevy/fsqlite/blob/main/docs/fsqlite-design.md#backup-and-copying)
+  defines the supported workflows.
 - Write callbacks are data transactions over a fixed schema.
   Persistent and temporary DDL, including temporary tables and triggers, and virtual
   tables are outside the `f1.0` concurrent-writer contract.

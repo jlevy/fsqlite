@@ -33,7 +33,7 @@ The `current` file names the snapshot that readers should open.
 
 Everything in this format serves two correctness invariants:
 
-- **R1 (bounded loss).** A crash, stale-lock overlap, torn capture, or interrupted
+- **R1 (bounded loss).** A crash, paused publisher, torn capture, or interrupted
   protocol operation loses at most the *unpublished tail* and never a previously
   published snapshot. The **commit point of the store is snapshot publication** (§6); see
   §10 for what is durable before that point.
@@ -42,6 +42,8 @@ Everything in this format serves two correctness invariants:
   This invariant does not cover an arbitrary recursive copy of a live directory.
 - **R2 (no silent corruption).** Validation surfaces every detectable inconsistency
   (§11) rather than accepting or repairing it silently.
+  An archived transaction absent from the published ledger is inconsistent even when
+  SQLite integrity checks pass.
 
 Three structural properties deliver them:
 
@@ -51,12 +53,13 @@ Three structural properties deliver them:
    rename.
 2. **The pointer swap is the only commit.** A snapshot exists but is not *the store*
    until `current` names it, and `current` is replaced atomically.
-3. **Safety does not depend on exclusive lease ownership.** The publish lock (§7) only
-   reduces wasted work.
+3. **Publication requires exclusive lock ownership.** The publish lock (§7) remains
+   owned until its holder releases it; age MUST NOT authorize takeover.
    Exactly-once application is guaranteed by recording each applied transaction ID
    inside its snapshot and by publishing only from the still-current base (§6). Lock
-   holders can overlap after a stale-lock break, but they cannot double-apply or corrupt
-   a conforming store.
+   ownership serializes the check of `current` with the pointer replacement.
+   A token check followed by a rename is not an atomic compare-and-swap and cannot make
+   overlapping publishers safe.
 
 Each published snapshot remains an ordinary SQLite file: any SQLite binding in any
 language can open it with no fsqlite code at all.
@@ -75,12 +78,15 @@ paths below are relative to it.
   fsqlite.json.<uuid>.tmp          # transient: marker creation (§3)
   publish.lock/                    # mkdir lease, present only while held (§7)
     owner.json                     #   {token, pid, host, at}
+  publish.lock.<hex10>.tmp/        # transient: lock moved aside by a break or release (§7)
   snapshots/
     000000000000.fsqlite.sqlite    # immutable published snapshot, version 0 (§3)
     000000000001.fsqlite.sqlite
     .build-<hex10>.sqlite          # transient: reconcile build (§6)
     .direct-<hex10>.sqlite         # transient: DirectStore build (§9)
+    .gc-<version>-<hex10>.tmp      # transient: snapshot tombstoned by GC (§8 G2)
     *.tmp                          # transient: init's snapshot-0 build (§3)
+    *.tmp-journal                  # transient: SQLite's rollback journal for that build
   tx/
     pending/
       <txid>.txn/                  # transaction envelope (§5)
@@ -92,6 +98,7 @@ paths below are relative to it.
     quarantine/<txid>.txn/         # rejected envelopes (+ QUARANTINE reason file)
   leases/
     <token>.lease                  # read lease: {version, pid, host, at} (§8)
+    <token>.lease.<hex10>.tmp      # transient: lease publication (§8)
 ```
 
 `fsqlite.json` makes the directory self-identifying.
@@ -128,10 +135,13 @@ Naming grammar:
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
   Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
-- **Transients** are exactly the files matching: prefix `.build-`, prefix `.direct-`,
-  prefix `.work-` (under `tx/pending/`), or suffix `.tmp`. Transients are never part of
-  store state; a *fresh* transient indicates work in flight, an *old* one indicates a
-  crash (§11).
+- **Transients** are exactly the entries at the store root, in `snapshots/`, in
+  `tx/pending/`, or in `leases/` matching: prefix `.build-`, prefix `.direct-`, prefix
+  `.work-` (under `tx/pending/`), suffix `.tmp`, or suffix `.tmp-journal` (the rollback
+  journal SQLite keeps beside a `.tmp` database while it writes one).
+  All are files except `publish.lock.<hex10>.tmp/`, a directory, so removing a transient
+  MUST handle both. Transients are never part of store state; a *fresh* transient
+  indicates work in flight, an *old* one indicates a crash (§11).
 - **Envelope dir**: `<txid>.txn` (§5 defines `<txid>`).
 - **Hex tokens** (`<hex10>` etc.)
   are lowercase hex from a cryptographically random source; their only requirement is
@@ -183,10 +193,34 @@ Requirements:
 
 - **S4.** Every *caller* table (any table not named `sqlite_*`, `applied_tx`, or
   `fsqlite_meta`) MUST have a primary key, and unless it is a single-column
-  `INTEGER PRIMARY KEY` (a non-null rowid alias), every PK column MUST be declared
-  `NOT NULL`. Writers/initializers MUST reject schemas violating this requirement
-  because the merge policy (§6) is keyed on primary keys, and SQLite otherwise permits
-  NULLs in non-integer PKs.
+  `INTEGER PRIMARY KEY` that is a rowid alias (and therefore non-null), every PK column
+  MUST be declared `NOT NULL`. Writers/initializers MUST reject schemas violating this
+  requirement because the merge policy (§6) is keyed on primary keys, SQLite otherwise
+  permits NULLs in non-integer PKs, and a session omits every row whose key is NULL. A
+  column declared `INTEGER PRIMARY KEY DESC` is not a rowid alias (a documented SQLite
+  quirk), so it too MUST be `NOT NULL`; the table-constraint form
+  `PRIMARY KEY (id DESC)` remains an alias.
+  A caller schema used by the SnapshotStore Writer or Reconciler role MUST NOT declare
+  triggers. `sqlite3changeset_apply` executes ordinary statements, so a trigger fires
+  again during reconcile, and the rows it already wrote at capture then conflict with
+  that second firing (an `AFTER INSERT` audit row hits CONFLICT, a counter update hits
+  DATA), quarantining valid envelopes.
+  SQLite can disable triggers per connection (`SQLITE_DBCONFIG_ENABLE_TRIGGER`), but
+  node:sqlite does not expose it, so `f1.0` forbids them: initialization and every open
+  by a Writer or Reconciler MUST reject a schema whose `sqlite_schema` holds a trigger,
+  naming it. The DirectStore strategy (§9) applies no changeset, so its triggers fire
+  once and are permitted.
+  For the same reason, such a schema MUST NOT declare an `ON CONFLICT REPLACE` or
+  `ON CONFLICT IGNORE` clause on a primary key or `UNIQUE` constraint: the apply
+  statements would resolve a clash by that clause instead of reporting it to the
+  conflict handler, so REPLACE deletes the existing row and IGNORE drops the incoming
+  change, both while the envelope is ledgered as applied and whatever the table’s
+  policy. Initialization and every open by a Writer or Reconciler MUST reject such a
+  schema, naming the table; DirectStore permits it.
+  A `NOT NULL` conflict clause is permitted, because capture already substituted its
+  default. Foreign-key actions (`ON DELETE`/`ON UPDATE` `CASCADE`, `SET NULL`,
+  `SET DEFAULT`) are permitted for both strategies; F3 applies their recorded effects
+  without running them again.
   The `f1.0` Writer role does not support virtual tables: SQLite sessions do not capture
   them, and their implementation-owned shadow tables do not satisfy this caller-table
   contract. Derived indexes that use virtual tables belong outside the envelope writer
@@ -203,11 +237,18 @@ Requirements:
 Snapshot 0 is the empty initial snapshot created by `init` (empty caller tables, both
 reserved tables, identity stamped).
 First-open MUST be fenced: build under the publish lock through a uniquely-named
-transient, rename into place, and then publish the pointer so concurrent initializers
-converge on one snapshot 0. After init (and on every reopen), an implementation MUST
-verify compatibility: the snapshot identity matches `fsqlite.json`, `user_version`
-equals its `schema_version`, `application_id` equals `0x4653514C`, and
-`fsqlite_meta.schema_hash` equals the hash of its exact supplied DDL string.
+transient, commit it as snapshot 0 without replacing (as in F5c), and then publish the
+pointer so concurrent initializers converge on one snapshot 0. When `fsqlite.json`
+exists but `current` does not, initialization MUST refuse if `snapshots/` holds any
+snapshot (including snapshot 0) and MUST direct the operator to repair (§11): the store
+has a lineage whose pointer was lost, and building a new snapshot 0 would roll every
+reader back to an empty store, after which repair would delete the newer snapshots as
+orphans. Only a marked store with no snapshot (a first-open that crashed before its
+commit) may be initialized again.
+After init (and on every reopen), an implementation MUST verify compatibility: the
+snapshot identity matches `fsqlite.json`, `user_version` equals its `schema_version`,
+`application_id` equals `0x4653514C`, and `fsqlite_meta.schema_hash` equals the hash of
+its exact supplied DDL string.
 The last check rejects a *divergent schema at the same version*, which the integer alone
 cannot catch.
 
@@ -279,6 +320,11 @@ chronological.
    Temporary schema objects include the callback-protection triggers installed by the
    implementation. A writer MUST reject such an attempt rather than silently discard or
    publish it. An empty changeset means the write is a no-op: produce no envelope.
+   The working copy MUST enforce foreign keys (`PRAGMA foreign_keys = ON`), so the
+   callback observes declared constraints and its foreign-key actions run during
+   capture: the session records every row an action deletes, nulls, or rewrites as an
+   ordinary change, and the envelope is complete without reconcile running the action
+   again.
 4. **W4.** Create `<txid>.txn/`, write `changeset.bin`, write `manifest.json`, and
    **write the zero-byte `COMMITTED` marker last**. An envelope without `COMMITTED` MUST
    be ignored by reconcile (it is an aborted/in-progress capture) and is quarantined by
@@ -312,15 +358,18 @@ Protocol:
 3. **F3.** For each envelope in order:
    - already in *seen* → mark **archivable** (it is in this lineage; move to
      `tx/applied/` after publish);
-   - payload missing/unreadable, payload larger than the configured cap (Node default 1
-     GiB), digest ≠ `changeset_sha256`, manifest `tx_id` differs from the envelope
+   - payload or manifest missing/unreadable, manifest valid JSON but not an object (Node
+     reason `malformed-manifest`), payload larger than the configured cap (Node default
+     1 GiB), digest ≠ `changeset_sha256`, manifest `tx_id` differs from the envelope
      directory, `format_version` or `store_id` differs from the marker, or
      `schema_version` or `schema_hash` differs from the reconciler’s → **quarantine**
      with a reason; never abort the batch;
    - otherwise **apply** the changeset under the per-table merge policy (below), with
-     foreign-key enforcement deferred across filtered passes until the complete envelope
-     has landed; an envelope that names `applied_tx` or `fsqlite_meta` MUST be
-     quarantined; then run `PRAGMA foreign_key_check` and record `tx_id` in
+     foreign-key enforcement off on the build (`PRAGMA foreign_keys = OFF`, set outside
+     any transaction), so the recorded effects of the writer’s foreign-key actions land
+     exactly once instead of the actions running again; an envelope that names
+     `applied_tx` or `fsqlite_meta` MUST be quarantined; then run
+     `PRAGMA foreign_key_check` (which works with enforcement off) and record `tx_id` in
      `applied_tx`; all three operations occur in one transaction in the build snapshot
      before publication; if the apply or foreign key check aborts → **quarantine** with
      the reason; continue with the next envelope.
@@ -329,22 +378,52 @@ Protocol:
 4. **F4.** Reassert the build’s application ID, reserved-table shapes and metadata,
    marker identity, schema version, and schema hash.
    Then run the integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`). A
-   failure aborts the whole reconcile (the build is a discarded transient; nothing was
-   published).
+   failure aborts the whole reconcile and publishes nothing.
+   A failure at any step before the build is committed (F5c) MUST discard the build
+   transient, so a failing reconcile never leaves a head-sized file behind per attempt.
 5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
    moves, and finish. Otherwise **publish** under the lock (§7):
    - **F5a.** Re-read `current`; if ≠ base, a peer published first, so discard the build
      and retry from F1 (**optimistic concurrency**).
    - **F5b.** Re-validate lock ownership by token (**fencing**, §7); on loss, discard
      and retry.
-   - **F5c.** fsync the build → `rename()` it to `snapshots/<base+1>...` (the rename
-     MUST replace any orphan left at that name by a previously crashed publish) → fsync
-     the directory → swap the pointer per P2/P3.
-6. **F6.** After publish (outside the lock), move applied and archivable envelopes to
-   `tx/applied/` and quarantined ones to `tx/quarantine/`, writing each quarantined
-   envelope a `QUARANTINE` file containing the reason.
+   - **F5c.** fsync the build (this MAY happen before the lock is taken), then **commit
+     it without replacing** to `snapshots/<base+1>.fsqlite.sqlite`: touch the build’s
+     mtime, record its identity (device, inode, size, and mtime), hard-link it to the
+     snapshot name (`link(2)`, which fails with `EEXIST` rather than replace), remove
+     the build name, and fsync `snapshots/`. A replacing `rename()` MUST NOT be used for
+     this step, to preserve any existing generation and evidence of a previous
+     publication. If the name exists: re-read `current`, and if it is ≥ base+1 a peer
+     published first, so discard and retry from F1. If `current` is still below that
+     version, fail without deleting or replacing the entry, regardless of age.
+     It may be an interrupted publish or evidence of a former published lineage after an
+     older client rolled back the pointer.
+     Stop all clients and run explicit repair before publishing again.
+     Immediately before the pointer swap, re-check `current` == base, fencing (L3), and
+     that the snapshot name still has the recorded identity.
+     On any mismatch, remove the entry only while it is still this holder’s build and
+     `current` < base+1, then retry.
+     Swap the pointer per P2/P3. Then re-check the identity once more: if the name no
+     longer holds this build, `current` names another holder’s snapshot, so the attempt
+     published nothing of its own and MUST retry rather than report success.
+     A conforming target filesystem MUST support hard links with these semantics.
+6. **F6.** After publish (outside the lock), or after a build that applied nothing, open
+   the snapshot that `current` names *now* and read its ledger.
+   Move to `tx/applied/` only envelopes whose `tx_id` that ledger contains.
+   If it contains every envelope the build applied or found archivable, the published
+   lineage is the build’s own: move the build’s quarantined envelopes that the ledger
+   does not contain to `tx/quarantine/`, writing each a `QUARANTINE` file containing the
+   reason. Otherwise external interference moved `current` to a lineage the build never
+   saw; every remaining envelope MUST stay in `tx/pending/` for the next reconcile to
+   classify against that lineage.
+   An implementation MUST NOT archive an envelope because its own build applied it.
    The reason MUST be written before the move; if it cannot be persisted, leave that
    envelope in place and fail loudly.
+   A failure after the pointer swap (here, or a directory fsync after the pointer
+   rename) MUST be reported as distinct from a failure before it, because a caller that
+   reruns a write whose version is already published applies it twice.
+   The Node implementation reports this as `PostPublishError`, with the version in its
+   `published` property.
    These moves are non-critical: if a crash skips them, the ledger makes the leftovers
    archivable on the next run.
 
@@ -355,6 +434,8 @@ both build, but only one can publish a given version; the loser rebuilds from th
 winner’s snapshot, where the winner’s ledger makes already-folded envelopes no-ops.
 A crash before F5c publishes nothing (the build is a transient); a crash after F5c loses
 only the F6 moves, which are recovered by the ledger-skip.
+Because F6 consults the ledger of the head `current` names rather than the build’s own
+belief, an envelope leaves `tx/pending/` only once it is in the published lineage.
 **`base_version` in the manifest is informational.
 An envelope seeded from version N may be folded into version N+k.** The per-table policy
 resolves cross-version merges; the base does not pin them.
@@ -399,9 +480,15 @@ constraints at each envelope boundary:
 - PRIMARY KEY DATA and CONFLICT cases use the table policy when replaceable.
 - NOT NULL, UNIQUE, and CHECK failures surface as nonreplaceable CONSTRAINT outcomes and
   quarantine the complete envelope.
-- Foreign-key enforcement is deferred across all filtered passes for one envelope, then
-  `foreign_key_check` runs before the ledger row is written.
-  A persistent violation quarantines the complete envelope.
+- Foreign-key enforcement is off while an envelope’s filtered passes run, so a parent
+  may land in a later pass than its child and no action fires twice; `foreign_key_check`
+  then runs before the ledger row is written.
+  A violation quarantines the complete envelope.
+  Actions are evaluated once, at capture: a recorded cascade covers only the rows that
+  existed in the writer’s copy, so a merge that leaves another envelope’s new child
+  pointing at a deleted parent quarantines whichever envelope completes the violation.
+  (SQLite’s `SQLITE_CHANGESETAPPLY_FKNOACTION` apply flag suppresses actions with
+  enforcement on, but node:sqlite exposes no apply flags.)
 - The pre-publication integrity gate repeats `foreign_key_check` over the complete
   build.
 
@@ -415,45 +502,76 @@ tables; it is a client pattern, not a format feature.
 
 ## 7. The Publish Lock
 
-The publish lock is a **`mkdir` lease**. A conforming target filesystem MUST give
-exclusive directory creation semantics, so `mkdir(store-root/publish.lock)` succeeds for
-exactly one racing creator.
+The publish lock is an **exclusive `mkdir` lock**. A conforming target filesystem MUST
+give exclusive directory creation semantics, so `mkdir(store-root/publish.lock)`
+succeeds for exactly one racing creator.
 The environment must validate this capability rather than infer it from a filesystem
-label.
-The lease is held only around the publish step (F5), not around writer work or the
-build.
+label. SnapshotStore takes the lock only around publication (F5), not writer work or the
+build. DirectStore holds it through its complete write.
+Maintenance and read-lease acquisition also hold it while changing the state they
+coordinate. (Informative: on NFSv4.1 and later the session reply cache gives
+non-idempotent operations such as `MKDIR` and `RENAME` exactly-once semantics, RFC 8881
+§2.10.6, so a retransmitted `mkdir` is not misreported as `EEXIST`. NFSv3 relies on a
+best-effort duplicate-request cache, one reason to run the multi-host gate on NFSv4.1.)
 
 - **L1.** Acquire by `mkdir`; on success write `owner.json` (`{token, pid, host, at}`)
   with a fresh random token *inside* the lock dir.
-- **L2.** Liveness is the lock dir’s **mtime**; a live long holder SHOULD touch it
-  (heartbeat). A waiter MAY break a lock whose mtime is older than the stale window, by
-  removing the dir and retrying acquisition.
-  (Node defaults: stale 20 s, acquire timeout 30 s, poll 25 ms.)
-  An implementation MUST enforce **timeout > stale window**. Otherwise, it could break a
-  lock it could have waited for.
-- **L3 (fencing).** Because a paused holder can be stale-broken and later resume, every
-  holder MUST re-read `owner.json` and verify its own token immediately before the
-  destructive publish step (F5b), and MUST abandon the publish on a mismatch.
-- **L4 (fenced release).** On release, a holder MUST remove the lock dir only if
-  `owner.json` still carries its token.
-  A stale-broken holder must not delete a successor’s live lock because doing so would
-  admit a third concurrent holder.
-- **L5.** Correctness MUST NOT depend on L1-L4 (see §1): even two overlapping holders
-  cannot double-publish a version (F5a) or double-apply an envelope (the ledger).
-  Clock skew between hosts makes mtime-based staleness approximate; that is why fencing
-  and OCC, not staleness precision, carry correctness.
-  (See Open issue O3.)
+
+- **L2.** The lock dir’s **mtime** is diagnostic liveness information only.
+  Holders SHOULD heartbeat at step boundaries.
+  A waiter MUST NOT remove, rename, or take over an existing lock because of its age,
+  missing metadata, or an apparently dead PID. It waits until the owner releases the
+  lock or the acquisition timeout expires.
+  Node defaults remain `staleMs` 20 s, `timeoutMs` 30 s, and `pollMs` 25 ms.
+  These options MUST be positive safe integers; Node retains `timeoutMs > staleMs` for
+  API compatibility. `onStaleBreak` is deprecated and never invoked.
+
+- **L3 (ownership checks).** A holder MUST re-read `owner.json` and verify its token
+  immediately before each destructive step, abandoning the step on a mismatch.
+  The Node implementation also refreshes mtime.
+  These checks detect accidental interference; they do not atomically fence a process
+  that pauses after the check.
+
+- **L4 (release).** A holder MUST finish its critical section before removing its lock
+  and MUST remove it only if `owner.json` still carries its token.
+  No other conforming client may remove that lock concurrently.
+
+- **L5 (safety and recovery).** Correctness depends on exclusive ownership from
+  acquisition through the final pointer replacement or maintenance mutation.
+  The lock remains held across arbitrary process pauses.
+  This prevents both a late pointer rename from rolling back newer publications and
+  orphan reclamation from replacing a snapshot another publisher just committed.
+  A crashed holder leaves an abandoned lock and blocks publication and other operations
+  that take the lock until **offline recovery**. Stop and prevent restart of every store
+  client on every host, verify that none can resume, remove only `publish.lock`, and run
+  repair before restarting clients.
+  Age and owner metadata alone never establish this quiescence.
+  Ordinary snapshot reads and independent envelope capture can continue while the lock
+  is present.
+
+The file layout remains `f1.0`, but a writer that automatically breaks old locks does
+not implement this safety rule.
+Upgrading an existing store requires stopping all clients and upgrading every writer,
+maintenance process, and read-lease client together before restart.
+Do not mix automatic-takeover writers with these clients.
+Preserved snapshots and archives from an older store should be inspected before
+destructive cleanup; upgrading the locking rule cannot restore writes already lost by a
+previous pointer regression.
 
 ## 8. Read Leases and Garbage Collection
 
 GC deletes superseded snapshots.
 A **read lease** pins a version against GC while a packager/uploader reads it.
 
-- **RL1.** To take a lease: read `current` → v; write `leases/<token>.lease` containing
+- **RL1.** Acquire `publish.lock` before selecting and pinning a version, and hold it
+  through the existence check.
+  Then read `current` → v; write `leases/<token>.lease` containing
   `{version: v, pid, host, at}`; **then verify the snapshot file still exists**. If it
   does not, the lease lost a race with GC: remove the lease file and retry from a fresh
-  pointer read. (Publish-then-verify closes the check-then-act race from the reader’s
-  side.)
+  pointer read. Release the lock before returning the lease.
+  Since GC holds the same exclusive lock, a successful lease cannot appear between GC’s
+  scan and snapshot removal, and its snapshot path cannot disappear temporarily during
+  tombstoning.
 - **RL2.** Lease liveness is the lease file’s mtime; holders of long leases SHOULD
   heartbeat by touching the file.
   GC MAY treat leases older than its staleness window (Node default 60 s) as abandoned
@@ -461,16 +579,37 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
 - A conforming `seal` or equivalent export that reads a selected snapshot while GC may
   run MUST hold a read lease for that version until the standalone artifact is complete
   and validated.
+- **G0.** GC is destructive maintenance and MUST fail closed.
+  It MUST reject invalid parameters before touching the store (Node: `retain` a
+  non-negative integer; `leaseStaleMs` and `transientStaleMs` positive integers, so a
+  zero or negative window cannot turn every live lease or fresh transient into debris).
+  It MUST validate the store (§11) and refuse unless the head passed identity and
+  integrity validation (`sealed`, `live`, or `in-flight-capture`, whose tells are
+  routine on a live store and are never touched by GC): with a corrupt head, the older
+  snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
+  the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
+  `current` under the lock.
+  If it differs from the validated version, GC MUST refuse and require a fresh
+  validation.
 - **G1.** GC MUST keep: the current version; every version `v ≥ current − retain` (i.e.
   `current` plus the `retain` versions preceding it); and every freshly-leased version.
-- **G2.** GC MUST re-scan the lease directory **immediately before each individual
-  snapshot unlink**. A lease may have been published after GC’s initial scan (this is
-  the GC-side half of the race closure; RL1 is the reader-side half).
-  The newest `retain` versions are never collected, which bounds RL1’s retries.
-- **G3.** GC MAY also sweep *stale* transients at the store root, in `snapshots/`, and
-  in `tx/pending/` (`.build-*`, `.direct-*`, `.work-*`, and `*.tmp`), but MUST NOT sweep
-  *fresh* ones, which may belong to a live initializer, reconcile, DirectStore write, or
-  envelope capture in another process.
+- **G2.** GC MUST delete each snapshot in two phases.
+  It re-scans the lease directory, then `rename()`s the snapshot to a
+  `snapshots/.gc-<version>-<hex10>.tmp` tombstone, then **re-scans the lease directory
+  again**. If a live lease now names the version, GC MUST restore the tombstone to its
+  snapshot name (without replacing) and keep it; otherwise it unlinks the tombstone.
+  If the second scan fails (for example on an unreadable fresh lease), GC MUST restore
+  the snapshot before failing.
+  RL1 and GC hold the same exclusive lock, so a conforming reader cannot publish a new
+  lease between the first scan and the rename.
+  A successful live pin is therefore never tombstoned, even temporarily.
+  The second scan is a defensive check, not a substitute for serialization: tombstoning
+  alone would allow a successful lease holder to observe a missing path, or lose its pin
+  if GC crashed before restoring it.
+- **G3.** GC MAY also sweep *stale* transients (§2) at the store root, in `snapshots/`,
+  in `tx/pending/`, and in `leases/`, but MUST NOT sweep *fresh* ones, which may belong
+  to a live initializer, reconcile, DirectStore write, envelope capture, or read-lease
+  publication in another process.
   Staleness is mtime-based with a window comfortably above any plausible build duration.
 
 ## 9. The DirectStore Strategy
@@ -487,14 +626,22 @@ snapshot to a `.direct-*` transient → mutate it in one transaction → reasser
 callback boundary from W3 and the candidate’s application ID, reserved tables, marker
 identity, schema version, and schema hash → integrity-gate (`quick_check` and
 `foreign_key_check`) → fsync → re-check `current` == base (OCC) and lock token (fencing)
-→ rename to `snapshots/<base+1>` → fsync the snapshot directory → re-check OCC and
-fencing → pointer swap (P2/P3) → release.
-On an OCC or fencing failure, discard or leave the unpublished snapshot as a recoverable
-orphan, then retry.
+→ commit to `snapshots/<base+1>` without replacing, with the identity checks and pointer
+swap of F5c → release.
+On an OCC, fencing, or identity failure, discard the build, removing a committed entry
+only while it is still this writer’s build and ahead of `current`, then retry.
+A retry MUST NOT leave its committed build behind: if the pointer were later torn,
+repair could select that orphan as the newest clean snapshot and expose a write whose
+caller saw it fail.
+The post-swap identity check means a successful return always names a
+snapshot that carries this writer’s callback.
 
 There are no envelopes, reconcile step, or merge policy.
-The writer **does not require the session extension**, so the strategy runs on any
-SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
+The callback runs on the build with foreign keys enforced, so its triggers and
+foreign-key actions fire exactly once; S4’s trigger and conflict-clause prohibitions do
+not apply.
+The writer **does not require the session extension**, so the strategy runs on
+any SQLite build. Because it performs OCC on `current` under the same lock, DirectStore
 composes safely with SnapshotStore reconcilers publishing into the same store.
 Because a lost OCC or fencing race retries the complete operation, the application
 callback MAY run more than once and MUST be safe to retry.
@@ -507,17 +654,49 @@ The required barriers:
 
 | Step | Required barriers |
 | --- | --- |
-| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → rename → fsync `snapshots/` dir → then pointer swap |
+| Publish a snapshot (init, reconcile F5c, DirectStore) | fsync snapshot file → no-replace hard link → fsync `snapshots/` dir → then pointer swap |
 | Pointer swap (P2/P3) | fsync pointer temp → rename over `current` → fsync store root |
 | Envelope creation (W4) | **none required** (see below) |
 | Archive/quarantine moves (F6) | none required (recovered via the ledger) |
+| Store subdirectories (`snapshots/`, `tx/*`, `leases/`) | fsync the parent of each directory init creates, deepest first |
 
 File and directory fsync barriers in this table are required, not best effort.
 If opening or fsyncing a required directory fails, initialization or publication MUST
 fail loudly and MUST NOT report a power-loss-durable success.
 A capability probe used to declare a target safe MUST include directory fsync.
-A platform or filesystem without that capability is unsupported for `f1.0` mutation
-rather than silently downgraded.
+A file barrier MUST be issued through a handle that can flush on the platform: Windows
+`FlushFileBuffers` fails on a read-only handle, so the Node implementation opens every
+file it syncs read-write on every platform (POSIX `fsync` flushes the same either way).
+Directory barriers open the directory read-only and are POSIX-only (O1). A platform or
+filesystem without that capability is unsupported for `f1.0` mutation rather than
+silently downgraded.
+A filesystem whose fsync returns success without persisting cannot meet this table
+either: tmpfs never persists, and an overlayfs mount with the `volatile` option omits
+every sync to its upper filesystem, so fsync normally succeeds without persisting (it
+fails only after a writeback error on the upper filesystem).
+Such stores are process-crash safe only.
+
+**Barrier mechanics.** Every barrier in the table is an fsync the implementation issues
+itself, on the file or directory, after the SQLite connection that wrote the file has
+closed. SQLite’s own syncs while it writes a transient build, working copy, or
+`VACUUM INTO` output are not barriers in this protocol, so SQLite’s `synchronous` and
+`fullfsync` settings do not affect publication durability.
+An implementation MAY therefore disable SQLite’s syncs on a reconcile build.
+The build is unreachable until F5c fsyncs it, links it, and fsyncs `snapshots/`, so a
+crash or power loss before then leaves only a discardable transient, whatever state
+SQLite left it in; the barrier fsync then flushes every page SQLite wrote without
+syncing. A rollback inside the live process reads the rollback journal back through the
+operating system’s cache, which needs no sync.
+The Node implementation runs reconcile builds with `synchronous = OFF`, which saves
+SQLite’s journal and database syncs on every applied envelope.
+It keeps SQLite’s `FULL` setting on writer working copies, DirectStore builds, and
+init’s snapshot-0 build.
+On Apple platforms `fsync(2)` flushes only to the drive’s cache; an implementation there
+MUST issue `fcntl(F_FULLFSYNC)` for each barrier, using the strongest weaker barrier
+only where the filesystem rejects it.
+Node’s `fs.fsyncSync` already does this: libuv’s `uv__fs_fsync` tries `F_FULLFSYNC`,
+then `F_BARRIERFSYNC`, then `fsync`, so the Node implementation’s barriers are full
+flushes on macOS without any SQLite pragma.
 
 **The store’s commit point is publication.** A successful `write()` (envelope dropped,
 id returned) is *accepted*, and survives process crashes, but is **not power-loss
@@ -530,15 +709,32 @@ accepted-but-unpublished writes (see Open issue O2); callers needing a hard dura
 receipt run `reconcile()` after `write()`.
 
 Published snapshots, once the pointer swap’s barriers complete, MUST survive power loss.
-A torn publish (power loss between snapshot rename and pointer swap) leaves an orphan
-snapshot ahead of a valid pointer.
+A torn publish (power loss between the snapshot commit and the pointer swap) leaves an
+orphan snapshot ahead of a valid pointer.
 Repair restores this `in-flight-capture` state (§11), and the previous head remains
 intact (R1).
 
 A conforming backup of a live store MUST pin or otherwise retain one published snapshot
 and copy that immutable SQLite file, or use SQLite’s online backup or `VACUUM INTO`
-facilities. This specification makes no guarantee about an arbitrary recursive directory
-copy racing publication, garbage collection, or interruption.
+facilities.
+A `seal` or export MUST publish its output like a completed file: write it to
+a uniquely-named temp in the destination directory, validate it, fsync it, commit it
+with a no-replace hard link to a new destination, remove the temp, and fsync that
+directory.
+`VACUUM INTO` writes in place and does not fsync its output, so it MUST target
+the temp, never the final path; a reader of the destination sees no file or the complete
+export. The destination MUST NOT exist or lie anywhere inside the store, including its
+root. It MUST NOT be in use by a SQLite connection or have a `-journal`, `-wal`, or
+`-shm` sidecar, since replaying an old journal or WAL into the new database could
+corrupt it. The reference implementation checks sidecars before building and immediately
+before committing the export.
+The caller must exclude concurrent SQLite users of the path.
+The no-replace commit also refuses existing files reached through case aliases or
+symlinks, and destinations created concurrently while the export is built.
+The reference implementation’s `seal()` also refuses to start while committed envelopes
+are pending; an export of the head alone copies a leased snapshot instead.
+This specification makes no guarantee about an arbitrary recursive directory copy racing
+publication, garbage collection, or interruption.
 
 ## 11. Validation States and Repair
 
@@ -562,7 +758,7 @@ layout, trusting no single file:
 | `sealed` | Pointer valid, head passes `integrity_check` and `foreign_key_check`, no committed pending envelopes, no in-flight tells |
 | `live` | As `sealed`, but committed pending envelopes await reconcile |
 | `in-flight-capture` | Head valid, but in-flight tells present: transients (§2), orphan snapshots ahead of the pointer, a held/leftover `publish.lock`, uncommitted envelopes (no `COMMITTED`), or SQLite `-wal`/`-shm` side files next to snapshots |
-| `corrupt` | Pointer missing/torn/non-numeric, pointer names a missing snapshot, head identity or required reserved schema/metadata mismatches the marker and format, or the head fails `integrity_check` or `foreign_key_check` |
+| `corrupt` | Pointer missing/torn/non-numeric, missing snapshot, identity or reserved schema mismatch, head fails SQLite integrity or foreign-key checks, or archived transactions are missing from the head ledger |
 
 Operator exit-code convention (CLI): `sealed`/`live` → 0, `in-flight-capture` → 2,
 `invalid`/`corrupt` → 3, and `unsupported` → 4. A path that is `not-a-store` is an input
@@ -580,14 +776,27 @@ published snapshot was integrity-gated at publish and never modified (S6):
    snapshots.
 2. Acquire `publish.lock` through L1-L5 and revalidate its owner token immediately
    before every pointer write, snapshot deletion, transient deletion, and envelope move.
-   A fresh publisher lock makes repair refuse without mutation.
-   A stale lock MAY be reclaimed only through the normal fenced stale-break and
-   acquisition path in L2-L4; repair MUST then act only while its acquired token remains
-   valid. Repair MUST NOT delete a lock based on a separate pre-acquisition check.
+   Any existing publisher lock makes repair refuse without mutation, regardless of age.
+   An abandoned lock requires offline recovery as defined in L5; repair MUST NOT remove
+   or reclaim it automatically.
 3. Delete snapshots **ahead** of the restored pointer (rolled-back orphans of a torn
    publish) and all transients.
-4. Quarantine envelopes lacking `COMMITTED` (preserving evidence with a `QUARANTINE`
-   reason file).
+4. Quarantine envelopes lacking `COMMITTED` whose directory mtime is older than the
+   repair transient window (60 seconds in Node), preserving evidence with a `QUARANTINE`
+   reason file. A younger one may be a live capture and MUST be left in place.
+   A writer’s `COMMITTED` write can land between repair’s check and its move, so repair
+   MUST check for `COMMITTED` again after moving the envelope and, if it is there,
+   remove the reason file and move the envelope back to `tx/pending/`. The writer’s
+   write either lands in the moved dir, where that check sees it, or fails, so the
+   writer never reports success for an envelope repair quarantined.
+
+Repair MUST refuse destructive cleanup when an otherwise integrity-clean current head
+conflicts with the transaction archive: an archived transaction missing from
+`applied_tx` may indicate a lost published lineage.
+Preserve snapshots and archives for operator recovery.
+After falling back from a physically corrupt head, repair may still report `corrupt`
+because archives are absent from the restored ledger; integrity recovery does not
+silently resolve that evidence.
 
 Repair MUST NOT delete committed pending envelopes because the next reconcile folds this
 unpublished work. Repair also MUST NOT modify any snapshot in place.
@@ -629,6 +838,10 @@ unpublished work. Repair also MUST NOT modify any snapshot in place.
   Compatibility across SQLite releases and bindings is a conformance claim that an
   implementation MUST validate for every combination it supports; database-file
   compatibility alone does not prove changeset compatibility.
+  SQLite 3.51 through 3.54 changed only the apply and changegroup APIs, not the
+  serialized changeset format.
+  Conformance testing should include corrupt and truncated changeset inputs, because
+  SQLite’s session module received 2026 memory-safety fixes for malformed blobs.
 
 Normal open, read, write, reconcile, validation, GC, and repair operations MUST NOT
 upgrade a store. A whole-format upgrade is an explicit operator action and is
@@ -656,6 +869,12 @@ upgrade implementation is post-alpha work.
 - MUST open snapshots read-only; MUST NOT modify any store file.
 - MUST re-read the pointer to observe a newer publish (close-to-open: a fresh open per
   read batch); a snapshot already open stays consistent forever (immutability).
+- MUST NOT treat a snapshot that disappears between the pointer read and the open as
+  corruption, and SHOULD re-read the pointer and retry: GC may have collected it after a
+  stale read. On network mounts, directory-entry and attribute caching can delay
+  visibility of a new `current` (Linux NFS: up to `acdirmax`, default 60 s), which
+  widens that window. The Node reader re-reads the pointer and retries a bounded number
+  of times, and reports a pointer that still names a missing snapshot as corruption.
 - SHOULD take a read lease (RL1/RL2) for any read longer than the GC retain horizon.
 
 **Writer**: W1-W4, S2-S4 callback and schema validation, the compatibility check of §3,
@@ -666,7 +885,7 @@ A reconciler MUST NOT apply an envelope outside the deterministic order, MUST NO
 publish a build whose integrity gate failed, and MUST NOT mutate a published snapshot.
 
 **Operator tool**: MUST implement `validate` per §11 before any destructive operation;
-`repair` MUST follow §11’s rules; GC MUST follow G1-G3.
+`repair` MUST follow §11’s rules; GC MUST follow G0-G3.
 
 **Conformance fixtures** (post-alpha): a directory of sealed, live, in-flight
 (orphan-ahead), corrupt-pointer, corrupt-head, and quarantined-envelope golden stores,
@@ -675,28 +894,63 @@ The same artifacts test every implementation.
 
 ## 14. Open Issues in Format v1
 
-- **O1: Windows rename-replace.** F5c and P2 require POSIX rename-over-existing
-  semantics; Win32 `rename` fails on an existing target.
-  A Windows implementation needs `ReplaceFile`/`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`
-  semantics. The cross-platform CI matrix gates the claim.
+- **O1: Windows mutation.** The pointer rename itself is not the blocker: Node’s
+  `fs.renameSync` already uses `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` on Windows, and
+  `CreateHardLink` can provide the F5c no-replace commit.
+  Two other gaps keep Windows unsupported for `f1.0` mutation.
+  First, §10’s directory fsync is unavailable from Node on Windows (`fs.fsync` on a
+  directory fails with `EPERM`, nodejs/node#4760), so publication fails closed.
+  Second, SQLite’s Windows VFS opens databases without `FILE_SHARE_DELETE`, so a
+  snapshot that any reader holds open cannot be renamed over or unlinked, and GC and
+  orphan reclamation then fail.
+  `MOVEFILE_REPLACE_EXISTING` is also not documented as atomic.
+  `FILE_RENAME_POSIX_SEMANTICS` (Windows 10 1607 and later) can replace an open target
+  but is not reachable from Node’s `fs`. A Windows implementation needs a native helper
+  for both, or a spec change that declares Windows reader-only.
+  CI runs on Linux and macOS only; a Windows CI job, not yet present, must gate any
+  Windows mutation claim.
+
 - **O2: Envelope durability option.** §10 makes accepted-but-unpublished writes
   non-durable across power loss by design.
   An opt-in “fsync envelopes” mode (payload and dir) would harden the accepted state for
   callers that need it.
+
 - **O3: Clock skew and mtime staleness.** Lock staleness (L2), lease staleness (RL2),
   and transient staleness (G3) all compare a *local* clock against an mtime that may
   have been set by another host.
-  Correctness never depends on these (L5), but liveness tuning on skewed clusters is
-  undocumented; the planned real-NFS gate and protocol model both probe this.
+  Publication does not expire lock ownership on age (L5). Read-lease and transient
+  expiry still require conservative clock and heartbeat assumptions; the planned
+  real-NFS gate and protocol model must probe them.
+
 - **O4: `base_version` is unused.** Manifests record the seed base, but reconcile
   intentionally ignores it (cross-version merge is policy-resolved).
   This specification treats it only as provenance.
   A future version could instead define semantics such as staleness warnings.
+
 - **O5: conflict-policy identity is not stamped.** All reconcilers in one caller-schema
   epoch must use the same effective policy, but `f1.0` relies on deployment
   configuration to enforce that rule.
   A future revision should bind the normalized policy to the store or schema epoch, or
   define an equivalent admission check and policy-transition protocol.
+
+- **O6: Shared snapshot names and a blind pointer swap.** Every publisher of version N+1
+  competes for the one path `snapshots/<N+1>`, and the pointer swap cannot fail on a
+  changed `current`. L5 therefore requires a non-stealable lock and offline recovery
+  after its owner crashes.
+  A future revision could permit safe automatic recovery by publishing builds under
+  unique names (for example `<version>-<hex10>.fsqlite.sqlite`) with `current` naming
+  the file, gated by a `required_features` entry, so builds never share a path and the
+  pointer identifies the exact build.
+  Closing the late-pointer window additionally needs a pointer protocol that cannot move
+  `current` backward, such as a no-replace commit of a per-version pointer record.
+
+- **O7: Envelope moves on overlayfs.** F6 and repair move envelope *directories* with
+  `rename()`. overlayfs fails that with `EXDEV` for a directory in a lower layer unless
+  its `redirect_dir` feature is on (the mount option, or kernel config
+  `OVERLAY_FS_REDIRECT_DIR`), so a store whose envelopes came from a container image
+  layer can fail F6 on every reconcile.
+  A future `f1.x` revision could add a copy-then-remove fallback for `EXDEV` or store
+  each envelope as a single file.
 
 ## 15. References
 

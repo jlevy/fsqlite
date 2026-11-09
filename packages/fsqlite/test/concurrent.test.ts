@@ -6,6 +6,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { SnapshotStore, DirectStore } from '../src/index.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 import { runSync, runAsync } from './spawn.ts'
@@ -27,6 +31,24 @@ interface ReaderResult {
   reads: number
   last: number
   torn: boolean
+  errors: number
+  firstError: string | null
+  distinct: number
+}
+
+/** How long the readers may take to start before the test fails instead of hanging. */
+const READERS_READY_TIMEOUT_MS = 15_000
+const READY_POLL_MS = 10
+
+/** Wait until `ready()` holds, failing after a bound rather than hanging the suite. */
+async function waitUntil(ready: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + READERS_READY_TIMEOUT_MS
+  while (!ready()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${what}`)
+    }
+    await delay(READY_POLL_MS)
+  }
 }
 
 test('N concurrent writer processes lose zero committed tx after reconcile', async () => {
@@ -49,7 +71,7 @@ test('N concurrent writer processes lose zero committed tx after reconcile', asy
       store.reconcile()
     }
     assert.equal(count(store), WRITERS * PER, 'reconcile folded in every committed tx without loss')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }
@@ -79,7 +101,7 @@ test('racing reconciler processes publish exactly-once with an integrity-clean h
 
     assert.equal(count(store), WRITERS * PER, 'exactly-once: no tx lost, none double-applied')
     assert.equal(count(store, 'applied_tx'), WRITERS * PER, 'ledger has exactly one row per tx')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
     const totalApplied = results.reduce((s, r) => s + r.totalApplied, 0)
     assert.ok(totalApplied >= WRITERS * PER)
   } finally {
@@ -87,28 +109,41 @@ test('racing reconciler processes publish exactly-once with an integrity-clean h
   }
 })
 
-test('readers during concurrent publishes never see a torn or regressing snapshot', async () => {
+test('readers during concurrent publishes never fail, tear, or regress', async () => {
   const { dir, cleanup } = tmpStore()
+  const control = mkdtempSync(join(tmpdir(), 'fsqlite-readers-'))
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
-    for (let i = 0; i < 5; i++) {
-      runSync<WriterResult>('writer.ts', [dir, `w${i}`, '8'])
-    }
-
-    const readers = Array.from({ length: 3 }, () =>
-      runAsync<ReaderResult>('reader.ts', [dir, '300']),
+    const READERS = 3
+    const PUBLISHES = 25
+    const readers = Array.from({ length: READERS }, () =>
+      runAsync<ReaderResult>('reader.ts', [dir, '20000', control]),
     )
-    let guard = 0
-    while (store.pendingTxns().length > 0 && guard++ < 200) {
-      store.reconcile()
-      await new Promise((r) => setTimeout(r, 2))
+    // Publish only once every reader is polling, one envelope per reconcile, so each
+    // reader overlaps many pointer swaps.
+    await waitUntil(
+      () => readdirSync(control).filter((f) => f.startsWith('ready-')).length === READERS,
+      'every reader to start',
+    )
+    for (let i = 0; i < PUBLISHES; i++) {
+      store.write('w', (db) =>
+        db.prepare('INSERT INTO artifacts VALUES (?, ?, ?)').run(`pub-${i}`, 'P', 't'),
+      )
+      assert.equal(store.reconcile().applied, 1)
+      await delay(0) // let the readers run between publishes
     }
+    writeFileSync(join(control, 'stop'), '')
     const results = await Promise.all(readers)
+
+    assert.equal(store.currentVersion(), PUBLISHES)
     for (const r of results) {
+      assert.equal(r.errors, 0, `reader ${r.pid} failed a read: ${r.firstError ?? ''}`)
       assert.equal(r.torn, false, `reader ${r.pid} saw a regressing snapshot count`)
-      assert.ok(r.reads > 0)
+      assert.equal(r.last, PUBLISHES, `reader ${r.pid} read the final publish`)
+      assert.ok(r.distinct >= 2, `reader ${r.pid} observed ${r.distinct} published version(s)`)
     }
   } finally {
+    rmSync(control, { recursive: true, force: true })
     cleanup()
   }
 })
@@ -133,7 +168,7 @@ test('N concurrent direct-writer processes serialize via the lock with zero loss
       'every direct write published exactly once without loss',
     )
     assert.equal(store.currentVersion(), WRITERS * PER, 'one published version per direct write')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
   } finally {
     cleanup()
   }

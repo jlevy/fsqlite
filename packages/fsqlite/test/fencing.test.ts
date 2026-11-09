@@ -1,118 +1,119 @@
-// Fencing / lease semantics of the publish lock. The publish lock is the only
-// mutual-exclusion point, and correctness must not depend on it being perfect. These
-// tests pin the three properties that make that true:
-//   - revalidate-before-publish: a holder whose lease was stolen aborts (the
-//     ownerOf(lockPath) === token check) instead of writing under a new owner
-//   - stale-break: a lock older than staleMs is reclaimable (no permanent wedge)
-//   - the timeoutMs > staleMs invariant is enforced
+// Publication requires exclusive lock ownership across arbitrary process pauses.
+// Age is diagnostic only; abandoned-lock recovery requires verified quiescence.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SnapshotStore, withLock, ownerOf, heartbeat } from '../src/index.ts'
+import { performance } from 'node:perf_hooks'
+import { LockTimeoutError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncDirForTest } from '../src/fsutil.ts'
-import { setOwnerWriterForTest, setStaleLockRemoverForTest } from '../src/lock.ts'
-import { STORE_OPTS, tmpStore } from './fixture.ts'
+import { ownerOf, setOwnerWriterForTest, withLock } from '../src/lock.ts'
+import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const artifactCount = (s: SnapshotStore): number =>
   s.read((db) => (db.prepare('SELECT COUNT(*) c FROM artifacts').get() as { c: number }).c)
 
-test('withLock enforces timeoutMs > staleMs', () => {
-  assert.throws(
-    () => withLock('/tmp/x.lock', () => 0, { timeoutMs: 100, staleMs: 100 }),
-    /requires timeoutMs > staleMs/,
-  )
-})
-
-test('revalidate-before-publish: a holder whose lease was stolen aborts the destructive step', () => {
+test('a poll interval longer than timeout does not extend the acquisition deadline', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   try {
-    let published = false
-    const result = withLock(
-      lockPath,
-      (token) => {
-        // Simulate a stale break and lease theft by a second reconciler while paused:
-        // the lock dir is reclaimed and re-owned by a different token.
-        rmSync(lockPath, { recursive: true, force: true })
-        mkdirSync(lockPath)
-        writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'someone-else' }))
-        // Our fencing check: only publish if we still own the lock.
-        if (ownerOf(lockPath) !== token) {
-          return 'aborted'
-        }
-        published = true
-        return 'published'
-      },
-      { timeoutMs: 5000, staleMs: 1000 },
-    )
-    assert.equal(result, 'aborted')
-    assert.equal(
-      published,
-      false,
-      'must not perform the destructive publish after losing the lease',
-    )
+    mkdirSync(lockPath)
+    const start = performance.now()
+    assert.throws(() => {
+      withLock(lockPath, () => undefined, { timeoutMs: 30, staleMs: 1, pollMs: 10_000 })
+    }, LockTimeoutError)
+    assert.ok(performance.now() - start < 2_000, 'the 10-second poll is capped by the deadline')
   } finally {
     cleanup()
   }
 })
 
-test('a stale lock (older than staleMs) is reclaimed, not a permanent wedge', () => {
+test('withLock enforces timeoutMs > staleMs before touching the lock path', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    assert.throws(
+      () => withLock(lockPath, () => 0, { timeoutMs: 100, staleMs: 100 }),
+      (error: unknown) =>
+        error instanceof TypeError && error.message.includes('requires timeoutMs > staleMs'),
+    )
+    assert.equal(existsSync(lockPath), false)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a holder whose lease was stolen fails its fence and leaves the successor lock alone', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    const result = withLock(
+      lockPath,
+      (_token, lease) => {
+        // A stale break and re-acquisition by a second holder while this one was paused:
+        // the lock dir is reclaimed and re-owned by a different token.
+        rmSync(lockPath, { recursive: true, force: true })
+        mkdirSync(lockPath)
+        writeFileSync(join(lockPath, 'owner.json'), ownerRecord('successor'))
+        return { fenced: lease.fence(), renewed: lease.heartbeat() }
+      },
+      { timeoutMs: 5000, staleMs: 1000 },
+    )
+    assert.deepEqual(result, { fenced: false, renewed: false }, 'both checks report the loss')
+    // The fenced release removes the lock only while this holder owns it.
+    assert.equal(ownerOf(lockPath), 'successor', "the successor's lock survives the release")
+  } finally {
+    cleanup()
+  }
+})
+
+test('an arbitrarily old lock is never stolen, including when a legacy callback is supplied', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   try {
     // A crashed holder left the lock dir behind with an old mtime, past the stale window.
     mkdirSync(lockPath)
-    writeFileSync(join(lockPath, 'owner.json'), JSON.stringify({ token: 'dead-holder' }))
+    writeFileSync(join(lockPath, 'owner.json'), ownerRecord('dead-holder'))
     const oldTime = new Date(Date.now() - 10_000)
     utimesSync(lockPath, oldTime, oldTime)
     let ran = false
-    const out = withLock(
-      lockPath,
-      () => {
-        ran = true
-        return 'ok'
-      },
-      { timeoutMs: 3000, staleMs: 500, pollMs: 10 },
-    )
-    assert.equal(out, 'ok')
-    assert.equal(ran, true, 'a stale lock must be breakable so a live worker can proceed')
+    let broken = false
+    assert.throws(() => {
+      withLock(
+        lockPath,
+        () => {
+          ran = true
+        },
+        {
+          timeoutMs: 60,
+          staleMs: 1,
+          pollMs: 5,
+          onStaleBreak: () => {
+            broken = true
+          },
+        },
+      )
+    }, LockTimeoutError)
+    assert.equal(ran, false)
+    assert.equal(broken, false)
+    assert.equal(ownerOf(lockPath), 'dead-holder', 'age cannot prove that its owner is dead')
   } finally {
     cleanup()
   }
 })
 
-test('a failed stale-lock removal backs off until timeout', () => {
+test('a malformed old lock is retained until quiescent recovery', () => {
   const { dir, cleanup } = tmpStore()
   const lockPath = join(dir, 'publish.lock')
   mkdirSync(lockPath)
   const oldTime = new Date(Date.now() - 10_000)
   utimesSync(lockPath, oldTime, oldTime)
-  let attempts = 0
-  setStaleLockRemoverForTest(() => {
-    attempts++
-    const error = new Error('injected stale removal failure') as NodeJS.ErrnoException
-    error.code = 'EPERM'
-    throw error
-  })
   try {
     assert.throws(() => {
       withLock(lockPath, () => undefined, { timeoutMs: 80, staleMs: 1, pollMs: 20 })
     }, /could not acquire/)
-    assert.ok(attempts <= 5, `stale removal should poll rather than spin; attempts=${attempts}`)
-  } finally {
-    setStaleLockRemoverForTest(null)
-    cleanup()
-  }
-})
-
-test('lock heartbeat reports loss instead of silently succeeding', () => {
-  const { dir, cleanup } = tmpStore()
-  try {
-    assert.throws(() => {
-      heartbeat(join(dir, 'missing.lock'))
-    }, /ENOENT/)
+    assert.equal(existsSync(lockPath), true)
   } finally {
     cleanup()
   }
@@ -164,7 +165,7 @@ test('OCC on the pointer: a reconcile that builds against a superseded base conv
   }
 })
 
-test('SnapshotStore retries when its lease is stolen after the snapshot rename', () => {
+test('SnapshotStore refuses a foreign lock installed after its snapshot commit', () => {
   const { dir, cleanup } = tmpStore()
   try {
     const store = new SnapshotStore(dir, STORE_OPTS).init()
@@ -178,21 +179,39 @@ test('SnapshotStore retries when its lease is stolen after the snapshot rename',
       setAfterFsyncDirForTest(null)
       rmSync(store.publishLock, { recursive: true, force: true })
       mkdirSync(store.publishLock)
-      writeFileSync(join(store.publishLock, 'owner.json'), JSON.stringify({ token: 'successor' }))
+      writeFileSync(join(store.publishLock, 'owner.json'), ownerRecord('successor'))
       const old = new Date(Date.now() - 10_000)
       utimesSync(store.publishLock, old, old)
     })
 
-    const result = store.reconcile({
-      lockOpts: { staleMs: 1, timeoutMs: 500, pollMs: 1 },
-    })
-
-    assert.equal(result.attempts, 2)
-    assert.equal(result.applied, 1)
-    assert.equal(artifactCount(store), 1)
-    assert.equal(store.validate().state, 'sealed')
+    assert.throws(
+      () =>
+        store.reconcile({
+          lockOpts: { staleMs: 1, timeoutMs: 60, pollMs: 1 },
+        }),
+      LockTimeoutError,
+    )
+    assert.equal(store.currentVersion(), 0)
+    assert.equal(artifactCount(store), 0)
+    assert.equal(ownerOf(store.publishLock), 'successor')
   } finally {
     setAfterFsyncDirForTest(null)
+    cleanup()
+  }
+})
+
+test('a malformed owner record names no owner, so no holder can fence on it', () => {
+  const { dir, cleanup } = tmpStore()
+  const lockPath = join(dir, 'publish.lock')
+  try {
+    mkdirSync(lockPath)
+    for (const record of ['{"token":"partial"}', '{"token":7,"pid":1,"host":"h","at":0}', '[]']) {
+      writeFileSync(join(lockPath, 'owner.json'), record)
+      assert.equal(ownerOf(lockPath), null, record)
+    }
+    writeFileSync(join(lockPath, 'owner.json'), ownerRecord('complete'))
+    assert.equal(ownerOf(lockPath), 'complete')
+  } finally {
     cleanup()
   }
 })

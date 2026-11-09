@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { fsyncDir, fsyncPath } from './fsutil.ts'
+import { errorMessage, FsqliteError, StoreFormatError } from './errors.ts'
+import { fsyncDir, fsyncPath, removeQuietly } from './fsutil.ts'
 
 export const STORE_MARKER_FILENAME = 'fsqlite.json'
 export const STORE_FORMAT_NAME = 'fsqlite'
@@ -16,6 +17,7 @@ function isArrayOfNonEmptyStrings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0)
 }
 
+/** The contents of `fsqlite.json`, the store's immutable identity (spec section 2). */
 export interface StoreMarker {
   format: typeof STORE_FORMAT_NAME
   format_version: typeof STORE_FORMAT_VERSION
@@ -23,23 +25,18 @@ export interface StoreMarker {
   store_id: string
 }
 
+/**
+ * What `recognizeStore` found: a supported store's marker, or why the path is not a store
+ * this implementation may read or change (spec section 11).
+ */
 export type StoreRecognition =
   | { state: 'not-a-store'; issue: string }
   | { state: 'invalid'; issue: string }
   | { state: 'unsupported'; issue: string }
   | { state: 'supported'; marker: StoreMarker }
 
+/** The recognition states other than `supported`. */
 export type StoreRecognitionFailure = Exclude<StoreRecognition['state'], 'supported'>
-
-export class StoreFormatError extends Error {
-  readonly state: StoreRecognitionFailure
-
-  constructor(state: StoreRecognitionFailure, message: string, options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'StoreFormatError'
-    this.state = state
-  }
-}
 
 export function storeMarkerPath(storeDir: string): string {
   return join(storeDir, STORE_MARKER_FILENAME)
@@ -63,7 +60,7 @@ export function recognizeStore(storeDir: string): StoreRecognition {
   } catch (error) {
     return {
       state: 'invalid',
-      issue: `invalid ${STORE_MARKER_FILENAME}: malformed JSON (${error instanceof Error ? error.message : String(error)})`,
+      issue: `invalid ${STORE_MARKER_FILENAME}: malformed JSON (${errorMessage(error)})`,
     }
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -160,8 +157,8 @@ export function createStoreMarker(storeDir: string): StoreMarker {
     renameSync(tmp, path)
     fsyncDir(storeDir)
   } catch (error) {
-    rmSync(tmp, { force: true })
-    throw new Error(`failed to create ${STORE_MARKER_FILENAME}`, { cause: error })
+    removeQuietly(tmp)
+    throw new FsqliteError('io', `failed to create ${storeMarkerPath(storeDir)}`, { cause: error })
   }
   return marker
 }

@@ -6,19 +6,28 @@ adding a regression test that fails without the change.
 
 ## Development Setup
 
-Install Node `>=22.18.0 <23 || >=24.0.0`, pnpm 11.14.0, and `uv` (used to run the pinned
-Markdown formatter), then run:
+Install Node `>=22.18.0 <23 || ^24.0.0 || >=26.0.0`, pnpm 11.28.8, and `uv` (used to run
+the pinned Markdown formatter), then run:
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec lefthook install
 pnpm verify
 ```
+
+`pnpm-workspace.yaml` sets `engineStrict`, so installing the development tools also
+enforces their own engines: development needs Node 22.18 or later on the 22 line, 24.11
+or later on the 24 line, or 26 and later.
+The published package keeps the wider runtime range.
+Installing with `--ignore-scripts` skips lefthook’s own installer, so
+`pnpm exec lefthook install` is what enables the Git hooks.
 
 Common focused commands:
 
 ```bash
 pnpm test
 pnpm test:golden
+pnpm check:docs
 pnpm typecheck
 pnpm lint
 pnpm format
@@ -41,8 +50,10 @@ development loop.
 - Run `pnpm verify` before submitting a pull request.
 
 Formatting is enforced by Prettier, flowmark, ESLint, and lefthook.
-CI verifies the declared Node floor on Linux plus the current Node LTS on Linux and
-macOS.
+CI runs `pnpm verify` on Linux with the declared Node 22.18.0 floor and the newest Node
+22, 24, and 26 releases, and on macOS with Node 26. It also smoke-tests the packed
+package on Node 24.0.0, the floor of the 24 line, and audits the dependencies weekly as
+well as on every change.
 
 ## Upgrading tbd
 
@@ -66,18 +77,19 @@ upgrade:
 4. Run `pnpm test:project-hooks`, then `tbd doctor`. A “user-owned” warning for Codex
    hooks is expected.
 
-`.claude/agents/tbd-strong-max.md` is a project-owned override that runs the strong-max
-tier on Fable at `max`. Setup keeps it because its generated marker was removed, so it
-no longer receives upstream body changes; compare it with a freshly generated copy after
-each upgrade. `AGENTS.md` is excluded from flowmark because flowmark would rewrap the
-tbd-managed block, which `tbd doctor` then reports as stale; the repository dash,
-footer, and link checks still cover it.
+`.claude/agents/tbd-strong-max.md` is a project-owned override of the strong-max tier’s
+model, chosen by the maintainer.
+Setup keeps it because its generated marker was removed, so it no longer receives
+upstream body changes; compare it with a freshly generated copy after each upgrade.
+`AGENTS.md` is excluded from flowmark because flowmark would rewrap the tbd-managed
+block, which `tbd doctor` then reports as stale; the repository dash, footer, and link
+checks still cover it.
 
 ## Releasing
 
 Release maintainers should follow [the release runbook](docs/releasing.md).
-The first npm publication is a documented bootstrap case; later releases use trusted
-publishing.
+The first npm publication is a documented bootstrap case; later releases are staged
+through npm trusted publishing and approved by an owner with 2FA.
 
 ## Reporting Bugs
 

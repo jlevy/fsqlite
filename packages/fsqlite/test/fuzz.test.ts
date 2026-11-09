@@ -28,6 +28,8 @@ const count = (s: SnapshotStore, table: string): number =>
 
 interface ReaderResult {
   torn: boolean
+  errors: number
+  firstError: string | null
 }
 
 // The jobs array mixes writer/reconciler/reader results; only reader results carry `torn`.
@@ -72,10 +74,11 @@ test(`chaos: concurrent writers, reconcilers, and readers converge (seed ${FUZZ_
       `zero loss under chaos (writers=${WRITERS} per=${PER})`,
     )
     assert.equal(count(store, 'applied_tx'), expected, 'no double-apply: one ledger row per tx')
-    assert.notEqual(store.validate().state, 'corrupt')
+    assert.equal(store.validate().state, 'sealed')
     for (const r of results) {
       if (isReaderResult(r)) {
         assert.equal(r.torn, false, 'a reader saw a torn/regressing snapshot')
+        assert.equal(r.errors, 0, `a reader failed a read: ${r.firstError ?? ''}`)
       }
     }
   } finally {
