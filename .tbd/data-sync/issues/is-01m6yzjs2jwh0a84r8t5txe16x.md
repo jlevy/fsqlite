@@ -5,7 +5,7 @@ title: "Complete review and stabilization for fsqlite PRs #3 and #5"
 kind: task
 status: in_progress
 priority: 1
-version: 44
+version: 45
 delegate: codex@spud10
 labels: []
 dependencies: []
@@ -53,10 +53,11 @@ child_order_hints:
   - is-01m6z069jg3679d27hm8rger0r
   - is-01m6z069we4cjtbyx5zyw8mtje
   - is-01m6z06a7nh6vyv7kdvcqzdjqc
+  - is-01m6z0erc1gjhwaj59vz5q4y0j
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:20.401Z
-updated_at: 2026-11-09T01:54:00.564Z
+updated_at: 2026-11-09T01:58:37.184Z
 started_at: 2026-11-09T01:43:20.822Z
 ---
 Review both pinned PRs, address merge blockers, track lower-priority findings, validate the merged result, and prepare focused follow-up PRs.
