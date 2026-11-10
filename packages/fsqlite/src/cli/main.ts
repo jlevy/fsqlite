@@ -201,7 +201,11 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     optionHelp: [
       `--retain N    Predecessors of current to keep (default ${DEFAULT_RETAINED_SNAPSHOTS})`,
     ],
-    notes: ["gc refuses a store whose head fails validation, exiting with that state's code."],
+    notes: [
+      'gc refuses to delete from a store whose head fails validation, exiting with that',
+      "state's code. A gc with nothing to delete skips the full integrity check, so use",
+      'validate to detect corruption.',
+    ],
     run: runGc,
   },
   seal: {
@@ -614,7 +618,8 @@ function runGc(inv: Invocation): number {
   const result = requireStore(path).gc({ retain })
   emit(inv, { path, retain, ...result }, () => [
     `removed ${result.removed} snapshot(s); kept ${result.kept}; ` +
-      `leased: ${result.leased.join(' ') || 'none'}`,
+      `leased: ${result.leased.join(' ') || 'none'}; ` +
+      `integrity check: ${result.integrityChecked ? 'passed' : 'skipped'}`,
   ])
   return EXIT.ok
 }

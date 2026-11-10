@@ -12,6 +12,7 @@ import {
   rmSync,
   openSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
   writeSync,
   utimesSync,
@@ -19,6 +20,7 @@ import {
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { FsqliteError, LockTimeoutError, SnapshotStore } from '../src/index.ts'
+import type { ValidateResult } from '../src/index.ts'
 import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 const readVersionCount = (store: SnapshotStore, version: number): number => {
@@ -206,6 +208,88 @@ test('gc refuses a store whose head fails integrity validation and keeps every r
     assert.deepEqual(snapshotFiles(store), [0, 1, 2], 'no snapshot was deleted')
     store.repair()
     assert.equal(store.currentVersion(), 1, 'repair can still fall back to the clean predecessor')
+  } finally {
+    cleanup()
+  }
+})
+
+test('gc that has nothing to delete skips the full head check but not the cheap ones', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    store.write('w', (db) => {
+      const ins = db.prepare('INSERT INTO artifacts VALUES (?,?,?)')
+      for (let i = 0; i < 400; i++) {
+        ins.run(`a${i}`, `t${i}`.repeat(8), 't')
+      }
+    })
+    store.reconcile()
+    // Damage the head below its identity rows: only a full integrity check notices.
+    corruptPage(store.snapshotPath(1))
+    const debris = join(store.snapDir, '.build-crashed.sqlite')
+    // A crashed gc's tombstone still holds a predecessor's bytes (C2).
+    const tombstone = join(store.snapDir, '.gc-000000000000-0123456789.tmp')
+    const past = new Date(Date.now() - 120_000)
+    for (const path of [debris, tombstone]) {
+      writeFileSync(path, 'x')
+      utimesSync(path, past, past)
+    }
+
+    // retain 3 keeps both snapshots, so gc reads none of the head and only sweeps debris.
+    const noop = { removed: 0, kept: 2, leased: [], integrityChecked: false }
+    assert.deepEqual(store.gc(), noop)
+    assert.equal(existsSync(debris), false, 'the stale transient was swept')
+    assert.equal(existsSync(tombstone), true, 'a tombstone waits for a gc that checked the head')
+    // At the retain boundary the oldest snapshot is exactly current - retain, which G1
+    // keeps, so this is still the steady state after a collecting gc: no full check.
+    assert.deepEqual(store.gc({ retain: 1 }), noop)
+
+    // With a snapshot to delete, the full check runs and refuses (no recovery point lost).
+    assert.throws(() => store.gc({ retain: 0 }), /gc refused: store is corrupt: .*integrity/)
+    assert.deepEqual(snapshotFiles(store), [0, 1])
+    assert.equal(existsSync(tombstone), true)
+
+    // The lineage and identity checks still run with nothing to delete: an archived
+    // envelope the head lacks, then a head whose identity no longer matches the marker.
+    const archived = join(store.txApplied, 'absent.txn')
+    mkdirSync(archived, { recursive: true })
+    assert.throws(() => store.gc(), /gc refused: store is corrupt: .*archived transaction/)
+    rmSync(archived, { recursive: true })
+    const marker = JSON.parse(readFileSync(join(dir, 'fsqlite.json'), 'utf8')) as object
+    const other = { ...marker, store_id: '00000000-0000-4000-8000-000000000000' }
+    writeFileSync(join(dir, 'fsqlite.json'), JSON.stringify(other))
+    assert.throws(() => store.gc(), /gc refused: store is corrupt: .*store_id/)
+  } finally {
+    cleanup()
+  }
+})
+
+test('gc classifies the store once, with the full head check only when it collects', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    advance(store, 2)
+    // Every classification lists and looks up each archived transaction, so a collecting
+    // gc that classified cheaply and then fully would pay that scan twice.
+    const classify = (
+      store as unknown as { classify: (deep: boolean) => ValidateResult }
+    ).classify.bind(store)
+    const passes: boolean[] = []
+    Object.assign(store, {
+      classify: (deep: boolean): ValidateResult => {
+        passes.push(deep)
+        return classify(deep)
+      },
+    })
+
+    assert.deepEqual(store.gc(), { removed: 0, kept: 3, leased: [], integrityChecked: false })
+    assert.deepEqual(store.gc({ retain: 0 }), {
+      removed: 2,
+      kept: 1,
+      leased: [],
+      integrityChecked: true,
+    })
+    assert.deepEqual(passes, [false, true], 'one cheap pass, then one full pass')
   } finally {
     cleanup()
   }
@@ -472,6 +556,22 @@ test('gc refuses to delete when current differs from the version it validated', 
           error.message.includes(`current moved from ${version} to 2`),
       )
     }
+    // A gc with nothing to delete checks the head without reading it whole, and holds
+    // to the same rule.
+    store.validate = validate
+    const classify = (
+      store as unknown as { classify: (deep: boolean) => ValidateResult }
+    ).classify.bind(store)
+    Object.assign(store, {
+      classify: (deep: boolean): ValidateResult => ({ ...classify(deep), current: 1 }),
+    })
+    assert.throws(
+      () => store.gc(),
+      (error: unknown) =>
+        error instanceof FsqliteError &&
+        error.code === 'retryable' &&
+        error.message.includes('current moved from 1 to 2'),
+    )
     assert.deepEqual(snapshotFiles(store), [0, 1, 2])
   } finally {
     cleanup()

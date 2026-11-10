@@ -22,6 +22,7 @@
 // making publish exactly-once across crashes and racing reconcilers.
 
 import {
+  closeSync,
   mkdirSync,
   copyFileSync,
   linkSync,
@@ -31,6 +32,8 @@ import {
   writeFileSync,
   renameSync,
   existsSync,
+  openSync,
+  readSync,
   realpathSync,
   rmSync,
   statSync,
@@ -46,6 +49,7 @@ import {
   FsqliteError,
   PermanentConflictError,
   PostPublishError,
+  PublishContentionError,
   StoreFormatError,
   StrictConflictError,
   TransactionError,
@@ -131,10 +135,11 @@ export function requireSafeInteger(name: string, value: unknown, min: number): n
 }
 
 /**
- * Store states in which gc may delete: the head passed identity and full integrity
- * validation. `in-flight-capture` qualifies because its tells (fresh transients, a held
- * lock, uncommitted envelopes, an orphan ahead of `current`) are routine on a live store
- * and gc never touches them; a corrupt or unrecognized store may need every snapshot.
+ * Store states in which gc may proceed: the head passed identity and lineage validation,
+ * and full integrity validation whenever gc has a snapshot to delete (see `gc`).
+ * `in-flight-capture` qualifies because its tells (fresh transients, a held lock,
+ * uncommitted envelopes, an orphan ahead of `current`) are routine on a live store and gc
+ * never touches them; a corrupt or unrecognized store may need every snapshot.
  */
 const GC_SAFE_STATES: ReadonlySet<StoreValidationState> = new Set([
   'sealed',
@@ -177,6 +182,79 @@ function applyFailureReason(error: unknown): string {
 /** The machine code that opens a quarantine reason (`digest-mismatch`, `strict-conflict`). */
 const quarantineReasonCode = (reason: string): string => reason.split(':', 1)[0]?.trim() ?? ''
 
+/**
+ * The longest valid `current` (spec P1): a safe-integer version (at most 16 digits) plus
+ * optional whitespace. Longer content is corruption. A read loads one byte more to detect
+ * it, so a pointer replaced by a large file is never loaded or echoed whole.
+ */
+const MAX_POINTER_BYTES = 64
+/** The most of a malformed pointer an error message quotes. */
+const POINTER_QUOTE_CHARS = 32
+/**
+ * A valid pointer (spec P1): ASCII digits with optional ASCII whitespace around them.
+ * `trim()` would also strip Unicode spaces and a byte order mark.
+ */
+const POINTER_PATTERN = /^[ \t\n\v\f\r]*([0-9]+)[ \t\n\v\f\r]*$/
+/** Characters a log line would hide: controls, format characters such as a BOM, spaces. */
+const UNPRINTED = /[\p{Cc}\p{Cf}\p{Z}]/gu
+
+/** `JSON.stringify(text)`, also escaping every unprinted character but U+0020. */
+function escapeText(text: string): string {
+  return JSON.stringify(text).replace(UNPRINTED, (c) => {
+    const code = c.codePointAt(0) ?? 0
+    if (c === ' ') {
+      return c
+    }
+    return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, '0')}`
+  })
+}
+
+/**
+ * Quote at most {@link POINTER_QUOTE_CHARS} characters (code points, so none is split) of
+ * malformed pointer text, escaped. `prefix` says the text is already only the start of the
+ * pointer, so the quote names itself a prefix even when every character fits.
+ */
+function quotePointer(text: string, prefix = false): string {
+  const chars = Array.from(text)
+  if (!prefix && chars.length <= POINTER_QUOTE_CHARS) {
+    return escapeText(text)
+  }
+  const quoted = chars.slice(0, POINTER_QUOTE_CHARS)
+  return `${escapeText(quoted.join(''))} (the first ${quoted.length} characters)`
+}
+
+/** Read `current`, loading at most one byte past {@link MAX_POINTER_BYTES}; more is corruption. */
+function readPointerText(path: string): string {
+  const buf = Buffer.alloc(MAX_POINTER_BYTES + 1)
+  const fd = openSync(path, 'r')
+  let length = 0
+  try {
+    while (length < buf.length) {
+      const n = readSync(fd, buf, length, buf.length - length, length)
+      if (n === 0) {
+        break
+      }
+      length += n
+    }
+  } finally {
+    closeSync(fd)
+  }
+  if (length > MAX_POINTER_BYTES) {
+    // Streaming decode holds back a character the bound cuts off instead of emitting U+FFFD.
+    // `ignoreBOM` keeps a leading byte order mark in the text, so the quote shows it.
+    const start = new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+      buf.subarray(0, MAX_POINTER_BYTES),
+      { stream: true },
+    )
+    throw new FsqliteError(
+      'corrupt',
+      `corrupt current pointer: larger than ${MAX_POINTER_BYTES} bytes, beginning ` +
+        quotePointer(start, true),
+    )
+  }
+  return buf.toString('utf8', 0, length)
+}
+
 /** init found a lineage without `current`; only repair may choose the head to restore. */
 const missingPointerError = (versions: number[]): FsqliteError =>
   new FsqliteError(
@@ -198,6 +276,9 @@ const isTransientFile = (f: string): boolean =>
   f.startsWith('.work-') ||
   f.endsWith('.tmp') ||
   f.endsWith('.tmp-journal')
+
+/** A gc tombstone: a snapshot renamed aside by a gc that may have crashed (spec G2). */
+const isGcTombstone = (f: string): boolean => f.startsWith('.gc-') && f.endsWith('.tmp')
 
 // writerId is interpolated into filesystem paths (the working copy and the envelope dir),
 // so it must be a safe single path component: no separators, traversal, or oversize names.
@@ -804,14 +885,18 @@ export class SnapshotStore {
    * The published version the `current` pointer names. Parsed strictly: an empty or
    * non-numeric pointer is corruption (R2) and throws rather than silently reading as
    * version 0 (the empty snapshot); `Number('')` would be 0, masking a torn pointer.
+   * Content longer than {@link MAX_POINTER_BYTES}, which is never read whole, and a digit
+   * string too long to be a safe integer are corruption too (spec P1).
    */
   currentVersion(): number {
     readStoreMarker(this.dir)
-    const raw = readFileSync(this.currentPath, 'utf8').trim()
-    if (!/^\d+$/.test(raw)) {
-      throw new FsqliteError('corrupt', `corrupt current pointer: ${JSON.stringify(raw)}`)
+    const text = readPointerText(this.currentPath)
+    const digits = POINTER_PATTERN.exec(text)?.[1]
+    const version = digits === undefined ? Number.NaN : Number(digits)
+    if (!Number.isSafeInteger(version)) {
+      throw new FsqliteError('corrupt', `corrupt current pointer: ${quotePointer(text)}`)
     }
-    return Number(raw)
+    return version
   }
 
   /**
@@ -943,7 +1028,7 @@ export class SnapshotStore {
       copyFileSync(path, work)
     }).version
     let changeset: Uint8Array | null
-    const db = driver.open(work)
+    const db = driver.openWorkingCopy(work)
     try {
       driver.protectOwnedTables(db)
       const boundary = driver.captureCallbackBoundary(db)
@@ -1120,7 +1205,8 @@ export class SnapshotStore {
    * atomic pointer swap under the lease lock. Idempotent (skips tx already in the snapshot's
    * `applied_tx` ledger) and conflict-resolving per the merge policy (clashes are quarantined,
    * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
-   * builder retry.
+   * builder retry. When all `maxRetries` attempts are superseded, it throws a
+   * {@link PublishContentionError}; back off and call again.
    *
    * A {@link PostPublishError} was raised after
    * the new version became current, for example while moving envelopes (spec F6); the data
@@ -1197,10 +1283,7 @@ export class SnapshotStore {
         attempts: attempt + 1,
       }
     }
-    throw new FsqliteError(
-      'retryable',
-      `reconcile exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
-    )
+    throw new PublishContentionError('reconcile', maxRetries)
   }
 
   /**
@@ -1361,9 +1444,17 @@ export class SnapshotStore {
    * another process (spec G3); `transientStaleMs` gates that.
    *
    * gc is destructive maintenance, so it fails closed (spec G0): invalid options throw a
-   * TypeError, a store that does not validate with an integrity-clean head is refused (its
-   * older snapshots may be the only recovery points repair has), and every deletion runs
-   * under the publish lock with a fenced token, so gc never interleaves with repair.
+   * TypeError, a store that does not validate is refused, no snapshot is deleted unless
+   * the head passed the full integrity check (its older snapshots may be the only recovery
+   * points repair has), and every deletion runs under the publish lock with a fenced
+   * token, so gc never interleaves with repair.
+   *
+   * The integrity check reads the whole head, so it runs only when some snapshot is old
+   * enough to delete. A call that would delete nothing still checks recognition, the
+   * pointer, the head's identity, and its lineage, and still requires `current` under the
+   * lock to equal the head it checked. It then sweeps stale transients other than gc
+   * tombstones, which hold a predecessor's bytes; snapshots that become collectable after
+   * that check, and those tombstones, wait for a call that runs the full check.
    */
   gc({
     retain = DEFAULT_RETAINED_SNAPSHOTS,
@@ -1377,7 +1468,18 @@ export class SnapshotStore {
     validateLockOptions(lockOpts)
     // Validate outside the lock: the integrity check reads the whole head and must not
     // stall publishers. A recognition failure is refused before the lock dir is created.
-    const health = this.validate()
+    // The full check runs only when there is a snapshot to delete, and the store is
+    // classified once either way: each pass looks up every archived transaction. A wrong
+    // guess here only costs work: `collect` false deletes nothing, and the floor and the
+    // `current`-moved check below both use the head the classification checked.
+    let collect = false
+    try {
+      const head = this.currentVersion()
+      collect = this.snapshotVersions().some((v) => v < head - retain)
+    } catch {
+      // A recognition failure or an unreadable pointer: the classification reports it.
+    }
+    const health = collect ? this.validate() : this.classify(false)
     if (!GC_SAFE_STATES.has(health.state) || health.current === undefined) {
       const message =
         `gc refused: store is ${health.state}: ${health.issues.join('; ')}; ` +
@@ -1389,14 +1491,22 @@ export class SnapshotStore {
     const validated = health.current
     return withLock(
       this.publishLock,
-      (_token, lease) => this.gcLocked(lease, validated, retain, leaseStaleMs, transientStaleMs),
+      (_token, lease) =>
+        this.gcLocked(lease, validated, collect, retain, leaseStaleMs, transientStaleMs),
       lockOpts,
     )
   }
 
+  /**
+   * `validated` is the head gc checked. `collect` is whether that check was the full one,
+   * run because some snapshot was old enough to delete; without it gc deletes no snapshot
+   * and sweeps no tombstone, only the other stale transients. The result reports it as
+   * `integrityChecked`.
+   */
   private gcLocked(
     lease: LockLease,
     validated: number,
+    collect: boolean,
     retain: number,
     leaseStaleMs: number,
     transientStaleMs: number,
@@ -1420,7 +1530,7 @@ export class SnapshotStore {
     const keepFloor = cur - retain
     let removed = 0
     for (const v of versions) {
-      if (v === cur || v >= keepFloor || leased.has(v)) {
+      if (!collect || v === cur || v >= keepFloor || leased.has(v)) {
         continue
       }
       // Re-scan leases right before the tombstone: a reader may have claimed v after we
@@ -1443,7 +1553,7 @@ export class SnapshotStore {
         return
       }
       for (const f of readdirSync(dir)) {
-        if (!isTransientFile(f)) {
+        if (!isTransientFile(f) || (!collect && isGcTombstone(f))) {
           continue
         }
         const p = join(dir, f)
@@ -1460,7 +1570,12 @@ export class SnapshotStore {
     for (const dir of this.transientDirs()) {
       sweepStaleTransients(dir)
     }
-    return { removed, kept: versions.length - removed, leased: [...leased] }
+    return {
+      removed,
+      kept: versions.length - removed,
+      leased: [...leased],
+      integrityChecked: collect,
+    }
   }
 
   /**
@@ -1562,6 +1677,15 @@ export class SnapshotStore {
    * {@link StoreState} plus issues, rather than silently accepting it.
    */
   validate(): ValidateResult {
+    return this.classify(true)
+  }
+
+  /**
+   * {@link validate}'s classification. With `deep` false it skips the head's
+   * `integrity_check` and `foreign_key_check`, the only steps that read the whole head,
+   * and keeps every other check, including the head's identity and lineage.
+   */
+  private classify(deep: boolean): ValidateResult {
     const issues: string[] = []
     const recognition = recognizeStore(this.dir)
     if (recognition.state !== 'supported') {
@@ -1630,7 +1754,7 @@ export class SnapshotStore {
           issues: [...issues, errorMessage(error)],
         }
       }
-      problems = driver.integrityProblems(db)
+      problems = deep ? driver.integrityProblems(db) : []
       missingArchived = problems.length === 0 ? this.countMissingArchived(db, archived) : 0
     } finally {
       db.close()

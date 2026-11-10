@@ -90,12 +90,26 @@ function openWritable(path: string, pragmas: string): DatabaseSync {
 }
 
 /**
- * Open a read-write database for a writer working copy, a DirectStore build, or init's
- * snapshot-0 build. Foreign keys are enforced, so a callback observes declared constraints
- * and its foreign-key actions run, which records their effects in the changeset.
+ * Open a read-write database for a DirectStore build or init's snapshot-0 build. Foreign
+ * keys are enforced, so a callback observes declared constraints and its foreign-key
+ * actions run.
  */
 export function open(path: string): DatabaseSync {
   return openWritable(path, 'PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;')
+}
+
+/**
+ * Open a SnapshotStore writer's working copy. Foreign keys are enforced, as in
+ * {@link open}, so the callback observes declared constraints and its foreign-key actions
+ * are recorded in the changeset.
+ *
+ * SQLite never syncs it (`synchronous = OFF`): the copy is private to this writer and
+ * deleted when the callback returns, and only the in-memory changeset outlives it, so no
+ * sync on it protects anything (spec section 10). A rollback inside this process reads
+ * the journal back from the OS cache.
+ */
+export function openWorkingCopy(path: string): DatabaseSync {
+  return openWritable(path, 'PRAGMA synchronous = OFF; PRAGMA foreign_keys = ON;')
 }
 
 /**

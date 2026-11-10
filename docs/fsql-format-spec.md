@@ -15,7 +15,9 @@ A DirectStore Writer instead follows the serialized strategy in section 9.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are to be interpreted as
 in RFC 2119. Requirements are stated against four conformance roles defined in §13:
-**Reader**, **Writer**, **Reconciler**, and **Operator tool**.
+**Reader**, **Writer**, **Reconciler**, and **Operator tool**. In this document’s
+patterns, `[0-9]` matches only the ASCII digits 0 through 9, not the other Unicode
+decimal digits that `\d` matches in some regular-expression engines.
 
 Where this document and the Node implementation disagree, that is a bug in one of them;
 file it.
@@ -114,8 +116,8 @@ Normal store operations never modify it; only an explicit format upgrade may rep
 ```
 
 - **M1.** `format` MUST be `"fsqlite"`; `format_version` MUST be a supported version
-  string matching `^f(0|[1-9]\d*)\.(0|[1-9]\d*)$`; `required_features` MUST be an array
-  of unique strings understood by the reader; and `store_id` MUST be a UUID.
+  string matching `^f(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`; `required_features` MUST be an
+  array of unique strings understood by the reader; and `store_id` MUST be a UUID.
 - **M2.** Marker absence means **not an fsqlite store**. A marker that is malformed or
   names another format is **invalid**. A valid marker with an unsupported
   `format_version` or unknown required feature is **unsupported**, not corrupt.
@@ -134,7 +136,7 @@ Naming grammar:
 
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
-  Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
+  Files matching `^([0-9]+)\.fsqlite\.sqlite$` and nothing else are snapshots.
 - **Transients** are exactly the entries at the store root, in `snapshots/`, in
   `tx/pending/`, or in `leases/` matching: prefix `.build-`, prefix `.direct-`, prefix
   `.work-` (under `tx/pending/`), suffix `.tmp`, or suffix `.tmp-journal` (the rollback
@@ -264,9 +266,16 @@ without the caller DDL.
 `current` contains the published version as an ASCII decimal string (no padding
 required; the Node implementation writes the bare number with no trailing newline).
 
-- **P1.** Readers MUST parse strictly: after trimming ASCII whitespace, the content MUST
-  match `^\d+$`. Anything else, including empty content, is **corruption** and MUST be
-  surfaced per R2 rather than silently treated as version 0.
+- **P1.** Readers MUST parse strictly: the content MUST be at most 64 bytes, and after
+  trimming ASCII whitespace (space, tab, line feed, vertical tab, form feed, and
+  carriage return; a byte order mark or a no-break space is not ASCII whitespace) it
+  MUST match `^[0-9]+$`, ASCII digits only, and name a version no greater than 2^53 − 1
+  (9007199254740991). Anything else, including empty content, is **corruption** and MUST
+  be surfaced per R2 rather than silently treated as version 0. A reader SHOULD detect
+  content over 64 bytes without loading the whole file, and SHOULD quote at most a
+  short, escaped prefix of malformed content in diagnostics (the Node implementation
+  reads at most 65 bytes, treats content longer than 64 bytes as corruption, and quotes
+  at most 32 characters).
 - **P2.** The pointer MUST be replaced atomically and durably: write the new content to
   a uniquely-named temp file in the same directory → fsync the temp file → `rename()` it
   over `current` → fsync the directory.
@@ -379,6 +388,11 @@ Protocol:
    marker identity, schema version, and schema hash.
    Then run the integrity gate (`PRAGMA quick_check` and `PRAGMA foreign_key_check`). A
    failure aborts the whole reconcile and publishes nothing.
+   For a conforming build the gate’s `foreign_key_check` repeats what F3’s per-envelope
+   checks already proved.
+   It is kept deliberately: it is the one check of the complete build that does not rely
+   on per-envelope attribution, and it costs one scan of the foreign-key-bearing tables
+   per reconcile, not per envelope.
    A failure at any step before the build is committed (F5c) MUST discard the build
    transient, so a failing reconcile never leaves a head-sized file behind per attempt.
 5. **F5.** If nothing was applied, discard the build, perform the archive/quarantine
@@ -583,10 +597,16 @@ A **read lease** pins a version against GC while a packager/uploader reads it.
   It MUST reject invalid parameters before touching the store (Node: `retain` a
   non-negative integer; `leaseStaleMs` and `transientStaleMs` positive integers, so a
   zero or negative window cannot turn every live lease or fresh transient into debris).
-  It MUST validate the store (§11) and refuse unless the head passed identity and
-  integrity validation (`sealed`, `live`, or `in-flight-capture`, whose tells are
-  routine on a live store and are never touched by GC): with a corrupt head, the older
-  snapshots may be the only recovery points repair has (§11 step 1). It MUST then hold
+  Before it deletes any snapshot, it MUST validate the store (§11) and refuse unless the
+  head passed identity and integrity validation (`sealed`, `live`, or
+  `in-flight-capture`, whose tells are routine on a live store and are never touched by
+  GC): with a corrupt head, the older snapshots may be the only recovery points repair
+  has (§11 step 1). A GC call that finds no snapshot old enough to delete MAY skip the
+  head’s `integrity_check` and `foreign_key_check`, which read the whole head, but MUST
+  still refuse a store that fails any other §11 check (recognition, the pointer, head
+  identity, or archived transactions missing from the head ledger).
+  Such a call MUST delete no snapshot and no GC tombstone (G2), which holds a
+  predecessor’s bytes; it MAY sweep the other stale transients (G3). It MUST then hold
   the publish lock (L1-L4) for every deletion, fence (L3) before each one, and re-read
   `current` under the lock.
   If it differs from the validated version, GC MUST refuse and require a fresh
@@ -681,16 +701,18 @@ itself, on the file or directory, after the SQLite connection that wrote the fil
 closed. SQLite’s own syncs while it writes a transient build, working copy, or
 `VACUUM INTO` output are not barriers in this protocol, so SQLite’s `synchronous` and
 `fullfsync` settings do not affect publication durability.
-An implementation MAY therefore disable SQLite’s syncs on a reconcile build.
-The build is unreachable until F5c fsyncs it, links it, and fsyncs `snapshots/`, so a
-crash or power loss before then leaves only a discardable transient, whatever state
-SQLite left it in; the barrier fsync then flushes every page SQLite wrote without
-syncing. A rollback inside the live process reads the rollback journal back through the
-operating system’s cache, which needs no sync.
+An implementation MAY therefore disable SQLite’s syncs on a reconcile build or a writer
+working copy. A reconcile build is unreachable until F5c fsyncs it, links it, and fsyncs
+`snapshots/`, so a crash or power loss before then leaves only a discardable transient,
+whatever state SQLite left it in; the barrier fsync then flushes every page SQLite wrote
+without syncing. A rollback inside the live process reads the rollback journal back
+through the operating system’s cache, which needs no sync.
 The Node implementation runs reconcile builds with `synchronous = OFF`, which saves
 SQLite’s journal and database syncs on every applied envelope.
-It keeps SQLite’s `FULL` setting on writer working copies, DirectStore builds, and
-init’s snapshot-0 build.
+It also runs writer working copies with `synchronous = OFF`: a working copy is never
+published or synced at all, because it is private to its writer and deleted once the
+callback returns, and only the in-memory changeset outlives it (W4 needs no barrier).
+It keeps SQLite’s `FULL` setting on DirectStore builds and init’s snapshot-0 build.
 On Apple platforms `fsync(2)` flushes only to the drive’s cache; an implementation there
 MUST issue `fcntl(F_FULLFSYNC)` for each barrier, using the strongest weaker barrier
 only where the filesystem rejects it.

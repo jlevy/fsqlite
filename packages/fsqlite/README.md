@@ -336,7 +336,7 @@ the store root `dir` without touching the filesystem.
 | `readLease({ maxRetries, lockOpts })` | `ReadLease` | Claims a pin under the publication lock; `heartbeat()` keeps it fresh, `release()` drops it |
 | `snapshotPath(version)` | path | The file of a published version |
 | `validate()` | `ValidateResult` | Classifies the store as `sealed`, `live`, `in-flight-capture`, `corrupt`, or a recognition failure, with issues |
-| `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses an unhealthy store |
+| `gc({ retain, leaseStaleMs, transientStaleMs, lockOpts })` | `GcResult` | Deletes superseded snapshots and stale transients under the publish lock; refuses to delete from a store whose head fails validation, and skips the full integrity check when nothing is old enough to delete (`integrityChecked: false`), so it is not a corruption check (use `validate()`) |
 | `planRepair({ lockOpts })` | `RepairResult` | Lists the steps `repair()` would take without changing anything |
 | `repair({ lockOpts })` | `RepairResult` | Restores the last consistent published state without deleting a recovery point first; refuses while any publisher lock exists |
 | `seal(destPath)` | `destPath` | Writes an integrity-checked standalone copy of the head; refuses while envelopes are pending |
@@ -436,8 +436,12 @@ It publishes the complete export atomically and refuses an existing destination,
 including symlinks, or a destination with `-journal`, `-wal`, or `-shm` sidecars.
 Choose a path no live SQLite connection uses; to replace an old export, choose a new
 filename and remove the old export only after the new one succeeds.
-`gc` holds the publish lock for every deletion and refuses a store whose head fails
-validation. `stats` and `doctor` also accept a plain SQLite file.
+`gc` holds the publish lock for every deletion and refuses to delete from a store whose
+head fails validation; it runs the full head check, which reads the whole head, only
+when it has a snapshot to delete, so a gc that exits 0 and prints `integrity check:
+skipped` has not proven the head clean.
+Use `validate` or `doctor` to detect corruption.
+`stats` and `doctor` also accept a plain SQLite file.
 `fsinspect` probes the local filesystem operations fsqlite depends on, but it is a
 heuristic from one host, not a substitute for the pending multi-host gate.
 Its safe verdict requires working directory fsync and a filesystem whose fsync persists
@@ -463,15 +467,17 @@ Argument mistakes throw `TypeError`.
 | `pending` | A captured write is not yet published (`TransactionError.txId`) | Reconcile and inspect its outcome; never re-run the write |
 | `outcome-unknown` | The captured write’s outcome could not be read (`TransactionError.txId`) | Restore access and inspect that transaction; never re-run the write |
 | `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
-| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |
+| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, `PublishContentionError`) | Retry later |
 | `post-publish` | A step failed after `current` named the new version (`PostPublishError.published`) | Do not re-run the write |
 | `incompatible` | The handle’s schema, schema version, or SQLite binding cannot serve the store | Fix the caller |
 | `refused` | A precondition failed, such as sealing a pending tail or a callback that changed the schema | Fix the call |
 | `io` | A required filesystem step failed; `cause` holds the system error | Fix the environment |
 
 `StoreFormatError` (the recognition codes, with `state`), `ConflictError` (with
-`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`), and
-`TransactionError` (with `txId` and `quarantineReason`) are subclasses.
+`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`),
+`PublishContentionError` (with `attempts`, raised when every publish attempt of a
+`reconcile()` or `DirectStore.write()` lost to a peer), and `TransactionError` (with
+`txId` and `quarantineReason`) are subclasses.
 A lost read-lease heartbeat is `refused` and non-retryable: take a new lease before
 reading further. Repeating a heartbeat cannot restore a released or collected pin.
 
@@ -525,9 +531,10 @@ is the normative protocol authority.
   store does not yet verify policy identity.
 - `SnapshotStore` seeds each default writer by copying the published snapshot, so write
   latency grows with snapshot size.
-  Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2
-  ms for 2.0 MiB and 163.8 to 164.6 ms for 21.7 MiB. Eight child processes issuing 40
-  total writes against 21.7 MiB took 8.4 to 8.9 seconds including startup.
+  Three runs of the maintained 2 KB-row benchmark on one cloud VM measured median
+  capture at 2.1 to 2.6 ms for 2.0 MiB and 13.4 to 14.6 ms for 21.7 MiB. In two runs of
+  the maintained multi-process calibration on one cloud VM, eight child processes
+  issuing 40 total writes against 21.7 MiB took 0.60 to 0.64 seconds including startup.
   Treat these hardware-specific measurements as sizing evidence, not a portable rate or
   performance guarantee.
   Any faster seed must preserve the data and constraints the callback observes; safe

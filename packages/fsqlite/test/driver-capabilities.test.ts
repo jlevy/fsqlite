@@ -6,9 +6,9 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { backupDatabase, capabilities } from '../src/index.ts'
-import { open, openBuild, openReadonly, integrityCheck } from '../src/driver.ts'
-import { tmpStore } from './fixture.ts'
+import { backupDatabase, capabilities, SnapshotStore } from '../src/index.ts'
+import { open, openBuild, openReadonly, openWorkingCopy, integrityCheck } from '../src/driver.ts'
+import { STORE_OPTS, tmpStore } from './fixture.ts'
 
 /** Run `fn` in a fresh temporary directory, removed afterward. */
 async function withTmp(fn: (dir: string) => unknown): Promise<void> {
@@ -53,6 +53,23 @@ test('a reconcile build skips SQLite syncs and runs no foreign-key actions', asy
   })
 })
 
+test('a writer working copy skips SQLite syncs and enforces foreign keys', async () => {
+  await withTmp((dir) => {
+    // The copy is private and deleted after the callback; only its changeset survives, so
+    // a sync would flush a head-sized file for nothing (spec section 10).
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    let seen: Record<string, unknown> = {}
+    store.write('w', (db) => {
+      const pragma = (name: string): unknown =>
+        Object.values(db.prepare(`PRAGMA ${name}`).get() ?? {})[0]
+      seen = { synchronous: pragma('synchronous'), foreignKeys: pragma('foreign_keys') }
+      db.prepare('INSERT INTO artifacts VALUES (?,?,?)').run('a', 'A', 't')
+    })
+    assert.deepEqual(seen, { synchronous: 0, foreignKeys: 1 })
+    assert.equal(store.reconcile().applied, 1, 'the captured changeset still applies')
+  })
+})
+
 test('every connection fsqlite opens is defensive wherever node:sqlite has the flag', async () => {
   // Node 24.12 added the option with enableDefensive(); Node 22 has neither.
   const defensiveExists =
@@ -62,6 +79,7 @@ test('every connection fsqlite opens is defensive wherever node:sqlite has the f
     const path = join(dir, 'probe.sqlite')
     for (const [name, connect] of [
       ['open', open],
+      ['openWorkingCopy', openWorkingCopy],
       ['openBuild', openBuild],
       ['openReadonly', openReadonly],
     ] as const) {

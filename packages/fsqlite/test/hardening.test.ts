@@ -1,11 +1,11 @@
 // Hardening guarantees: writers fail loudly without the session extension, validate/seal
-// surface integrity_check diagnostics rather than a bare verdict, and a read lease
-// protects its snapshot from concurrent gc.
+// surface integrity_check diagnostics rather than a bare verdict, a read lease protects
+// its snapshot from concurrent gc, and a corrupt pointer is never loaded or echoed whole.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { closeSync, existsSync, openSync, statSync, writeSync } from 'node:fs'
-import { SnapshotStore } from '../src/index.ts'
+import { closeSync, existsSync, openSync, statSync, writeFileSync, writeSync } from 'node:fs'
+import { FsqliteError, SnapshotStore } from '../src/index.ts'
 import * as driver from '../src/driver.ts'
 import { STORE_OPTS, tmpStore } from './fixture.ts'
 
@@ -124,6 +124,123 @@ test('a read lease protects its snapshot from aggressive gc, then releases it', 
       'the unpinned version is collected',
     )
     assert.equal(store.validate().state, 'sealed')
+  } finally {
+    cleanup()
+  }
+})
+
+test('a corrupt current pointer is read and quoted only up to a small bound', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const corrupt = (pattern: RegExp) => (error: unknown) =>
+      error instanceof FsqliteError &&
+      error.code === 'corrupt' &&
+      pattern.test(error.message) &&
+      error.message.length < 200
+
+    // A large file renamed over `current` (a mistaken copy, or a misdirected export).
+    writeFileSync(store.currentPath, `SQLite format 3\0${'store data '.repeat(100_000)}`)
+    assert.throws(
+      () => store.currentVersion(),
+      corrupt(/^corrupt current pointer: larger than 64 bytes, beginning "SQLite format 3\\u0000/),
+    )
+    assert.deepEqual(store.validate(), { state: 'corrupt', issues: ['torn current pointer'] })
+
+    writeFileSync(store.currentPath, `12${'z'.repeat(50)}`)
+    assert.throws(() => store.currentVersion(), corrupt(/"12z{30}" \(the first 32 characters\)$/))
+    writeFileSync(store.currentPath, '9'.repeat(40)) // digits, but no safe-integer version
+    assert.throws(() => store.read(() => 0), corrupt(/^corrupt current pointer: "9{32}"/))
+    writeFileSync(store.currentPath, ' 0\n')
+    assert.equal(store.currentVersion(), 0, 'surrounding whitespace is still allowed (P1)')
+
+    // P1's limits are exact: 64 bytes and 2^53 - 1 are valid, one more of either is not.
+    writeFileSync(store.currentPath, `${' '.repeat(63)}0`)
+    assert.equal(store.currentVersion(), 0)
+    writeFileSync(store.currentPath, `${' '.repeat(64)}0`)
+    assert.throws(() => store.currentVersion(), corrupt(/^corrupt current pointer: larger than 64/))
+    writeFileSync(store.currentPath, String(Number.MAX_SAFE_INTEGER))
+    assert.equal(store.currentVersion(), Number.MAX_SAFE_INTEGER)
+    writeFileSync(store.currentPath, '9007199254740992')
+    assert.throws(
+      () => store.currentVersion(),
+      corrupt(/^corrupt current pointer: "9007199254740992"$/),
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('a quoted pointer prefix never splits a character and always says it is a prefix', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    const messageFor = (content: string): string => {
+      writeFileSync(store.currentPath, content)
+      try {
+        store.currentVersion()
+      } catch (error) {
+        assert.ok(error instanceof FsqliteError && error.code === 'corrupt')
+        return error.message
+      }
+      throw new Error(`pointer ${JSON.stringify(content)} parsed`)
+    }
+    const oversize = 'corrupt current pointer: larger than 64 bytes, beginning '
+
+    // 80 bytes of two-byte characters: over the bound, so the quote is only a prefix.
+    assert.equal(
+      messageFor('é'.repeat(40)),
+      `${oversize}"${'é'.repeat(32)}" (the first 32 characters)`,
+    )
+    // 64 bytes end inside the 22nd three-byte character, which is left out, not mangled.
+    assert.equal(
+      messageFor('€'.repeat(30)),
+      `${oversize}"${'€'.repeat(21)}" (the first 21 characters)`,
+    )
+    // A leading byte order mark is quoted, escaped, not dropped by the decoder.
+    assert.equal(
+      messageFor(`\ufeff${'x'.repeat(70)}`),
+      `${oversize}"\\ufeff${'x'.repeat(31)}" (the first 32 characters)`,
+    )
+    // Within the bound, the 32nd character is a surrogate pair and is quoted whole.
+    assert.equal(
+      messageFor(`${'z'.repeat(31)}😀${'z'.repeat(8)}`),
+      `corrupt current pointer: "${'z'.repeat(31)}😀" (the first 32 characters)`,
+    )
+  } finally {
+    cleanup()
+  }
+})
+
+test('a pointer is trimmed of ASCII whitespace only, and its quote shows the rest', () => {
+  const { store, cleanup } = freshStore()
+  try {
+    for (const content of [' 0\n', '\t0\r\n', '\v0\f']) {
+      writeFileSync(store.currentPath, content)
+      assert.equal(store.currentVersion(), 0, `${JSON.stringify(content)} is a valid pointer (P1)`)
+    }
+    // A UTF-8 byte order mark and a no-break space are not ASCII whitespace, and only
+    // ASCII digits name a version. The quote is the untrimmed content, with characters a
+    // log would hide escaped.
+    const bom = String.fromCodePoint(0xfeff)
+    const nbsp = String.fromCodePoint(0xa0)
+    const arabicIndicThree = String.fromCodePoint(0x663)
+    const fullwidthThree = String.fromCodePoint(0xff13)
+    for (const [content, quoted] of [
+      [`${bom}0`, String.raw`"\ufeff0"`],
+      [`0${nbsp}`, String.raw`"0\u00a0"`],
+      [' x\n', String.raw`" x\n"`],
+      [arabicIndicThree, `"${arabicIndicThree}"`],
+      [`1${fullwidthThree}`, `"1${fullwidthThree}"`],
+    ] as const) {
+      writeFileSync(store.currentPath, content)
+      assert.throws(
+        () => store.currentVersion(),
+        (error: unknown) =>
+          error instanceof FsqliteError &&
+          error.code === 'corrupt' &&
+          error.message === `corrupt current pointer: ${quoted}`,
+        `${JSON.stringify(content)} is corrupt`,
+      )
+    }
   } finally {
     cleanup()
   }

@@ -428,19 +428,20 @@ it, so even a one-row fsqlite write has an O(snapshot size) I/O floor.
 SnapshotStore then pays another head-sized build during reconciliation.
 This is the main performance price of immutable publication in `f1.0`.
 
-Two runs of the maintained 2 KB-row benchmark measured median capture at 13.7 to 18.2 ms
-for a 2.0 MiB head and 163.8 to 164.6 ms for a 21.7 MiB head.
-The algorithm has a linear copy floor, but the measurements do not establish a portable
-rate or justify a GiB extrapolation.
+Three runs of the maintained 2 KB-row benchmark on one cloud VM in November 2026
+measured median capture at 2.1 to 2.6 ms for a 2.0 MiB head and 13.4 to 14.6 ms for a
+21.7 MiB head. The algorithm has a linear copy floor, but the measurements do not
+establish a portable rate or justify a GiB extrapolation.
 
 Session setup and callback-boundary checks visit schema objects, and every table
 consumes some SQLite pages, but data and indexes usually dominate snapshot bytes.
-Two local calibration runs from 1 to 250 empty caller tables increased median capture
-from about 2.5 ms to about 16.3 ms while the snapshot itself grew from 28 KiB to 2.0
-MiB. Because the calibration changed table count and file bytes together, it does not
-isolate table count as the primary variable or establish an independent linear
-table-count law. Table count adds real schema work, but the severity must be measured
-with the target schema rather than inferred from a table total.
+Two calibration runs on one cloud VM in November 2026 from 1 to 250 empty caller tables
+increased median capture from about 1.4 ms to about 4.2 ms while the snapshot itself
+grew from 28 KiB to 2.0 MiB. Because the calibration changed table count and file bytes
+together, it does not isolate table count as the primary variable or establish an
+independent linear table-count law.
+Table count adds real schema work, but the severity must be measured with the target
+schema rather than inferred from a table total.
 
 Measure the target workload before adopting SnapshotStore for a large database.
 Safe copy-on-write, overlay, shared-base, and compaction designs remain on the roadmap.
@@ -457,9 +458,28 @@ envelope to decide whether to commit or quarantine it.
 The lifetime `applied_tx` count adds another growing term because reconcile loads the
 complete ledger into memory and every later snapshot carries it.
 
-Garbage collection validates the current head even when there are no snapshots to
-collect. On one Linux review host, a no-op collection against a 505 MiB head took about
-464 ms with a warm cache and 6.7 s with a cold cache.
+Maintenance reads the head too.
+`validate()` runs `integrity_check` and `foreign_key_check` over the whole head, and
+`gc()` runs the same full check before it deletes any snapshot, so a collecting gc pays
+one head-sized read: on one Linux review host that took about 464 ms with a warm cache
+and 6.7 s with a cold cache for a 505 MiB head.
+A gc call with nothing old enough to delete skips that check.
+It still pays directory listings, a lease scan, a publish-lock round trip, a read of the
+head’s identity rows, and one ledger lookup per archived transaction, because every
+classification checks that the head’s ledger holds each envelope in `tx/applied/`, and
+nothing prunes that archive.
+On one local run with a 39.5 MiB head and few archived transactions its median was about
+1 ms, against about 20 ms with the full check.
+On one cloud VM a no-op gc on a small head took 0.7 to 0.9 ms with no archived
+transactions and 123 to 126 ms with 30,000, about 4 µs per lookup, and the lock round
+trip was about 0.14 ms there; on a shared path it costs a few network round trips.
+Frequent gc calls are therefore cheap only while the archive is small, and only until
+retained versions turn over.
+A collecting gc pays one full head read however many snapshots it deletes, and each
+publish makes at most one more version old enough to delete, so a gc after every
+reconcile, or on a timer faster than publishing, pays that read once per publish.
+To amortize it, collect less often than you publish, for example after every tenth
+reconcile; on a shared path the full read crosses the network.
 
 Capture without the publish lease permits concurrent agents, but `W` in-flight writers
 can require about `W` working copies of the head.
@@ -489,10 +509,10 @@ The natural alpha workload is a few to a few dozen such cooperative agents, shor
 callbacks, a single-digit-MiB head, occasional writes, and batched reconciliation.
 A handful of agents against a head in the low tens of MiB can fit when background
 latency is acceptable, but it requires workload-specific measurement.
-In the maintained calibration, eight processes issuing 40 total writes against 21.7 MiB
-took 8.4 to 8.9 seconds including process startup.
-At 50 to 100 MiB, frequent capture or reconcile-after-write is a conditional to poor fit
-and needs capacity monitoring.
+In two runs of the maintained calibration on one cloud VM in November 2026, eight
+processes issuing 40 total writes against 21.7 MiB took 0.60 to 0.64 seconds including
+process startup. At 50 to 100 MiB, frequent capture or reconcile-after-write is a
+conditional to poor fit and needs capacity monitoring.
 Hundreds of MiB to GiB heads with frequent small writes, immediate global visibility, or
 high sustained transaction rates are poor default fits.
 

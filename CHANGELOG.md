@@ -32,15 +32,16 @@ publication validation are still pending.
   the published ledger holds them, and a failure after the new version is visible raises
   `PostPublishError` so callers do not re-run the write.
 - **Maintenance:** `validate()`; a non-destructive `repair()` with a `planRepair()` dry
-  run; a `gc()` that refuses an unhealthy store, holds the publish lock, and tombstones
-  snapshots so a racing read lease keeps its snapshot; a disposable `readLease()`; an
-  integrity-checked `seal()` that replaces its output atomically and refuses while
-  envelopes are pending; and `backupDatabase()`. `init()` refuses an unmarked non-empty
-  directory and a lineage that lost `current`, and reads retry when gc collects their
-  snapshot.
+  run; a `gc()` that refuses to delete from an unhealthy store, holds the publish lock,
+  and tombstones snapshots so a racing read lease keeps its snapshot; a disposable
+  `readLease()`; an integrity-checked `seal()` that replaces its output atomically and
+  refuses while envelopes are pending; and `backupDatabase()`. `init()` refuses an
+  unmarked non-empty directory and a lineage that lost `current`, and reads retry when
+  gc collects their snapshot.
 - **Typed errors:** every deliberate failure is an `FsqliteError` with a stable `code`
   and a `retryable` flag, with subclasses for recognition, conflicts, lock timeouts,
-  post-publish failures, and unpublished `writeWithRetry` transactions.
+  exhausted publish retries, post-publish failures, and unpublished `writeWithRetry`
+  transactions.
 - **CLI:** `fsqlite info|validate|stats|gc|seal|repair|doctor|fsinspect` with `--json`,
   strict argument parsing, and one exit-code table; `stats` and `doctor` also accept
   plain SQLite files, and `fsqlite/cli` exports `main()` for in-process use.
@@ -48,6 +49,26 @@ publication validation are still pending.
   `>=22.18.0 <23 || ^24.0.0 || >=26.0.0` (24.22 or 26.8 and later recommended).
   Every connection pins SQLite’s defensive mode where `node:sqlite` offers it, and none
   enables extension loading.
+
+### Performance and Diagnostics
+
+- **Capture:** a `SnapshotStore` writer’s private working copy runs with SQLite
+  `synchronous = OFF`, so capture no longer fsyncs a head-sized file it deletes moments
+  later. On one cloud VM, median capture in the seed benchmark fell to about a third: 2.1
+  to 2.6 ms (from 7.7 to 8.1 ms) for a 2.0 MiB head and 13.4 to 14.6 ms (from 39.4 to
+  47.4 ms) for a 21.7 MiB head.
+- **No-op gc:** a `gc()` with no snapshot old enough to delete skips the head’s
+  `integrity_check` and `foreign_key_check`, which read the whole head, and still
+  refuses a store that fails recognition, the pointer, head identity, or the ledger
+  lineage. `GcResult.integrityChecked` and the `integrity check:` field of `fsqlite gc`
+  say whether the full check ran.
+  On a 39.5 MiB head with few archived transactions its median fell from about 20 ms to
+  about 1 ms; each archived transaction still adds one ledger lookup (about 4 µs), so a
+  store with 30,000 archived transactions still pays about 125 ms.
+- **Pointer diagnostics:** `current` content longer than 64 bytes or naming a version
+  above 2^53 − 1 is corruption (spec P1), only ASCII whitespace around the digits is
+  trimmed, and an error quotes at most 32 characters of a corrupt pointer, escaped, so a
+  large file renamed over `current` is never loaded or echoed whole into logs.
 
 ### Changes From the July 2026 Repository Snapshot
 

@@ -83,7 +83,9 @@ Options:
   --json        Print JSON instead of text
   -h, --help    Show this help
 
-gc refuses a store whose head fails validation, exiting with that state's code.
+gc refuses to delete from a store whose head fails validation, exiting with that
+state's code. A gc with nothing to delete skips the full integrity check, so use
+validate to detect corruption.
 
 Exit codes:
 ...
@@ -503,7 +505,7 @@ $ ls store/snapshots
 
 ```console
 $ fsqlite gc store --retain 1
-removed 0 snapshot(s); kept 2; leased: none
+removed 0 snapshot(s); kept 2; leased: none; integrity check: skipped
 ? 0
 ```
 
@@ -514,7 +516,8 @@ $ fsqlite gc store --retain 0 --json
   "retain": 0,
   "removed": 1,
   "kept": 1,
-  "leased": []
+  "leased": [],
+  "integrityChecked": true
 }
 ? 0
 ```
@@ -539,6 +542,20 @@ $ ls damaged/snapshots
 000000000001.fsqlite.sqlite
 000000000002.fsqlite.sqlite
 ? 0
+```
+
+# Test: GC With Nothing to Delete Skips the Full Check, So Validate Detects Corruption
+
+```console
+$ fsqlite gc damaged
+removed 0 snapshot(s); kept 3; leased: none; integrity check: skipped
+? 0
+```
+
+```console
+$ fsqlite validate damaged
+corrupt: snapshot 2 failed integrity validation: [..]
+? 3
 ```
 
 # Test: Seal Refuses a Head That Fails Integrity Validation (Exit 3)

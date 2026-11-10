@@ -14,7 +14,7 @@ import { copyFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import * as driver from './driver.ts'
-import { FsqliteError, PostPublishError } from './errors.ts'
+import { PostPublishError, PublishContentionError } from './errors.ts'
 import { fsyncPath, removeQuietly } from './fsutil.ts'
 import { commitSnapshot } from './publication.ts'
 import type { CommitOutcome } from './publication.ts'
@@ -121,7 +121,8 @@ export class DirectStore {
   /**
    * Synchronous copy, mutate, publish under the publish lock, with OCC on the
    * `current` pointer (so it also composes safely with a SnapshotStore reconcile
-   * publishing into the same store). Retries internally on a lost race, rerunning `fn`.
+   * publishing into the same store). Retries internally on a lost race, rerunning `fn`,
+   * and throws a {@link PublishContentionError} when all `maxRetries` attempts lose.
    * Returns the published version, which always carries this call's mutation.
    *
    * A {@link PostPublishError} was raised after
@@ -211,9 +212,6 @@ export class DirectStore {
         return out
       }
     }
-    throw new FsqliteError(
-      'retryable',
-      `DirectStore.write exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
-    )
+    throw new PublishContentionError('DirectStore.write', maxRetries)
   }
 }
