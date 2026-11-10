@@ -8,7 +8,7 @@
 // fsynced, then hangs before publishing, so a test can SIGKILL it at a known point.
 
 import { writeFileSync } from 'node:fs'
-import { FsqliteError, SnapshotStore } from '../src/index.ts'
+import { PublishContentionError, SnapshotStore } from '../src/index.ts'
 import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { STORE_OPTS } from '../test/fixture.ts'
 
@@ -24,9 +24,12 @@ if (buildMarker !== undefined) {
 const maxPasses = Number(maxPassesStr)
 const store = new SnapshotStore(dir, STORE_OPTS)
 
-// A reconcile that keeps losing the publish race to its peers throws a `retryable` error
-// by contract; a real caller backs off and retries, so this worker does too rather than
-// exiting. Correctness (zero loss, no double-apply) is still asserted by the tests.
+// A reconcile that keeps losing the publish race to its peers throws a
+// PublishContentionError by contract; a real caller backs off and retries, so this worker
+// does too rather than exiting. Every other error, including a lock timeout and the
+// `in-flight` refusal of a snapshot ahead of `current`, is not contention in these tests
+// and ends the worker with that error. Correctness (zero loss, no double-apply) is still
+// asserted by the tests.
 const CONTENTION_BACKOFF_MIN_MS = 5
 const CONTENTION_BACKOFF_SPREAD_MS = 20
 const backoff = (): void => {
@@ -43,7 +46,7 @@ for (let p = 0; p < maxPasses; p++) {
   try {
     res = store.reconcile({ lockOpts: { timeoutMs: 10_000, staleMs: 5_000, pollMs: 10 } })
   } catch (error) {
-    if (error instanceof FsqliteError && error.retryable) {
+    if (error instanceof PublishContentionError) {
       contended++
       backoff()
       continue

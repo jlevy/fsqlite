@@ -1,12 +1,13 @@
 // Multi-process concurrency: the heart of the package. Real child processes (not
 // threads) write, reconcile, and read one store at once, proving:
 //   - N lock-free writers lose zero committed tx after reconcile
-//   - racing reconcilers publish exactly-once and leave an integrity-clean head
+//   - racing reconcilers publish exactly-once and leave an integrity-clean head, and
+//     retry only publish contention
 //   - readers during concurrent publishes never see a torn/regressing snapshot
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -25,6 +26,7 @@ interface ReconcilerResult {
   pid: number
   totalApplied: number
   passes: number
+  contended: number
 }
 interface ReaderResult {
   pid: number
@@ -104,6 +106,29 @@ test('racing reconciler processes publish exactly-once with an integrity-clean h
     assert.equal(store.validate().state, 'sealed')
     const totalApplied = results.reduce((s, r) => s + r.totalApplied, 0)
     assert.ok(totalApplied >= WRITERS * PER)
+    for (const r of results) {
+      assert.ok(r.contended < r.passes, `reconciler ${r.pid} drained, not only contended`)
+    }
+  } finally {
+    cleanup()
+  }
+})
+
+test('a reconciler process fails on a snapshot ahead of current instead of retrying it', async () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    store.write('w', (db) =>
+      db.prepare('INSERT INTO artifacts VALUES (?, ?, ?)').run('a', 'A', 't'),
+    )
+    copyFileSync(store.snapshotPath(0), store.snapshotPath(1)) // an orphan ahead of current
+    // The `in-flight` refusal is retryable but is not contention: only repair clears it.
+    await assert.rejects(
+      runAsync<ReconcilerResult>('reconciler.ts', [dir, '200']),
+      /reconciler\.ts exited 1: [^]*snapshot 1 already exists ahead of current/,
+    )
+    assert.equal(store.currentVersion(), 0)
+    assert.equal(store.pendingTxns().length, 1, 'the envelope is still pending')
   } finally {
     cleanup()
   }

@@ -10,16 +10,19 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import {
   ConflictError,
+  DirectStore,
   FsqliteError,
   LockTimeoutError,
   PermanentConflictError,
   PostPublishError,
+  PublishContentionError,
   SnapshotStore,
   StoreFormatError,
   StrictConflictError,
   readStoreMarker,
 } from '../src/index.ts'
 import type { FsqliteErrorCode } from '../src/index.ts'
+import { setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { ownerRecord, STORE_OPTS, tmpStore } from './fixture.ts'
 
 /** An assert.throws validator for an FsqliteError with `code` and `retryable`. */
@@ -140,6 +143,38 @@ test('a lock timeout is retryable and names the lock and the timeout', () => {
         fsqliteError('retryable', true)(error),
     )
   } finally {
+    cleanup()
+  }
+})
+
+test('a reconcile that loses every publish race is a PublishContentionError, not a lock timeout', () => {
+  const { dir, cleanup } = tmpStore()
+  try {
+    const store = new SnapshotStore(dir, STORE_OPTS).init()
+    store.write('w', insertArtifact('a'))
+    // A DirectStore peer publishes after each reconcile build is durable and before that
+    // reconcile takes the lock, so every attempt finds `current` moved. The peer leaves
+    // the pending envelope alone, so the next attempt has work again.
+    const peer = new DirectStore(dir, STORE_OPTS)
+    let peerWrites = 0
+    setAfterFsyncPathForTest((path) => {
+      if (path.includes('.build-')) {
+        peer.write(insertArtifact(`peer-${peerWrites++}`))
+      }
+    })
+    assert.throws(
+      () => store.reconcile({ maxRetries: 2 }),
+      (error: unknown) =>
+        error instanceof PublishContentionError &&
+        !(error instanceof LockTimeoutError) &&
+        error.attempts === 2 &&
+        fsqliteError('retryable', true)(error),
+    )
+    assert.equal(peerWrites, 2, 'each attempt lost to a peer publication')
+    setAfterFsyncPathForTest(null)
+    assert.equal(store.reconcile().applied, 1, 'the envelope is still pending, not lost')
+  } finally {
+    setAfterFsyncPathForTest(null)
     cleanup()
   }
 })

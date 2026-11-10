@@ -49,6 +49,7 @@ import {
   FsqliteError,
   PermanentConflictError,
   PostPublishError,
+  PublishContentionError,
   StoreFormatError,
   StrictConflictError,
   TransactionError,
@@ -1200,7 +1201,8 @@ export class SnapshotStore {
    * atomic pointer swap under the lease lock. Idempotent (skips tx already in the snapshot's
    * `applied_tx` ledger) and conflict-resolving per the merge policy (clashes are quarantined,
    * not lost). Safe to run concurrently: optimistic concurrency on `current` makes a superseded
-   * builder retry.
+   * builder retry. When all `maxRetries` attempts are superseded, it throws a
+   * {@link PublishContentionError}; back off and call again.
    *
    * A {@link PostPublishError} was raised after
    * the new version became current, for example while moving envelopes (spec F6); the data
@@ -1277,10 +1279,7 @@ export class SnapshotStore {
         attempts: attempt + 1,
       }
     }
-    throw new FsqliteError(
-      'retryable',
-      `reconcile exceeded retries after ${maxRetries} attempts (excessive publish contention)`,
-    )
+    throw new PublishContentionError('reconcile', maxRetries)
   }
 
   /**

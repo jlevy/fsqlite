@@ -15,7 +15,13 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { DirectStore, LockTimeoutError, PostPublishError, SnapshotStore } from '../src/index.ts'
+import {
+  DirectStore,
+  LockTimeoutError,
+  PostPublishError,
+  PublishContentionError,
+  SnapshotStore,
+} from '../src/index.ts'
 import { setAfterFsyncDirForTest, setAfterFsyncPathForTest } from '../src/fsutil.ts'
 import { ownerOf, setLockReleaserForTest, withLock } from '../src/lock.ts'
 import { setBeforeSnapshotLinkForTest } from '../src/publication.ts'
@@ -283,7 +289,10 @@ test('a DirectStore retry after committing its build leaves no orphan a later re
       }
     })
 
-    assert.throws(() => store.write(insert('a'), { maxRetries: 1 }), /exceeded retries/)
+    assert.throws(
+      () => store.write(insert('a'), { maxRetries: 1 }),
+      (error: unknown) => error instanceof PublishContentionError && error.attempts === 1,
+    )
 
     assert.equal(existsSync(store.snapshotPath(1)), false, 'the unpublished build was removed')
     assert.equal(store.validate().state, 'sealed')

@@ -467,15 +467,17 @@ Argument mistakes throw `TypeError`.
 | `pending` | A captured write is not yet published (`TransactionError.txId`) | Reconcile and inspect its outcome; never re-run the write |
 | `outcome-unknown` | The captured write’s outcome could not be read (`TransactionError.txId`) | Restore access and inspect that transaction; never re-run the write |
 | `conflict` | A changeset conflicted under the merge policy | `StrictConflictError` is retryable; `PermanentConflictError` is not |
-| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, publish retries) | Retry later |
+| `retryable` | Bounded contention ran out (`LockTimeoutError`, lost lock ownership, `PublishContentionError`) | Retry later |
 | `post-publish` | A step failed after `current` named the new version (`PostPublishError.published`) | Do not re-run the write |
 | `incompatible` | The handle’s schema, schema version, or SQLite binding cannot serve the store | Fix the caller |
 | `refused` | A precondition failed, such as sealing a pending tail or a callback that changed the schema | Fix the call |
 | `io` | A required filesystem step failed; `cause` holds the system error | Fix the environment |
 
 `StoreFormatError` (the recognition codes, with `state`), `ConflictError` (with
-`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`), and
-`TransactionError` (with `txId` and `quarantineReason`) are subclasses.
+`conflictTypes`), `LockTimeoutError` (with `lockPath` and `timeoutMs`),
+`PublishContentionError` (with `attempts`, raised when every publish attempt of a
+`reconcile()` or `DirectStore.write()` lost to a peer), and `TransactionError` (with
+`txId` and `quarantineReason`) are subclasses.
 A lost read-lease heartbeat is `refused` and non-retryable: take a new lease before
 reading further. Repeating a heartbeat cannot restore a released or collected pin.
 

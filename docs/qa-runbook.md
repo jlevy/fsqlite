@@ -30,7 +30,7 @@ The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.
 
-Current status: **226 `node:test` cases**, **80 CLI golden cases**, `tsc` clean,
+Current status: **228 `node:test` cases**, **80 CLI golden cases**, `tsc` clean,
 zero-warning lint, `dist` build and clean-room package smoke green.
 
 * * *
@@ -45,7 +45,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `merge-constraints.test.ts` | `C7` | Fixed filtered-pass order, UNIQUE and foreign-key closure at envelope and publication boundaries (including an envelope whose dangling reference a later envelope in the same batch would repair), foreign-key actions applied once from their recorded effects, a merge-created dangling reference quarantined, and policy routing by own keys only, so tables or actions named like `Object.prototype` members never drop changes |
 | `init.test.ts` | `C5-C8` | Non-null primary-key contract, including the nullable `INTEGER PRIMARY KEY DESC` quirk; SnapshotStore trigger and key `ON CONFLICT REPLACE`/`IGNORE` rejection; schema-version, envelope-size, retry, and policy-table option validation; schema-hash compatibility before filesystem mutation; fenced racing first-open; refusal to re-create snapshot 0 for a lineage that lost `current` |
 | `hardening.test.ts` | `C6`, `C11`, `C12` | Loud capability failure, integrity diagnostics, read-lease protection from concurrent GC, a `current` pointer trimmed of ASCII whitespace only, and a corrupt one read and quoted only up to a small bound without splitting a character |
-| `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile, readers that overlap many publishes without a failed, torn, or regressing read, and serialized DirectStore writers with zero loss |
+| `concurrent.test.ts` | `C2-C5`, `C7`, `C10` | Real multiprocess SnapshotStore capture, exactly-once racing reconcile whose workers retry only publish contention, readers that overlap many publishes without a failed, torn, or regressing read, and serialized DirectStore writers with zero loss |
 | `crash.test.ts` | `C5`, `C6` | Fault injection at publication boundaries and recovery to a consistent point |
 | `kill.test.ts` | `C5` | Hard `SIGKILL` during publication without loss of a published head |
 | `fuzz.test.ts` | `C5-C7` | Reproducible interleaved writer, reconciler, reader, and fault chaos |
@@ -64,7 +64,7 @@ zero-warning lint, `dist` build and clean-room package smoke green.
 | `store-format.test.ts` | `C6`, `C8`, `C9` | Self-identifying root, cross-file identity, recognition states including every invalid-marker rule, feature/version gating, marker fencing, and mixed-store quarantine |
 | `fsinspect.test.ts` | `C3`, `C11` | Filesystem capability probes, including atomic rename, exclusive creation, visibility, mtime, required hard links and directory fsync, and WAL negative control; mountinfo parsing (escaped paths, network and volatile filesystems) and the verdict rules |
 | `fsutil.test.ts` | `C3`, `C5` | Pointer-temp cleanup and fail-closed directory fsync behavior |
-| `errors.test.ts` | `C6`, `C11` | Typed errors, retry flags, and machine-coded quarantine reasons. The GC and retry suites cover lease I/O and captured transactions. |
+| `errors.test.ts` | `C6`, `C11` | Typed errors, retry flags, publish contention distinct from a lock timeout, and machine-coded quarantine reasons. The GC and retry suites cover lease I/O and captured transactions. |
 | `read-retry.test.ts` | `C4`, `C11` | A reader whose snapshot gc collects after the pointer read retries on the new head, within a bound, and a pointer to a missing snapshot stays corruption |
 | `cli.test.ts` | `C11` | The importable CLI runs nothing on import, returns exit codes, maps every state and error code to its exit code, and prints cause chains |
 | `examples.test.ts` | `C10`, `C11` | Both runnable examples complete and their own result checks pass |
@@ -114,7 +114,7 @@ pnpm verify
 ```
 
 - **Expect:** the format, lint, type, hook, and supply-chain stages exit 0; node:test
-  reports `ℹ tests 226` and `ℹ fail 0` (as root, one test reports skipped because it
+  reports `ℹ tests 228` and `ℹ fail 0` (as root, one test reports skipped because it
   needs a non-root process); goldens `80 passed`; build emits `dist/index.mjs`,
   `dist/index.d.mts`, `dist/cli/index.mjs`, `dist/cli/bin.mjs`; package smoke prints
   `package smoke test passed`.

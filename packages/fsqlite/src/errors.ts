@@ -32,7 +32,8 @@ export function errorMessage(error: unknown): string {
  *   inspected. Preserve its txId and inspect again; never repeat the write.
  * - `conflict`: a changeset conflicted with the published head under the merge policy.
  * - `retryable`: bounded contention ran out (lock timeout, lost lock ownership, publish
- *   retries exhausted). Retry later.
+ *   retries exhausted; see {@link LockTimeoutError} and {@link PublishContentionError}).
+ *   Retry later.
  * - `post-publish`: a step failed after `current` already named the new version; see
  *   {@link PostPublishError}.
  * - `incompatible`: the caller's schema, schema version, or SQLite binding cannot serve
@@ -171,6 +172,26 @@ export class LockTimeoutError extends FsqliteError {
     this.name = 'LockTimeoutError'
     this.lockPath = lockPath
     this.timeoutMs = timeoutMs
+  }
+}
+
+/**
+ * Every publish attempt of one `reconcile` or `DirectStore.write` call lost: each time,
+ * a peer published first or this caller was fenced out of the publish lock. Nothing was
+ * published. Unlike a {@link LockTimeoutError}, the lock was acquirable, so backing off
+ * and calling again is the expected response.
+ */
+export class PublishContentionError extends FsqliteError {
+  /** How many publish attempts the call made; every one lost. */
+  readonly attempts: number
+
+  constructor(operation: string, attempts: number) {
+    super(
+      'retryable',
+      `${operation} exceeded retries after ${attempts} attempts (excessive publish contention)`,
+    )
+    this.name = 'PublishContentionError'
+    this.attempts = attempts
   }
 }
 

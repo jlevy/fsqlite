@@ -40,7 +40,8 @@ publication validation are still pending.
   gc collects their snapshot.
 - **Typed errors:** every deliberate failure is an `FsqliteError` with a stable `code`
   and a `retryable` flag, with subclasses for recognition, conflicts, lock timeouts,
-  post-publish failures, and unpublished `writeWithRetry` transactions.
+  exhausted publish retries, post-publish failures, and unpublished `writeWithRetry`
+  transactions.
 - **CLI:** `fsqlite info|validate|stats|gc|seal|repair|doctor|fsinspect` with `--json`,
   strict argument parsing, and one exit-code table; `stats` and `doctor` also accept
   plain SQLite files, and `fsqlite/cli` exports `main()` for in-process use.

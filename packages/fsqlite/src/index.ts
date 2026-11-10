@@ -16,6 +16,7 @@ export {
   StrictConflictError,
   PermanentConflictError,
   LockTimeoutError,
+  PublishContentionError,
   PostPublishError,
   TransactionError,
 } from './errors.ts'
