@@ -241,7 +241,11 @@ function readPointerText(path: string): string {
   }
   if (length > MAX_POINTER_BYTES) {
     // Streaming decode holds back a character the bound cuts off instead of emitting U+FFFD.
-    const start = new TextDecoder().decode(buf.subarray(0, MAX_POINTER_BYTES), { stream: true })
+    // `ignoreBOM` keeps a leading byte order mark in the text, so the quote shows it.
+    const start = new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+      buf.subarray(0, MAX_POINTER_BYTES),
+      { stream: true },
+    )
     throw new FsqliteError(
       'corrupt',
       `corrupt current pointer: larger than ${MAX_POINTER_BYTES} bytes, beginning ` +

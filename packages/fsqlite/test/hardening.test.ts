@@ -195,6 +195,11 @@ test('a quoted pointer prefix never splits a character and always says it is a p
       messageFor('€'.repeat(30)),
       `${oversize}"${'€'.repeat(21)}" (the first 21 characters)`,
     )
+    // A leading byte order mark is quoted, escaped, not dropped by the decoder.
+    assert.equal(
+      messageFor(`\ufeff${'x'.repeat(70)}`),
+      `${oversize}"\\ufeff${'x'.repeat(31)}" (the first 32 characters)`,
+    )
     // Within the bound, the 32nd character is a surrogate pair and is quoted whole.
     assert.equal(
       messageFor(`${'z'.repeat(31)}😀${'z'.repeat(8)}`),
