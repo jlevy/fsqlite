@@ -15,7 +15,9 @@ A DirectStore Writer instead follows the serialized strategy in section 9.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are to be interpreted as
 in RFC 2119. Requirements are stated against four conformance roles defined in §13:
-**Reader**, **Writer**, **Reconciler**, and **Operator tool**.
+**Reader**, **Writer**, **Reconciler**, and **Operator tool**. In this document’s
+patterns, `[0-9]` matches only the ASCII digits 0 through 9, not the other Unicode
+decimal digits that `\d` matches in some regular-expression engines.
 
 Where this document and the Node implementation disagree, that is a bug in one of them;
 file it.
@@ -114,8 +116,8 @@ Normal store operations never modify it; only an explicit format upgrade may rep
 ```
 
 - **M1.** `format` MUST be `"fsqlite"`; `format_version` MUST be a supported version
-  string matching `^f(0|[1-9]\d*)\.(0|[1-9]\d*)$`; `required_features` MUST be an array
-  of unique strings understood by the reader; and `store_id` MUST be a UUID.
+  string matching `^f(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`; `required_features` MUST be an
+  array of unique strings understood by the reader; and `store_id` MUST be a UUID.
 - **M2.** Marker absence means **not an fsqlite store**. A marker that is malformed or
   names another format is **invalid**. A valid marker with an unsupported
   `format_version` or unknown required feature is **unsupported**, not corrupt.
@@ -134,7 +136,7 @@ Naming grammar:
 
 - **Snapshot**: `<version>.fsqlite.sqlite` where `<version>` is the decimal version
   zero-padded to 12 digits.
-  Files matching `^(\d+)\.fsqlite\.sqlite$` and nothing else are snapshots.
+  Files matching `^([0-9]+)\.fsqlite\.sqlite$` and nothing else are snapshots.
 - **Transients** are exactly the entries at the store root, in `snapshots/`, in
   `tx/pending/`, or in `leases/` matching: prefix `.build-`, prefix `.direct-`, prefix
   `.work-` (under `tx/pending/`), suffix `.tmp`, or suffix `.tmp-journal` (the rollback
@@ -267,12 +269,13 @@ required; the Node implementation writes the bare number with no trailing newlin
 - **P1.** Readers MUST parse strictly: the content MUST be at most 64 bytes, and after
   trimming ASCII whitespace (space, tab, line feed, vertical tab, form feed, and
   carriage return; a byte order mark or a no-break space is not ASCII whitespace) it
-  MUST match `^\d+$` and name a version no greater than 2^53 − 1 (9007199254740991).
-  Anything else, including empty content, is **corruption** and MUST be surfaced per R2
-  rather than silently treated as version 0. A reader SHOULD detect content over 64
-  bytes without loading the whole file, and SHOULD quote at most a short, escaped prefix
-  of malformed content in diagnostics (the Node implementation reads at most 65 bytes,
-  treats content longer than 64 bytes as corruption, and quotes at most 32 characters).
+  MUST match `^[0-9]+$`, ASCII digits only, and name a version no greater than 2^53 − 1
+  (9007199254740991). Anything else, including empty content, is **corruption** and MUST
+  be surfaced per R2 rather than silently treated as version 0. A reader SHOULD detect
+  content over 64 bytes without loading the whole file, and SHOULD quote at most a
+  short, escaped prefix of malformed content in diagnostics (the Node implementation
+  reads at most 65 bytes, treats content longer than 64 bytes as corruption, and quotes
+  at most 32 characters).
 - **P2.** The pointer MUST be replaced atomically and durably: write the new content to
   a uniquely-named temp file in the same directory → fsync the temp file → `rename()` it
   over `current` → fsync the directory.

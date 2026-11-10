@@ -217,14 +217,19 @@ test('a pointer is trimmed of ASCII whitespace only, and its quote shows the res
       writeFileSync(store.currentPath, content)
       assert.equal(store.currentVersion(), 0, `${JSON.stringify(content)} is a valid pointer (P1)`)
     }
-    // A UTF-8 byte order mark and a no-break space are not ASCII whitespace. The quote is
-    // the untrimmed content, with characters a log would hide escaped.
+    // A UTF-8 byte order mark and a no-break space are not ASCII whitespace, and only
+    // ASCII digits name a version. The quote is the untrimmed content, with characters a
+    // log would hide escaped.
     const bom = String.fromCodePoint(0xfeff)
     const nbsp = String.fromCodePoint(0xa0)
+    const arabicIndicThree = String.fromCodePoint(0x663)
+    const fullwidthThree = String.fromCodePoint(0xff13)
     for (const [content, quoted] of [
       [`${bom}0`, String.raw`"\ufeff0"`],
       [`0${nbsp}`, String.raw`"0\u00a0"`],
       [' x\n', String.raw`" x\n"`],
+      [arabicIndicThree, `"${arabicIndicThree}"`],
+      [`1${fullwidthThree}`, `"1${fullwidthThree}"`],
     ] as const) {
       writeFileSync(store.currentPath, content)
       assert.throws(

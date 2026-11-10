@@ -191,10 +191,10 @@ const MAX_POINTER_BYTES = 64
 /** The most of a malformed pointer an error message quotes. */
 const POINTER_QUOTE_CHARS = 32
 /**
- * A valid pointer (spec P1): decimal digits with optional ASCII whitespace around them.
+ * A valid pointer (spec P1): ASCII digits with optional ASCII whitespace around them.
  * `trim()` would also strip Unicode spaces and a byte order mark.
  */
-const POINTER_PATTERN = /^[ \t\n\v\f\r]*(\d+)[ \t\n\v\f\r]*$/
+const POINTER_PATTERN = /^[ \t\n\v\f\r]*([0-9]+)[ \t\n\v\f\r]*$/
 /** Characters a log line would hide: controls, format characters such as a BOM, spaces. */
 const UNPRINTED = /[\p{Cc}\p{Cf}\p{Z}]/gu
 
