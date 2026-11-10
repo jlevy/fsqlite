@@ -128,7 +128,10 @@ export interface GcOptions {
   lockOpts?: LockOptions
 }
 
-/** Result of `gc()`: snapshots removed, snapshots kept, and the versions a lease pinned. */
+/**
+ * Result of `gc()`: snapshots removed, snapshots kept, the versions a lease pinned, and
+ * whether the full integrity check ran.
+ */
 export interface GcResult {
   removed: number
   kept: number
