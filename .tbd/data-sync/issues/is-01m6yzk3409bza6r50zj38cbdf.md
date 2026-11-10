@@ -5,7 +5,7 @@ title: "PR #5 D2 — Medium — each envelope's `foreign_key_check` scans every 
 kind: task
 status: in_progress
 priority: 2
-version: 4
+version: 5
 delegate: codex@spud10
 labels:
   - pr-5-review
@@ -14,7 +14,7 @@ parent_id: is-01m6yzjs2jwh0a84r8t5txe16x
 hold: null
 hold_until: null
 created_at: 2026-11-09T01:43:30.687Z
-updated_at: 2026-11-09T02:08:00.899Z
+updated_at: 2026-11-10T23:31:34.689Z
 started_at: 2026-11-09T01:48:24.814Z
 ---
 Review D at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5820694576
@@ -24,3 +24,5 @@ Review D at f40a530. https://github.com/jlevy/fsqlite/pull/5#pullrequestreview-5
 ## Notes
 
 PR #5 documents the per-envelope FK scan. The performance optimization remains open.
+
+2026-11-10: jlevy/fsqlite#7 (merged e8fd2b2) added merge-constraints.test.ts "foreign keys close at each envelope, even when a later envelope in the batch would cure it", which pins per-envelope closure. Design constraint for any optimization: outcomes must equal closure at each envelope boundary (spec F3). A batch check with per-envelope fallback is not enough, because its success path applies an envelope whose dangling reference a later envelope repairs. An exact fix needs a spec change to batch-boundary closure or an incremental check node:sqlite cannot express today.
