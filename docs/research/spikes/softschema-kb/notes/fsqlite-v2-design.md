@@ -32,6 +32,11 @@ Every quantitative statement has one of three bases:
 - **Inferred:** it is derived from measured numbers or from the design, and says so.
   Each inference needs a spike before the brief states it as a finding.
 
+After the prototypes were built, a security review of their patches (review B of pull
+request 9) found gaps that a real v2 must close.
+Sections (e), (g), (h), (k), and (n) list them, each under “Requirements from the
+security review”, with the review’s finding number.
+
 Citation prefixes:
 
 | Prefix | Path |
@@ -478,6 +483,21 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   the same tail must derive equivalent content.
   Stamp the derived specification’s hash and version in every generation, and refuse to
   build with a different one.
+- **Requirements from the security review (B6).** The Spike 1 and combined prototypes
+  run the application’s `rebuild` and `update` hooks where fsqlite’s own tables are
+  unprotected. The direct lane unprotects `applied_tx` and `fsqlite_meta` to stamp the
+  derived version and then calls the hook, reconcile calls the hooks with no protection,
+  and only the closure hook is audited with a session.
+  A hook that clears every table outside the base set would empty the ledger, and the
+  gate would not see it.
+  The prototype also evaluates the derived DDL on an in-memory connection that skips
+  `connect()`. A real v2 must:
+  - keep the protection triggers on while any hook runs, and stamp `fsqlite_meta`
+    through a path that the triggers allow;
+  - audit `rebuild` and `update` with a session, as the closure hook is audited, and
+    refuse a build whose hook wrote a base table or an fsqlite-owned table;
+  - fail a build in which `applied_tx` changed other than by fsqlite’s own insert;
+  - open every connection through `connect()`.
 - **Format and API.** `fsqlite_meta` gains the base table list and the derived hash and
   version. The store options gain `derived: { version, ddl, rebuild, update }`, where
   `update` receives the changed keys, which come from the parsed changesets, or from a
@@ -504,8 +524,9 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   older envelopes valid, which matches SQLite’s own compatibility rule and was measured
   (A.1). Because SQLite skips incompatible tables silently, fsqlite must check each
   changeset’s table headers against the build before applying it; the header parser is
-  40 lines (A.1). A `breaking` step quarantines older envelopes that arrive after it as
-  `schema-superseded`, and the writer re-captures.
+  40 lines (A.1). That parser must meet the admission requirement in (n). A `breaking`
+  step quarantines older envelopes that arrive after it as `schema-superseded`, and the
+  writer re-captures.
 - **Expected effect.** With (e), index and FTS changes are not migrations at all.
   A typed-column addition is `ALTER TABLE ADD COLUMN`, a schema-only change in SQLite,
   plus one publish, against 8.8 s and a new store (`results/S2/w4.json`,
@@ -541,6 +562,13 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   The losing value of a conflict stays recoverable only for envelopes kept as evidence,
   which is what the conflict test relies on (`spike/fsqlite/README.md`, Conflicting
   Writes).
+- **Requirements from the security review (B3).** In the Spike 3 prototype the floor
+  follows one publisher’s clock and never moves back.
+  A publisher whose clock is far ahead raises the floor past real time.
+  Every other writer then fails the clock check, and pending envelopes are quarantined
+  as expired, until real time catches up.
+  A real v2 must bound the floor against clock error, so that one fast clock cannot
+  expire other writers’ envelopes.
 - **Format and API.** A `ledger_floor` key, a `maintain({ retainApplied })` option, and
   a validation rule that compares the archive with the ledger above the floor only.
 - **Tests.** An old envelope copied back into pending is refused.
@@ -577,6 +605,32 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   plus the retained envelopes.
   This is the largest change to a core guarantee in this list, so it needs a written
   model of the interleavings before code.
+- **Requirements from the security review (B3).** `f1.0` never takes a lock on age, and
+  its trust boundary rests on that rule.
+  The Spike 3 prototype replaces it with a lease that a waiter may break, and four of
+  its choices must not carry into a real v2:
+  - **Owner identity.** The prototype treats an owner as local when the lock names the
+    waiter’s hostname, and as dead when it cannot see the owner’s pid.
+    A hostname is not a machine identity, and pids are per namespace, so two machines or
+    containers that share a store path and a hostname break each other’s live locks at
+    once. The same test classifies a live writer’s work files and builds as a dead
+    owner’s. Identify an owner by boot id and pid namespace, with the process start
+    time.
+  - **Expiry.** The waiter chooses the expiry: its own `staleMs`, compared on its own
+    clock with the lock’s mtime.
+    A holder renews only between steps, and every step is synchronous, so a long check
+    or index build cannot renew, and a waiter with the default 20 s breaks an importer
+    that asked for 600 s. One path passes a window of half a second after an unlocked
+    dead-owner check, and clock skew between hosts has the same effect.
+    The holder’s recorded lease length must decide expiry on every path.
+  - **Two holders.** Some code still assumes the lease is exclusive.
+    Repair removes transients whatever their age because their creators lost the lease,
+    yet repair may hold a lease that it took from a live holder, and the fence is a
+    check before a step, not atomic with it.
+    The specification must state, for every step under the lease, why it is safe with
+    two holders.
+  - **The ledger floor.** The floor must be bounded against clock error, as (g)
+    requires.
 - **Format and API.** `current` becomes advisory, a `floor` file is added, and the lock
   rules L2 and L5 change.
   The marker names the feature in `required_features`.
@@ -656,6 +710,12 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   Exactly-once and deterministic order are unchanged.
   Reconcile now needs application code, as it already needs the application’s schema and
   policy. A reducer that throws quarantines its envelope.
+- **Requirements from the security review (B6).** The prototype guards `applied_tx` and
+  `fsqlite_meta` during a reducer with TEMP triggers that read one row of a TEMP table.
+  The reducer can update that row, which disarms the guard, and the callback boundary
+  check still passes: in the review’s probe the ledger was emptied and nothing refused.
+  A real v2 needs a guard that the guarded code cannot reach, and the ledger rule of
+  (e): a build fails if `applied_tx` changed other than by fsqlite’s own insert.
 - **Format and API.** An envelope `kind` field, a single-file envelope committed by link
   (which also removes the directory rename of spec O7), an `append()` call for writers,
   and a `reducers` option for the publisher.
@@ -740,6 +800,19 @@ guarantee it touches and how to keep it, the format and API impact, and the test
 - **What it does not fix.** Edge ordinals and merges still depend on other records.
   For them the mapping has to change, which section 3.6 describes: tombstones and
   redirects stored as base facts, and the live edge table derived.
+- **Requirements from the security review (B7).** The changeset reader that the
+  prototypes use for admission and for the split by operation disagrees with SQLite: it
+  gives the ninth byte of a varint 7 bits where SQLite gives it 8. For a text length
+  written as a 9-byte varint, SQLite reads 256 bytes and applies the row, and the reader
+  takes 128 and treats the rest as the next change.
+  In that probe the reader fails closed.
+  A crafted changeset could instead show the reader other tables and operations than
+  SQLite applies, which defeats table admission and the delete-only pass.
+  A real v2 must take table names from SQLite’s own parse, through the `filter` callback
+  of `applyChangeset`, or decode exactly as SQLite does and reject over-long encodings.
+  Keep the 9-byte case as a test.
+  A hostile envelope is outside the trust boundary today, and admission should not be
+  the part that widens it.
 - **Guarantees.** Constraint closure (spec section 6) is extended, not weakened: the
   default stays `quarantine`, and every relaxation is declared per table and stamped
   with the schema.

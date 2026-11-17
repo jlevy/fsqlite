@@ -4,8 +4,9 @@
 
 **Author:** Joshua Levy, with Claude Code research agents
 
-**Status:** Complete, except that timings marked “(provisional)” await a quiet
-re-measurement pass
+**Status:** In Progress.
+Timings marked “(provisional)” await a quiet re-measurement pass, and after-batch states
+await a row-level check.
 
 ## Overview
 
@@ -26,39 +27,50 @@ fsqlite is new and has no compatibility constraints, so its format and API may c
 The research read paraverse, softschema, and fsqlite at the source level.
 It then ran FalkorDB as paraverse uses it, fsqlite, and plain SQLite through the same
 workflows, on the real KB and on synthetic corpora up to 249,000 nodes, and prototyped
-an fsqlite redesign in three spikes.
+an fsqlite redesign in three spikes and one combined prototype.
 
 The conclusions:
 
-1. **Keep the files as the system of record, and treat every database as a rebuildable
-   projection.** Parsing and validation dominate consolidation, not the database.
+1. **Treat every database as a rebuildable projection, and cache the parse.** Parsing
+   and validation dominate consolidation, not the database.
    At 249,000 nodes the YAML parse takes 43 to 79 s and the SQLite build 17 to 18 s
    (both provisional), and softschema validation would take about 34 minutes on one core
    (inferred from 8.9 ms per record).
    Cache the parse and the validation by content hash.
-2. **Serve from a SQLite file with a generic, schema-driven mapping.** On equal corpora,
+2. **Keep one file per entity in git as the system of record to about 100,000 documents,
+   and append-only record batches above that.** Both halves are inferred: no workflow
+   measured git, and batches were not run as the record.
+   Above the limit the batches hold full softschema records with their upsert, delete,
+   and merge operations, and per-entity files remain for the records that people review
+   and as an export.
+3. **Serve from a SQLite file with a generic, schema-driven mapping.** On equal corpora,
    with every result checked against one oracle, SQLite answered 123 of 124 round-2
    queries faster than FalkorDB, at a median ratio of 8 (provisional), hub queries
-   included. It imported 4 to 5 times faster (provisional), served from a 0.17 GB process
-   against a 1.3 GB server, opened in milliseconds against 12 to 20 s (provisional), and
-   exported 228,873 of 228,876 files byte for byte, where the paraverse graph keeps
-   payloads only.
-3. **Plain SQLite is enough for one consolidating process on one host.** fsqlite reads
+   included. It imported 4 to 5 times faster (provisional), opened in milliseconds
+   against 12 to 20 s (provisional), and exported 228,873 of 228,876 files byte for
+   byte, where the paraverse graph keeps payloads only.
+   Its serving process held 0.17 GB against a 1.3 GB server, a figure that leaves out
+   the file pages the OS caches for SQLite, which were not measured.
+   Four asymmetries listed under [threats to validity](#methodology) favor SQLite and
+   change the size of these gaps.
+4. **Plain SQLite is enough for one consolidating process on one host.** fsqlite reads
    at plain SQLite speed and adds 7 to 11% to an import at the largest scales
    (provisional). It earns that cost when writers are independent processes, when the
    path is shared, or when each published state must be an immutable file.
-4. **fsqlite as built (`f1.0`) can publish rebuilds at these sizes and cannot accumulate
+5. **fsqlite as built (`f1.0`) can publish rebuilds at these sizes and cannot accumulate
    into them.** Every publish copies the whole file.
    At 1.8 to 1.9 GB one record takes 2.6 to 4.0 s to publish and four concurrent writers
    take 46 to 92 s (both provisional), and their merged result is wrong for edge
    changes, deletes, and merges until two repair publishes run.
-5. **The v2 prototypes fix most of that and keep one immutable SQLite file per
+6. **The v2 prototypes fix most of that and keep one immutable SQLite file per
    generation.** Capture stops depending on file size (0.47 ms, provisional), four
    writers publish once with one writer’s result, search and statistics live in the
    file, an index change stays in the same store, gc stops refusing, and a crashed
    publisher needs no operator.
    The per-publish copy remains on filesystems without reflinks.
-6. **Take FalkorDB out of the serving path.** The spike found no graph-query advantage
+   A combined prototype of the three spikes passes the package tests and the S1-r2
+   correctness runs, and it was not timed.
+7. **Take FalkorDB out of the serving path.** The spike found no graph-query advantage
    at this graph shape, and FalkorDB’s small-write advantage holds only while durability
    is deferred.
 
@@ -88,11 +100,12 @@ The conclusions:
    files, and the paraverse graph loses bodies and byte fidelity
    ([findings](#export-fidelity-w5)).
 6. Which format fits which role, and what should a production design use?
-   Files as the system of record, JSONL as interchange, SQLite as the serving store
-   ([formats](#formats-by-role), [recommendations](#recommendations)).
+   Per-entity files as the system of record to about 100,000 documents and record
+   batches above that (both inferred), JSONL as interchange, and SQLite as the serving
+   store ([formats](#formats-by-role), [recommendations](#recommendations)).
 7. Which fsqlite changes fit this workload, and which did prototypes confirm?
-   Eleven of 13 hypotheses held
-   ([findings](#what-the-fsqlite-v2-prototypes-confirmed-and-refuted)).
+   Eleven of 13 hypotheses held, and a combined prototype passes its correctness runs at
+   S1-r2 ([findings](#what-the-fsqlite-v2-prototypes-confirmed-and-refuted)).
 8. How do other databases join the comparison later?
    By implementing the workload specification against the same corpora and oracle
    ([later comparisons](#later-comparisons-on-the-same-harness)).
@@ -108,7 +121,8 @@ Included:
 - five measured arms on one workload: FalkorDB as paraverse built it, a FalkorDB
   incremental prototype, fsqlite `DirectStore`, fsqlite `SnapshotStore`, and a plain
   SQLite control;
-- an fsqlite v2 design and three prototypes of it.
+- an fsqlite v2 design, three prototypes of it, and a combined prototype checked for
+  correctness at S1-r2.
 
 Not covered:
 
@@ -121,6 +135,11 @@ Not covered:
   figures come from a probe.
 - **Other filesystems and hosts.** Every run used ext4 on one VM. No reflink filesystem,
   network filesystem, or macOS run exists.
+- **git itself.** No workflow measured git operations or repository size, so the scale
+  limit of per-entity files in one repository is inferred.
+- **Row-level state after a batch.** After-batch states were checked by W3 answers and,
+  for fsqlite, by table digests against one writer.
+  None was compared row by row with the reference applier’s output.
 - **Other backends.** DuckDB with Parquet, embedded graph stores, Dolt, and Postgres are
   left for [the same harness](#later-comparisons-on-the-same-harness).
 
@@ -132,11 +151,15 @@ It defines these corpora:
 | Scale | Source | Nodes | Edges | Record files | Record bytes | Largest degree |
 | --- | --- | --- | --- | --- | --- | --- |
 | S0 | The real GitHub Universe KB | 5,407 | 25,313 | 4,977 | 15.7 MB | 533 |
-| S1 | 9 replicas of S0 | 48,663 | 227,817 | 44,775 | 139 MB | 533 |
-| S2 | 46 replicas | 248,722 | 1,164,398 | 228,850 | 712 MB | 533 |
+| S1 | 9 replicas of S0 | 48,663 | 227,817 | 44,777 | 139 MB | 533 |
+| S2 | 46 replicas | 248,722 | 1,164,398 | 228,852 | 712 MB | 533 |
 | S1-r2 | 9 replicas with shared hubs | 46,927 | 226,281 | 44,057 | 135 MB | 4,781 |
 | S2-r2 | 46 replicas with shared hubs | 238,957 | 1,155,758 | 224,802 | 692 MB | 24,428 |
-| S3 | 185 replicas, generated and not loaded | 1,000,295 | 4,682,905 | 920,375 | 2.87 GB | 533 |
+| S3 | 185 replicas, generated and not loaded | 1,000,295 | 4,682,905 | 920,377 | 2.87 GB | 533 |
+
+Record files count every record artifact, including `faq.yaml` and `media.yaml`, which
+carry no node. The S1, S2, and S3 manifests leave those two out and report 44,775,
+228,850, and 920,375.
 
 A **generation** is one published, complete SQLite file, and the **head** is the newest
 one. A **hub** is a node whose degree grows with the corpus.
@@ -147,10 +170,27 @@ Three evidence levels apply throughout:
 
 - **Measured:** recorded in a result file under
   [the spike’s results](spikes/softschema-kb/results/), which each subsection links.
-  Every W3 run among them matches the oracle, except two deliberate ablations.
+  A W3 file that matched the oracle keeps its timings and plans, and stores the
+  comparison’s verdict with digests of its answers.
 - **Probe:** a single scratch run recorded in an appendix of the notes.
   Its raw output is not in the repository.
 - **Inferred:** derived from measurements or from the design, and not run.
+
+Correctness claims come in three strengths:
+
+- **W3-checked:** the answers to the 124 round-2 queries, or the 24 of round 1, equal
+  the oracle’s. Every W3 run on a freshly loaded corpus is W3-checked.
+- **Row-equal:** table digests equal those of one writer that applies the same batch in
+  line order.
+- **Count-equal:** per-kind and per-relation counts equal those of a full rebuild.
+
+For a state reached by applying a batch, a W3 match is necessary and not sufficient.
+The batches never delete or merge an entity that a query names, and every W3 statement
+joins edges to entities, so a wrong edge shows only when it touches a queried entity or
+moves an aggregate. Four after-batch states whose rows differ from one writer’s still
+match 124 of 124, and [Methodology](#methodology) names them.
+No after-batch state has yet been compared row by row with the reference applier’s
+output.
 
 Every timing here comes from runs that shared the VM with other benchmark jobs.
 The headline timings carry the marker **(provisional)**, and a quiet re-measurement pass
@@ -228,7 +268,7 @@ producers. The storage and format choices that fit each stage:
 
 | Stage | About 5,000 documents (S0) | 50,000 to 250,000 (S1 and S2) | 1M and more (S3, projected) |
 | --- | --- | --- | --- |
-| System of record | One git repository, one YAML or Markdown file per entity | The same, with sharded directories and no committed single-file exports: `edges.jsonl` passes GitHub’s 100 MiB file limit between S1 and S2 | 920,000 files and 2.9 GB of records strain git and hosting guidance. Pack cold records into JSONL shards, or accumulate through an append-only inbox and treat the files as an export |
+| System of record | One git repository, one YAML or Markdown file per entity | The same to about 100,000 documents (inferred), with sharded directories and no committed single-file exports: `edges.jsonl` passes GitHub’s 100 MiB file limit between S1 and S2. Past that, machine-written records start to move into batches | Append-only record batches over a consolidated base (inferred): 920,000 files and 2.9 GB of records strain git and hosting guidance. Per-entity files remain for reviewed records and as an export |
 | Accumulation | Direct commits | Whole records in per-run batches, no shared derived files, and unresolved references allowed | Appended operation batches from many writers, identity lookups against the serving store, and merges recorded as redirect facts |
 | Validation | Validate everything each run: 44 s | Cache by content hash and schema hash, and quarantine per record | The same. Uncached validation takes hours |
 | Consolidation | Full rebuild: under 1 s of database time | Full rebuild from a row cache: 3 to 21 s of SQLite time | Full rebuild from a row cache, about 1.5 minutes inferred, or incremental batches through fsqlite v2 |
@@ -252,15 +292,16 @@ Sources: [paraverse analysis](spikes/softschema-kb/notes/paraverse-analysis.md),
 
 ### Formats by Role
 
-Use each format for one role: YAML and Markdown records as the system of record, JSONL
-as interchange and cache, and SQLite as the serving store and portable artifact.
+Use each format for one role: YAML and Markdown records as the system of record to about
+100,000 documents, JSONL as interchange, as cache, and as the record batches above that
+scale, and SQLite as the serving store and portable artifact.
 A graph store fits only the serving role, and only while the corpus fits in memory.
 
 | Format | System of record | Interchange | Serving store |
 | --- | --- | --- | --- |
 | YAML files | Yes, to roughly 100,000 documents in one git repository (inferred; git was not measured): readable, diffable, and one history per entity. It is the slowest format to parse and has no transaction across files | Small sets only | No |
 | Markdown with YAML frontmatter | Yes, for records that people read. The payload is the data. A generated body adds diff noise, and a hand-written body must be stored for export | For people and agents | No |
-| JSONL | Only as packed shards when file count is the limit. Poor for review | Yes. It parses 14 times faster than YAML (probe) and suits the row cache and operation batches. Lines need an identity and an origin record | No |
+| JSONL | Yes above about 100,000 documents (inferred), as append-only record batches. Poor for review | Yes. It parses 14 times faster than YAML (probe) and suits the row cache and operation batches. Lines need an identity and an origin record | No |
 | Graph store (FalkorDB) | No: data lives in memory, persistence is tied to the engine version, and no contract is enforced | No: the RDB is not a version-independent format | Yes, for a corpus that fits in memory. No measured advantage here |
 | SQLite (plain or fsqlite) | Possible for machine-written facts at large scale, at the price of git review | Yes: one stable file that any tool opens | Yes |
 
@@ -287,7 +328,7 @@ The four differ most in where the data lives and in what one durable write costs
 | Schema | Open: labels, relationship types, and properties appear on write | Ordinary DDL at any time | Fixed for the life of a store. No virtual tables, so no FTS5 | Fixed base tables. Indexes, FTS5, statistics, and summaries are declared as derived objects and rebuilt by version |
 | Text search | A built-in stemmed full-text index | FTS5 in the file | A scan, or an FTS5 sidecar file rebuilt for every version | FTS5 inside each generation |
 | Artifact | One RDB file that only a `redis-server` with the module can load | One file that any SQLite tool opens | A directory. Any SQLite tool opens a generation | The same |
-| Maturity and license | The engine is SSPLv1. FalkorDBLite is documented for development and CI | Public domain. The file format has been stable since 2004 | 0.1.0 alpha, MIT, draft format | Three unmerged patches |
+| Maturity and license | The engine is SSPLv1. FalkorDBLite is documented for development and CI | Public domain. The file format has been stable since 2004 | 0.1.0 alpha, MIT, draft format | Three spike patches and one combined patch, all unmerged |
 
 Sources: [paraverse analysis](spikes/softschema-kb/notes/paraverse-analysis.md), section
 5.1; [fsqlite design](../fsqlite-design.md);
@@ -343,8 +384,10 @@ Sources: FalkorDB [S1](spikes/softschema-kb/results/falkordb/S1/w1.json),
 For a small change, FalkorDB shows it first and fsqlite pays a fixed whole-file cost.
 Once the change must be durable, the FalkorDB prototype costs as much as fsqlite’s
 one-writer lane, or more.
-Four concurrent writers were slower than one in both engines, and only the v2 operation
-envelopes kept the merged result correct.
+Four concurrent writers were slower than one in both engines.
+Of the arrangements that interleaved deletes and merges, only the v2 operation envelopes
+kept the merged rows equal to one writer’s. The FalkorDB run applied its deletes and
+merges serially after the writers.
 
 Apply time at S2-r2, excluding the parse of the batch (all provisional):
 
@@ -363,15 +406,20 @@ Apply time at S2-r2, excluding the parse of the batch (all provisional):
 - **FalkorDB’s durable cost has a whole-corpus floor too.** Its `SAVE` rewrites the
   graph in 2.5 to 3.5 s at S2-r2 (provisional).
   An append-only file was not tested.
-- **FalkorDB’s one-record figure is a workaround cost.** FalkorDB 4.18.3 corrupted nodes
-  at S2-r2 unless every label was read between write phases.
+- **FalkorDB’s one-record figure is a workaround cost.** At S2-r2 the spike’s
+  back-to-back write phases left nodes that later scans rejected.
+  This is a suspected engine defect in FalkorDB 4.18.3, not yet isolated, and reading
+  every label between write phases avoids it.
   At S1-r2, before the workaround, the same write took 7 ms (provisional).
-- **Sustained one-record writes rise from 0.6 to 172 per second in the v2 prototype
-  (provisional).** At S2, fsqlite today publishes 0.6 records per second with a 16.5 s
-  median delay. The v2 prototype with a coalescing publisher published 172 per second
-  with a 13.0 s p95 delay, and gc’s integrity check was 65% of each cycle.
-  The FalkorDB prototype reached 376 per second at S1-r2 and 1.0 at S2-r2 with the
-  workaround, with no save.
+- **The v2 prototype sustains an offered 200 one-record writes per second at S2, where
+  fsqlite today saturates at 0.6 (provisional).** The figures come from different load
+  models. fsqlite today ran a closed loop, one writer capturing as fast as it could, and
+  published 0.6 records per second with a 16.5 s median delay.
+  The v2 prototype was offered 200 per second and published all of them, 172 per second
+  counting the final drain, with a 13.0 s p95 delay.
+  That is a floor, not a capacity, and gc’s integrity check was 65% of each cycle.
+  The FalkorDB prototype ran closed loops of 100 single operations with no save: 376 per
+  second at S1-r2, and 1.0 at S2-r2 with the workaround.
 - **Four writers are slower than one (provisional).** For the 5% batch, FalkorDB took 38
   s against 12 s, both including the parse.
   fsqlite today took 77 s against 9.3 s, because each of 20 captures copies the 1.95 GB
@@ -388,15 +436,21 @@ Correctness under concurrency:
 | --- | --- | --- | --- |
 | Readers see a batch atomically | No. Each query is atomic, and a batch is several | Yes | Yes |
 | Durable when visible | No | Yes | Yes |
-| Four writers with edge changes, deletes, and merges | Same final state as one writer. The run applied deletes and merges in one process after the writers, so it did not interleave them | 1 to 3 of 20 envelopes quarantined as `NOTFOUND`. At S2-r2, 12 and 138 dangling edges remained and changed 6 of 124 answers. Correct after a retry publish and a closure publish | Operation envelopes with stored tombstone and redirect facts: 0 quarantined, one publish, and rows equal to one writer’s in 15 of 15 runs. Changeset envelopes with idempotent deletes: no quarantine, and one wrong edge even after closure |
+| How the final state was checked | Count-equal and W3-checked against a full rebuild of the batch-applied KB | Row-equal to one writer in line order, and W3-checked after p05 | The same, with the tombstone and redirect tables in the digests |
+| Four writers with edge changes, deletes, and merges | Count-equal and W3-checked. The run gave its writers upserts only and applied every delete and merge in one process afterward, so it did not interleave them | 1 to 3 of 20 envelopes quarantined as `NOTFOUND`. At S2-r2, 12 and 138 dangling edges remained and changed 6 of 124 answers. Row-equal after a retry publish and a closure publish | Operation envelopes with stored tombstone and redirect facts: 0 quarantined, one publish, and row-equal in 15 of 15 runs and in the combined prototype at S1-r2. Changeset envelopes with idempotent deletes: no quarantine, and one wrong edge even after closure |
 | Two writers set one field | The last write wins, and the other value is gone | A per-table policy decides (`lww`, `union`, `strict`), and the losing value stays recoverable from its envelope | The same, with retention that keeps conflict evidence |
 | One invalid record in a batch | The default load loads it, `load --validate` rejects the whole load, and the prototype quarantines it | Quarantined by the parse-stage schema check, and loaded without it | The same |
 | Readers during writes | No errors. p95 rises: record 3.4 to 23 ms and table 61 to 310 ms at S2-r2 (provisional) | No errors. p95 unchanged at 17 to 111 ms (provisional) | No errors |
 
+The one-writer state that the row comparisons use is W3-checked after p05 at both
+scales, and its entity and edge totals equal the reference applier’s for the three bulk
+batches. Its rows have not been compared with the applier’s output.
+
 Sources: FalkorDB [S1-r2](spikes/softschema-kb/results/falkordb/S1-r2/w2.json) and
 [S2-r2](spikes/softschema-kb/results/falkordb/S2-r2/w2.json); fsqlite
-[one writer](spikes/softschema-kb/results/fsqlite/S2-r2/w2-v2.json),
-[four writers](spikes/softschema-kb/results/fsqlite/S2-r2/w2.json),
+[one writer](spikes/softschema-kb/results/fsqlite/S2-r2/w2-v2.json), four writers at
+[S1-r2](spikes/softschema-kb/results/fsqlite/S1-r2/w2.json) and
+[S2-r2](spikes/softschema-kb/results/fsqlite/S2-r2/w2.json),
 [trickle](spikes/softschema-kb/results/fsqlite/S2/w2-trickle.json), and
 [conflicts](spikes/softschema-kb/results/fsqlite/S2/w2-conflict.json); prototype
 [four writers](spikes/softschema-kb/results/fsqlite-v2/spike2/S2-r2/w2-ops.json),
@@ -438,8 +492,14 @@ From S1-r2 to S2-r2 the largest degree grows from 4,781 to 24,428 (timings provi
   at S2-r2. The median ratio of FalkorDB to fsqlite is 6.0, 6.3, and 8.0 at the three
   round-1 scales and 7.7 and 8.0 at the two round-2 scales.
   The median ratio of fsqlite to the plain SQLite control is 0.99 to 1.03.
-- **Part of the gap on small lookups is architecture.** Each FalkorDB query crosses a
-  socket to the server, and each SQLite query runs in process.
+- **Part of the gap is architecture and client runtime.** Each FalkorDB query crosses a
+  socket to the server from a Python client, and each SQLite query runs in process in
+  Node. The shared path search, result shaping, and JSON decoding run in those two
+  runtimes.
+- **The two search scans are not the same work.** SQLite scans `search_text`, a table
+  that the load fills with the three fields already lower-cased, 63 MB at S2. FalkorDB
+  lower-cases three properties of every entity node at query time.
+  The search row compares a prepared structure with an unprepared one.
 - **The engines’ own path forms did worse than the shared search.** FalkorDB has no
   undirected `shortestPath` and cannot exclude hub kinds inside one.
   At S2-r2, under a 30 s statement timeout, its in-engine iterative deepening timed out
@@ -473,12 +533,14 @@ under `extras`; fsqlite [scan](spikes/softschema-kb/results/fsqlite/S2-r2/w3.jso
 
 ### Memory, Disk, and the 1M Scale
 
-Neither arm ran at 1M nodes on the 16 GB VM. FalkorDB as paraverse loads it runs out of
-memory, and fsqlite `f1.0` runs out of disk once writers work concurrently.
+Neither arm loaded 1M nodes on the 16 GB VM. A 6 GB memory guard stopped paraverse’s
+loader before it parsed a record.
+The fsqlite run was not started, because its projected disk use with concurrent writers
+exceeds the free space.
 
 | Measure | FalkorDB | Plain SQLite and fsqlite today | fsqlite v2 prototype |
 | --- | --- | --- | --- |
-| Serving memory at S2 | 1.33 GB in the server; 1.47 GB resident at S2-r2 | 0.17 GB process with a 64 MiB page cache; file pages live in the OS page cache | The same |
+| Serving memory at S2 | 1.33 GB in the server; 1.47 GB resident at S2-r2 | 0.17 GB process with a 64 MiB page cache. File pages live in the OS page cache, and their resident size was not measured | The same |
 | Start-up to first query at S2 (provisional) | 12 to 20 s | 6 to 9 ms to open, 1 ms for the first query | The same |
 | Memory during a rebuild at S2 | 5.1 to 6.0 GB loader; 3.1 to 3.3 GB server while the staging and live graphs coexist | 0.5 to 0.9 GB | 0.62 GB |
 | Disk per version at S2 | 0.28 GB RDB, payloads only | 1.80 GB: payloads, documents, bodies, search text, opaque files, indexes | 2.03 GB, including 0.17 GB of FTS5 and facets |
@@ -519,9 +581,11 @@ partial expression index.
 
 - **Plain SQLite uses ordinary DDL.** The control builds every index in 2.9 s at S2
   (provisional).
-- **Typed per-kind tables trade size for rigidity.** They are 24% smaller for records
-  and edges, and they turn every schema change into a new store: 8.8 s for one added
-  column at S2 (provisional).
+- **Typed per-kind tables were measured for size and migration time only.** They are 24%
+  smaller for records and edges.
+  On fsqlite today an added column is a new store, 8.8 s at S2 (provisional), and on
+  plain SQLite it is ordinary DDL. No W3 run used the typed mapping, and the generic
+  tables are still needed for export.
 - **No case exercised mixed contract versions.** The variants rewrite the affected
   record files and re-hash the schema under the same contract name.
   The files can carry mixed versions, because each record names its own contract, and
@@ -567,7 +631,7 @@ under contention, and the v2 prototype removes both.
 | Artifacts | An RDB file, a settings file, and a running `redis-server` with the module | `fsqlite.json`, `current`, and one SQLite file per retained version | The same, plus verification records and a floor |
 | Standard tools | The system’s Redis 7.0.15 cannot open the file (RDB format version 13) | Python’s `sqlite3` opens a snapshot directly, and `quick_check` is `ok` | The same |
 | Kill the loader or a writer | The live graph is intact. An orphan staging graph, a full copy in memory, stays until someone deletes it | The head is never damaged, and no envelope is applied twice | The same |
-| Kill the server or the lock holder | The restarted server serves the previous load: a load completed 5 s earlier is lost. At S1 it would not restart until a stale settings file was deleted | 2 of 4 kill points hold the lock, and an operator must remove `publish.lock` before repair runs | 8 of 8 recoveries with no operator step, in 4 to 308 ms, at S0 and S1 |
+| Kill the server or the lock holder | The restarted server serves the previous load: a load completed 5 s earlier is lost. At S1 it would not restart until a stale settings file was deleted | 2 of 4 kill points hold the lock, and an operator must remove `publish.lock` before repair runs | 8 of 8 recoveries with no operator step, in 4 to 308 ms, at S0 and S1. The combined prototype repeated the publication kill at S1-r2 |
 | Maintenance | None measured | `gc` gave up on 6 to 10 of 20 attempts under contending `DirectStore` writers. `validate()` takes 3.4 s at S2 (provisional) | 0 of 20 refusals. Reader reopen p95 is 9 to 39 ms against 0.8 to 3.0 s (provisional) |
 | Client defaults | redis-py’s 5 s socket timeout fails paraverse’s own load check at S2, so every run disabled it | None found | None found |
 
@@ -582,6 +646,8 @@ Sources: FalkorDB [S1](spikes/softschema-kb/results/falkordb/S1/w6.json) and
 
 Three prototypes, each a patch against scratch copies of the package and the harness,
 confirmed 11 of 13 hypotheses, refuted 2, and changed four design details.
+A combined prototype then put the three patches in one copy, and it passes the package
+tests and the S1-r2 correctness runs.
 Letters refer to the changes in the
 [v2 design](spikes/softschema-kb/notes/fsqlite-v2-design.md).
 All timings are provisional.
@@ -594,13 +660,35 @@ All timings are provisional.
 | (e) Closure by deletion in the build | 1 | Changed | It removes dangling edges in milliseconds. It cannot retarget an edge to a merge survivor, so merges need stored tombstone and redirect facts |
 | (k) Operation envelopes applied by a serial reducer | 2 | Confirmed | Capture takes 0.47 ms at S2 against 1.1 to 1.3 s. Four writers need one publish, with no quarantine and one writer’s rows in 15 of 15 runs. Without stored facts or closure, 1 to 70 dangling edges remain |
 | (l) Sparse-seed changeset capture | 2 | Confirmed, with a hazard | 3.2 ms for one record and 7.8 ms for 100, with digests equal to a full copy. A row that the hydration plan misses changes the result without an error, and the detecting helper is not built |
-| (n) Missing-row policy and changeset admission | 2 | Confirmed, and not sufficient | No `NOTFOUND` quarantine. Changesets with closure still leave one wrong edge at S1-r2, so cross-record structures need operation envelopes |
+| (n) Missing-row policy and changeset admission | 2 | Confirmed, and not sufficient | No `NOTFOUND` quarantine. The dangling edges stay until a closure runs, 17 and 470 at S2-r2, and changesets with closure still leave one wrong edge at S1-r2, so cross-record structures need operation envelopes |
 | (d) Coalescing publisher | 2 | Confirmed | 172 records per second published at S2, with a p95 delay of 1.39 cycles, against 0.6 per second |
-| (i) gc against a pinned, verified generation | 3 | Confirmed, and changed | 0 of 20 refusals against 6 to 10. Collecting only against a full verification kept every generation between scrubs, 147 in 20 s at S0, so the prototype also collects against the publish check |
-| (g) Envelope retention and a ledger floor | 3 | Confirmed at S0 and S1 | The import store is 1.00 times the head against 1.61 to 1.63 times |
+| (i) gc against a pinned, verified generation | 3 | Confirmed, and changed | 0 of 20 refusals against 6 to 10, measured with the link commit (h) in the same patch. Collecting only against a full verification kept every generation between scrubs, 147 in 20 s at S0, so the prototype also collects against the publish check |
+| (g) Envelope retention and a ledger floor | 3 | Confirmed at S0 and S1 | The import store is 1.00 times the head against 1.61 to 1.63 times, also with (h) in the patch |
 | (h) Commit by no-replace link, with an expirable lease | 3 | Confirmed at S0 and S1, and changed | 8 of 8 kill-point recoveries with no operator. Probing forward from the `current` hint is unsound after gc, so the head is read from a directory listing |
 | (i) and (g) Halving the sustained trickle round | 3 | Refuted, narrowly | The round falls 47% at S2, from 8.7 to 4.6 s. What remains is the unlink of the old head |
 
+The [combined prototype](spikes/softschema-kb/fsqlite-v2/combined/README.md) applies the
+patches in the order 3, 1, 2 and merges the hunks that conflict.
+It checks answers and states at S1-r2 and reports no timing:
+
+| Check | Outcome |
+| --- | --- |
+| Package tests | 279 run: 278 pass and 1 is skipped, as in the unmodified package |
+| W3 on a fresh load, by scan and by the in-file FTS5 index | 124 of 124 each |
+| Four writers with operation envelopes, batch p05 | One publish, 0 quarantined, W3-checked, and row-equal to one writer |
+| Four writers, batch p20 | 0 dangling edges, and row-equal to one writer |
+| Merges at p20 with a reducer that keeps no facts | One closure at build moved 13 edges to their merge survivors and removed 15 edges of deleted nodes, so the survivors carry their 557 one-writer edges. Cascade relations alone delete those edges and leave 551 |
+| Kill during publication, holding the lease | Recovered with no operator step and no lost generation, and 360 envelopes applied exactly once |
+
+- **The combination leaves gaps.** The schema-agnostic CLI cannot roll a corrupt head
+  forward, because repair now needs the application’s schema, derived specification, and
+  reducers. Changed keys are approximate, so derived hooks must be idempotent per key.
+  The knowledge-base closure trusts tombstones, so a writer that leaves a tombstone on a
+  live node would lose that node’s edges.
+  The format marker is still `f1.0`.
+- **The combined run is narrow.** It did not carry spike 2’s trickle and sustained runs,
+  and it did not run three of the four kill points, changeset envelopes with the
+  missing-row policy, any timing, or any S2 scale.
 - **Four changes were not prototyped.** Clone copies (a) need a reflink filesystem,
   which the VM lacks. Migration steps (f), generation manifests (m), and a WAL live head
   (j) were left for later spikes.
@@ -611,18 +699,19 @@ All timings are provisional.
   the bound of 1.5 holds against the first only.
   The index change met its 5 s bound at S2-r2, and the one S2 run took 39 s with a cold
   check.
-- **The spikes measured the patches one at a time.** This brief uses no combined run, so
-  the combined effect is inferred.
+- **The combined effect on timings is still inferred.** The spikes timed their patches
+  one at a time, and the combined prototype reports no timing.
   Spike 1 alone made the sustained trickle worse, 0.23 records per second, because the
   `f1.0` gc then also checks the FTS5 index.
 - **Each patched copy passes the package’s test suite.** Spikes 1 and 2 changed no
   existing test. Spike 3 rewrote the publication, fencing, gc, repair, crash, and kill
-  suites where a rule changed.
+  suites where a rule changed, and the combined copy adjusts two more tests.
 
 Sources: [spike 1](spikes/softschema-kb/fsqlite-v2/spike1/README.md),
-[spike 2](spikes/softschema-kb/fsqlite-v2/spike2/README.md), and
-[spike 3](spikes/softschema-kb/fsqlite-v2/spike3/README.md), with their patches and
-[results](spikes/softschema-kb/results/fsqlite-v2/).
+[spike 2](spikes/softschema-kb/fsqlite-v2/spike2/README.md),
+[spike 3](spikes/softschema-kb/fsqlite-v2/spike3/README.md), and the
+[combined prototype](spikes/softschema-kb/fsqlite-v2/combined/README.md), with their
+patches and [results](spikes/softschema-kb/results/fsqlite-v2/).
 
 ## Key Insights
 
@@ -644,9 +733,14 @@ Sources: [spike 1](spikes/softschema-kb/fsqlite-v2/spike1/README.md),
   At equal guarantees the two cost the same at 1% and 5%, and fsqlite is faster at 20%
   (provisional).
 - **Concurrent capture bought nothing in either engine.** One serial applier fed by
-  cheap appends was faster, and it was the only arrangement that kept edges, deletes,
-  and merges correct. A row changeset replays the consequences one writer saw and none of
-  the rule that produced them, so envelopes should carry facts and builds should derive.
+  cheap appends was faster, and of the arrangements that interleaved deletes and merges
+  it was the only one whose rows equaled one writer’s. A row changeset replays the
+  consequences one writer saw and none of the rule that produced them, so envelopes
+  should carry facts and builds should derive.
+- **A query oracle is not a state oracle.** Four after-batch states with wrong rows gave
+  all 124 oracle answers, because the batches leave queried entities alone and the
+  queries join through entities.
+  An incremental backend needs a row-level check against the reference applier.
 - **Export fidelity is a storage-content decision.** Documents, bodies, and export lines
   take a third of the SQLite file at S2 and buy a byte-exact export.
 - **The remaining v2 cost is structural.** Without reflinks, a store can have only two
@@ -667,23 +761,23 @@ Rows marked (provisional) hold contended timings.
 | Peak memory during import | 5.07 GB loader and 1.70 GB server | 0.61 GB | 0.52 GB | 0.62 GB |
 | One record, visible then durable (provisional) | 0.75 s, then 4.1 s (prototype); 226 s as built | Probe: 0.7 to 1.8 ms in WAL mode | 2.9 s, both at once | Capture 0.47 ms; both after the next publish, 2.4 to 2.6 s |
 | 5% batch, visible then durable (provisional) | 5.6 s, then 8.9 s (prototype); 217 s as built | Not run | 9.3 s with one writer; 77 s with four | 10.4 s with four writers |
-| Sustained one-record writes (provisional) | 376 per second at S1-r2, not durable; 1.0 at S2-r2 with the defect workaround | Not run | 0.6 per second | 172 per second |
+| Sustained one-record writes, by load model (provisional) | Closed loop, not durable: 376 per second at S1-r2, and 1.0 at S2-r2 with the workaround for the suspected defect | Not run | Closed loop, saturated: 0.6 per second | Offered 200 per second, all published: 172 per second with the final drain |
 | Batch atomic and durable when visible | No | Yes, per transaction | Yes, per generation | Yes |
-| Four writers with deletes and merges | Correct, with deletes and merges applied serially afterward | Writers queue on one file; not run | Wrong until two repair publishes | Correct in one publish |
+| Four writers with deletes and merges | Count-equal and W3-checked; deletes and merges were applied serially afterward, not interleaved | Writers queue on one file; not run | Rows differ from one writer’s until two repair publishes | Row-equal to one writer in one publish |
 | Conflicting writes | Last write wins; the loser is lost | Last commit wins | Per-table policy; the loser is recoverable | The same |
 | Table page, record, substring search (provisional) | 17.5, 0.66, 378 ms | 0.24, 0.039, 43.5 ms | 0.30, 0.036, 46.6 ms | The same reads |
 | Hub neighborhood, slowest path (provisional) | 329, 398 ms | 272, 150 ms | 256, 154 ms | The same reads |
 | Indexed text search (provisional) | Built in, stemmed, 1.6 ms | FTS5 in the file | Sidecar rebuilt per version: 3.5 to 4.4 s and 148 MB | In the generation, 0.35 to 3.6 ms, maintained in 1 to 12 ms per publish |
-| Serving memory | 1.33 GB in the server | The same as fsqlite | 0.17 GB process, plus the OS page cache | The same |
+| Serving memory | 1.33 GB in the server | The same as fsqlite | 0.17 GB process, plus file pages in the OS page cache, which were not measured | The same |
 | Start-up to first query (provisional) | 12 to 20 s | A file open | 6 to 9 ms to open, 1 ms to query | The same |
 | Disk | 0.28 GB RDB, payloads only | 1.80 GB | 1.80 GB per version, plus one copy per capture in flight | 2.03 GB per version; envelopes of a few KB |
 | 1M nodes on a 16 GB VM | The load was stopped at 6 GB of loader memory | Not run; 6.7 GiB projected | Not run; fits for import, not for four writers | Inferred: 13.4 GiB, less with reflinks |
 | New kind or field (provisional) | Code change for a new kind; 174 to 252 s rebuild or 7 to 21 s in place | Data only | Data only: 24 to 35 s | The same |
 | New index (provisional) | On request; not run | `CREATE INDEX`; all indexes build in 2.9 s | A new store: 16.8 s | The same store: 2.5 to 4.5 s |
 | Export fidelity | Payloads only; 0 files byte-identical | As stored; not run | 228,873 of 228,876 files byte-identical | The same |
-| Crash recovery | Orphan staging graphs; a finished load can be lost | Automatic | Head safe; manual lock removal at 2 of 4 kill points | No operator step in 8 of 8 recoveries |
+| Crash recovery | Orphan staging graphs; a finished load can be lost | Automatic | Head safe; manual lock removal at 2 of 4 kill points | No operator step in 8 of 8 recoveries, and in the combined prototype’s one |
 | Artifact | An RDB tied to the module and its version | Any SQLite tool | Any SQLite tool | Any SQLite tool |
-| Maturity | Engine SSPLv1; FalkorDBLite for development and CI | Stable since 2004 | Alpha | Three unmerged patches |
+| Maturity | Engine SSPLv1; FalkorDBLite for development and CI | Stable since 2004 | Alpha | Three spike patches and one combined patch, unmerged |
 
 ## Options Considered
 
@@ -715,7 +809,8 @@ as paraverse does today, with an optional incremental upsert path.
   string-to-object change silently empties filters
 - The persisted file is tied to the engine version, the engine is SSPLv1, and
   FalkorDBLite is documented for development
-- An engine defect corrupted nodes under back-to-back incremental writes at S2-r2
+- A suspected engine defect, not yet isolated, left unreadable nodes after back-to-back
+  incremental writes at S2-r2
 - A new kind needs code changes in paraverse’s tables
 
 ### Option B: Plain SQLite Projection
@@ -781,7 +876,12 @@ Put the entity, edge, and softschema logic in a separate package.
 
 **Cons:**
 
-- It is not built: three separate patches, measured one at a time under contention
+- It is not built: three spike patches timed one at a time under contention, and a
+  combined patch checked for correctness at S1-r2 and not timed
+- Roll-forward repair needs the application’s schema, derived specification, and
+  reducers, so the schema-agnostic CLI cannot repair a corrupt head
+- The prototypes’ lease takeover, hook isolation, and changeset admission have security
+  gaps that the specification must close
 - A publish still copies the head on ext4, 2.4 to 3.9 s at S2 (probe), until reflinks or
   manifests are measured
 - Reducers and derive hooks must be deterministic, and they put application code in the
@@ -818,8 +918,9 @@ process from each generation for multi-hop queries through hubs.
   times, and this SQLite build attaches at most 10 databases.
 - **Recycling superseded generation files in place:** a standard tool that still holds
   an old file would read a different database without an error.
-- **Typed per-kind tables as the default mapping:** every schema change becomes a new
-  store, and the generic tables are still needed for export.
+- **Typed per-kind tables as the default mapping:** the generic tables are still needed
+  for export, and one generic mapping needs no per-kind DDL. The typed mapping was
+  measured for size and migration time only, and no W3 run used it.
 - **`SnapshotStore` as the bulk import route:** it is 2.4 to 2.7 times slower than
   `DirectStore` (provisional) and leaves a store 1.65 times the head.
 - **Row-changeset merging for cross-record structures:** even with idempotent deletes
@@ -829,12 +930,13 @@ process from each generation for multi-hop queries through hubs.
 
 ## Recommendations
 
-Keep softschema files as the system of record, serve from a SQLite file that a generic
-KB layer builds, and develop fsqlite v2 as the way many writers accumulate into
-published generations.
+Keep softschema records as the system of record: one file per entity in git to about
+100,000 documents, and append-only record batches above that (both inferred).
+Serve from a SQLite file that a generic KB layer builds, and develop fsqlite v2 as the
+way many writers accumulate into published generations.
 
 ```text
-softschema records in git (YAML, Markdown)       system of record
+softschema records: files in git, then batches   system of record
   -> parse and validate changed files            one reader, cached by content hash
   -> JSONL rows and operation batches            interchange, not committed at scale
   -> KB layer: mapping, reducer, derive          a separate package
@@ -842,11 +944,32 @@ softschema records in git (YAML, Markdown)       system of record
   -> UI, CLI, and export back to records
 ```
 
+### The System of Record by Scale
+
+The records stay softschema records at every scale, and their container changes.
+
+- **To about 100,000 documents, one file per entity in git.** The limit is inferred.
+  GitHub blocks files over 100 MiB and recommends repositories under 1 GB. S2 holds 712
+  MB of records in 228,852 files, and by their S0 proportions its edge and search
+  exports each pass 100 MiB. No workflow measured git.
+- **Above that, append-only record batches over a consolidated base.** A batch holds
+  full records with their upsert, delete, and merge operations, as the spike’s batch
+  format v2 does. The reference applier rebuilds the per-entity tree from a base and a
+  batch, and each arm that applied a batch gave the oracle’s answers for that tree after
+  p05. Batches as the record were not run at scale.
+- **Per-entity files remain** for the records that people review, and as an export of
+  the rest.
+- **Splitting the corpus across repositories delays the switch.** Paraverse already
+  composes several KB directories into one view.
+- **No database is the record.** The projection is rebuilt from the base and the
+  batches. fsqlite v2 prunes applied envelopes, so the batches are kept outside the
+  store.
+
 ### The Role of Each Component
 
 | Component | Role |
 | --- | --- |
-| softschema records in git | The system of record: one entity per file, sharded directories, provenance in the payload, and no committed derived exports at scale |
+| softschema records | The system of record. To about 100,000 documents: one entity per file in git, sharded directories, provenance in the payload, and no committed derived exports. Above that: append-only batches of full records and operations over a consolidated base |
 | softschema | Contracts, compiled schemas, and validation. It should gain declared annotations for identity, reference targets, relation names and directions, field order, and index hints; schema file names that carry the contract version; and a canonical record serialization |
 | JSONL row cache and operation batches | Interchange between parsing and import, keyed by content hash and schema hash. Edges carry their origin record, deletes are explicit, and merges are redirect facts, as in the spike’s batch format v2 |
 | KB layer, a new package | The generic mapping (entity, edge, and document tables with JSON payloads), view indexes and their queries, the batch reducer, tombstone and redirect rules, search and facet builders, the validation cache, export, and any graph cache |
@@ -862,7 +985,7 @@ softschema records in git (YAML, Markdown)       system of record
 | One consolidating process on a local disk, at any measured scale | Plain SQLite, built at a temporary path and renamed |
 | Several consumers that pin versions, or a store on a shared or cloud path | fsqlite generations through the serialized lane, `DirectStore` today |
 | Many independent writers adding facts between rebuilds | fsqlite v2 operation envelopes with a coalescing publisher. Until v2 exists, queue writers behind one consolidator |
-| Small durable writes on one host with sub-second visibility | Plain SQLite in WAL mode |
+| Small durable writes on one host with sub-second visibility | Plain SQLite in WAL mode, on the evidence of a probe |
 | Multi-hop expansion through hubs as a product feature | An in-process adjacency cache built from the generation |
 
 Through S2 a full rebuild from cached rows is the simplest correct consolidation: 17 to
@@ -874,20 +997,50 @@ Through S2 a full rebuild from cached rows is the simplest correct consolidation
 Because no compatibility is owed, v2 can replace `f1.0` outright as a new format that
 names its features in `required_features`, with one store class and no upgrade path.
 
-1. **First release: derive at build, and maintenance.** Implement derived objects (e)
-   with a full `ANALYZE`, plan assertions, and FTS5 in the file; gc against a pinned,
-   verified generation (i); envelope retention and a ledger floor (g); and changeset
-   admission with the missing-row policy (n). All were confirmed, all are low risk, and
-   none changes the commit protocol.
-   Ship (e) with (i), because the `f1.0` gc gets slower once it also checks FTS5.
-2. **Second: accumulation.** Implement operation envelopes with a serial reducer (k) and
-   the coalescing publisher (d). Add sparse capture (l) only with a helper that detects
-   a missing hydration.
+The order below is inferred.
+No spike measured these subsets alone: (i) and (g) ran only inside spike 3’s patch, with
+the link commit (h) present, and (n) ran bundled with (k), (l), and (d).
+
+1. **First release: derive at build, admission, and maintenance.** Implement derived
+   objects (e) with a full `ANALYZE`, plan assertions, and FTS5 in the file; changeset
+   admission from (n); and, if they separate from (h), gc against a pinned, verified
+   generation (i) with envelope retention and a ledger floor (g).
+   - Spike 1 confirmed (e) by itself, and (e) changes no publication rule.
+   - Pinned gc as prototyped touches the publish path.
+     Its safety rests on a floor that a publisher reads before linking and again after,
+     and its 0 of 20 refusals were measured with the link commit and the lease in place.
+     If (i) cannot be carved out, it moves to the phase that holds (h).
+   - Collecting against the publish check narrows the recovery guarantee: between
+     scrubs, the only fully verified recovery point may be older than every retained
+     generation.
+   - Ship (e) with (i), because the `f1.0` gc gets slower once it also checks FTS5.
+2. **Second: accumulation.** Implement operation envelopes with a serial reducer (k),
+   the coalescing publisher (d), and the tombstone and redirect facts with their
+   closure. Only then enable the missing-row policy of (n). Alone,
+   `missingDelete: 'ignore'` removes the `NOTFOUND` quarantine and leaves the dangling
+   edges, 17 and 470 at S2-r2, so it turns a reported conflict into an unreported wrong
+   state. Add sparse capture (l) only with a helper that detects a missing hydration.
 3. **Third: the commit.** Implement the link commit with an expirable lease (h) after a
    written model of its interleavings and a run on a shared filesystem.
 4. **Fourth: measure before building.** Clone copies (a) on a reflink filesystem,
    generation manifests (m), a WAL live head (j), and migration steps (f) wait for a
    measurement.
+
+The security review of the prototypes found gaps that the specification must close.
+The [v2 design](spikes/softschema-kb/notes/fsqlite-v2-design.md) lists them under (e),
+(g), (h), (k), and (n):
+
+- **Lease takeover (h).** Identify a lock owner by boot id and pid namespace, with the
+  process start time, not by hostname and pid.
+  Let the holder’s recorded lease length decide expiry, not the waiter’s option.
+  State for every step under the lease why it is safe with two holders.
+  Bound the ledger floor against clock error.
+- **Hooks and reducers (e) and (k).** Keep fsqlite’s own tables protected while derive
+  hooks and reducers run, and audit the hooks with a session.
+  Fail a build in which the ledger changed other than by fsqlite’s own insert, and open
+  every connection through the defensive path.
+- **Changeset admission (n).** Take table names from SQLite’s own parse, or decode a
+  changeset exactly as SQLite does and reject over-long encodings.
 
 These changes overlap work that the [roadmap](../roadmap.md) already lists before 1.0: a
 pointer protocol that cannot move `current` backward, a shorter `DirectStore` critical
@@ -910,7 +1063,11 @@ publication backend.
   are rewritten should not become storage rules.
 - **Readers need no fsqlite code.** The export read each generation with Python’s
   standard `sqlite3`, so paraverse’s Python server can serve from the file.
+  W3 was timed from Node only, so that client’s latency is unmeasured.
   With operation envelopes a producer in any language writes a file.
+- **Batch admission belongs to the layer.** A batch names record paths, so the reducer
+  and the exporter must reject a path that is absolute, has a `..` segment, or resolves
+  outside the root.
 
 ### FalkorDB as an Optional Graph Cache
 
@@ -922,45 +1079,64 @@ Do not keep FalkorDB in the default stack.
   second server and no second copy of the payloads.
 - **Keeping paraverse’s loader is defensible for ad hoc Cypher and stemmed search.**
   That holds while the corpus is small.
-  Use it only as a full rebuild from the files, which showed no engine defect, and never
-  as the system of record or the interchange artifact.
+  Use it only as a full rebuild from the files, which did not show the suspected defect,
+  and never as the system of record or the interchange artifact.
 
 ### Phased Plan
+
+The phases follow the order above, which is inferred.
 
 | Phase | Work | Depends on | Covers |
 | --- | --- | --- | --- |
 | 1 | Build the KB layer on plain SQLite with the generic mapping, the content-hash row cache, full rebuild and rename, and softschema annotations. Move paraverse’s browser queries to SQL | No fsqlite change | S2 measured, 1M inferred |
-| 2 | fsqlite v2 first release: (e), (i), (g), (n). Publish generations with search and statistics in the file | The v2 specification | Pinned versions and shared paths |
-| 3 | fsqlite v2 accumulation: (k), (d), and tombstone and redirect facts in the KB layer | Phase 2 | Many writers between rebuilds |
+| 2 | fsqlite v2 first release: (e), admission from (n), and (i) with (g) if they separate from (h). Publish generations with search and statistics in the file | The v2 specification and the carve-out of (i) and (g) | Pinned versions and shared paths |
+| 3 | fsqlite v2 accumulation: (k), (d), tombstone and redirect facts in the KB layer, and then the missing-row policy of (n) | Phase 2 | Many writers between rebuilds |
 | 4 | The commit and the copy: (h), then (a), (m), (j), and (f) by measurement | An interleaving model and a reflink run | 1M with frequent publishes |
 
 ## Next Steps
 
 - [ ] Replace the timings marked (provisional) when the quiet re-measurement lands.
+  In the same pass, measure the resident file pages after W3, a FalkorDB scan over
+  stored lower-case properties or a SQLite scan that lower-cases at query time, and W3
+  from Python’s `sqlite3`.
+- [ ] Add a row-level state check to the harness: compare each backend’s nodes and edge
+  multiset after p01, p05, and p20 with the reference applier’s output, starting with
+  the fsqlite one-writer state and the FalkorDB incremental state.
 - [ ] Write the fsqlite v2 implementation plan as a separate specification under
-  [the project specs](../project/specs/), starting from the three patches and their
+  [the project specs](../project/specs/), starting from the combined patch and its
   tests. It should fix the format marker, the semantics of collecting against a quick
   check, the head-by-listing rule, and the roadmap items it replaces.
+  It should carry the security requirements for lease takeover, hook isolation, and
+  changeset admission, and decide how a schema-agnostic CLI repairs a store that has
+  derived objects and reducers.
+- [ ] Carve (i) and (g) out of spike 3 without (h), and repeat its gc-refusal and
+  import-store measurements.
+  If the carve-out fails, schedule (i) with (h).
 - [ ] Measure reflinks on APFS, XFS, or btrfs: a one-record publish at S2, the disk
   added per retained generation, and an S3 run of W1 and W2. The VM has no reflink
   filesystem.
 - [ ] Settle tombstones for merges: how long a tombstone lives against the ledger floor,
-  fact-keyed edge sets for changeset writers, and the 10 dangling edges that remained
-  when a retry followed a build that had deleted their endpoints.
+  fact-keyed edge sets for changeset writers, a closure that removes only edges of
+  absent nodes, and the 10 dangling edges that remained when a retry followed a build
+  that had deleted their endpoints.
 - [ ] Add crash and kill tests for operation envelopes, and enforce the stamped reducer
   version on open.
 - [ ] Write the interleaving model for the link commit, and close the residual
   lock-break race.
-- [ ] Measure the three patches together on a quiet machine, including W1 with the
-  derived build, since this brief infers the combined effect.
+- [ ] Time the combined prototype on a quiet machine at S2 scale: W1 with the derived
+  build, the trickle and sustained runs that its harness does not carry, and the three
+  kill points it did not run.
+- [ ] Give the FalkorDB prototype the interleaved four-writer test, with an
+  edge-multiset comparison.
 - [ ] Run S3 on a machine with at least 64 GB of disk, and run W4 case 6 and W7.
 - [ ] Measure git itself at S2 and S3: status, commit, and clone times and repository
   size, since the limit of files as the system of record is inferred.
+  Prototype record batches as the system of record at S3.
 - [ ] Propose the softschema annotations, versioned schema file names, and a canonical
   record serialization, and measure a cached or faster validation path against 8.9 ms
   per record.
-- [ ] Isolate the FalkorDB 4.18.3 defect to a small reproduction before any further
-  incremental use.
+- [ ] Reduce the suspected FalkorDB 4.18.3 defect to a small reproduction, and report it
+  upstream, before any further incremental use.
 
 ### Later Comparisons on the Same Harness
 
@@ -977,7 +1153,8 @@ implementations.
    The oracle is the executable definition.
 4. Write one result file per scale and workflow with the machine, versions, per-phase
    timings, and plans, and check every W3 file with the comparison tool against the
-   expected results, including the state after batch p05.
+   expected results. After each batch, also compare the stored nodes and edge multiset
+   with the reference applier’s output, because a W3 match alone can pass a wrong state.
 5. Report parse separately, compare on ingest through durable, and report visible and
    durable times separately.
 6. Rerun the plain SQLite control in the same session, because the numbers do not
@@ -1007,12 +1184,37 @@ prototypes.
   own loader unmodified and a spike-only incremental path.
   The [fsqlite arm](spikes/softschema-kb/fsqlite/README.md) uses the public API and
   includes the plain SQLite control.
-- **Correctness.** A pure-Python oracle computes every W3 result from the KB files.
-  For this brief the comparison tool was rerun on all 54 W3 result files: 49 match in
-  full, 3 hold only the five recursive-path queries and match on those, and 2 are the
-  deliberate no-closure ablations of spike 2.
-- **Prototypes.** Each [v2 spike](spikes/softschema-kb/fsqlite-v2/) is a pair of patches
-  against scratch copies.
+- **Correctness.** A pure-Python oracle computes every W3 result from the KB files, and
+  a reference applier builds the KB that a batch produces.
+  For this brief the comparison tool was rerun on the 55 W3 answer files then in the
+  repository: 50 matched in full, 3 held only the five recursive-path queries and
+  matched on those, and 2 were the deliberate no-closure ablations of spike 2. The
+  answers have since been replaced by digests and the recorded verdict, and the five W3
+  files of the combined prototype carry that verdict only.
+- **After a batch, a W3 match is necessary and not sufficient.** Four states whose rows
+  differ from one writer’s match 124 of 124 after p05:
+  - spike 1 at S1-r2, four writers with the closure in the build: 235,469 edges against
+    235,470
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json));
+  - spike 2 at S1-r2, sparse changesets with idempotent deletes and no closure: 235,474
+    against 235,470
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json));
+  - spike 2 at S1-r2, full-copy changesets with idempotent deletes and no closure:
+    235,474 against 235,470
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json));
+  - spike 2 at S2-r2, operation envelopes with the reducer that keeps no facts and no
+    closure: 1,204,889 edges on both sides, with different rows
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S2-r2/w2-ops-naive.json)).
+- **What each correctness claim rests on.** fsqlite states are compared by table digests
+  with one writer that applies the batch in line order: entities, the edge multiset,
+  documents, search text, quarantine, and in spike 2 the tombstone and redirect tables.
+  That one-writer state is W3-checked after p05 at both scales, and its entity and edge
+  totals equal the reference applier’s for p01, p05, and p20. Its rows have not been
+  compared with the applier’s. FalkorDB’s incremental and four-writer states are
+  compared with a full rebuild by per-kind and per-relation counts and by W3 answers,
+  which is a weaker check.
+- **Prototypes.** Each [v2 spike](spikes/softschema-kb/fsqlite-v2/), and the combined
+  prototype, is a pair of patches against scratch copies.
   Nothing under `packages/` changed.
 - **Recomputation.** The tables here were recomputed from the result files, so some
   figures differ from the arm READMEs.
@@ -1043,24 +1245,43 @@ Threats to validity:
 - **FalkorDB as configured by paraverse.** The arm measures FalkorDBLite, not a tuned
   server deployment, with the client’s socket timeout disabled and no append-only file.
   The incremental path is spike code.
-- **The FalkorDB 4.18.3 defect.** At S2-r2, back-to-back write phases left Repository
-  nodes that every later scan rejected.
+- **A suspected FalkorDB 4.18.3 defect, not yet isolated.** At S2-r2, the spike’s
+  back-to-back write phases left Repository nodes that every later scan rejected.
+  It was seen in one spike-written write sequence, at one scale, on one version.
   Reading every label between phases avoids it and adds about 0.7 s to each apply, which
   dominates the one-record and sustained figures at that scale.
   The S1-r2 run predates the workaround.
 - **Planner hints.** The compared queries carry hints on both sides: anchored patterns
   in Cypher, and `INDEXED BY` and one unary plus in SQL. Unhinted plans are up to 3,000
   times slower and are stored per query.
-- **Unequal concurrency tests.** The FalkorDB run applied deletes and merges serially
-  after its four writers, and the fsqlite runs interleaved them.
+- **Unequal concurrency tests and checks.** The FalkorDB run gave its four writers
+  upserts only and applied every delete and merge in one process afterward, and the
+  fsqlite runs interleaved them.
+  FalkorDB’s final state was checked by counts and W3 answers, and fsqlite’s by row
+  digests.
+- **After-batch correctness.** A W3 match after a batch is necessary and not sufficient,
+  and no after-batch state was compared row by row with the reference applier’s output.
 - **Different parsers and job counts.** W1 parses in one process in the FalkorDB arm and
   in 4 workers in the fsqlite arm, and no W1 run includes softschema validation.
-- **Process boundaries.** FalkorDB latencies include a socket round trip, and SQLite
-  latencies do not.
-- **Search semantics.** The compared search is a substring match, which FalkorDB’s text
-  index cannot answer, so its indexed search is reported and not compared.
-- **Separate prototypes.** The three spikes ran their patches one at a time, their S2
+- **Process boundaries and client runtime.** FalkorDB latencies include a socket round
+  trip and a Python client, and SQLite latencies come from an in-process Node client.
+  The shared path search, result shaping, and JSON decoding run in those runtimes.
+  Paraverse’s server is Python, and W3 was not timed from Python’s `sqlite3`.
+- **Search semantics and preparation.** The compared search is a substring match, which
+  FalkorDB’s text index cannot answer, so its indexed search is reported and not
+  compared. The two scans also differ: SQLite scans a table of fields lower-cased at
+  load, and FalkorDB lower-cases three properties of every entity node at query time.
+- **Serving memory.** The comparison of 0.17 GB with 1.3 GB counts FalkorDB’s data and
+  leaves out SQLite’s file pages in the OS page cache, whose resident size was not
+  measured.
+- **Sustained-write load models.** The v2 figure is an offered load of 200 per second,
+  all published. The `f1.0` figure is a saturated closed loop, and the FalkorDB figures
+  are closed loops at other scales without durability.
+  They are not three capacities.
+- **Prototype coverage.** The three spikes timed their patches one at a time, their S2
   runs were limited by disk, and their baselines ran at other times under other load.
+  The combined prototype checked answers and states at S1-r2 only and reported no
+  timing.
 
 ## References
 
@@ -1076,8 +1297,9 @@ Spike documents, as primary evidence:
 - [FalkorDB arm](spikes/softschema-kb/falkordb/README.md) and
   [fsqlite arm](spikes/softschema-kb/fsqlite/README.md)
 - v2 prototypes: [spike 1](spikes/softschema-kb/fsqlite-v2/spike1/README.md),
-  [spike 2](spikes/softschema-kb/fsqlite-v2/spike2/README.md), and
-  [spike 3](spikes/softschema-kb/fsqlite-v2/spike3/README.md)
+  [spike 2](spikes/softschema-kb/fsqlite-v2/spike2/README.md),
+  [spike 3](spikes/softschema-kb/fsqlite-v2/spike3/README.md), and the
+  [combined prototype](spikes/softschema-kb/fsqlite-v2/combined/README.md)
 
 Repository documents:
 
