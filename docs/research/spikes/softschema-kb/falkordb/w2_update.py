@@ -1,10 +1,10 @@
 """
 W2, incremental accumulation, for each delta batch (1%, 5%, 20%) of a scale:
 
-1. Full rebuild, paraverse's only update path: materialize the post-delta KB (standing
+1. "paraverse as built", a full rebuild and paraverse's only update path: materialize the post-delta KB (standing
    in for the KB build), then `load_kb` + `load_graph` into the server that still holds
    the base graph, which swaps in the new graph with RENAME.
-2. Incremental prototype: from the same base RDB, upsert the delta's nodes with
+2. "incremental prototype": from the same base RDB, upsert the delta's nodes with
    paraverse's own mapping (labels_for, node_properties, readable_name), create the new
    records' edges, and bump GraphMeta's load_id so browser caches refresh. No rebuild.
    Correctness: the incremental graph must give the same W3 results and the same
@@ -316,6 +316,7 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
         load_graph(server.db, kb, GRAPH)
         t2 = time.perf_counter()
     del kb
+    save_s = server.save()
     probe = manifest["new_ids"][0]
     visible = bool(server.graph.ro_query("MATCH (n:Entity {id: $id}) RETURN n.id", {"id": probe}).result_set)
     rebuilt_counts = graph_counts(server.graph)
@@ -326,6 +327,8 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
         "load_graph_s": round(t2 - t1, 3),
         "db_visible_s": round(t2 - t0, 3),
         "total_visible_s": round(t2 - t0 + build_s, 3),
+        "durable_save_s": round(save_s, 3),
+        "durable_s": round(t2 - t0 + save_s, 3),
         "server_peak_rss": sampler.peak["server"],
         "loader_peak_rss_sampled": sampler.peak["loader"],
         "new_record_visible": visible,
@@ -343,6 +346,7 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
     t2 = time.perf_counter()
     publish_change(server)
     t3 = time.perf_counter()
+    inc_save_s = server.save()
     visible = bool(server.graph.ro_query("MATCH (n:Entity {id: $id}) RETURN n.id", {"id": probe}).result_set)
     inc_counts = graph_counts(server.graph)
     inc_w3 = _norm(w3_results(server.graph, scale)) if check_w3 else None
@@ -351,6 +355,8 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
         "write_s": round(t2 - t1, 3),
         "publish_s": round(t3 - t2, 3),
         "db_visible_s": round(t3 - t0, 3),
+        "durable_save_s": round(inc_save_s, 3),
+        "durable_s": round(t3 - t0 + inc_save_s, 3),
         "new_record_visible": visible,
         "counts": prepared["counts"],
         "counts_match_rebuild": inc_counts == rebuilt_counts,
@@ -367,8 +373,8 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
         "post_delta_nodes": post_stats["node_total"],
         "post_delta_edges": post_stats["edge_total"],
         "kb_materialize": build,
-        "full_rebuild": rebuild,
-        "incremental": incremental,
+        "paraverse_as_built": rebuild,
+        "incremental_prototype": incremental,
     }
 
 
@@ -381,7 +387,7 @@ def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | N
         batches.append(run_batch(scale, corpus, base_rdb, work, pct, check_w3=True))
         if pct != conc_pct:
             shutil.rmtree(work / f"post-p{pct:02d}", ignore_errors=True)
-        print(json.dumps({k: batches[-1][k] for k in ("pct", "full_rebuild", "incremental")}), flush=True)
+        print(json.dumps({k: batches[-1][k] for k in ("pct", "paraverse_as_built", "incremental_prototype")}), flush=True)
     conc = None
     if conc_pct is not None:
         print(f"concurrency at {conc_pct}%", flush=True)
@@ -391,6 +397,10 @@ def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | N
     return {
         "workflow": "W2",
         "backend": "falkordb",
+        "arms": {
+            "paraverse_as_built": "full rebuild with paraverse load_kb + load_graph, then RENAME",
+            "incremental_prototype": "spike-only upsert with paraverse's mapping functions; not part of paraverse",
+        },
         "scale": scale,
         "machine": machine([corpus, data]),
         "software": package_versions(PACKAGES),
@@ -402,6 +412,7 @@ def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | N
             "kb_build_s stands in for the KB build that regenerates _graph; it hard-links the base and overlays the delta.",
             "The incremental prototype is not part of paraverse: it upserts nodes with paraverse's mapping and creates new records' edges; edge changes of updated records would need an edge diff from the build (none in these deltas).",
             "Incremental correctness: per-kind and per-relation counts and all W3 results equal those of the full rebuild.",
+            "db_visible_s is servable (queries see the change); durable_s adds an explicit SAVE, since the default save rules would persist it only at the next snapshot.",
         ],
     }
 

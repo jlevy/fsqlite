@@ -1,0 +1,104 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "W1 control (C15)",
+  "recorded_at": "2026-11-17T01:23:39.013Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14494,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "indexes_first": {
+    "arm": "plain SQLite (indexes-first)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 43052,
+      "node": 48663,
+      "doc": 44777,
+      "entity": 48663,
+      "edge": 227817,
+      "update": 0,
+      "removed": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 1.567,
+      "decode_ms": 463.447,
+      "transform_ms": 264.542,
+      "ingest_ms": 1737.552,
+      "index_ms": 0,
+      "verify_counts_ms": 17.228,
+      "commit_durable_ms": 568.079,
+      "ingest_through_durable_ms": 2961.986
+    },
+    "total_ms": 3425.434,
+    "file_bytes": 350756864,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "indexes_after": {
+    "arm": "plain SQLite (indexes-after)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 43052,
+      "node": 48663,
+      "doc": 44777,
+      "entity": 48663,
+      "edge": 227817,
+      "update": 0,
+      "removed": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 0.812,
+      "decode_ms": 478.28,
+      "transform_ms": 294.995,
+      "ingest_ms": 1097.061,
+      "index_ms": 534.556,
+      "verify_counts_ms": 18.313,
+      "commit_durable_ms": 595.693,
+      "ingest_through_durable_ms": 3005.395
+    },
+    "total_ms": 3483.675,
+    "file_bytes": 345198592,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "max_rss_mib": 449.6
+}

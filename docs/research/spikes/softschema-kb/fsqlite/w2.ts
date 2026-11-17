@@ -33,6 +33,7 @@ import {
   writeResult,
 } from './common.ts'
 import type { KbRow, NodeRow } from './common.ts'
+import { buildFtsSidecar } from './fts.ts'
 import { genericStore } from './w3.ts'
 
 const HERE = join(SPIKE_DIR, 'fsqlite')
@@ -217,6 +218,9 @@ async function batch(
   }
   const published = Date.now()
   const head = handle.currentVersion()
+  // Indexed search follows each publish: rebuild the FTS5 sidecar for the new head.
+  const sidecar = buildFtsSidecar(handle.snapshotPath(head), join(dir, 'search-fts.sqlite'))
+  const searchVisible = Date.now()
   // The reader checks `current` before every query; give it time to reopen on the head.
   await new Promise((r) => setTimeout(r, 500))
   writeFileSync(stop, '')
@@ -262,6 +266,7 @@ async function batch(
   const result = {
     batch: name,
     strategy,
+    arm: strategy === 'direct' ? 'DirectStore' : 'SnapshotStore',
     delta: {
       changes: manifest.changes,
       new: manifest.new,
@@ -273,10 +278,29 @@ async function batch(
     writers: writers,
     envelopes: reports.reduce((n, rep) => n + rep.envelopes, 0),
     capture_ms: stats(captureMs),
+    gc_refusals:
+      strategy === 'direct'
+        ? reports
+            .flatMap((rep) => rep.captures)
+            .filter((c) => typeof (c as { gcRetries?: unknown }).gcRetries === 'string').length
+        : null,
+    gc_after_write_ms:
+      strategy === 'direct'
+        ? stats(
+            reports.flatMap((rep) => rep.captures.map((c) => (c as { gc_ms?: number }).gc_ms ?? 0)),
+          )
+        : null,
     writers_wall_ms: writersDone - started,
     writer_max_rss_mib: Math.max(...reports.map((rep) => rep.max_rss_mib)),
     reconcile,
     visible_after_ms: seenHead ? seenHead.seen_at - started : null,
+    // The same, from the first capture rather than from spawning the writer processes.
+    visible_after_first_capture_ms: seenHead
+      ? seenHead.seen_at -
+        Math.min(...reports.map((rep) => (rep as { started_at?: number }).started_at ?? started))
+      : null,
+    fts_sidecar_rebuild: sidecar,
+    indexed_search_visible_after_ms: searchVisible - started,
     published_after_ms: published - started,
     versions_published: head - baseVersion,
     entities: { before: before.n, after: after.n, added: after.n - before.n },
@@ -294,7 +318,8 @@ async function batch(
     },
   }
   if (!process.env.KB_KEEP) {
-    rmSync(store, { recursive: true, force: true })
+    // Measured: drop the clone, its new generation, the sidecar and the parsed rows.
+    rmSync(dir, { recursive: true, force: true })
   }
   return result
 }

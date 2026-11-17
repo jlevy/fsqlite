@@ -27,7 +27,7 @@ SCRATCH = Path(
 CORPORA = Path(os.environ.get("KB_CORPORA", SCRATCH / "kb-corpora"))
 DATA = Path(os.environ.get("FALKORDB_DATA", SCRATCH / "fdb-data"))
 
-STEPS = ("oracle", "w1", "w3", "compare", "w2", "w4", "w5", "w6")
+STEPS = ("oracle", "w1", "w1nosave", "w3", "compare", "w2", "w4", "w5", "w6")
 
 
 def sh(args: list[str], **kwargs) -> int:
@@ -49,6 +49,8 @@ def main() -> None:
             rc = sh([py, str(SPIKE / "harness" / "oracle.py"), "--kb", str(kb), "--scale", s, "--out", str(expected)])
         elif step == "w1":
             rc = sh([py, str(HERE / "w1_load.py"), "--kb", str(kb), "--data", str(data), "--scale", s, "--out", str(out / "w1.json")])
+        elif step == "w1nosave":
+            rc = sh([py, str(HERE / "w1_load.py"), "--kb", str(kb), "--data", str(data), "--scale", s, "--save-mode", "disabled", "--out", str(out / "w1-save-disabled.json")])
         elif step == "w3":
             rc = sh([py, str(HERE / "w3_queries.py"), "--data", str(data), "--kb", str(kb), "--scale", s, "--out", str(out / "w3.json")])
         elif step == "compare":

@@ -8,9 +8,9 @@
 // each and folds them with one reconcile. Prints one JSON report on stdout.
 
 import { rmSync, statSync } from 'node:fs'
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import { DirectStore, SnapshotStore } from './fsq.ts'
-import { forEachRowSync, isMain, maxRssMiB, nowMs, parseArgs, round } from './common.ts'
+import { forEachLineSync, isMain, maxRssMiB, nowMs, parseArgs, round } from './common.ts'
 import type { KbRow } from './common.ts'
 import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
 
@@ -44,7 +44,62 @@ export function countProblems(db: DatabaseSync): string[] {
 }
 
 /** Larger page cache for bulk work; a connection setting, not a schema change. */
-const BULK_PRAGMAS = 'PRAGMA cache_size = -262144;'
+export const BULK_PRAGMAS = 'PRAGMA cache_size = -262144;'
+export const IMPORT_LOCK = { staleMs: 600_000, timeoutMs: 600_001 }
+
+/** Configuration every W1 result records (C17). */
+export const LOAD_CONFIG = {
+  bulk_pragmas: BULK_PRAGMAS,
+  build_journal_mode: 'DELETE (fsqlite builds and publishes in rollback-journal mode)',
+  build_synchronous:
+    'DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync',
+  lock_options: IMPORT_LOCK,
+  gc: 'none during the import; w1.ts then runs gc({ retain: 0 }) and times it',
+}
+
+/**
+ * Stream the rows into `db`, timing three phases: decode (JSON.parse of each intermediate
+ * line), transform (derived labels, promoted fields, search text), and ingest (SQLite
+ * inserts with index maintenance; indexes exist from init(), since DDL is fixed then).
+ */
+function streamRows(rows: Iterable<KbRow> | string, loader: GenericLoader): Record<string, number> {
+  let decodeMs = 0
+  let addMs = 0
+  const add = (row: KbRow): void => {
+    const t = nowMs()
+    loader.add(row)
+    addMs += nowMs() - t
+  }
+  if (typeof rows === 'string') {
+    forEachLineSync(rows, (line) => {
+      const t = nowMs()
+      const row = JSON.parse(line) as KbRow
+      decodeMs += nowMs() - t
+      add(row)
+    })
+  } else {
+    for (const row of rows) {
+      add(row)
+    }
+  }
+  return {
+    decode_ms: round(decodeMs),
+    transform_ms: round(loader.transformMs),
+    ingest_ms: round(addMs - loader.transformMs),
+  }
+}
+
+/** A warm quick_check of the published file, to split publish into verify and durable. */
+function quickCheckMs(snapshot: string): number {
+  const db = new DatabaseSync(snapshot, { readOnly: true })
+  try {
+    const t = nowMs()
+    db.prepare('PRAGMA quick_check').all()
+    return round(nowMs() - t)
+  } finally {
+    db.close()
+  }
+}
 
 export function loadDirect(jsonl: string, dir: string): Record<string, unknown> {
   const t0 = nowMs()
@@ -54,37 +109,49 @@ export function loadDirect(jsonl: string, dir: string): Record<string, unknown> 
   }).init()
   const tInit = nowMs()
   let counts: GenericLoader['counts'] | undefined
-  let loadMs = 0
-  let checkMs = 0
+  let phases: Record<string, number> = {}
+  let callbackMs = 0
+  let verifyMs = 0
   const version = store.write(
     (db) => {
-      db.exec(BULK_PRAGMAS)
       const t = nowMs()
+      db.exec(BULK_PRAGMAS)
       const loader = new GenericLoader(db, true)
-      forEachRowSync(jsonl, (row) => loader.add(row))
+      phases = streamRows(jsonl, loader)
       counts = loader.counts
       const t2 = nowMs()
-      loadMs = t2 - t
       const problems = countProblems(db)
-      checkMs = nowMs() - t2
+      verifyMs = nowMs() - t2
+      callbackMs = nowMs() - t
       if (problems.length > 0) {
         throw new Error(`load does not match stats.json: ${problems.slice(0, 5).join('; ')}`)
       }
     },
-    { lockOpts: { staleMs: 600_000, timeoutMs: 600_001 } },
+    { lockOpts: IMPORT_LOCK },
   )
   const tWrite = nowMs()
+  const snapshot = store.snapshotPath(version)
+  const publishMs = tWrite - tInit - callbackMs
+  const qc = quickCheckMs(snapshot)
   return {
-    route: 'direct',
+    arm: 'DirectStore',
+    route: 'init() with the DDL, then one DirectStore.write streaming every row',
     version,
     counts,
-    init_ms: round(tInit - t0),
-    callback_load_ms: round(loadMs),
-    callback_check_ms: round(checkMs),
-    write_total_ms: round(tWrite - tInit),
-    publish_overhead_ms: round(tWrite - tInit - loadMs - checkMs),
+    phases: {
+      init_ddl_ms: round(tInit - t0),
+      ...phases,
+      verify_counts_ms: round(verifyMs),
+      publish_ms: round(publishMs),
+      publish_note:
+        'COMMIT, quick_check, foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs',
+      quick_check_warm_ms: qc,
+      ingest_through_durable_ms: round(tWrite - t0 - (phases.decode_ms ?? 0)),
+    },
     total_ms: round(tWrite - t0),
-    snapshot: store.snapshotPath(version),
+    validation: 'softschema validation not run (as in paraverse default load)',
+    config: LOAD_CONFIG,
+    snapshot,
   }
 }
 
@@ -100,7 +167,9 @@ export function loadSnapshot(jsonl: string, dir: string, batch: number): Record<
   let pending: KbRow[] = []
   let captures = 0
   let captureMs = 0
-  const counts = { schema: 0, file: 0, doc: 0, entity: 0, edge: 0 }
+  let decodeMs = 0
+  const totals = { transform_ms: 0, ingest_ms: 0 }
+  const counts: Record<string, number> = {}
   const flush = (): void => {
     if (pending.length === 0) {
       return
@@ -111,40 +180,54 @@ export function loadSnapshot(jsonl: string, dir: string, batch: number): Record<
     store.write(`import-${captures}`, (db) => {
       db.exec(BULK_PRAGMAS)
       const loader = new GenericLoader(db, true)
-      for (const row of rows) {
-        loader.add(row)
-      }
+      const p = streamRows(rows, loader)
+      totals.transform_ms += p.transform_ms ?? 0
+      totals.ingest_ms += p.ingest_ms ?? 0
       for (const [k, v] of Object.entries(loader.counts)) {
-        counts[k as keyof typeof counts] += v
+        counts[k] = (counts[k] ?? 0) + v
       }
     })
     captureMs += nowMs() - t
     captures++
   }
-  forEachRowSync(jsonl, (row) => {
-    pending.push(row)
+  forEachLineSync(jsonl, (line) => {
+    const t = nowMs()
+    pending.push(JSON.parse(line) as KbRow)
+    decodeMs += nowMs() - t
     if (pending.length >= batch) {
       flush()
     }
   })
   flush()
   const tCaptured = nowMs()
-  const result = store.reconcile({ lockOpts: { staleMs: 600_000, timeoutMs: 600_001 } })
+  const result = store.reconcile({ lockOpts: IMPORT_LOCK })
   const tReconciled = nowMs()
   const problems = store.read((db) => countProblems(db))
+  const snapshot = store.snapshotPath(result.published)
   return {
-    route: 'snapshot',
+    arm: 'SnapshotStore',
+    route: `init(), ${captures} envelopes of ${batch} rows, one reconcile`,
     batch,
     captures,
     counts,
     reconcile: result,
-    init_ms: round(tInit - t0),
-    capture_ms: round(captureMs),
-    read_and_capture_ms: round(tCaptured - tInit),
-    reconcile_ms: round(tReconciled - tCaptured),
+    phases: {
+      init_ddl_ms: round(tInit - t0),
+      decode_ms: round(decodeMs),
+      transform_ms: round(totals.transform_ms),
+      ingest_ms: round(totals.ingest_ms),
+      capture_overhead_ms: round(captureMs - totals.transform_ms - totals.ingest_ms),
+      capture_note: 'per envelope: copy the head, session changeset, envelope files',
+      reconcile_ms: round(tReconciled - tCaptured),
+      reconcile_note: 'copy head, apply changesets, quick_check, fsync, publish',
+      quick_check_warm_ms: quickCheckMs(snapshot),
+      ingest_through_durable_ms: round(tReconciled - t0 - decodeMs),
+    },
     total_ms: round(tReconciled - t0),
     count_problems: problems,
-    snapshot: store.snapshotPath(result.published),
+    validation: 'softschema validation not run',
+    config: LOAD_CONFIG,
+    snapshot,
   }
 }
 

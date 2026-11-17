@@ -5,8 +5,10 @@ W6, operations, from the W1 database of a scale:
 - standard tools: what can read the RDB without a FalkorDB server;
 - serving start-up: spawning the server on the RDB until the first query answers;
 - resident memory at rest;
-- crash safety: SIGKILL the loader mid-import, then SIGKILL the server mid-import,
-  and check what survives and whether the next load succeeds.
+- crash safety (C25): SIGKILL the client (loader) mid-load; SIGKILL the server mid-load;
+  SIGKILL the server a few seconds after a completed load. Each records orphan staging
+  graphs, what the restarted server serves (by GraphMeta load_id) and whether the next
+  load succeeds.
 
     python w6_ops.py --scale S1 --corpus $CORPORA/S1 --data $DATA/S1 --out w6.json
 """
@@ -102,6 +104,7 @@ def crash_server(base_rdb: Path, kb: Path, work: Path, kill_after: float) -> dic
     data = work / "crash-server"
     server = fresh_server(base_rdb, data)
     before = graph_counts(server.graph)
+    old_id = _load_id(server)
     proc = _spawn_loader(server, kb)
     _wait_for_staging(server, 600)
     time.sleep(kill_after)
@@ -135,10 +138,59 @@ def crash_server(base_rdb: Path, kb: Path, work: Path, kill_after: float) -> dic
         "restart_s": round(restart_s, 3),
         "graphs_after_restart": graphs,
         "live_graph_intact_after_restart": after == before,
+        "restarted_serves": "previous load" if GRAPH in graphs and _load_id(server) == old_id else "other",
         "orphan_staging_graphs_after_restart": orphans,
         "retry_exit_code": retry_rc,
         "retry_s": round(retry_s, 3),
         "live_graph_after_retry_matches_kb": graph_counts(server.graph) == before,
+    }
+    server.shutdown(save=False)
+    return result
+
+
+def _load_id(server: Server) -> str | None:
+    rows = server.graph.ro_query("MATCH (m:GraphMeta) RETURN m.load_id").result_set
+    return rows[0][0] if rows else None
+
+
+def _restart(data: Path, rdb_name: str) -> tuple[Server, float, str | None]:
+    t0 = time.perf_counter()
+    error = None
+    try:
+        server = Server(data)
+    except Exception as e:  # noqa: BLE001  redislite trips over its stale registry
+        error = f"{type(e).__name__}: {e}"[:200]
+        (data / f"{rdb_name}.settings").unlink(missing_ok=True)
+        server = Server(data)
+    return server, time.perf_counter() - t0, error
+
+
+def crash_after_load(base_rdb: Path, kb: Path, work: Path, kill_after: float) -> dict[str, Any]:
+    """SIGKILL the server `kill_after` seconds after a load completed (RENAME done)."""
+    data = work / "crash-after-load"
+    server = fresh_server(base_rdb, data)
+    old_id = _load_id(server)
+    proc = _spawn_loader(server, kb)
+    rc = proc.wait(timeout=3600)
+    done = time.perf_counter()
+    new_id = _load_id(server)
+    last_save = server.db.connection.lastsave()
+    time.sleep(kill_after)
+    bgsave_ran = server.db.connection.lastsave() != last_save
+    os.kill(server.pid, signal.SIGKILL)
+    killed_after = time.perf_counter() - done
+    server.db.connection.running = False
+    server, restart_s, error = _restart(data, base_rdb.name)
+    served = _load_id(server)
+    result = {
+        "loader_exit_code": rc,
+        "killed_after_completed_load_s": round(killed_after, 3),
+        "bgsave_between_load_and_kill": bgsave_ran,
+        "restart_error_before_manual_cleanup": error,
+        "restart_s": round(restart_s, 3),
+        "restarted_serves": "new load" if served == new_id else "previous load" if served == old_id else f"other ({served})",
+        "graphs_after_restart": _graphs(server),
+        "orphan_staging_graphs_after_restart": _staging_nodes(server),
     }
     server.shutdown(save=False)
     return result
@@ -211,6 +263,8 @@ def run(scale: str, corpus: Path, data: Path, w1: dict[str, Any] | None) -> dict
     loader = crash_loader(rdb, kb, work, kill_after=round(load_s * 0.4, 2))
     print("crash: server", flush=True)
     srv = crash_server(rdb, kb, work, kill_after=round(load_s * 0.4, 2))
+    print("crash: server after a completed load", flush=True)
+    after = crash_after_load(rdb, kb, work, kill_after=5.0)
     shutil.rmtree(work, ignore_errors=True)
     return {
         "workflow": "W6",
@@ -224,6 +278,7 @@ def run(scale: str, corpus: Path, data: Path, w1: dict[str, Any] | None) -> dict
         "startup": start,
         "crash_loader_killed": loader,
         "crash_server_killed": srv,
+        "crash_server_killed_after_load": after,
     }
 
 

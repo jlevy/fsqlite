@@ -1,0 +1,170 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W3 plan audit (C7)",
+  "recorded_at": "2026-11-17T01:21:29.908Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14873,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "queries": {
+    "table.sessions_by_start.p1": {
+      "planner": {
+        "sql": "SELECT id, label, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+        ],
+        "p50_ms": 0.055
+      },
+      "indexed_by": {
+        "sql": "SELECT id, label, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+        ],
+        "p50_ms": 0.0545
+      },
+      "planner_uses_view_index": true,
+      "planner_sorts": false,
+      "same_rows": true
+    },
+    "table.sessions_by_start.p3": {
+      "planner": {
+        "sql": "SELECT id, label, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+        ],
+        "p50_ms": 0.056
+      },
+      "indexed_by": {
+        "sql": "SELECT id, label, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+        ],
+        "p50_ms": 0.0581
+      },
+      "planner_uses_view_index": true,
+      "planner_sorts": false,
+      "same_rows": true
+    },
+    "table.people_by_org.p1": {
+      "in_subquery_original": {
+        "sql": "SELECT e.id, e.label FROM entity e WHERE e.kind = 'person' AND e.id IN (SELECT source FROM edge WHERE target = ? AND relation = 'affiliated_with') ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH e USING COVERING INDEX ix_entity_kind_label (kind=?)",
+          "LIST SUBQUERY 1",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "CREATE BLOOM FILTER"
+        ],
+        "p50_ms": 0.0815
+      },
+      "cross_join_unhinted": {
+        "sql": "SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "CO-ROUTINE m",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "SCAN m",
+          "SEARCH e USING COVERING INDEX ix_entity_kind_label (kind=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "p50_ms": 3.5735
+      },
+      "cross_join_hinted_used_by_w3": {
+        "sql": "SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "CO-ROUTINE m",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "SCAN m",
+          "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "p50_ms": 0.1158
+      },
+      "same_rows": true
+    },
+    "table.people_by_org.p3": {
+      "in_subquery_original": {
+        "sql": "SELECT e.id, e.label FROM entity e WHERE e.kind = 'person' AND e.id IN (SELECT source FROM edge WHERE target = ? AND relation = 'affiliated_with') ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH e USING COVERING INDEX ix_entity_kind_label (kind=?)",
+          "LIST SUBQUERY 1",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "CREATE BLOOM FILTER"
+        ],
+        "p50_ms": 0.1189
+      },
+      "cross_join_unhinted": {
+        "sql": "SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "CO-ROUTINE m",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "SCAN m",
+          "SEARCH e USING COVERING INDEX ix_entity_kind_label (kind=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "p50_ms": 4.8959
+      },
+      "cross_join_hinted_used_by_w3": {
+        "sql": "SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+        "plan": [
+          "CO-ROUTINE m",
+          "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+          "SCAN m",
+          "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "p50_ms": 0.1279
+      },
+      "same_rows": true
+    },
+    "table.repos_by_stars.p1": {
+      "planner": {
+        "sql": "SELECT id, label, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+        ],
+        "p50_ms": 0.0351
+      },
+      "indexed_by": {
+        "sql": "SELECT id, label, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+        ],
+        "p50_ms": 0.0352
+      },
+      "planner_uses_view_index": true,
+      "planner_sorts": false,
+      "same_rows": true
+    },
+    "table.repos_by_stars.p3": {
+      "planner": {
+        "sql": "SELECT id, label, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+        ],
+        "p50_ms": 0.0374
+      },
+      "indexed_by": {
+        "sql": "SELECT id, label, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+        ],
+        "p50_ms": 0.0372
+      },
+      "planner_uses_view_index": true,
+      "planner_sorts": false,
+      "same_rows": true
+    }
+  }
+}

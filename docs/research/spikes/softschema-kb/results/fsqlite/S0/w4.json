@@ -2,12 +2,12 @@
   "backend": "fsqlite",
   "scale": "S0",
   "workflow": "W4",
-  "recorded_at": "2026-11-17T01:11:06.802Z",
+  "recorded_at": "2026-11-17T01:22:46.048Z",
   "machine": {
     "cpus": 4,
     "cpu_model": "Intel(R) Xeon(R) Processor",
     "mem_total_mib": 16088,
-    "mem_free_mib": 8077,
+    "mem_free_mib": 13617,
     "os": "linux 6.18.44-fc-v553",
     "filesystem": "ext2/ext3",
     "node": "v22.23.4",
@@ -25,7 +25,7 @@
     "new_kind": {
       "ddl": "none",
       "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
-      "diff_seconds": 0.513,
+      "diff_seconds": 0.432,
       "diff_rows": {
         "schema": 1,
         "node": 11,
@@ -45,20 +45,20 @@
         "update": 0,
         "removed": 0
       },
-      "capture_ms": 33.804,
+      "capture_ms": 44.918,
       "envelope_bytes": 15632,
-      "reconcile_ms": 83.383,
+      "reconcile_ms": 75.211,
       "reconcile": {
         "published": 2,
         "applied": 1,
         "quarantined": 0,
         "attempts": 1
       },
-      "data_change_total_seconds": 0.63,
+      "data_change_total_seconds": 0.552,
       "rebuild": {
-        "seconds": 1.833,
-        "parse_seconds": 1.091,
-        "load_seconds": 0.742,
+        "seconds": 1.65,
+        "parse_seconds": 1.029,
+        "load_seconds": 0.621,
         "tables_equal_to_incremental": true,
         "differing_tables": []
       }
@@ -66,7 +66,7 @@
     "add_field": {
       "ddl": "none",
       "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
-      "diff_seconds": 0.505,
+      "diff_seconds": 0.496,
       "diff_rows": {
         "schema": 1,
         "doc": 172,
@@ -83,20 +83,20 @@
         "update": 0,
         "removed": 0
       },
-      "capture_ms": 43.452,
+      "capture_ms": 57.244,
       "envelope_bytes": 957821,
-      "reconcile_ms": 140.67,
+      "reconcile_ms": 75.114,
       "reconcile": {
         "published": 2,
         "applied": 1,
         "quarantined": 0,
         "attempts": 1
       },
-      "data_change_total_seconds": 0.689,
+      "data_change_total_seconds": 0.628,
       "rebuild": {
-        "seconds": 1.794,
-        "parse_seconds": 1.162,
-        "load_seconds": 0.632,
+        "seconds": 1.704,
+        "parse_seconds": 1.004,
+        "load_seconds": 0.7,
         "tables_equal_to_incremental": true,
         "differing_tables": []
       }
@@ -104,7 +104,7 @@
     "rename_relation": {
       "ddl": "none",
       "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
-      "diff_seconds": 0.443,
+      "diff_seconds": 0.53,
       "diff_rows": {
         "unedge": 790,
         "file": 1,
@@ -121,20 +121,20 @@
         "update": 0,
         "removed": 790
       },
-      "capture_ms": 38.481,
+      "capture_ms": 46.786,
       "envelope_bytes": 140071,
-      "reconcile_ms": 68.44,
+      "reconcile_ms": 76.826,
       "reconcile": {
         "published": 2,
         "applied": 1,
         "quarantined": 0,
         "attempts": 1
       },
-      "data_change_total_seconds": 0.55,
+      "data_change_total_seconds": 0.654,
       "rebuild": {
-        "seconds": 1.629,
-        "parse_seconds": 0.972,
-        "load_seconds": 0.657,
+        "seconds": 1.654,
+        "parse_seconds": 1.016,
+        "load_seconds": 0.638,
         "tables_equal_to_incremental": true,
         "differing_tables": []
       }
@@ -142,7 +142,7 @@
     "string_to_object": {
       "ddl": "none",
       "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
-      "diff_seconds": 0.672,
+      "diff_seconds": 0.598,
       "diff_rows": {
         "schema": 1,
         "doc": 1029,
@@ -159,20 +159,20 @@
         "update": 0,
         "removed": 0
       },
-      "capture_ms": 72.99,
+      "capture_ms": 79.119,
       "envelope_bytes": 2120015,
-      "reconcile_ms": 72.984,
+      "reconcile_ms": 73.135,
       "reconcile": {
         "published": 2,
         "applied": 1,
         "quarantined": 0,
         "attempts": 1
       },
-      "data_change_total_seconds": 0.818,
+      "data_change_total_seconds": 0.75,
       "rebuild": {
-        "seconds": 1.621,
-        "parse_seconds": 1.032,
-        "load_seconds": 0.589,
+        "seconds": 1.615,
+        "parse_seconds": 0.983,
+        "load_seconds": 0.632,
         "tables_equal_to_incremental": true,
         "differing_tables": []
       },
@@ -199,9 +199,9 @@
             "search_text": 7506,
             "edge": 25313
           },
-          "init_ms": 48.951,
-          "copy_ms": 382.282,
-          "total_ms": 431.232,
+          "init_ms": 40.802,
+          "copy_ms": 343.735,
+          "total_ms": 384.536,
           "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/string_to_object/store-v2/snapshots/000000000001.fsqlite.sqlite",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
@@ -232,7 +232,7 @@
         "t_venue": 58,
         "t_website": 151
       },
-      "total_ms": 323.511,
+      "total_ms": 330.513,
       "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed/snapshots/000000000001.fsqlite.sqlite",
       "snapshot_bytes": 18022400
     },
@@ -266,9 +266,9 @@
         "t_other": 432,
         "edge": 25313
       },
-      "init_ms": 62.366,
-      "copy_ms": 214.977,
-      "total_ms": 277.343,
+      "init_ms": 61.396,
+      "copy_ms": 247.267,
+      "total_ms": 308.663,
       "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed-v2/snapshots/000000000001.fsqlite.sqlite",
       "snapshot_bytes": 18022400
     },

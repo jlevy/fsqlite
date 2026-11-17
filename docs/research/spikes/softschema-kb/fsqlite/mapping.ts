@@ -419,6 +419,8 @@ export class GenericLoader {
   private readonly removals: Record<string, StatementSync[]>
 
   private readonly fresh: boolean
+  /** Time spent deriving labels, promoted fields and search text (the transform phase). */
+  transformMs = 0
 
   constructor(db: DatabaseSync, fresh = false) {
     this.fresh = fresh
@@ -547,7 +549,9 @@ export class GenericLoader {
       }
       this.counts.update++
     }
+    const t = performance.now()
     const { label, derived, search } = entityValues(row, this.exportName)
+    this.transformMs += performance.now() - t
     this.entity.run(row.id, row.kind, row.name, label, row.path, row.payload, derived)
     search.forEach((text, rank) => {
       if (text === null) {

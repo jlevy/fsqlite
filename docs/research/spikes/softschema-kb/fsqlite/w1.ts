@@ -10,7 +10,18 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { SPIKE_DIR, WORK_DIR, isMain, kbDirFor, parseArgs, round, writeResult } from './common.ts'
+import {
+  SPIKE_DIR,
+  WORK_DIR,
+  isMain,
+  kbDirFor,
+  nowMs,
+  parseArgs,
+  round,
+  writeResult,
+} from './common.ts'
+import { buildFtsSidecar } from './fts.ts'
+import { genericStore } from './w3.ts'
 
 const HERE = join(SPIKE_DIR, 'fsqlite')
 export const UV_PYTHON = [
@@ -88,7 +99,11 @@ function main(): void {
   const parse = measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows])
   const result: Record<string, unknown> = {
     kb_bytes: dirBytes(kb),
-    parse,
+    parse: {
+      ...parse,
+      parser: 'parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order',
+      validation: 'softschema validation not run',
+    },
     intermediate_bytes: statSync(rows).size,
   }
   for (const route of routes) {
@@ -105,13 +120,31 @@ function main(): void {
     ])
     const report = load.report as Record<string, unknown>
     const snapshot = String(report.snapshot)
-    result[route] = {
+    const storeBytesBeforeGc = dirBytes(store)
+    // Retain nothing older than the head: the import's empty snapshot 0, and for
+    // SnapshotStore the archived envelopes stay (gc never prunes tx/applied).
+    const handle = genericStore(store).init()
+    const tGc = nowMs()
+    const gc = handle.gc({ retain: 0 })
+    const gcMs = nowMs() - tGc
+    const entry: Record<string, unknown> = {
       ...load,
+      arm: route === 'direct' ? 'DirectStore' : 'SnapshotStore',
+      ingest_through_durable_seconds: round(
+        Number(load.seconds) - Number((report.phases as Record<string, number>).decode_ms) / 1000,
+      ),
       total_with_parse_seconds: round(Number(parse.seconds) + Number(load.seconds)),
+      store_bytes_before_gc: storeBytesBeforeGc,
+      gc: { retain: 0, ms: round(gcMs), ...gc },
       store_bytes: dirBytes(store),
       snapshot_bytes: statSync(snapshot).size,
       breakdown: route === 'direct' ? sizeBreakdown(snapshot) : undefined,
     }
+    if (route === 'direct') {
+      // The FTS5 search sidecar is part of making the store servable with indexed search.
+      entry.fts_sidecar = buildFtsSidecar(snapshot, join(work, 'search-fts.sqlite'))
+    }
+    result[route] = entry
     if (route !== 'direct' && !flags.keep) {
       rmSync(store, { recursive: true, force: true })
     }

@@ -134,11 +134,13 @@ export class KbQueries {
     const offset = Number(p.offset)
     if (p.table === 'people_by_org') {
       // Drive from the organization's in-edges (CROSS JOIN fixes the join order), so the
-      // cost follows the member count rather than the number of people in the KB.
+      // cost follows the member count rather than the number of people in the KB. The
+      // unary plus keeps the planner, which has no ANALYZE statistics, from resolving the
+      // join through the (kind, label) index and scanning every person per member.
       const members = `
         FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m
         CROSS JOIN entity e ON e.id = m.source
-        WHERE e.kind = 'person'`
+        WHERE +e.kind = 'person'`
       const total = this.stmt(`SELECT count(*) AS n ${members}`).get(p.org) as { n: number }
       const rows = this.stmt(
         `SELECT e.id, e.label AS name, e.label AS value ${members}

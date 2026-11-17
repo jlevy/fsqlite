@@ -79,7 +79,8 @@ export function openReader(snapshot: string, fts?: string): DatabaseSync {
 export function sqliteConfig(snapshot: string): Record<string, unknown> {
   const db = openReader(snapshot)
   try {
-    const one = (pragma: string): unknown => Object.values(db.prepare(`PRAGMA ${pragma}`).get() ?? {})[0]
+    const one = (pragma: string): unknown =>
+      Object.values(db.prepare(`PRAGMA ${pragma}`).get() ?? {})[0]
     return {
       page_size: one('page_size'),
       page_count: one('page_count'),
@@ -176,7 +177,11 @@ function measureInChild(snapshot: string, scale: string, q: QueryInstance, opts:
       category: q.category,
       params: q.params,
       result: null,
-      timings: { timed_out: timedOut, timeout_ms: opts.timeoutMs, error: timedOut ? null : r.stderr.slice(-500) },
+      timings: {
+        timed_out: timedOut,
+        timeout_ms: opts.timeoutMs,
+        error: timedOut ? null : r.stderr.slice(-500),
+      },
     }
   }
   return JSON.parse(r.stdout) as Record<string, unknown>
@@ -196,7 +201,9 @@ export function runOnSnapshot(snapshot: string, scale: string, opts: W3Options) 
   return {
     options: {
       search: opts.ftsPath ? 'fts5-trigram-sidecar (MATCH phrase)' : 'search_text substring scan',
-      path: opts.pathCte ? 'recursive CTE (in-engine)' : 'bidirectional BFS (application-side, shared)',
+      path: opts.pathCte
+        ? 'recursive CTE (in-engine)'
+        : 'bidirectional BFS (application-side, shared)',
       warm_runs: opts.warm ?? 50,
       timeout_ms: opts.timeoutMs ?? null,
       reader_pragmas: READER_PRAGMAS,

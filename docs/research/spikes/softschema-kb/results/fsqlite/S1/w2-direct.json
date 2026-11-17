@@ -1,0 +1,287 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "w2-direct",
+  "recorded_at": "2026-11-17T01:27:58.909Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 11277,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct",
+  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/deltas",
+  "writers": 4,
+  "envelopes_per_writer": 5,
+  "strategy": "direct",
+  "batches": [
+    {
+      "batch": "p01",
+      "strategy": "direct",
+      "arm": "DirectStore",
+      "delta": {
+        "changes": 487,
+        "new": 390,
+        "updated": 97,
+        "new_edges": 2340
+      },
+      "units": 487,
+      "parse_ms": 347.573,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 1111.657,
+        "p95_ms": 2621.777,
+        "max_ms": 3510.46
+      },
+      "gc_refusals": 6,
+      "gc_after_write_ms": {
+        "n": 20,
+        "p50_ms": 5201.681,
+        "p95_ms": 11907.977,
+        "max_ms": 14904.732
+      },
+      "writers_wall_ms": 43123,
+      "writer_max_rss_mib": 97.6,
+      "reconcile": null,
+      "visible_after_ms": 41972,
+      "visible_after_first_capture_ms": 41386.425048828125,
+      "fts_sidecar_rebuild": {
+        "rows": 68104,
+        "build_ms": 1163.603,
+        "bytes": 34082816
+      },
+      "indexed_search_visible_after_ms": 44287,
+      "published_after_ms": 43123,
+      "versions_published": 20,
+      "entities": {
+        "before": 48663,
+        "after": 49053,
+        "added": 390
+      },
+      "updated_records_changed": "97/97",
+      "base_copy": {
+        "bytes": 350773248,
+        "median_ms": 151.937,
+        "mib_per_s": 2201.7
+      },
+      "head_copy": {
+        "bytes": 353161216,
+        "median_ms": 106.84,
+        "mib_per_s": 3152.4
+      },
+      "reader": {
+        "queries": 6107,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 116,
+          "p50_ms": 0.856,
+          "p95_ms": 13.938,
+          "max_ms": 17.159
+        },
+        "during_writes": {
+          "n": 5534,
+          "p50_ms": 0.751,
+          "p95_ms": 32.874,
+          "max_ms": 184.444
+        },
+        "reopen_ms": {
+          "n": 17,
+          "p50_ms": 46.902,
+          "p95_ms": 1299.936,
+          "max_ms": 1299.936
+        },
+        "max_rss_mib": 167.3
+      }
+    },
+    {
+      "batch": "p05",
+      "strategy": "direct",
+      "arm": "DirectStore",
+      "delta": {
+        "changes": 2433,
+        "new": 1946,
+        "updated": 487,
+        "new_edges": 14456
+      },
+      "units": 2433,
+      "parse_ms": 681.238,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 748.378,
+        "p95_ms": 1721.608,
+        "max_ms": 2382.357
+      },
+      "gc_refusals": 8,
+      "gc_after_write_ms": {
+        "n": 20,
+        "p50_ms": 5136.491,
+        "p95_ms": 6904.476,
+        "max_ms": 7805.959
+      },
+      "writers_wall_ms": 31252,
+      "writer_max_rss_mib": 110,
+      "reconcile": null,
+      "visible_after_ms": 30432,
+      "visible_after_first_capture_ms": 30092.88134765625,
+      "fts_sidecar_rebuild": {
+        "rows": 70372,
+        "build_ms": 753.81,
+        "bytes": 33587200
+      },
+      "indexed_search_visible_after_ms": 32006,
+      "published_after_ms": 31252,
+      "versions_published": 20,
+      "entities": {
+        "before": 48663,
+        "after": 50609,
+        "added": 1946
+      },
+      "updated_records_changed": "487/487",
+      "base_copy": {
+        "bytes": 350773248,
+        "median_ms": 131.297,
+        "mib_per_s": 2547.8
+      },
+      "head_copy": {
+        "bytes": 362414080,
+        "median_ms": 124.347,
+        "mib_per_s": 2779.5
+      },
+      "reader": {
+        "queries": 7338,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 166,
+          "p50_ms": 0.633,
+          "p95_ms": 10.646,
+          "max_ms": 16.041
+        },
+        "during_writes": {
+          "n": 6768,
+          "p50_ms": 0.634,
+          "p95_ms": 16.935,
+          "max_ms": 295.404
+        },
+        "reopen_ms": {
+          "n": 19,
+          "p50_ms": 5.057,
+          "p95_ms": 1282.733,
+          "max_ms": 1282.733
+        },
+        "max_rss_mib": 169.8
+      }
+    },
+    {
+      "batch": "p20",
+      "strategy": "direct",
+      "arm": "DirectStore",
+      "delta": {
+        "changes": 9733,
+        "new": 7786,
+        "updated": 1947,
+        "new_edges": 54941
+      },
+      "units": 9733,
+      "parse_ms": 1694.285,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 758.032,
+        "p95_ms": 1633.274,
+        "max_ms": 2329.538
+      },
+      "gc_refusals": 8,
+      "gc_after_write_ms": {
+        "n": 20,
+        "p50_ms": 4643.851,
+        "p95_ms": 7529.157,
+        "max_ms": 7696.875
+      },
+      "writers_wall_ms": 27472,
+      "writer_max_rss_mib": 155.4,
+      "reconcile": null,
+      "visible_after_ms": 25899,
+      "visible_after_first_capture_ms": 25551.18408203125,
+      "fts_sidecar_rebuild": {
+        "rows": 78595,
+        "build_ms": 834.168,
+        "bytes": 37167104
+      },
+      "indexed_search_visible_after_ms": 28306,
+      "published_after_ms": 27472,
+      "versions_published": 20,
+      "entities": {
+        "before": 48663,
+        "after": 56449,
+        "added": 7786
+      },
+      "updated_records_changed": "1947/1947",
+      "base_copy": {
+        "bytes": 350773248,
+        "median_ms": 141.19,
+        "mib_per_s": 2369.3
+      },
+      "head_copy": {
+        "bytes": 400220160,
+        "median_ms": 94.438,
+        "mib_per_s": 4041.6
+      },
+      "reader": {
+        "queries": 7604,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 178,
+          "p50_ms": 0.551,
+          "p95_ms": 10.093,
+          "max_ms": 15.484
+        },
+        "during_writes": {
+          "n": 6984,
+          "p50_ms": 0.542,
+          "p95_ms": 11.393,
+          "max_ms": 65.431
+        },
+        "reopen_ms": {
+          "n": 16,
+          "p50_ms": 5.632,
+          "p95_ms": 1140.936,
+          "max_ms": 1140.936
+        },
+        "max_rss_mib": 173.7
+      }
+    }
+  ]
+}

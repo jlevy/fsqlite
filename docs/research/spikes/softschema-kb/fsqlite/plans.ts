@@ -50,13 +50,25 @@ function main(): void {
          CROSS JOIN entity e ON e.id = m.source WHERE e.kind = 'person' ${page}`,
         args,
       )
+      const hinted = probe(
+        db,
+        `SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge
+           WHERE target = ? AND relation = 'affiliated_with') m
+         CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ${page}`,
+        args,
+      )
       const before = probe(
         db,
         `SELECT e.id, e.label FROM entity e WHERE e.kind = 'person' AND e.id IN
            (SELECT source FROM edge WHERE target = ? AND relation = 'affiliated_with') ${page}`,
         args,
       )
-      out[q.name] = { before, after, same_rows: before.rows === after.rows }
+      out[q.name] = {
+        in_subquery_original: before,
+        cross_join_unhinted: after,
+        cross_join_hinted_used_by_w3: hinted,
+        same_rows: before.rows === after.rows && after.rows === hinted.rows,
+      }
       continue
     }
     const v = TABLE_VIEWS.find((x) => x.name === p.table)

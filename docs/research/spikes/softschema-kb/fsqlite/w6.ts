@@ -9,7 +9,7 @@
 // (the kill guarantees it here), run repair, validate again, and rerun the import.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from './fsq.ts'
 import { SPIKE_DIR, WORK_DIR, isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
@@ -157,110 +157,148 @@ function readOverhead(dir: string, scale: string): Record<string, number> {
   return { store_read_record_p50_ms: perRead, held_connection_record_p50_ms: held }
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}
+type CrashPhase = 'direct-build' | 'capture' | 'reconcile-build' | 'publication'
 
-/** Kill an import partway, then validate, recover, and rerun it. */
-async function crash(rows: string, dir: string, route: string, killAtBytes: number) {
-  rmSync(dir, { recursive: true, force: true })
-  const child = spawn(
-    process.execPath,
-    [...NODE.slice(1), join(HERE, 'load.ts'), rows, dir, '--route', route, '--batch', '2000'],
-    { stdio: 'ignore' },
-  )
-  const t0 = nowMs()
-  let killedAt = ''
-  for (;;) {
-    await wait(5)
-    if (child.exitCode !== null) {
-      killedAt = 'finished before the kill point'
-      break
-    }
-    const snaps = join(dir, 'snapshots')
-    const pending = join(dir, 'tx', 'pending')
-    const building = existsSync(snaps)
-      ? readdirSync(snaps).filter((f) => f.startsWith('.direct-') || f.startsWith('.build-'))
-      : []
-    const bytes = building.reduce((n, f) => {
-      try {
-        return n + statSync(join(snaps, f)).size
-      } catch {
-        return n
-      }
-    }, 0)
-    const envelopes = existsSync(pending)
-      ? readdirSync(pending).filter((f) => f.endsWith('.txn')).length
-      : 0
-    if (bytes >= killAtBytes || (route === 'snapshot' && envelopes >= 2)) {
-      child.kill('SIGKILL')
-      killedAt =
-        route === 'snapshot' ? `${envelopes} envelopes captured` : `${bytes} bytes into the build`
-      break
+/** What to look for before killing: each phase leaves its own transient on disk. */
+function killPoint(dir: string, phase: CrashPhase, killAtBytes: number): string | null {
+  const snaps = join(dir, 'snapshots')
+  const pending = join(dir, 'tx', 'pending')
+  const lock = existsSync(join(dir, 'publish.lock'))
+  const list = (d: string): string[] => {
+    try {
+      return readdirSync(d)
+    } catch {
+      return []
     }
   }
-  await new Promise((r) => child.once('exit', r))
-  const killMs = round(nowMs() - t0)
+  switch (phase) {
+    case 'direct-build': {
+      const tmp = list(snaps).filter((f) => f.startsWith('.direct-') && f.endsWith('.sqlite'))
+      const bytes = tmp.reduce((n, f) => {
+        try {
+          return n + statSync(join(snaps, f)).size
+        } catch {
+          return n
+        }
+      }, 0)
+      return bytes >= killAtBytes ? `${bytes} bytes into the DirectStore build, lock held` : null
+    }
+    case 'capture': {
+      const work = list(pending).filter((f) => f.startsWith('.work-'))
+      const done = list(pending).filter((f) => f.endsWith('.txn')).length
+      return work.length > 0 && done >= 2 ? `during capture ${done + 1} (${work[0]})` : null
+    }
+    case 'reconcile-build': {
+      const build = list(snaps).find((f) => f.startsWith('.build-'))
+      return build && !lock ? `during the reconcile build (${build}), before the lock` : null
+    }
+    case 'publication':
+      return lock && list(snaps).some((f) => f.startsWith('.build-') || /^0+1\./.test(f))
+        ? 'holding publish.lock during publication'
+        : null
+  }
+}
+
+/**
+ * Kill an import in one phase, then follow the documented recovery: validate, remove an
+ * abandoned publish.lock only once no client can resume (the SIGKILL guarantees it),
+ * repair, validate, and finish (reconcile the surviving envelopes, or rerun the import).
+ */
+function crash(rows: string, dir: string, phase: CrashPhase, killAtBytes: number) {
+  const route = phase === 'direct-build' ? 'direct' : 'snapshot'
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    rmSync(dir, { recursive: true, force: true })
+    const child = spawn(
+      process.execPath,
+      [...NODE.slice(1), join(HERE, 'load.ts'), rows, dir, '--route', route, '--batch', '1000'],
+      { stdio: 'ignore' },
+    )
+    const t0 = nowMs()
+    let killedAt: string | null = null
+    // A synchronous poll: the publication window lasts only a few fsyncs.
+    while (killedAt === null && nowMs() - t0 < 120_000) {
+      if (
+        existsSync(join(dir, 'current')) &&
+        readFileSync(join(dir, 'current'), 'utf8').trim() !== '0'
+      ) {
+        break // the import finished before the kill point: try again
+      }
+      killedAt = killPoint(dir, phase, killAtBytes)
+      if (killedAt !== null) {
+        process.kill(child.pid ?? 0, 'SIGKILL')
+      }
+    }
+    if (killedAt === null) {
+      process.kill(child.pid ?? 0, 'SIGKILL')
+      continue
+    }
+    const killMs = round(nowMs() - t0)
+    return { attempt, killMs, killedAt, ...recover(rows, dir, route) }
+  }
+  return { phase, outcome: 'kill window missed in 5 attempts' }
+}
+
+function recover(rows: string, dir: string, route: string): Record<string, unknown> {
+  const opts = { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }
   const handle =
     route === 'direct'
-      ? new DirectStore(dir, { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION })
-      : new SnapshotStore(dir, {
-          schema: genericDdl(),
-          schemaVersion: GENERIC_SCHEMA_VERSION,
-          conflictPolicy: GENERIC_POLICY,
-        })
+      ? new DirectStore(dir, opts)
+      : new SnapshotStore(dir, { ...opts, conflictPolicy: GENERIC_POLICY })
   const leftovers = readdirSync(dir, { recursive: true })
     .map(String)
-    .filter((f) => /\.(direct|build|work)-|publish\.lock|\.tmp/.test(f))
+    .filter((f) => /\.(direct|build|work)-|publish\.lock$|\.tmp$/.test(f))
   const validateBefore = handle.validate()
-  let repairRefusal: string | null = null
+  let refusal: string | null = null
   try {
     handle.planRepair()
   } catch (error) {
-    repairRefusal = String((error as Error).message).slice(0, 200)
+    refusal = (error as Error).message.slice(0, 200)
   }
-  const lockRemoved = existsSync(join(dir, 'publish.lock'))
-  if (lockRemoved) {
+  const steps: string[] = ['validate']
+  const t = nowMs()
+  const lockPresent = existsSync(join(dir, 'publish.lock'))
+  if (lockPresent) {
     rmSync(join(dir, 'publish.lock'), { recursive: true, force: true })
+    steps.push('confirm no client can resume, then remove the abandoned publish.lock (manual)')
   }
-  const t1 = nowMs()
   const repair = handle.repair()
-  const repairMs = round(nowMs() - t1)
+  steps.push('repair')
   const validateAfter = handle.validate()
-  const versionAfterCrash = handle.currentVersion()
-  // Restart: a SnapshotStore reconcile folds the envelopes that survived; a DirectStore
-  // import reruns from scratch into the recovered store.
+  steps.push('validate')
+  const recoveryMs = round(nowMs() - t)
+  const versionAfterRepair = handle.currentVersion()
   const t2 = nowMs()
-  let restart: unknown
+  let finish: Record<string, unknown>
   if (route === 'snapshot') {
+    // Envelopes captured before the kill survive; reconcile publishes each exactly once.
     const s = handle as SnapshotStore
-    restart = { reconcile: s.reconcile(), pending_after: s.pendingTxns().length }
+    const result = s.reconcile()
+    const counts = s.read(
+      (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+    )
+    finish = { reconcile: result, pending_after: s.pendingTxns().length, entities: counts.n }
+    steps.push('reconcile (the importer then resumes the batches it had not captured)')
   } else {
     rmSync(dir, { recursive: true, force: true })
     const r = spawnSync(process.execPath, [...NODE.slice(1), join(HERE, 'load.ts'), rows, dir], {
       encoding: 'utf8',
     })
-    restart = {
-      exit: r.status,
-      validate: new DirectStore(dir, {
-        schema: genericDdl(),
-        schemaVersion: GENERIC_SCHEMA_VERSION,
-      }).validate().state,
-    }
+    finish = { rerun_exit: r.status, state: new DirectStore(dir, opts).validate().state }
+    steps.push('rerun the import')
   }
   return {
-    route,
-    killed_after_ms: killMs,
-    killed_at: killedAt,
+    route: route === 'direct' ? 'DirectStore' : 'SnapshotStore',
     leftovers: leftovers.slice(0, 10),
     validate_before: validateBefore,
-    repair_refused_while_lock_present: repairRefusal,
-    removed_abandoned_publish_lock: lockRemoved,
-    repair: { ...repair, ms: repairMs },
+    repair_refused_while_lock_present: refusal,
+    manual_lock_recovery: lockPresent,
+    repair,
     validate_after: validateAfter,
-    published_version_after_crash: versionAfterCrash,
-    restart_ms: round(nowMs() - t2),
-    restart,
+    recovery_ms: recoveryMs,
+    published_version_after_repair: versionAfterRepair,
+    finish_ms: round(nowMs() - t2),
+    finish,
+    steps,
   }
 }
 
@@ -285,12 +323,14 @@ async function main(): Promise<void> {
   const rows = join(work, 'rows.jsonl')
   if (existsSync(rows) && !flags['skip-crash']) {
     const size = statSync(snapshot).size
-    result.crash = [
-      await crash(rows, join(work, 'w6-crash-direct'), 'direct', Math.floor(size / 2)),
-      await crash(rows, join(work, 'w6-crash-snapshot'), 'snapshot', Number.MAX_SAFE_INTEGER),
-    ]
-    rmSync(join(work, 'w6-crash-direct'), { recursive: true, force: true })
-    rmSync(join(work, 'w6-crash-snapshot'), { recursive: true, force: true })
+    const crashDir = join(work, 'w6-crash')
+    result.crash = Object.fromEntries(
+      (['direct-build', 'capture', 'reconcile-build', 'publication'] as CrashPhase[]).map((p) => [
+        p,
+        crash(rows, crashDir, p, Math.floor(size / 2)),
+      ]),
+    )
+    rmSync(crashDir, { recursive: true, force: true })
   }
   console.log(writeResult(scale, 'w6', result))
 }
