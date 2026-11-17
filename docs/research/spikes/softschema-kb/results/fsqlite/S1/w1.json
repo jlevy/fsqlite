@@ -1,0 +1,153 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "w1",
+  "recorded_at": "2026-11-17T00:56:03.627Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14559,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "kb_bytes": 221432416,
+  "parse": {
+    "label": "parse",
+    "seconds": 8.242,
+    "max_rss_mib": 155,
+    "exit": 0,
+    "report": {
+      "seconds": 8.11,
+      "jobs": 4,
+      "counts": {
+        "schema": 18,
+        "line": 43052,
+        "node": 48663,
+        "file": 3,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817
+      }
+    }
+  },
+  "intermediate_bytes": 264854291,
+  "direct": {
+    "label": "load-direct",
+    "seconds": 3.976,
+    "max_rss_mib": 428,
+    "exit": 0,
+    "report": {
+      "route": "direct",
+      "version": 1,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 43052,
+        "node": 48663,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817,
+        "update": 0
+      },
+      "init_ms": 56.43,
+      "callback_load_ms": 2949.096,
+      "callback_check_ms": 17.062,
+      "write_total_ms": 3818.269,
+      "publish_overhead_ms": 852.112,
+      "total_ms": 3874.7,
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 348237824,
+      "max_rss_mib": 427.7
+    },
+    "total_with_parse_seconds": 12.218,
+    "store_bytes": 348328072,
+    "snapshot_bytes": 348237824,
+    "breakdown": {
+      "entity": 146104320,
+      "kb_line": 81342464,
+      "doc": 36474880,
+      "edge": 22691840,
+      "ix_edge_in": 19046400,
+      "ix_edge_rel": 18931712,
+      "search_text": 12234752,
+      "ix_entity_kind_label": 3776512,
+      "ix_entity_path": 2404352,
+      "sqlite_autoindex_doc_1": 2228224,
+      "sqlite_autoindex_entity_1": 1974272,
+      "ix_view_repos_by_stars": 606208,
+      "ix_view_sessions_by_start": 221184,
+      "kind_schema": 131072,
+      "kb_file": 40960,
+      "sqlite_schema": 4096,
+      "sqlite_autoindex_kind_schema_1": 4096,
+      "sqlite_autoindex_kb_file_1": 4096,
+      "sqlite_autoindex_fsqlite_meta_1": 4096,
+      "sqlite_autoindex_applied_tx_1": 4096,
+      "fsqlite_meta": 4096,
+      "applied_tx": 4096
+    }
+  },
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 9.111,
+    "max_rss_mib": 549.9,
+    "exit": 0,
+    "report": {
+      "route": "snapshot",
+      "batch": 20000,
+      "captures": 21,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817,
+        "line": null,
+        "node": null,
+        "update": null
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "init_ms": 48.177,
+      "capture_ms": 3797.273,
+      "read_and_capture_ms": 4752.674,
+      "reconcile_ms": 4171.537,
+      "total_ms": 8972.387,
+      "count_problems": [],
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 356216832,
+      "max_rss_mib": 549.9
+    },
+    "total_with_parse_seconds": 17.353,
+    "store_bytes": 589322925,
+    "snapshot_bytes": 356216832
+  }
+}

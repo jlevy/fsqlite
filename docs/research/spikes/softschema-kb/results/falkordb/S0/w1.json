@@ -1,0 +1,80 @@
+{
+  "workflow": "W1",
+  "backend": "falkordb",
+  "scale": "S0",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0/kb",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 13948744
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S0",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 13948744
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2",
+    "redis_version": "8.6.2",
+    "falkordb_version": "4.18.3"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0/kb",
+    "seed": 20261117,
+    "replicas": 1,
+    "nodes": 5407,
+    "edges": 25313,
+    "record_files": 4975,
+    "bytes": 24767599
+  },
+  "timings": {
+    "server_start_s": 0.123,
+    "read_kb_s": 2.448,
+    "load_graph_s": 1.815,
+    "import_s": 4.263,
+    "save_s": 0.062,
+    "wall_s": 4.476
+  },
+  "memory": {
+    "loader_peak_rss": 209915904,
+    "loader_peak_rss_sampled": 210259968,
+    "server_peak_rss": 119955456,
+    "server_peak_rss_with_bgsave": 119955456,
+    "server_used_memory": 45764136,
+    "server_used_memory_peak": 49386368,
+    "server_used_memory_rss": 119721984
+  },
+  "size": {
+    "rdb_bytes": 6186066,
+    "data_dir_files": [
+      "paraverse-graph.rdb",
+      "paraverse-graph.rdb.settings"
+    ]
+  },
+  "load_report": {
+    "node_total": 5407,
+    "edge_total": 25313,
+    "engine": "4.18.3",
+    "loader_seconds": 1.814
+  },
+  "notes": [
+    "load_kb parses every artifact into memory before load_graph writes; both run in this process.",
+    "redislite's default config keeps `save 900 1 / 300 100 / 60 200 / 15 1000`, so BGSAVE forks can run during the load.",
+    "import_s is read_kb_s + load_graph_s: from files to a servable, renamed live graph."
+  ]
+}

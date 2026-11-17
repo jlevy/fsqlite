@@ -1,0 +1,153 @@
+{
+  "backend": "fsqlite",
+  "scale": "S2",
+  "workflow": "w1",
+  "recorded_at": "2026-11-17T00:58:49.011Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 15007,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "kb_bytes": 1135690973,
+  "parse": {
+    "label": "parse",
+    "seconds": 42.656,
+    "max_rss_mib": 581.6,
+    "exit": 0,
+    "report": {
+      "seconds": 42.3,
+      "jobs": 4,
+      "counts": {
+        "schema": 18,
+        "line": 219986,
+        "node": 248722,
+        "file": 3,
+        "doc": 228852,
+        "entity": 248722,
+        "edge": 1164398
+      }
+    }
+  },
+  "intermediate_bytes": 1358668853,
+  "direct": {
+    "label": "load-direct",
+    "seconds": 18.63,
+    "max_rss_mib": 485,
+    "exit": 0,
+    "report": {
+      "route": "direct",
+      "version": 1,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 219986,
+        "node": 248722,
+        "doc": 228852,
+        "entity": 248722,
+        "edge": 1164398,
+        "update": 0
+      },
+      "init_ms": 43.853,
+      "callback_load_ms": 15499.353,
+      "callback_check_ms": 97.285,
+      "write_total_ms": 18471.512,
+      "publish_overhead_ms": 2874.873,
+      "total_ms": 18515.365,
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/store-direct/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 1787510784,
+      "max_rss_mib": 485
+    },
+    "total_with_parse_seconds": 61.286,
+    "store_bytes": 1787601032,
+    "snapshot_bytes": 1787510784,
+    "breakdown": {
+      "entity": 749744128,
+      "kb_line": 416739328,
+      "doc": 186896384,
+      "edge": 115032064,
+      "ix_edge_in": 98684928,
+      "ix_edge_rel": 97955840,
+      "search_text": 62844928,
+      "ix_entity_kind_label": 19861504,
+      "ix_entity_path": 12705792,
+      "sqlite_autoindex_doc_1": 11812864,
+      "sqlite_autoindex_entity_1": 10547200,
+      "ix_view_repos_by_stars": 3260416,
+      "ix_view_sessions_by_start": 1220608,
+      "kind_schema": 131072,
+      "kb_file": 40960,
+      "sqlite_schema": 4096,
+      "sqlite_autoindex_kind_schema_1": 4096,
+      "sqlite_autoindex_kb_file_1": 4096,
+      "sqlite_autoindex_fsqlite_meta_1": 4096,
+      "sqlite_autoindex_applied_tx_1": 4096,
+      "fsqlite_meta": 4096,
+      "applied_tx": 4096
+    }
+  },
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 46.95,
+    "max_rss_mib": 899.2,
+    "exit": 0,
+    "report": {
+      "route": "snapshot",
+      "batch": 20000,
+      "captures": 106,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "doc": 228852,
+        "entity": 248722,
+        "edge": 1164398,
+        "line": null,
+        "node": null,
+        "update": null
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 95,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "init_ms": 52.812,
+      "capture_ms": 16870.751,
+      "read_and_capture_ms": 20961.304,
+      "reconcile_ms": 25717.056,
+      "total_ms": 46731.171,
+      "count_problems": [],
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 1825828864,
+      "max_rss_mib": 899.2
+    },
+    "total_with_parse_seconds": 89.606,
+    "store_bytes": 3021977524,
+    "snapshot_bytes": 1825828864
+  }
+}

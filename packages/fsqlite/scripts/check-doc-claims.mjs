@@ -13,6 +13,12 @@ const generatedProse = new Set([
   '.codex/ensure-gh-cli.sh',
   'pnpm-lock.yaml',
 ])
+// Benchmark output the research spikes write. It quotes dataset text verbatim, so the
+// editorial rules for maintained prose do not apply to it.
+const generatedDataDirs = [
+  'docs/research/spikes/softschema-kb/harness/expected/',
+  'docs/research/spikes/softschema-kb/results/',
+]
 // Sub-agent definitions are agent prompts, not docs, so they carry no doc footer.
 const agentPromptDirs = ['.claude/agents/']
 const executableMarkdown = new Set(['packages/fsqlite/test/cli-golden/cli.tryscript.md'])
@@ -149,7 +155,7 @@ export function checkEditorialSafety() {
   const proseFiles = filesBelow(repoDir, (path) => proseExtensions.has(extname(path)))
   for (const path of proseFiles) {
     const repoPath = relative(repoDir, path).split(sep).join('/')
-    if (generatedProse.has(repoPath)) {
+    if (generatedProse.has(repoPath) || generatedDataDirs.some((dir) => repoPath.startsWith(dir))) {
       continue
     }
 

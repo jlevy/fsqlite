@@ -1,0 +1,6 @@
+{
+  "name": "softschema-kb-fsqlite-spike",
+  "private": true,
+  "type": "module",
+  "description": "Temporary research code for the softschema KB storage spike; no dependencies."
+}

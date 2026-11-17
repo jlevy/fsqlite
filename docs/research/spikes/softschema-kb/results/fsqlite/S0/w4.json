@@ -1,0 +1,184 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W4",
+  "recorded_at": "2026-11-17T00:59:08.613Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14710,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "generic_head_bytes": 39084032,
+  "generic": {
+    "new_kind": {
+      "records": 520,
+      "ddl": "none",
+      "route": "SnapshotStore envelope + reconcile",
+      "capture_ms": 41.589,
+      "envelope_bytes": 453510,
+      "reconcile_ms": 74.309,
+      "total_ms": 115.931,
+      "applied": 1,
+      "quarantined": 0
+    },
+    "new_kind_check": {
+      "record_kind": "recording",
+      "session_neighborhood_has_recording": true
+    },
+    "optional_field": {
+      "ddl": "none",
+      "route": "SnapshotStore envelope + reconcile",
+      "capture_ms": 35.572,
+      "envelope_bytes": 288879,
+      "reconcile_ms": 64.275,
+      "total_ms": 99.884,
+      "applied": 1,
+      "quarantined": 0
+    },
+    "rename_relation": {
+      "edges": 1124,
+      "ddl": "none",
+      "route": "SnapshotStore envelope + reconcile",
+      "capture_ms": 37.848,
+      "envelope_bytes": 205846,
+      "reconcile_ms": 73.219,
+      "total_ms": 111.096,
+      "applied": 1,
+      "quarantined": 0
+    },
+    "type_change": {
+      "records": 1029,
+      "data": {
+        "ddl": "none",
+        "route": "SnapshotStore envelope + reconcile",
+        "capture_ms": 44.045,
+        "envelope_bytes": 2016850,
+        "reconcile_ms": 78.662,
+        "total_ms": 122.735,
+        "applied": 1,
+        "quarantined": 0
+      },
+      "ddl_in_callback": {
+        "attempt": "CREATE INDEX inside SnapshotStore.write",
+        "outcome": "rejected (refused)",
+        "message": "application callback changed the SQLite schema"
+      },
+      "open_with_new_ddl": {
+        "attempt": "open the store with the new DDL",
+        "outcome": "rejected (incompatible)",
+        "message": "store schema version 1 is incompatible with the requested 2"
+      },
+      "side_by_side": {
+        "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/store-v2",
+        "version": 1,
+        "rows": {
+          "kind_schema": 19,
+          "kb_file": 3,
+          "kb_line": 4796,
+          "doc": 5497,
+          "entity": 5927,
+          "search_text": 8546,
+          "edge": 25833
+        },
+        "init_ms": 44.187,
+        "copy_ms": 438.553,
+        "total_ms": 482.741,
+        "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/store-v2/snapshots/000000000001.fsqlite.sqlite",
+        "plan": [
+          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+        ],
+        "store_bytes": 39071880
+      }
+    }
+  },
+  "typed": {
+    "build_from_generic": {
+      "dir": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed",
+      "rows": {
+        "t_social_account": 1052,
+        "t_github_account": 237,
+        "t_other": 432,
+        "t_event": 4,
+        "t_experience": 11,
+        "t_organization": 310,
+        "t_package": 134,
+        "t_page": 9,
+        "t_person": 577,
+        "t_profile": 577,
+        "t_repository": 1155,
+        "t_room": 85,
+        "t_session": 520,
+        "t_software": 61,
+        "t_facet": 34,
+        "t_venue": 58,
+        "t_website": 151,
+        "t_recording": 520
+      },
+      "total_ms": 357.534,
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 18251776
+    },
+    "alter_in_callback": {
+      "attempt": "ALTER TABLE ADD COLUMN inside DirectStore.write",
+      "outcome": "rejected (refused)",
+      "message": "application callback changed the SQLite schema"
+    },
+    "add_column_side_by_side": {
+      "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed-v2",
+      "version": 1,
+      "rows": {
+        "t_event": 4,
+        "t_experience": 11,
+        "t_facet": 34,
+        "t_faq": 0,
+        "t_github_account": 237,
+        "t_media": 0,
+        "t_organization": 310,
+        "t_package": 134,
+        "t_page": 9,
+        "t_person": 577,
+        "t_profile": 577,
+        "t_recording": 520,
+        "t_repository": 1155,
+        "t_room": 85,
+        "t_session": 520,
+        "t_social_account": 1052,
+        "t_software": 61,
+        "t_venue": 58,
+        "t_website": 151,
+        "t_other": 432,
+        "edge": 25833
+      },
+      "init_ms": 64.001,
+      "copy_ms": 255.694,
+      "total_ms": 319.695,
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed-v2/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 18251776
+    }
+  },
+  "requirements": {
+    "generic": {
+      "new_kind": "data only (no DDL); a new table view for it needs an index, so a new epoch",
+      "optional_field": "data only; an index on the field needs a new epoch",
+      "rename_relation": "data only (an UPDATE of the edge key), plus query code that names it",
+      "type_change": "data only for the payload; any view or index over the field needs a new epoch"
+    },
+    "typed": {
+      "new_kind": "new table, so a new epoch (side-by-side copy)",
+      "optional_field": "ALTER TABLE ADD COLUMN, so a new epoch",
+      "rename_relation": "data only while edges stay generic",
+      "type_change": "column type and transform, so a new epoch"
+    }
+  }
+}

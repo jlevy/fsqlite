@@ -1,0 +1,174 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W6",
+  "recorded_at": "2026-11-17T01:00:51.503Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14950,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "artifacts": {
+    "files": 4,
+    "bytes": 38461576,
+    "groups": {
+      "current": {
+        "files": 1,
+        "bytes": 1
+      },
+      "fsqlite.json": {
+        "files": 1,
+        "bytes": 135
+      },
+      "snapshots": {
+        "files": 2,
+        "bytes": 38461440
+      }
+    }
+  },
+  "validate": {
+    "state": "sealed",
+    "current": 1,
+    "pending": 0,
+    "issues": [],
+    "ms": 50.977
+  },
+  "standard_tools": {
+    "python_sqlite3": {
+      "sqlite": "3.53.1",
+      "tables": [
+        "applied_tx",
+        "doc",
+        "edge",
+        "entity",
+        "fsqlite_meta",
+        "kb_file",
+        "kb_line",
+        "kind_schema",
+        "search_text"
+      ],
+      "entities": 5407,
+      "quick_check": "ok",
+      "application_id": 1179865420,
+      "sample": [
+        [
+          "repo:1password/arboard",
+          975
+        ]
+      ]
+    },
+    "sqlite3_cli": "not installed on this VM",
+    "fsqlite_cli_stats": {
+      "exit": 0,
+      "out": "fsqlite stats: /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 9368\n  file_bytes: 38371328\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=0 doc=4977 edge=25313 entity=5407 fsqlite_meta=4 kb_file=3 kb_line=4796 kind_schema=18 search_text=7506"
+    }
+  },
+  "startup": {
+    "process_wall_ms": 122.591,
+    "import_ms": 73.542,
+    "open_ms": 6.88,
+    "first_query_ms": 0.974,
+    "rss_mib": 90.184
+  },
+  "read_overhead": {
+    "store_read_record_p50_ms": 0.5559,
+    "held_connection_record_p50_ms": 0.0869
+  },
+  "memory_at_rest": {
+    "process_rss_before_open_mib": 94.1,
+    "rss_after_open_mib": 94.1,
+    "rss_after_w3_mib": 100.8,
+    "sqlite_cache_size_setting": -65536
+  },
+  "crash": [
+    {
+      "route": "direct",
+      "killed_after_ms": 501.071,
+      "killed_at": "26436240 bytes into the build",
+      "leftovers": [
+        "publish.lock",
+        "publish.lock/owner.json",
+        "snapshots/.direct-502f427d90.sqlite",
+        "snapshots/.direct-502f427d90.sqlite-journal"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 0,
+        "issues": [
+          "transient build files present: .direct-502f427d90.sqlite, .direct-502f427d90.sqlite-journal",
+          "publish.lock present (reconcile in progress or crashed)"
+        ]
+      },
+      "repair_refused_while_lock_present": "repair refused: publish.lock is present; stop every store client on every host, verify none can resume, then remove the abandoned lock before repair",
+      "removed_abandoned_publish_lock": true,
+      "repair": {
+        "actions": [
+          "removed transient .direct-502f427d90.sqlite",
+          "removed transient .direct-502f427d90.sqlite-journal"
+        ],
+        "state": "sealed",
+        "ms": 10.323
+      },
+      "validate_after": {
+        "state": "sealed",
+        "current": 0,
+        "pending": 0,
+        "issues": []
+      },
+      "published_version_after_crash": 0,
+      "restart_ms": 660.05,
+      "restart": {
+        "exit": 0,
+        "validate": "sealed"
+      }
+    },
+    {
+      "route": "snapshot",
+      "killed_after_ms": 208.923,
+      "killed_at": "2 envelopes captured",
+      "leftovers": [],
+      "validate_before": {
+        "state": "live",
+        "current": 0,
+        "pending": 2,
+        "issues": []
+      },
+      "repair_refused_while_lock_present": null,
+      "removed_abandoned_publish_lock": false,
+      "repair": {
+        "actions": [],
+        "state": "live",
+        "ms": 1.853
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 2,
+        "issues": []
+      },
+      "published_version_after_crash": 0,
+      "restart_ms": 48.63,
+      "restart": {
+        "reconcile": {
+          "published": 1,
+          "applied": 2,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0
+      }
+    }
+  ]
+}
