@@ -11,13 +11,13 @@
     "python": "3.13.18",
     "filesystems": [
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2/kb",
+        "path": "<scratch>/kb-corpora/S2-r2/kb",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 12104684
       },
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S2-r2",
+        "path": "<scratch>/fdb-data/S2-r2",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 12104292
@@ -70,7 +70,7 @@
   },
   "statement_timeout_ms": 30000,
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2/kb",
+    "kb": "<scratch>/kb-corpora/S2-r2/kb",
     "seed": 20261117,
     "replicas": 46,
     "nodes": 238957,
@@ -11014,7 +11014,7 @@
   ],
   "oracle_check": {
     "expected": "harness/expected/S2-r2/w3.json",
-    "expected_sha256": "51c984c20c5c51f06b91b5c092e5ad0c2f56e54192211a8b346c015bc6ba0da5",
+    "expected_sha256": "ea3412fdbda7bdf124926c8440f9a431e07e6d1978fa64363f611811c43d6409",
     "paths_checked_against": "$KB_CORPORA/S2-r2/kb",
     "outcome": "MATCH: 124 ok, 0 differ",
     "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"

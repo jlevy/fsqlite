@@ -2,7 +2,7 @@
   "workflow": "W3",
   "backend": "oracle",
   "scale": "S0",
-  "kb_root": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+  "kb_root": "attic/paraverse/vendor/universe2026-md/kb",
   "index_seconds": 1.526,
   "nodes": 5407,
   "queries": [

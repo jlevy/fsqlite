@@ -7868,7 +7868,7 @@
   ],
   "oracle_check": {
     "expected": "harness/expected/S1-r2/w3.json",
-    "expected_sha256": "dc3f5bcfecaf0345e6676d27a13e9f935fffd135a704289c61b07207f7d2e8bc",
+    "expected_sha256": "8730d9c39398668008217d62d80da14e035554a91b2d077b8d0dfcb4e2489b63",
     "paths_checked_against": "$KB_CORPORA/S1-r2/kb",
     "outcome": "MATCH: 124 ok, 0 differ",
     "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"

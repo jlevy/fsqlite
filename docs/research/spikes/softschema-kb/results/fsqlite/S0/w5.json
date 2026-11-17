@@ -15,7 +15,7 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
     "node_total": 5407,
     "edge_total": 25313
   },
@@ -26,7 +26,7 @@
     "exit": 0,
     "report": {
       "export": {
-        "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
+        "snapshot": "<scratch>/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
         "files_written": 5001,
         "graph_and_files_seconds": 0.178,
         "seconds": 3.173,

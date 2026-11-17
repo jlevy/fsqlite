@@ -15,7 +15,7 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
     "node_total": 5407,
     "edge_total": 25313
   },
@@ -24,7 +24,7 @@
     "fsqlite_api": "packages/fsqlite/src/index.ts",
     "mapping": "generic (a)"
   },
-  "store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-direct",
+  "store": "<scratch>/fsqlite-spike/S0/store-direct",
   "version": 1,
   "options": {
     "search": "search_text substring scan",
@@ -43,7 +43,7 @@
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
+  "snapshot": "<scratch>/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
   "queries": [
     {
       "name": "path.person_person_2",

@@ -15,12 +15,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2/kb",
+    "kb": "<scratch>/kb-corpora/S2/kb",
     "corpus": {
       "scale": "S2",
       "seed": 20261117,
       "replicas": 46,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 248722,
       "edges": 1164398,
       "record_files": 228850,
@@ -34,7 +34,7 @@
     "node_total": 248722,
     "edge_total": 1164398
   },
-  "inputs": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2/evolve",
+  "inputs": "<scratch>/kb-corpora/S2/evolve",
   "verified_against_rebuild": false,
   "generic": {
     "new_kind": {
@@ -175,7 +175,7 @@
           "message": "store schema is incompatible: stamped schema_hash 137a8ed5c5a9120b does not match the requested exact DDL hash d13418979750ba3d at schemaVersion 1"
         },
         "side_by_side": {
-          "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/string_to_object/store-v2",
+          "dest": "<scratch>/fsqlite-spike/S2/w4/string_to_object/store-v2",
           "version": 1,
           "rows": {
             "kind_schema": 18,
@@ -189,7 +189,7 @@
           "init_ms": 41.358,
           "copy_ms": 16798.134,
           "total_ms": 16839.492,
-          "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/string_to_object/store-v2/snapshots/000000000001.fsqlite.sqlite",
+          "snapshot": "<scratch>/fsqlite-spike/S2/w4/string_to_object/store-v2/snapshots/000000000001.fsqlite.sqlite",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -199,7 +199,7 @@
   },
   "typed": {
     "build_from_generic": {
-      "dir": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/typed",
+      "dir": "<scratch>/fsqlite-spike/S2/w4/typed",
       "rows": {
         "t_social_account": 48392,
         "t_github_account": 10902,
@@ -220,7 +220,7 @@
         "t_website": 6946
       },
       "total_ms": 11289.559,
-      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/typed/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot": "<scratch>/fsqlite-spike/S2/w4/typed/snapshots/000000000001.fsqlite.sqlite",
       "snapshot_bytes": 855236608
     },
     "alter_in_callback": {
@@ -229,7 +229,7 @@
       "message": "application callback changed the SQLite schema"
     },
     "add_column_side_by_side": {
-      "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/typed-v2",
+      "dest": "<scratch>/fsqlite-spike/S2/w4/typed-v2",
       "version": 1,
       "rows": {
         "t_event": 184,
@@ -256,7 +256,7 @@
       "init_ms": 58.392,
       "copy_ms": 8742.541,
       "total_ms": 8800.933,
-      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2/w4/typed-v2/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot": "<scratch>/fsqlite-spike/S2/w4/typed-v2/snapshots/000000000001.fsqlite.sqlite",
       "snapshot_bytes": 855236608
     },
     "size_comparison": {

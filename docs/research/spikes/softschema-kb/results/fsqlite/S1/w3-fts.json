@@ -15,12 +15,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "kb": "<scratch>/kb-corpora/S1/kb",
     "corpus": {
       "scale": "S1",
       "seed": 20261117,
       "replicas": 9,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 48663,
       "edges": 227817,
       "record_files": 44775,
@@ -39,7 +39,7 @@
     "fsqlite_api": "packages/fsqlite/src/index.ts",
     "mapping": "generic (a)"
   },
-  "store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct",
+  "store": "<scratch>/fsqlite-spike/S1/store-direct",
   "version": 1,
   "options": {
     "search": "fts5-trigram-sidecar (MATCH phrase)",
@@ -58,7 +58,7 @@
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
+  "snapshot": "<scratch>/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
   "queries": [
     {
       "name": "table.sessions_by_start.p1",
@@ -2254,7 +2254,7 @@
   },
   "oracle_check": {
     "expected": "harness/expected/S1/w3.json",
-    "expected_sha256": "606bb82105ed25e2acf38a0b87f002983d11009df56090def3472d457edfb4dd",
+    "expected_sha256": "bc7c9885708269818c89785e7557e630be02a27b0fe13f0c163a04c8401288b7",
     "paths_checked_against": "$KB_CORPORA/S1/kb",
     "outcome": "MATCH: 24 ok, 0 differ",
     "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"

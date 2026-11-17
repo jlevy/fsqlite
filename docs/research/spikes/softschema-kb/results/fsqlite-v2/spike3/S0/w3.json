@@ -15,7 +15,7 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
     "node_total": 5407,
     "edge_total": 25313
   },
@@ -24,7 +24,7 @@
     "fsqlite_api": "packages/fsqlite/src/index.ts",
     "mapping": "generic (a)"
   },
-  "store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct",
+  "store": "<scratch>/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct",
   "version": 1,
   "options": {
     "search": "search_text substring scan",
@@ -43,7 +43,7 @@
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
+  "snapshot": "<scratch>/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
   "queries": [
     {
       "name": "table.sessions_by_start.p1",
@@ -2254,7 +2254,7 @@
   ],
   "oracle_check": {
     "expected": "harness/expected/S0/w3.json",
-    "expected_sha256": "4c9fba6bb7a32db4ee6f16f2b1b36795009b149d88e349e4b1174eaf638e6f58",
+    "expected_sha256": "348ac4439c79b83c6d674f4f978f9ada6b3baded84b04925538c4fe727185207",
     "paths_checked_against": "$KB_CORPORA/S0/kb",
     "outcome": "MATCH: 24 ok, 0 differ",
     "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"

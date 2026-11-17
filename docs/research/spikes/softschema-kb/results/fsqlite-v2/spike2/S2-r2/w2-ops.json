@@ -16,14 +16,14 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S2-r2/kb",
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2-r2/kb",
     "corpus": {
       "scale": "S2-r2",
       "round": 2,
       "seed": 20261117,
       "seed_namespace": "r2",
       "replicas": 46,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 238957,
       "edges": 1155758,
       "record_files": 224802,
@@ -153,8 +153,8 @@
     "node_total": 238957,
     "edge_total": 1155758
   },
-  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/store-direct",
-  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S2-r2/deltas",
+  "base_store": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/store-direct",
+  "deltas": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2-r2/deltas",
   "writers": 4,
   "envelopes_per_writer": 5,
   "strategy": "ops",
@@ -441,7 +441,7 @@
         "edges": 70371
       },
       "w3_check_against_reference": {
-        "expected": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/spike/harness/expected/S2-r2-p05/w3.json",
+        "expected": "<scratch>/research-c/spike2/spike/harness/expected/S2-r2-p05/w3.json",
         "result": "MATCH: 124 ok, 0 differ",
         "differing": []
       },
@@ -575,7 +575,7 @@
         "edges": 70371
       },
       "w3_check_against_reference": {
-        "expected": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/spike/harness/expected/S2-r2-p05/w3.json",
+        "expected": "<scratch>/research-c/spike2/spike/harness/expected/S2-r2-p05/w3.json",
         "result": "MATCH: 124 ok, 0 differ",
         "differing": []
       },

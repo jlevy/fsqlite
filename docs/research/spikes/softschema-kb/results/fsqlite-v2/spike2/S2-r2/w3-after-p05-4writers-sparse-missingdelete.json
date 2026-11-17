@@ -18,7 +18,7 @@
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/w2-sparse/p05/store/snapshots/000000000002.fsqlite.sqlite",
+  "snapshot": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/w2-sparse/p05/store/snapshots/000000000002.fsqlite.sqlite",
   "queries": [
     {
       "name": "v2.record.00",

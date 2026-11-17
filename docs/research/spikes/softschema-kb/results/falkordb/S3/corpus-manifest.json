@@ -2,7 +2,7 @@
   "scale": "S3",
   "seed": 20261117,
   "replicas": 185,
-  "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+  "source": "attic/paraverse/vendor/universe2026-md/kb",
   "nodes": 1000295,
   "edges": 4682905,
   "record_files": 920375,

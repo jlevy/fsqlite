@@ -15,13 +15,13 @@
     "python": "3.13.18",
     "filesystems": [
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2",
+        "path": "<scratch>/kb-corpora/S1-r2",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 16517104
       },
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1-r2",
+        "path": "<scratch>/fdb-data/S1-r2",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 16517104
@@ -37,7 +37,7 @@
     "psutil": "7.2.2"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/kb",
+    "kb": "<scratch>/kb-corpora/S1-r2/kb",
     "seed": 20261117,
     "replicas": 9,
     "nodes": 46927,

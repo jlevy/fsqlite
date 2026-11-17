@@ -15,7 +15,7 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
     "node_total": 5407,
     "edge_total": 25313
   },

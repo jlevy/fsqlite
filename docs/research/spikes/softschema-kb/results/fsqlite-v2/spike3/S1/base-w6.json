@@ -15,12 +15,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch-base/kb-corpora/S1/kb",
+    "kb": "<scratch>/research-c/spike3/kbscratch-base/kb-corpora/S1/kb",
     "corpus": {
       "scale": "S1",
       "seed": 20261117,
       "replicas": 9,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 48663,
       "edges": 227817,
       "record_files": 44775,
@@ -87,7 +87,7 @@
     "sqlite3_cli": "not installed on this VM",
     "fsqlite_cli_stats": {
       "exit": 0,
-      "out": "fsqlite stats: /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch-base/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 90494\n  file_bytes: 370663424\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=0 doc=44777 edge=227817 entity=48663 fsqlite_meta=4 kb_file=3 kb_line=43052 kind_schema=18 quarantine=0 search_text=67554"
+      "out": "fsqlite stats: <scratch>/research-c/spike3/kbscratch-base/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 90494\n  file_bytes: 370663424\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=0 doc=44777 edge=227817 entity=48663 fsqlite_meta=4 kb_file=3 kb_line=43052 kind_schema=18 quarantine=0 search_text=67554"
     }
   },
   "startup_and_memory_at_rest": {

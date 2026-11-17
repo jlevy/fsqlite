@@ -15,12 +15,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
     "node_total": 5407,
     "edge_total": 25313
   },
   "gc_opts": {},
-  "delta": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/kb-corpora/S0/deltas/p20",
+  "delta": "<scratch>/research-c/spike3/kbscratch/kb-corpora/S0/deltas/p20",
   "gc": "gc({ retain: 0, ...{} }) after every publish",
   "batches": {
     "SnapshotStore.1": {

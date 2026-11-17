@@ -54,7 +54,7 @@
     "benchmark:workload-fit": "node benchmarks/workload-fit.ts",
     "example:catalog": "node examples/document-catalog.ts",
     "test": "node scripts/run-tests.mjs",
-    "check:docs": "node scripts/check-docs.mjs",
+    "check:docs": "node --test scripts/check-doc-claims.test.mjs && node scripts/check-docs.mjs",
     "test:golden": "tryscript run 'test/cli-golden/*.tryscript.md'",
     "test:golden:update": "tryscript run --update 'test/cli-golden/*.tryscript.md'",
     "test:package": "node scripts/package-smoke.mjs",

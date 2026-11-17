@@ -15,12 +15,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "kb": "<scratch>/kb-corpora/S1/kb",
     "corpus": {
       "scale": "S1",
       "seed": 20261117,
       "replicas": 9,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 48663,
       "edges": 227817,
       "record_files": 44775,
@@ -41,7 +41,7 @@
     "exit": 0,
     "report": {
       "export": {
-        "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
+        "snapshot": "<scratch>/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
         "files_written": 44801,
         "graph_and_files_seconds": 1.067,
         "seconds": 70.182,

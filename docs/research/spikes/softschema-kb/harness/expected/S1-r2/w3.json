@@ -2,7 +2,7 @@
   "workflow": "W3",
   "backend": "oracle",
   "scale": "S1-r2",
-  "kb_root": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/kb",
+  "kb_root": "<scratch>/kb-corpora/S1-r2/kb",
   "index_seconds": 14.165,
   "nodes": 46927,
   "queries": [

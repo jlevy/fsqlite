@@ -12,13 +12,13 @@
     "python": "3.13.18",
     "filesystems": [
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+        "path": "<scratch>/kb-corpora/S1/kb",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 14118040
       },
       {
-        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1",
+        "path": "<scratch>/fdb-data/S1",
         "device": "/dev/vda",
         "type": "ext4",
         "available_kb": 14118040
@@ -70,7 +70,7 @@
     "client_socket_timeout": null
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "kb": "<scratch>/kb-corpora/S1/kb",
     "seed": 20261117,
     "replicas": 9,
     "nodes": 48663,

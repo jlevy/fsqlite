@@ -18,7 +18,7 @@
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/w2-ops-naive/p05/store/snapshots/000000000002.fsqlite.sqlite",
+  "snapshot": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/w2-ops-naive/p05/store/snapshots/000000000002.fsqlite.sqlite",
   "queries": [
     {
       "name": "v2.record.00",
@@ -5154,7 +5154,7 @@
   ],
   "oracle_check": {
     "expected": "harness/expected/S2-r2-p05/w3.json",
-    "expected_sha256": "0f898dbdea719d43151d70b96d8cd482972a94eebe41c01df3eab6db00b39355",
+    "expected_sha256": "8d85c9ce50bfc0c3173f4e5ae78020bcfcde80b1e50b10f0f1fe6446be9e44aa",
     "paths_checked_against": "delta2.py --apply output for S2-r2-p05",
     "outcome": "MATCH: 124 ok, 0 differ",
     "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"

@@ -16,14 +16,14 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S1-r2/kb",
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1-r2/kb",
     "corpus": {
       "scale": "S1-r2",
       "round": 2,
       "seed": 20261117,
       "seed_namespace": "r2",
       "replicas": 9,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 46927,
       "edges": 226281,
       "record_files": 44057,
@@ -153,8 +153,8 @@
     "node_total": 46927,
     "edge_total": 226281
   },
-  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/fsqlite-spike/S1-r2/store-direct",
-  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S1-r2/deltas",
+  "base_store": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S1-r2/store-direct",
+  "deltas": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1-r2/deltas",
   "gc": "not run",
   "fts_sidecar": "not rebuilt",
   "arms": [
@@ -305,7 +305,7 @@
               "fts_rebuild_ms": null,
               "gc_retain0_ms": null,
               "state": "{\"entities\":48734,\"edges\":235470,\"quarantine\":[]}",
-              "w3_check_against_reference": "{\"expected\":\"/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/spike/harness/expected/S1-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
+              "w3_check_against_reference": "{\"expected\":\"<scratch>/research-c/spike2/spike/harness/expected/S1-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
             },
             {
               "arm": "DirectStore",

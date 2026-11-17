@@ -16,12 +16,12 @@
     "python": "Python 3.13.18"
   },
   "corpus": {
-    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S2/kb",
+    "kb": "<scratch>/research-c/spike1/kbscratch/kb-corpora/S2/kb",
     "corpus": {
       "scale": "S2",
       "seed": 20261117,
       "replicas": 46,
-      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
       "nodes": 248722,
       "edges": 1164398,
       "record_files": 228850,
@@ -35,7 +35,7 @@
     "node_total": 248722,
     "edge_total": 1164398
   },
-  "delta": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S2/deltas/p20",
+  "delta": "<scratch>/research-c/spike1/kbscratch/kb-corpora/S2/deltas/p20",
   "gc": "gc({ retain: 0 }) after every publish",
   "batches": {
     "SnapshotStore.1": {
