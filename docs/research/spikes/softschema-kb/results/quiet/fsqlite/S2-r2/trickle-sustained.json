@@ -1,0 +1,436 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S2-r2",
+ "workflow": "trickle-sustained",
+ "description": "60 s: one writer capturing one-record envelopes, one reconciler looping reconcile then gc({retain:0})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 15102,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "capture_records_per_s": {
+   "median": 0.53,
+   "min": 0.49,
+   "max": 0.54,
+   "n": 3
+  },
+  "gc_ms_median": {
+   "median": 5697,
+   "min": 5122,
+   "max": 5697,
+   "n": 3
+  },
+  "gc_share_of_build_plus_gc": {
+   "median": 0.6379,
+   "min": 0.6086,
+   "max": 0.6615,
+   "n": 3
+  },
+  "reconcile_ms_median": {
+   "median": 3234,
+   "min": 2915,
+   "max": 3294,
+   "n": 3
+  },
+  "reconciles": {
+   "median": 8,
+   "min": 8,
+   "max": 8,
+   "n": 3
+  },
+  "records_captured": {
+   "median": 32,
+   "min": 30,
+   "max": 33,
+   "n": 3
+  },
+  "records_per_reconcile_median": {
+   "median": 4,
+   "min": 4,
+   "max": 4,
+   "n": 3
+  },
+  "visibility_max_ms": {
+   "median": 15824,
+   "min": 15133,
+   "max": 17287,
+   "n": 3
+  },
+  "visibility_p50_ms": {
+   "median": 9519,
+   "min": 9508,
+   "max": 9548,
+   "n": 3
+  },
+  "visibility_p95_ms": {
+   "median": 15094,
+   "min": 14105,
+   "max": 15916,
+   "n": 3
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:54:05Z",
+   "wall_s": 76.017,
+   "load_before": [
+    0.92,
+    1.02,
+    1.1
+   ],
+   "load_after": [
+    1.54,
+    1.24,
+    1.18
+   ],
+   "load1_max_during": 1.76,
+   "foreign_cpu_max": 0.065,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898455.6,
+     "load1": 1.17,
+     "own_cpu": 1.397,
+     "foreign_cpu": 0.046
+    },
+    {
+     "t": 1794898465.6,
+     "load1": 1.53,
+     "own_cpu": 0.983,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898475.6,
+     "load1": 1.6,
+     "own_cpu": 0.883,
+     "foreign_cpu": 0.038
+    },
+    {
+     "t": 1794898485.6,
+     "load1": 1.66,
+     "own_cpu": 0.793,
+     "foreign_cpu": 0.065
+    },
+    {
+     "t": 1794898495.6,
+     "load1": 1.72,
+     "own_cpu": 0.975,
+     "foreign_cpu": 0.025
+    },
+    {
+     "t": 1794898505.6,
+     "load1": 1.76,
+     "own_cpu": 0.874,
+     "foreign_cpu": 0.022
+    },
+    {
+     "t": 1794898515.6,
+     "load1": 1.64,
+     "own_cpu": 0.755,
+     "foreign_cpu": 0.042
+    },
+    {
+     "t": 1794898521.6,
+     "load1": 1.54,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.025
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 32,
+    "capture_records_per_s": 0.53,
+    "visibility_p50_ms": 9508,
+    "visibility_p95_ms": 15094,
+    "visibility_max_ms": 15133,
+    "gc_ms_median": 5697,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 2915,
+    "gc_share_of_build_plus_gc": 0.6615
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15102,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 32,
+     "capture_records_per_s": 0.53,
+     "capture_ms_median": 1323,
+     "reconciles": 8,
+     "records_per_reconcile_median": 4,
+     "reconcile_ms_median": 2915,
+     "gc_retain0_ms_median": 5697,
+     "visibility_delay_ms": {
+      "p50": 9508,
+      "p95": 15094,
+      "max": 15133
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:55:51Z",
+   "wall_s": 76.018,
+   "load_before": [
+    0.93,
+    1.12,
+    1.14
+   ],
+   "load_after": [
+    1.57,
+    1.31,
+    1.21
+   ],
+   "load1_max_during": 1.73,
+   "foreign_cpu_max": 0.068,
+   "waited_for_quiet_s": 30.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898561.6,
+     "load1": 1.18,
+     "own_cpu": 1.354,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898571.6,
+     "load1": 1.38,
+     "own_cpu": 0.971,
+     "foreign_cpu": 0.032
+    },
+    {
+     "t": 1794898581.6,
+     "load1": 1.56,
+     "own_cpu": 0.863,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794898591.6,
+     "load1": 1.63,
+     "own_cpu": 0.867,
+     "foreign_cpu": 0.029
+    },
+    {
+     "t": 1794898601.6,
+     "load1": 1.69,
+     "own_cpu": 0.94,
+     "foreign_cpu": 0.032
+    },
+    {
+     "t": 1794898611.6,
+     "load1": 1.73,
+     "own_cpu": 0.811,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794898621.6,
+     "load1": 1.62,
+     "own_cpu": 0.647,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794898627.6,
+     "load1": 1.57,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.068
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 30,
+    "capture_records_per_s": 0.49,
+    "visibility_p50_ms": 9519,
+    "visibility_p95_ms": 15916,
+    "visibility_max_ms": 17287,
+    "gc_ms_median": 5697,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 3234,
+    "gc_share_of_build_plus_gc": 0.6379
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15114,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 30,
+     "capture_records_per_s": 0.49,
+     "capture_ms_median": 1401,
+     "reconciles": 8,
+     "records_per_reconcile_median": 4,
+     "reconcile_ms_median": 3234,
+     "gc_retain0_ms_median": 5697,
+     "visibility_delay_ms": {
+      "p50": 9519,
+      "p95": 15916,
+      "max": 17287
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:57:37Z",
+   "wall_s": 76.019,
+   "load_before": [
+    0.95,
+    1.18,
+    1.17
+   ],
+   "load_after": [
+    1.64,
+    1.36,
+    1.23
+   ],
+   "load1_max_during": 1.71,
+   "foreign_cpu_max": 0.031,
+   "waited_for_quiet_s": 30.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898667.7,
+     "load1": 1.11,
+     "own_cpu": 1.143,
+     "foreign_cpu": 0.031
+    },
+    {
+     "t": 1794898677.7,
+     "load1": 1.25,
+     "own_cpu": 0.951,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794898687.7,
+     "load1": 1.53,
+     "own_cpu": 0.876,
+     "foreign_cpu": 0.004
+    },
+    {
+     "t": 1794898697.7,
+     "load1": 1.6,
+     "own_cpu": 0.87,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898707.7,
+     "load1": 1.66,
+     "own_cpu": 0.936,
+     "foreign_cpu": 0.021
+    },
+    {
+     "t": 1794898717.7,
+     "load1": 1.71,
+     "own_cpu": 0.98,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794898727.7,
+     "load1": 1.6,
+     "own_cpu": 0.755,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794898733.7,
+     "load1": 1.64,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.018
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 33,
+    "capture_records_per_s": 0.54,
+    "visibility_p50_ms": 9548,
+    "visibility_p95_ms": 14105,
+    "visibility_max_ms": 15824,
+    "gc_ms_median": 5122,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 3294,
+    "gc_share_of_build_plus_gc": 0.6086
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15125,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 33,
+     "capture_records_per_s": 0.54,
+     "capture_ms_median": 1318,
+     "reconciles": 8,
+     "records_per_reconcile_median": 4,
+     "reconcile_ms_median": 3294,
+     "gc_retain0_ms_median": 5122,
+     "visibility_delay_ms": {
+      "p50": 9548,
+      "p95": 14105,
+      "max": 15824
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  }
+ ]
+}

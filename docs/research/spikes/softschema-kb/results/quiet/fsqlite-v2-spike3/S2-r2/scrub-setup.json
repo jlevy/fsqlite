@@ -1,0 +1,69 @@
+{
+ "arm": "fsqlite-v2-spike3",
+ "arm_label": "fsqlite v2 Spike 3 (maintenance and publication; gc collectOn quick)",
+ "scale": "S2-r2",
+ "workflow": "scrub-setup",
+ "description": "Spike 3 full verification of the base head before the trickle (verifyMaxAgeMs 1 h)",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": null,
+ "repetitions_kept": 1,
+ "summary": {
+  "scrub_ms": {
+   "median": 3837.2,
+   "min": 3837.2,
+   "max": 3837.2,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:22:47Z",
+   "wall_s": 4.005,
+   "load_before": [
+    0.98,
+    1.08,
+    1.24
+   ],
+   "load_after": [
+    0.98,
+    1.08,
+    1.24
+   ],
+   "load1_max_during": 0.98,
+   "foreign_cpu_max": 0.017,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.47,
+   "disk_free_gb_min": 13.47,
+   "load_samples": [
+    {
+     "t": 1794900171.4,
+     "load1": 0.98,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.017
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "scrub_ms": 3837.2
+   },
+   "detail": {
+    "verify": {
+     "scrub_ms": 3837.235129,
+     "version": 1,
+     "level": "full",
+     "ok": true,
+     "at_ms": 1794900171292,
+     "dev": 65024,
+     "ino": 1359850,
+     "size": 1946152960,
+     "mtimeMs": 1794900151765,
+     "problems": []
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,242 @@
+{
+ "arm": "fsqlite-v2-spike2",
+ "arm_label": "fsqlite v2 Spike 2 (operation envelopes, serial reducer, coalescing publisher)",
+ "scale": "S2-r2",
+ "workflow": "trickle-one",
+ "description": "one v2 record per publish as an operation envelope (Ops) or a sparse changeset (Sparse), then gc",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14944,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "Ops.capture_ms": {
+   "median": 0.626,
+   "min": 0.626,
+   "max": 0.626,
+   "n": 1
+  },
+  "Ops.gc_ms": {
+   "median": 4322.08,
+   "min": 4322.08,
+   "max": 4322.08,
+   "n": 1
+  },
+  "Ops.gc_share_of_publish_plus_gc": {
+   "median": 0.645,
+   "min": 0.645,
+   "max": 0.645,
+   "n": 1
+  },
+  "Ops.reconcile_ms": {
+   "median": 2378.63,
+   "min": 2378.63,
+   "max": 2378.63,
+   "n": 1
+  },
+  "Ops.visible_ms": {
+   "median": 2379.141,
+   "min": 2379.141,
+   "max": 2379.141,
+   "n": 1
+  },
+  "Sparse.capture_ms": {
+   "median": 3.423,
+   "min": 3.423,
+   "max": 3.423,
+   "n": 1
+  },
+  "Sparse.gc_ms": {
+   "median": 5190.651,
+   "min": 5190.651,
+   "max": 5190.651,
+   "n": 1
+  },
+  "Sparse.gc_share_of_publish_plus_gc": {
+   "median": 0.672,
+   "min": 0.672,
+   "max": 0.672,
+   "n": 1
+  },
+  "Sparse.reconcile_ms": {
+   "median": 2411.015,
+   "min": 2411.015,
+   "max": 2411.015,
+   "n": 1
+  },
+  "Sparse.visible_ms": {
+   "median": 2414.438,
+   "min": 2414.438,
+   "max": 2414.438,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:17:11Z",
+   "wall_s": 44.01,
+   "load_before": [
+    0.99,
+    1.18,
+    1.33
+   ],
+   "load_after": [
+    1.05,
+    1.17,
+    1.32
+   ],
+   "load1_max_during": 1.07,
+   "foreign_cpu_max": 0.027,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.01,
+   "disk_free_gb_min": 9.11,
+   "load_samples": [
+    {
+     "t": 1794899841.1,
+     "load1": 0.99,
+     "own_cpu": 0.831,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794899851.1,
+     "load1": 0.99,
+     "own_cpu": 0.815,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794899861.1,
+     "load1": 1.07,
+     "own_cpu": 0.724,
+     "foreign_cpu": 0.027
+    },
+    {
+     "t": 1794899871.1,
+     "load1": 1.06,
+     "own_cpu": 0.778,
+     "foreign_cpu": 0.009
+    },
+    {
+     "t": 1794899875.1,
+     "load1": 1.05,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.005
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "Ops.visible_ms": 2379.141,
+    "Ops.capture_ms": 0.626,
+    "Ops.reconcile_ms": 2378.63,
+    "Ops.gc_ms": 4322.08,
+    "Ops.gc_share_of_publish_plus_gc": 0.645,
+    "Sparse.visible_ms": 2414.438,
+    "Sparse.capture_ms": 3.423,
+    "Sparse.reconcile_ms": 2411.015,
+    "Sparse.gc_ms": 5190.651,
+    "Sparse.gc_share_of_publish_plus_gc": 0.672
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14944,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "batches": {
+     "Ops.1": {
+      "arm": "Ops",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 0.626,
+      "reconcile_ms": 2378.63,
+      "visible_ms_median": 2379.141,
+      "records_per_s": 0.42,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 4322.08,
+      "runs": [
+       {
+        "capture_ms": 1.2593,
+        "reconcile_ms": 2498.162,
+        "visible_ms": 2499.423,
+        "envelope_bytes": 2252,
+        "fts_rebuild_ms": null,
+        "gc_ms": 3664.898
+       },
+       {
+        "capture_ms": 0.5041,
+        "reconcile_ms": 2378.63,
+        "visible_ms": 2379.141,
+        "envelope_bytes": 9837,
+        "fts_rebuild_ms": null,
+        "gc_ms": 4322.08
+       },
+       {
+        "capture_ms": 0.6259,
+        "reconcile_ms": 1921.535,
+        "visible_ms": 1922.162,
+        "envelope_bytes": 10117,
+        "fts_rebuild_ms": null,
+        "gc_ms": 4983.047
+       }
+      ]
+     },
+     "Sparse.1": {
+      "arm": "Sparse",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 3.423,
+      "reconcile_ms": 2411.015,
+      "visible_ms_median": 2414.438,
+      "records_per_s": 0.41,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 5190.651,
+      "runs": [
+       {
+        "capture_ms": 4.194,
+        "reconcile_ms": 1494.205,
+        "visible_ms": 1498.4,
+        "envelope_bytes": 0,
+        "fts_rebuild_ms": null,
+        "gc_ms": 5400.896
+       },
+       {
+        "capture_ms": 3.19,
+        "reconcile_ms": 2803.778,
+        "visible_ms": 2806.969,
+        "envelope_bytes": 0,
+        "fts_rebuild_ms": null,
+        "gc_ms": 5190.651
+       },
+       {
+        "capture_ms": 3.423,
+        "reconcile_ms": 2411.015,
+        "visible_ms": 2414.438,
+        "envelope_bytes": 0,
+        "fts_rebuild_ms": null,
+        "gc_ms": 4946.036
+       }
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

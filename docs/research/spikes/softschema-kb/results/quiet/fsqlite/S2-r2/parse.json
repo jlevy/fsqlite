@@ -1,0 +1,127 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S2-r2",
+ "workflow": "parse",
+ "description": "parse_kb.py, 4 worker processes, with the stdlib schema check (--validate)",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": null,
+ "repetitions_kept": 1,
+ "summary": {
+  "peak_rss_mib": {
+   "median": 579.0,
+   "min": 579.0,
+   "max": 579.0,
+   "n": 1
+  },
+  "schema_check_cpu_s_summed_over_4_workers": {
+   "median": 31.198,
+   "min": 31.198,
+   "max": 31.198,
+   "n": 1
+  },
+  "wall_s": {
+   "median": 45.472,
+   "min": 45.472,
+   "max": 45.472,
+   "n": 1
+  }
+ },
+ "earlier_contended": {
+  "source": "results/fsqlite/S2-r2/w1.json",
+  "values": {
+   "wall_s": 49.935,
+   "schema_check_cpu_s_summed_over_4_workers": 41.611
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:14:26Z",
+   "wall_s": 46.014,
+   "load_before": [
+    0.05,
+    0.33,
+    1.21
+   ],
+   "load_after": [
+    1.79,
+    0.77,
+    1.32
+   ],
+   "load1_max_during": 1.86,
+   "foreign_cpu_max": 0.04,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 16.97,
+   "disk_free_gb_min": 15.59,
+   "load_samples": [
+    {
+     "t": 1794896076.4,
+     "load1": 0.44,
+     "own_cpu": 2.365,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794896086.4,
+     "load1": 1.14,
+     "own_cpu": 3.679,
+     "foreign_cpu": 0.04
+    },
+    {
+     "t": 1794896096.4,
+     "load1": 1.66,
+     "own_cpu": 3.79,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794896106.4,
+     "load1": 1.86,
+     "own_cpu": 0.319,
+     "foreign_cpu": 0.02
+    },
+    {
+     "t": 1794896112.4,
+     "load1": 1.79,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.017
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "wall_s": 45.472,
+    "peak_rss_mib": 579.0,
+    "schema_check_cpu_s_summed_over_4_workers": 31.198
+   },
+   "detail": {
+    "report": {
+     "seconds": 45.114,
+     "jobs": 4,
+     "counts": {
+      "schema": 18,
+      "line": 210401,
+      "node": 238957,
+      "file": 3,
+      "doc": 224802,
+      "entity": 238957,
+      "edge": 1155758
+     },
+     "validation": {
+      "cpu_seconds_summed_over_workers": 31.198,
+      "checked": 224802,
+      "invalid": 0,
+      "invalid_samples": [],
+      "validator": "parse_kb.py schema_errors (stdlib subset of JSON Schema; formats unchecked)"
+     }
+    },
+    "measure": {
+     "label": "parse",
+     "seconds": 45.472,
+     "max_rss_mib": 579.0,
+     "exit": 0
+    }
+   }
+  }
+ ]
+}

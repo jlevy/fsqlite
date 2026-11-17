@@ -1,0 +1,267 @@
+{
+ "arm": "fsqlite-v2-spike3",
+ "arm_label": "fsqlite v2 Spike 3 (maintenance and publication; gc collectOn quick)",
+ "scale": "S2-r2",
+ "workflow": "trickle-one",
+ "description": "one v2 record per publish, then gc({retain:0, collectOn:'quick'})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14815,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "DirectStore.fts_sidecar_rebuild_ms": {
+   "median": 4099.97,
+   "min": 4099.97,
+   "max": 4099.97,
+   "n": 1
+  },
+  "DirectStore.gc_ms": {
+   "median": 1338.663,
+   "min": 1338.663,
+   "max": 1338.663,
+   "n": 1
+  },
+  "DirectStore.gc_share_of_publish_plus_gc": {
+   "median": 0.3123,
+   "min": 0.3123,
+   "max": 0.3123,
+   "n": 1
+  },
+  "DirectStore.visible_ms": {
+   "median": 2744.485,
+   "min": 2744.485,
+   "max": 2744.485,
+   "n": 1
+  },
+  "SnapshotStore.capture_ms": {
+   "median": 1403.943,
+   "min": 1403.943,
+   "max": 1403.943,
+   "n": 1
+  },
+  "SnapshotStore.fts_sidecar_rebuild_ms": {
+   "median": 4000.249,
+   "min": 4000.249,
+   "max": 4000.249,
+   "n": 1
+  },
+  "SnapshotStore.gc_ms": {
+   "median": 672.583,
+   "min": 672.583,
+   "max": 672.583,
+   "n": 1
+  },
+  "SnapshotStore.gc_share_of_publish_plus_gc": {
+   "median": 0.1663,
+   "min": 0.1663,
+   "max": 0.1663,
+   "n": 1
+  },
+  "SnapshotStore.reconcile_ms": {
+   "median": 2473.801,
+   "min": 2473.801,
+   "max": 2473.801,
+   "n": 1
+  },
+  "SnapshotStore.visible_ms": {
+   "median": 3994.039,
+   "min": 3994.039,
+   "max": 3994.039,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:22:51Z",
+   "wall_s": 53.012,
+   "load_before": [
+    0.98,
+    1.08,
+    1.24
+   ],
+   "load_after": [
+    1.07,
+    1.08,
+    1.23
+   ],
+   "load1_max_during": 1.07,
+   "foreign_cpu_max": 0.07,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 13.47,
+   "disk_free_gb_min": 9.43,
+   "load_samples": [
+    {
+     "t": 1794900181.4,
+     "load1": 0.98,
+     "own_cpu": 0.765,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794900191.4,
+     "load1": 0.98,
+     "own_cpu": 0.618,
+     "foreign_cpu": 0.019
+    },
+    {
+     "t": 1794900201.4,
+     "load1": 0.99,
+     "own_cpu": 0.713,
+     "foreign_cpu": 0.039
+    },
+    {
+     "t": 1794900211.4,
+     "load1": 0.99,
+     "own_cpu": 0.798,
+     "foreign_cpu": 0.054
+    },
+    {
+     "t": 1794900221.4,
+     "load1": 0.99,
+     "own_cpu": 0.659,
+     "foreign_cpu": 0.07
+    },
+    {
+     "t": 1794900224.4,
+     "load1": 1.07,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.06
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "SnapshotStore.visible_ms": 3994.039,
+    "SnapshotStore.capture_ms": 1403.943,
+    "SnapshotStore.reconcile_ms": 2473.801,
+    "SnapshotStore.gc_ms": 672.583,
+    "SnapshotStore.gc_share_of_publish_plus_gc": 0.1663,
+    "SnapshotStore.fts_sidecar_rebuild_ms": 4000.249,
+    "DirectStore.visible_ms": 2744.485,
+    "DirectStore.gc_ms": 1338.663,
+    "DirectStore.gc_share_of_publish_plus_gc": 0.3123,
+    "DirectStore.fts_sidecar_rebuild_ms": 4099.97
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14815,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": {
+     "verifyMaxAgeMs": 3600000,
+     "collectOn": "quick"
+    },
+    "batches": {
+     "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 1403.943,
+      "reconcile_ms": 2473.801,
+      "visible_ms_median": 3994.039,
+      "records_per_s": 0.25,
+      "fts_rebuild_ms_median": 4000.249,
+      "gc_retain0_ms_median": 672.583,
+      "gc_unlink_ms_median": 669.643,
+      "gc_scrubs": 0,
+      "runs": [
+       {
+        "capture_ms": 1520.235,
+        "reconcile_ms": 2473.801,
+        "visible_ms": 3994.039,
+        "fts_rebuild_ms": 3968.044,
+        "gc_ms": 3.294,
+        "gc_verify_ms": 1.451,
+        "gc_unlink_ms": 0.395,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 1403.943,
+        "reconcile_ms": 2698.366,
+        "visible_ms": 4102.312,
+        "fts_rebuild_ms": 4000.249,
+        "gc_ms": 1470.782,
+        "gc_verify_ms": 1.092,
+        "gc_unlink_ms": 1467.406,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 1263.844,
+        "reconcile_ms": 2107.965,
+        "visible_ms": 3371.812,
+        "fts_rebuild_ms": 4567.154,
+        "gc_ms": 672.583,
+        "gc_verify_ms": 1.311,
+        "gc_unlink_ms": 669.643,
+        "gc_integrity_checked": 0
+       }
+      ]
+     },
+     "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 2744.485,
+      "records_per_s": 0.36,
+      "fts_rebuild_ms_median": 4099.97,
+      "gc_retain0_ms_median": 1338.663,
+      "gc_unlink_ms_median": 1334.33,
+      "gc_scrubs": 0,
+      "runs": [
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 2744.485,
+        "fts_rebuild_ms": 4099.97,
+        "gc_ms": 662.15,
+        "gc_verify_ms": 4.864,
+        "gc_unlink_ms": 655.359,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 2737.829,
+        "fts_rebuild_ms": 3940.873,
+        "gc_ms": 1378.586,
+        "gc_verify_ms": 0.939,
+        "gc_unlink_ms": 1376.493,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 2947.481,
+        "fts_rebuild_ms": 4168.98,
+        "gc_ms": 1338.663,
+        "gc_verify_ms": 1.036,
+        "gc_unlink_ms": 1334.33,
+        "gc_integrity_checked": 0
+       }
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

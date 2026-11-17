@@ -1,0 +1,101 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S2-r2",
+ "workflow": "parse-no-check",
+ "description": "parse_kb.py, 4 worker processes, without the schema check",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": null,
+ "repetitions_kept": 1,
+ "summary": {
+  "peak_rss_mib": {
+   "median": 582.2,
+   "min": 582.2,
+   "max": 582.2,
+   "n": 1
+  },
+  "wall_s": {
+   "median": 31.335,
+   "min": 31.335,
+   "max": 31.335,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:15:52Z",
+   "wall_s": 32.011,
+   "load_before": [
+    0.92,
+    0.67,
+    1.26
+   ],
+   "load_after": [
+    1.66,
+    0.89,
+    1.31
+   ],
+   "load1_max_during": 1.81,
+   "foreign_cpu_max": 0.194,
+   "waited_for_quiet_s": 40.0,
+   "disk_free_gb_before": 15.59,
+   "disk_free_gb_min": 14.22,
+   "load_samples": [
+    {
+     "t": 1794896162.5,
+     "load1": 1.17,
+     "own_cpu": 2.7,
+     "foreign_cpu": 0.026
+    },
+    {
+     "t": 1794896172.5,
+     "load1": 1.6,
+     "own_cpu": 3.904,
+     "foreign_cpu": 0.062
+    },
+    {
+     "t": 1794896182.5,
+     "load1": 1.81,
+     "own_cpu": 0.688,
+     "foreign_cpu": 0.194
+    },
+    {
+     "t": 1794896184.5,
+     "load1": 1.66,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.035
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "wall_s": 31.335,
+    "peak_rss_mib": 582.2
+   },
+   "detail": {
+    "report": {
+     "seconds": 30.966,
+     "jobs": 4,
+     "counts": {
+      "schema": 18,
+      "line": 210401,
+      "node": 238957,
+      "file": 3,
+      "doc": 224802,
+      "entity": 238957,
+      "edge": 1155758
+     }
+    },
+    "measure": {
+     "label": "parse",
+     "seconds": 31.335,
+     "max_rss_mib": 582.2,
+     "exit": 0
+    }
+   }
+  }
+ ]
+}

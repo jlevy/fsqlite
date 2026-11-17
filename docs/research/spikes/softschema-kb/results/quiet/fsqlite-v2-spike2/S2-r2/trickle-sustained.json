@@ -1,0 +1,957 @@
+{
+ "arm": "fsqlite-v2-spike2",
+ "arm_label": "fsqlite v2 Spike 2 (operation envelopes, serial reducer, coalescing publisher)",
+ "scale": "S2-r2",
+ "workflow": "trickle-sustained",
+ "description": "60 s: one writer offering 200 operation envelopes per s, runPublisher folding all pending per build, then gc",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 15092,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "build_ms_median": {
+   "median": 3468,
+   "min": 3435,
+   "max": 3800,
+   "n": 3
+  },
+  "capture_records_per_s": {
+   "median": 198.5,
+   "min": 198.29,
+   "max": 198.59,
+   "n": 3
+  },
+  "gc_ms_median": {
+   "median": 5342,
+   "min": 5277,
+   "max": 5427,
+   "n": 3
+  },
+  "gc_share_of_build_plus_gc": {
+   "median": 0.6086,
+   "min": 0.5814,
+   "max": 0.6101,
+   "n": 3
+  },
+  "gc_share_of_cycle": {
+   "median": 0.5846,
+   "min": 0.5643,
+   "max": 0.6198,
+   "n": 3
+  },
+  "publish_cycle_ms_median": {
+   "median": 9283,
+   "min": 8619,
+   "max": 9351,
+   "n": 3
+  },
+  "published_records_per_s": {
+   "median": 175,
+   "min": 167.3,
+   "max": 177.92,
+   "n": 3
+  },
+  "publishes": {
+   "median": 8,
+   "min": 8,
+   "max": 9,
+   "n": 3
+  },
+  "records_captured": {
+   "median": 11910,
+   "min": 11897,
+   "max": 11915,
+   "n": 3
+  },
+  "records_per_publish_median": {
+   "median": 1730,
+   "min": 1651,
+   "max": 1779,
+   "n": 3
+  },
+  "records_published": {
+   "median": 11910,
+   "min": 11897,
+   "max": 11915,
+   "n": 3
+  },
+  "visibility_max_ms": {
+   "median": 14808,
+   "min": 13201,
+   "max": 15496,
+   "n": 3
+  },
+  "visibility_p50_ms": {
+   "median": 8745,
+   "min": 7879,
+   "max": 8775,
+   "n": 3
+  },
+  "visibility_p95_ms": {
+   "median": 13144,
+   "min": 12106,
+   "max": 13198,
+   "n": 3
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:18:00Z",
+   "wall_s": 77.019,
+   "load_before": [
+    0.97,
+    1.15,
+    1.32
+   ],
+   "load_after": [
+    0.99,
+    1.11,
+    1.29
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.025,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.01,
+   "disk_free_gb_min": 8.87,
+   "load_samples": [
+    {
+     "t": 1794899890.1,
+     "load1": 0.97,
+     "own_cpu": 0.985,
+     "foreign_cpu": 0.002
+    },
+    {
+     "t": 1794899900.1,
+     "load1": 0.98,
+     "own_cpu": 0.881,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794899910.2,
+     "load1": 0.98,
+     "own_cpu": 0.683,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794899920.2,
+     "load1": 0.98,
+     "own_cpu": 0.828,
+     "foreign_cpu": 0.025
+    },
+    {
+     "t": 1794899930.2,
+     "load1": 0.99,
+     "own_cpu": 0.758,
+     "foreign_cpu": 0.009
+    },
+    {
+     "t": 1794899940.2,
+     "load1": 0.99,
+     "own_cpu": 0.768,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794899950.2,
+     "load1": 0.99,
+     "own_cpu": 0.828,
+     "foreign_cpu": 0.02
+    },
+    {
+     "t": 1794899957.2,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.01
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 11897,
+    "capture_records_per_s": 198.29,
+    "visibility_p50_ms": 8775,
+    "visibility_p95_ms": 13144,
+    "visibility_max_ms": 15496,
+    "gc_ms_median": 5427,
+    "records_published": 11897,
+    "published_records_per_s": 175,
+    "publishes": 8,
+    "records_per_publish_median": 1779,
+    "build_ms_median": 3468,
+    "publish_cycle_ms_median": 9283,
+    "gc_share_of_cycle": 0.5846,
+    "gc_share_of_build_plus_gc": 0.6101
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15092,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "strategy": "ops",
+     "offered_records_per_s": 200,
+     "interval_factor": 0,
+     "records_captured": 11897,
+     "capture_records_per_s": 198.29,
+     "capture_ms": {
+      "p50": 0.1684,
+      "p95": 0.4094
+     },
+     "records_published": 11897,
+     "published_records_per_s": 175,
+     "publishes": 8,
+     "records_per_publish_median": 1779,
+     "build_ms_median": 3468,
+     "apply_ms_median": 1000.682,
+     "gc_retain0_ms_median": 5427,
+     "publish_cycle_ms": {
+      "median": 9283,
+      "p95": 11390
+     },
+     "visibility_delay_ms": {
+      "p50": 8775,
+      "p95": 13144,
+      "max": 15496
+     },
+     "visibility_delay_in_cycles": {
+      "p50": 0.95,
+      "p95": 1.42
+     },
+     "note": "one writer process capturing one-record envelopes at the offered rate; one publisher process (runPublisher) folding everything pending per build, then gc({ retain: 0 })"
+    },
+    "rounds": [
+     {
+      "applied": 2,
+      "build_ms": 3014,
+      "waited_ms": 389,
+      "gc_ms": 4309,
+      "timings": {
+       "copy_ms": 1086.052717000246,
+       "open_ms": 1.0666280016303062,
+       "apply_ms": 5.730402000248432,
+       "closure_ms": 0.19451899826526642,
+       "gate_ms": 1100.0231710001826,
+       "fsync_ms": 813.4706800021231,
+       "commit_ms": 3.849245999008417,
+       "published_at_epoch_ms": 1794899883799,
+       "settle_ms": 0.9172450006008148
+      }
+     },
+     {
+      "applied": 1465,
+      "build_ms": 3468,
+      "waited_ms": 2,
+      "gc_ms": 5427,
+      "timings": {
+       "copy_ms": 835.2518920004368,
+       "open_ms": 1.1177110001444817,
+       "apply_ms": 1161.0064279995859,
+       "closure_ms": 0.11487999930977821,
+       "gate_ms": 1073.958696000278,
+       "fsync_ms": 368.177664000541,
+       "commit_ms": 3.545616000890732,
+       "published_at_epoch_ms": 1794899891557,
+       "settle_ms": 22.14113099873066
+      }
+     },
+     {
+      "applied": 1779,
+      "build_ms": 4137,
+      "waited_ms": 1,
+      "gc_ms": 6880,
+      "timings": {
+       "copy_ms": 859.1090999990702,
+       "open_ms": 2.4536649994552135,
+       "apply_ms": 1174.8420380018651,
+       "closure_ms": 0.07803099974989891,
+       "gate_ms": 995.6611179970205,
+       "fsync_ms": 1073.207541000098,
+       "commit_ms": 3.3249469995498657,
+       "published_at_epoch_ms": 1794899901118,
+       "settle_ms": 26.02895100042224
+      }
+     },
+     {
+      "applied": 2204,
+      "build_ms": 4511,
+      "waited_ms": 3,
+      "gc_ms": 4961,
+      "timings": {
+       "copy_ms": 800.3590760007501,
+       "open_ms": 2.870261002331972,
+       "apply_ms": 1350.390281997621,
+       "closure_ms": 0.07744999974966049,
+       "gate_ms": 1123.9597220011055,
+       "fsync_ms": 1197.9212459996343,
+       "commit_ms": 1.8553970009088516,
+       "published_at_epoch_ms": 1794899912508,
+       "settle_ms": 30.721365001052618
+      }
+     },
+     {
+      "applied": 1894,
+      "build_ms": 4317,
+      "waited_ms": 1,
+      "gc_ms": 5420,
+      "timings": {
+       "copy_ms": 878.8589620031416,
+       "open_ms": 4.546399999409914,
+       "apply_ms": 1208.3211780004203,
+       "closure_ms": 0.07444699853658676,
+       "gate_ms": 1009.1965430006385,
+       "fsync_ms": 1183.5653459988534,
+       "commit_ms": 3.534670002758503,
+       "published_at_epoch_ms": 1794899921791,
+       "settle_ms": 26.08841000124812
+      }
+     },
+     {
+      "applied": 1948,
+      "build_ms": 3081,
+      "waited_ms": 1,
+      "gc_ms": 5979,
+      "timings": {
+       "copy_ms": 737.5097839981318,
+       "open_ms": 4.950106002390385,
+       "apply_ms": 984.6416049972177,
+       "closure_ms": 0.1205420009791851,
+       "gate_ms": 927.1256459988654,
+       "fsync_ms": 390.16364499926567,
+       "commit_ms": 4.050257001072168,
+       "published_at_epoch_ms": 1794899930289,
+       "settle_ms": 29.31140499934554
+      }
+     },
+     {
+      "applied": 1812,
+      "build_ms": 3848,
+      "waited_ms": 1,
+      "gc_ms": 5456,
+      "timings": {
+       "copy_ms": 907.7209339998662,
+       "open_ms": 7.422761999070644,
+       "apply_ms": 1000.6824630014598,
+       "closure_ms": 0.057617999613285065,
+       "gate_ms": 911.273449998349,
+       "fsync_ms": 987.6289840005338,
+       "commit_ms": 3.471324998885393,
+       "published_at_epoch_ms": 1794899940119,
+       "settle_ms": 27.248329997062683
+      }
+     },
+     {
+      "applied": 793,
+      "build_ms": 3177,
+      "waited_ms": 1,
+      "gc_ms": 5554,
+      "timings": {
+       "copy_ms": 886.9284339994192,
+       "open_ms": 6.98199899867177,
+       "apply_ms": 402.32074500247836,
+       "closure_ms": 0.06335099786520004,
+       "gate_ms": 896.0600080005825,
+       "fsync_ms": 962.8462390005589,
+       "commit_ms": 2.9580879993736744,
+       "published_at_epoch_ms": 1794899948764,
+       "settle_ms": 16.9156919978559
+      }
+     }
+    ]
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:19:17Z",
+   "wall_s": 82.016,
+   "load_before": [
+    0.99,
+    1.11,
+    1.29
+   ],
+   "load_after": [
+    1.08,
+    1.13,
+    1.27
+   ],
+   "load1_max_during": 1.29,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 13.01,
+   "disk_free_gb_min": 8.86,
+   "load_samples": [
+    {
+     "t": 1794899967.2,
+     "load1": 1.29,
+     "own_cpu": 1.018,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794899977.2,
+     "load1": 1.24,
+     "own_cpu": 0.807,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794899987.2,
+     "load1": 1.21,
+     "own_cpu": 0.946,
+     "foreign_cpu": 0.021
+    },
+    {
+     "t": 1794899997.2,
+     "load1": 1.17,
+     "own_cpu": 0.85,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794900007.2,
+     "load1": 1.15,
+     "own_cpu": 0.775,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794900017.2,
+     "load1": 1.12,
+     "own_cpu": 0.802,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794900027.2,
+     "load1": 1.1,
+     "own_cpu": 0.796,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794900037.2,
+     "load1": 1.09,
+     "own_cpu": 0.023,
+     "foreign_cpu": 0.024
+    },
+    {
+     "t": 1794900039.2,
+     "load1": 1.08,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.01
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 11915,
+    "capture_records_per_s": 198.59,
+    "visibility_p50_ms": 7879,
+    "visibility_p95_ms": 12106,
+    "visibility_max_ms": 13201,
+    "gc_ms_median": 5342,
+    "records_published": 11915,
+    "published_records_per_s": 167.3,
+    "publishes": 9,
+    "records_per_publish_median": 1651,
+    "build_ms_median": 3435,
+    "publish_cycle_ms_median": 8619,
+    "gc_share_of_cycle": 0.6198,
+    "gc_share_of_build_plus_gc": 0.6086
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15113,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "strategy": "ops",
+     "offered_records_per_s": 200,
+     "interval_factor": 0,
+     "records_captured": 11915,
+     "capture_records_per_s": 198.59,
+     "capture_ms": {
+      "p50": 0.2636,
+      "p95": 0.6554
+     },
+     "records_published": 11915,
+     "published_records_per_s": 167.3,
+     "publishes": 9,
+     "records_per_publish_median": 1651,
+     "build_ms_median": 3435,
+     "apply_ms_median": 1065.357,
+     "gc_retain0_ms_median": 5342,
+     "publish_cycle_ms": {
+      "median": 8619,
+      "p95": 9583
+     },
+     "visibility_delay_ms": {
+      "p50": 7879,
+      "p95": 12106,
+      "max": 13201
+     },
+     "visibility_delay_in_cycles": {
+      "p50": 0.91,
+      "p95": 1.4
+     },
+     "note": "one writer process capturing one-record envelopes at the offered rate; one publisher process (runPublisher) folding everything pending per build, then gc({ retain: 0 })"
+    },
+    "rounds": [
+     {
+      "applied": 2,
+      "build_ms": 2754,
+      "waited_ms": 311,
+      "gc_ms": 3629,
+      "timings": {
+       "copy_ms": 958.8939509987831,
+       "open_ms": 1.2876830026507378,
+       "apply_ms": 6.945600997656584,
+       "closure_ms": 0.8788149990141392,
+       "gate_ms": 873.4310149997473,
+       "fsync_ms": 905.9577850028872,
+       "commit_ms": 3.5193239971995354,
+       "published_at_epoch_ms": 1794899960495,
+       "settle_ms": 0.6830530017614365
+      }
+     },
+     {
+      "applied": 1277,
+      "build_ms": 3316,
+      "waited_ms": 1,
+      "gc_ms": 5418,
+      "timings": {
+       "copy_ms": 726.9004280008376,
+       "open_ms": 0.878260001540184,
+       "apply_ms": 1330.993313997984,
+       "closure_ms": 0.09041000157594681,
+       "gate_ms": 911.5266599990427,
+       "fsync_ms": 321.24366799741983,
+       "commit_ms": 3.9753270000219345,
+       "published_at_epoch_ms": 1794899967424,
+       "settle_ms": 18.375099003314972
+      }
+     },
+     {
+      "applied": 1747,
+      "build_ms": 4170,
+      "waited_ms": 1,
+      "gc_ms": 4739,
+      "timings": {
+       "copy_ms": 828.5832929983735,
+       "open_ms": 1.5071009993553162,
+       "apply_ms": 1362.4970399998128,
+       "closure_ms": 0.10716400295495987,
+       "gate_ms": 858.045120999217,
+       "fsync_ms": 1088.711660001427,
+       "commit_ms": 3.425154000520706,
+       "published_at_epoch_ms": 1794899977007,
+       "settle_ms": 24.090978998690844
+      }
+     },
+     {
+      "applied": 1782,
+      "build_ms": 3359,
+      "waited_ms": 1,
+      "gc_ms": 4457,
+      "timings": {
+       "copy_ms": 893.6508430019021,
+       "open_ms": 3.6305829994380474,
+       "apply_ms": 1217.373257998377,
+       "closure_ms": 0.06320900097489357,
+       "gate_ms": 870.1425459980965,
+       "fsync_ms": 345.4442979991436,
+       "commit_ms": 2.032057002186775,
+       "published_at_epoch_ms": 1794899985106,
+       "settle_ms": 24.508678998798132
+      }
+     },
+     {
+      "applied": 1563,
+      "build_ms": 3556,
+      "waited_ms": 0,
+      "gc_ms": 5342,
+      "timings": {
+       "copy_ms": 848.1242850013077,
+       "open_ms": 2.95287000015378,
+       "apply_ms": 869.8780669979751,
+       "closure_ms": 0.06632300093770027,
+       "gate_ms": 863.4009010009468,
+       "fsync_ms": 942.9669050015509,
+       "commit_ms": 3.303794998675585,
+       "published_at_epoch_ms": 1794899993120,
+       "settle_ms": 23.29891499876976
+      }
+     },
+     {
+      "applied": 1780,
+      "build_ms": 3896,
+      "waited_ms": 1,
+      "gc_ms": 5901,
+      "timings": {
+       "copy_ms": 740.3380069993436,
+       "open_ms": 5.0548879988491535,
+       "apply_ms": 1065.3573990017176,
+       "closure_ms": 0.07278699800372124,
+       "gate_ms": 1036.8902829997241,
+       "fsync_ms": 1016.5542039982975,
+       "commit_ms": 2.84239100292325,
+       "published_at_epoch_ms": 1794900002356,
+       "settle_ms": 26.243925999850035
+      }
+     },
+     {
+      "applied": 1959,
+      "build_ms": 3435,
+      "waited_ms": 2,
+      "gc_ms": 4817,
+      "timings": {
+       "copy_ms": 817.2615220025182,
+       "open_ms": 6.624921999871731,
+       "apply_ms": 1176.4395850002766,
+       "closure_ms": 0.0674309991300106,
+       "gate_ms": 992.1753679998219,
+       "fsync_ms": 409.3002249971032,
+       "commit_ms": 2.8035899996757507,
+       "published_at_epoch_ms": 1794900011692,
+       "settle_ms": 27.111429002135992
+      }
+     },
+     {
+      "applied": 1651,
+      "build_ms": 3821,
+      "waited_ms": 0,
+      "gc_ms": 5513,
+      "timings": {
+       "copy_ms": 805.9681180007756,
+       "open_ms": 6.229841999709606,
+       "apply_ms": 1032.9113219976425,
+       "closure_ms": 0.0654739998281002,
+       "gate_ms": 904.8653919994831,
+       "fsync_ms": 1043.2774710021913,
+       "commit_ms": 2.0986640006303787,
+       "published_at_epoch_ms": 1794900020335,
+       "settle_ms": 22.50117699801922
+      }
+     },
+     {
+      "applied": 154,
+      "build_ms": 3086,
+      "waited_ms": 0,
+      "gc_ms": 6173,
+      "timings": {
+       "copy_ms": 912.4911000020802,
+       "open_ms": 7.0888880006968975,
+       "apply_ms": 112.76996199786663,
+       "closure_ms": 0.13315600156784058,
+       "gate_ms": 1198.5392629988492,
+       "fsync_ms": 846.1901540011168,
+       "commit_ms": 3.7583789974451065,
+       "published_at_epoch_ms": 1794900028954,
+       "settle_ms": 3.1818399988114834
+      }
+     }
+    ]
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:20:44Z",
+   "wall_s": 76.015,
+   "load_before": [
+    0.99,
+    1.11,
+    1.27
+   ],
+   "load_after": [
+    1.07,
+    1.11,
+    1.26
+   ],
+   "load1_max_during": 1.11,
+   "foreign_cpu_max": 0.014,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.0,
+   "disk_free_gb_min": 8.87,
+   "load_samples": [
+    {
+     "t": 1794900054.3,
+     "load1": 1.07,
+     "own_cpu": 1.077,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794900064.3,
+     "load1": 1.06,
+     "own_cpu": 0.994,
+     "foreign_cpu": 0.008
+    },
+    {
+     "t": 1794900074.3,
+     "load1": 1.05,
+     "own_cpu": 0.89,
+     "foreign_cpu": 0.014
+    },
+    {
+     "t": 1794900084.3,
+     "load1": 1.04,
+     "own_cpu": 0.737,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794900094.3,
+     "load1": 1.11,
+     "own_cpu": 0.858,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794900104.3,
+     "load1": 1.1,
+     "own_cpu": 0.761,
+     "foreign_cpu": 0.009
+    },
+    {
+     "t": 1794900114.3,
+     "load1": 1.08,
+     "own_cpu": 0.73,
+     "foreign_cpu": 0.008
+    },
+    {
+     "t": 1794900120.3,
+     "load1": 1.07,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.007
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 11910,
+    "capture_records_per_s": 198.5,
+    "visibility_p50_ms": 8745,
+    "visibility_p95_ms": 13198,
+    "visibility_max_ms": 14808,
+    "gc_ms_median": 5277,
+    "records_published": 11910,
+    "published_records_per_s": 177.92,
+    "publishes": 8,
+    "records_per_publish_median": 1730,
+    "build_ms_median": 3800,
+    "publish_cycle_ms_median": 9351,
+    "gc_share_of_cycle": 0.5643,
+    "gc_share_of_build_plus_gc": 0.5814
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15109,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "strategy": "ops",
+     "offered_records_per_s": 200,
+     "interval_factor": 0,
+     "records_captured": 11910,
+     "capture_records_per_s": 198.5,
+     "capture_ms": {
+      "p50": 0.2652,
+      "p95": 0.8344
+     },
+     "records_published": 11910,
+     "published_records_per_s": 177.92,
+     "publishes": 8,
+     "records_per_publish_median": 1730,
+     "build_ms_median": 3800,
+     "apply_ms_median": 1014.574,
+     "gc_retain0_ms_median": 5277,
+     "publish_cycle_ms": {
+      "median": 9351,
+      "p95": 10482
+     },
+     "visibility_delay_ms": {
+      "p50": 8745,
+      "p95": 13198,
+      "max": 14808
+     },
+     "visibility_delay_in_cycles": {
+      "p50": 0.94,
+      "p95": 1.41
+     },
+     "note": "one writer process capturing one-record envelopes at the offered rate; one publisher process (runPublisher) folding everything pending per build, then gc({ retain: 0 })"
+    },
+    "rounds": [
+     {
+      "applied": 1,
+      "build_ms": 2368,
+      "waited_ms": 334,
+      "gc_ms": 4330,
+      "timings": {
+       "copy_ms": 883.833215996623,
+       "open_ms": 1.100312002003193,
+       "apply_ms": 3.3395400010049343,
+       "closure_ms": 0.8353380002081394,
+       "gate_ms": 1081.610675998032,
+       "fsync_ms": 387.4085919968784,
+       "commit_ms": 4.956277001649141,
+       "published_at_epoch_ms": 1794900047191,
+       "settle_ms": 1.0953660011291504
+      }
+     },
+     {
+      "applied": 1340,
+      "build_ms": 4192,
+      "waited_ms": 1,
+      "gc_ms": 5101,
+      "timings": {
+       "copy_ms": 838.7996490001678,
+       "open_ms": 1.0644670017063618,
+       "apply_ms": 1800.8803349994123,
+       "closure_ms": 0.13437499850988388,
+       "gate_ms": 1120.7021079994738,
+       "fsync_ms": 401.5029509998858,
+       "commit_ms": 3.8083759993314743,
+       "published_at_epoch_ms": 1794900055693,
+       "settle_ms": 21.92884100228548
+      }
+     },
+     {
+      "applied": 1859,
+      "build_ms": 4357,
+      "waited_ms": 2,
+      "gc_ms": 5870,
+      "timings": {
+       "copy_ms": 820.1920509971678,
+       "open_ms": 1.8724649995565414,
+       "apply_ms": 1968.4338300004601,
+       "closure_ms": 0.07937000319361687,
+       "gate_ms": 1109.5735559985042,
+       "fsync_ms": 423.3115109987557,
+       "commit_ms": 3.47817799821496,
+       "published_at_epoch_ms": 1794900065147,
+       "settle_ms": 28.222108002752066
+      }
+     },
+     {
+      "applied": 2046,
+      "build_ms": 4627,
+      "waited_ms": 2,
+      "gc_ms": 5277,
+      "timings": {
+       "copy_ms": 854.9486790001392,
+       "open_ms": 6.5324609987437725,
+       "apply_ms": 1704.365816000849,
+       "closure_ms": 0.07689400017261505,
+       "gate_ms": 884.1875679977238,
+       "fsync_ms": 1125.6236840002239,
+       "commit_ms": 4.221262000501156,
+       "published_at_epoch_ms": 1794900075629,
+       "settle_ms": 44.367814000695944
+      }
+     },
+     {
+      "applied": 1981,
+      "build_ms": 4052,
+      "waited_ms": 2,
+      "gc_ms": 4596,
+      "timings": {
+       "copy_ms": 864.7756359986961,
+       "open_ms": 3.20337900146842,
+       "apply_ms": 1061.54427799955,
+       "closure_ms": 0.10021499916911125,
+       "gate_ms": 914.4817570000887,
+       "fsync_ms": 1176.4550829976797,
+       "commit_ms": 2.691788002848625,
+       "published_at_epoch_ms": 1794900084979,
+       "settle_ms": 26.40947400033474
+      }
+     },
+     {
+      "applied": 1730,
+      "build_ms": 3201,
+      "waited_ms": 1,
+      "gc_ms": 5551,
+      "timings": {
+       "copy_ms": 727.7379459999502,
+       "open_ms": 4.271129999309778,
+       "apply_ms": 1014.5744989998639,
+       "closure_ms": 0.07828500121831894,
+       "gate_ms": 1017.3411839976907,
+       "fsync_ms": 405.05847400054336,
+       "commit_ms": 4.383979998528957,
+       "published_at_epoch_ms": 1794900092778,
+       "settle_ms": 24.691593997180462
+      }
+     },
+     {
+      "applied": 1750,
+      "build_ms": 3800,
+      "waited_ms": 1,
+      "gc_ms": 5910,
+      "timings": {
+       "copy_ms": 838.7460999973118,
+       "open_ms": 4.822666000574827,
+       "apply_ms": 857.1995289996266,
+       "closure_ms": 0.06885400041937828,
+       "gate_ms": 946.2573220022023,
+       "fsync_ms": 1121.40361700207,
+       "commit_ms": 3.0027239993214607,
+       "published_at_epoch_ms": 1794900102129,
+       "settle_ms": 25.861901998519897
+      }
+     },
+     {
+      "applied": 1203,
+      "build_ms": 3712,
+      "waited_ms": 1,
+      "gc_ms": 5689,
+      "timings": {
+       "copy_ms": 897.653588000685,
+       "open_ms": 6.32150200009346,
+       "apply_ms": 647.2618389986455,
+       "closure_ms": 0.06766100227832794,
+       "gate_ms": 1021.6520329974592,
+       "fsync_ms": 1116.3741319999099,
+       "commit_ms": 3.258486997336149,
+       "published_at_epoch_ms": 1794900111761,
+       "settle_ms": 16.775865003466606
+      }
+     }
+    ]
+   }
+  }
+ ]
+}
