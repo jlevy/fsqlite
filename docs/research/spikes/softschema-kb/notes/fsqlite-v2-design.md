@@ -37,6 +37,11 @@ request 9) found gaps that a real v2 must close.
 Sections (e), (g), (h), (k), and (n) list them, each under “Requirements from the
 security review”, with the review’s finding number.
 
+The harness’s state check (`spike/results/state-check.json`) later compared the stored
+state after each round-2 batch with the reference applier’s output, at S1-r2 after p05
+and p20 and at S2-r2 after p05. Sections 1.8 and (k) say what it found for the
+statements they make.
+
 Citation prefixes:
 
 | Prefix | Path |
@@ -300,6 +305,8 @@ remove rows (`spike/fsqlite/mapping.ts:549-594`). Three things happened
    the 124 W3 answers after p05 (`spike/fsqlite/README.md`, W2 With v2 Batches).
    A closure envelope that replays the deletes and merges, and a third publish of 6.6 to
    7.3 s at S2-r2, made the rows equal to the one-writer state.
+   The state check verified that final state against the reference applier: at its three
+   reference states the edge digests are equal and the entity counts are equal.
 
 The cause is structural, not a tuning problem.
 The edge table is a cross-record structure: a row’s existence depends on other records’
@@ -702,10 +709,11 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   for `NOTFOUND` and no retry publish is needed.
   The state is that of one writer applying the operations in envelope order.
   One writer in line order matches the oracle (`spike/fsqlite/README.md`, Round 2,
-  Correctness). Envelope order equals line order only for operations that commute, so an
-  upsert that arrives after the delete of a node it references still needs the delete to
-  be remembered: the tombstones and closure of section 3.6, which the reducer runs in
-  the same build.
+  Correctness), and the state check found its edges equal to the reference applier’s.
+  Envelope order equals line order only for operations that commute, so an upsert that
+  arrives after the delete of a node it references still needs the delete to be
+  remembered: the tombstones and closure of section 3.6, which the reducer runs in the
+  same build.
 - **Guarantees.** Capture without a server is kept and widened to any language.
   Exactly-once and deterministic order are unchanged.
   Reconcile now needs application code, as it already needs the application’s schema and
@@ -723,6 +731,8 @@ guarantee it touches and how to keep it, the format and API impact, and the test
   A reducer version mismatch is refused.
   The round-2 batches with four writers produce no quarantine, and with tombstones and
   closure they equal the line-order rows in one publish.
+  The same test compares the edge multiset with the reference applier’s output, because
+  in the spikes four wrong states matched the oracle on every W3 query.
 
 ### (l) Sparse-Seed Changeset Capture (Rank 6)
 

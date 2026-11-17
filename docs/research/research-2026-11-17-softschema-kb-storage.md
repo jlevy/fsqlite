@@ -5,8 +5,7 @@
 **Author:** Joshua Levy, with Claude Code research agents
 
 **Status:** In Progress.
-Timings marked “(provisional)” await a quiet re-measurement pass, and after-batch states
-await a row-level check.
+Timings marked “(provisional)” await a quiet re-measurement pass.
 
 ## Overview
 
@@ -28,6 +27,9 @@ The research read paraverse, softschema, and fsqlite at the source level.
 It then ran FalkorDB as paraverse uses it, fsqlite, and plain SQLite through the same
 workflows, on the real KB and on synthetic corpora up to 249,000 nodes, and prototyped
 an fsqlite redesign in three spikes and one combined prototype.
+Query answers were checked against one oracle.
+The state that a batch leaves was also compared with a reference applier’s output, for
+the runs that recorded their rows.
 
 The conclusions:
 
@@ -60,11 +62,12 @@ The conclusions:
 5. **fsqlite as built (`f1.0`) can publish rebuilds at these sizes and cannot accumulate
    into them.** Every publish copies the whole file.
    At 1.8 to 1.9 GB one record takes 2.6 to 4.0 s to publish and four concurrent writers
-   take 46 to 92 s (both provisional), and their merged result is wrong for edge
-   changes, deletes, and merges until two repair publishes run.
+   take 46 to 92 s (both provisional).
+   Their merged result is wrong for edge changes, deletes, and merges until two repair
+   publishes run, and it is state-verified against the reference applier after them.
 6. **The v2 prototypes fix most of that and keep one immutable SQLite file per
    generation.** Capture stops depending on file size (0.47 ms, provisional), four
-   writers publish once with one writer’s result, search and statistics live in the
+   writers publish once with a state-verified result, search and statistics live in the
    file, an index change stays in the same store, gc stops refusing, and a crashed
    publisher needs no operator.
    The per-publish copy remains on filesystems without reflinks.
@@ -105,7 +108,8 @@ The conclusions:
    store ([formats](#formats-by-role), [recommendations](#recommendations)).
 7. Which fsqlite changes fit this workload, and which did prototypes confirm?
    Eleven of 13 hypotheses held, and a combined prototype passes its correctness runs at
-   S1-r2 ([findings](#what-the-fsqlite-v2-prototypes-confirmed-and-refuted)).
+   S1-r2, with state-verified four-writer results
+   ([findings](#what-the-fsqlite-v2-prototypes-confirmed-and-refuted)).
 8. How do other databases join the comparison later?
    By implementing the workload specification against the same corpora and oracle
    ([later comparisons](#later-comparisons-on-the-same-harness)).
@@ -137,9 +141,10 @@ Not covered:
   network filesystem, or macOS run exists.
 - **git itself.** No workflow measured git operations or repository size, so the scale
   limit of per-entity files in one repository is inferred.
-- **Row-level state after a batch.** After-batch states were checked by W3 answers and,
-  for fsqlite, by table digests against one writer.
-  None was compared row by row with the reference applier’s output.
+- **Row-level state after every batch.** The state check compares stored edges with the
+  reference applier’s output at three states: S1-r2 after p05 and p20, and S2-r2 after
+  p05. No reference state was built for p01 or for S2-r2 after p20. Entity rows are
+  compared by count only, and the FalkorDB runs recorded counts and no rows.
 - **Other backends.** DuckDB with Parquet, embedded graph stores, Dolt, and Postgres are
   left for [the same harness](#later-comparisons-on-the-same-harness).
 
@@ -170,16 +175,23 @@ Three evidence levels apply throughout:
 
 - **Measured:** recorded in a result file under
   [the spike’s results](spikes/softschema-kb/results/), which each subsection links.
-  A W3 file that matched the oracle keeps its timings and plans, and stores the
-  comparison’s verdict with digests of its answers.
+  A W3 file that matched the oracle keeps its timings, plans, and path answers, and
+  holds a digest of every other answer.
+  It records the verdict, the hash of its expected file, and the KB that its paths were
+  checked against.
 - **Probe:** a single scratch run recorded in an appendix of the notes.
   Its raw output is not in the repository.
 - **Inferred:** derived from measurements or from the design, and not run.
 
-Correctness claims come in three strengths:
+Correctness claims come in four strengths:
 
 - **W3-checked:** the answers to the 124 round-2 queries, or the 24 of round 1, equal
   the oracle’s. Every W3 run on a freshly loaded corpus is W3-checked.
+- **State-verified:** after a batch, the run’s recorded edge digest equals that of the
+  reference applier’s output, and its entity count equals the reference’s node count.
+  The digest covers the edge multiset with its properties.
+  Entity rows are compared with the reference by count only, because their digest covers
+  payloads and derived columns that the reference does not hold.
 - **Row-equal:** table digests equal those of one writer that applies the same batch in
   line order.
 - **Count-equal:** per-kind and per-relation counts equal those of a full rebuild.
@@ -187,10 +199,25 @@ Correctness claims come in three strengths:
 For a state reached by applying a batch, a W3 match is necessary and not sufficient.
 The batches never delete or merge an entity that a query names, and every W3 statement
 joins edges to entities, so a wrong edge shows only when it touches a queried entity or
-moves an aggregate. Four after-batch states whose rows differ from one writer’s still
-match 124 of 124, and [Methodology](#methodology) names them.
-No after-batch state has yet been compared row by row with the reference applier’s
-output.
+moves an aggregate. The harness’s
+[state check](spikes/softschema-kb/harness/README.md#state-check) therefore compares the
+rows that each after-batch run recorded with the reference applier’s output.
+It has reference states for S1-r2 after p05 and p20 and for S2-r2 after p05, and its
+[result file](spikes/softschema-kb/results/state-check.json) gives each after-batch
+claim in this brief one of three marks:
+
+| Mark | Meaning | After-batch W3 files (22, all after p05) |
+| --- | --- | --- |
+| State-verified | As defined above | 12 |
+| Known different | A recorded digest or count differs from the reference’s | 6, of which 4 still match the oracle on all 124 queries |
+| W3-checked only | The run recorded totals or counts and no rows, which the state check calls unverified | 4: the FalkorDB incremental state and the fsqlite arm’s own one-writer run, at both scales |
+
+The reference applier’s edge digest equals the one-writer digest in every fsqlite run
+that recorded one, at all three states.
+A row-equal state is therefore state-verified wherever a reference state exists.
+After p01, and after p20 at S2-r2, none exists, and row-equal is the strongest claim.
+[The W2 findings](#incremental-accumulation-and-concurrent-writers-w2) mark each claim,
+and [Methodology](#methodology) names the six known-different files.
 
 Every timing here comes from runs that shared the VM with other benchmark jobs.
 The headline timings carry the marker **(provisional)**, and a quiet re-measurement pass
@@ -386,8 +413,11 @@ Once the change must be durable, the FalkorDB prototype costs as much as fsqlite
 one-writer lane, or more.
 Four concurrent writers were slower than one in both engines.
 Of the arrangements that interleaved deletes and merges, only the v2 operation envelopes
-kept the merged rows equal to one writer’s. The FalkorDB run applied its deletes and
-merges serially after the writers.
+were state-verified after one publish at every reference state, and they need stored
+facts or a closure in the build for it.
+fsqlite today reached a state-verified result after its repair publishes.
+The FalkorDB run applied its deletes and merges serially after the writers, and its
+states are W3-checked only.
 
 Apply time at S2-r2, excluding the parse of the batch (all provisional):
 
@@ -436,15 +466,39 @@ Correctness under concurrency:
 | --- | --- | --- | --- |
 | Readers see a batch atomically | No. Each query is atomic, and a batch is several | Yes | Yes |
 | Durable when visible | No | Yes | Yes |
-| How the final state was checked | Count-equal and W3-checked against a full rebuild of the batch-applied KB | Row-equal to one writer in line order, and W3-checked after p05 | The same, with the tombstone and redirect tables in the digests |
-| Four writers with edge changes, deletes, and merges | Count-equal and W3-checked. The run gave its writers upserts only and applied every delete and merge in one process afterward, so it did not interleave them | 1 to 3 of 20 envelopes quarantined as `NOTFOUND`. At S2-r2, 12 and 138 dangling edges remained and changed 6 of 124 answers. Row-equal after a retry publish and a closure publish | Operation envelopes with stored tombstone and redirect facts: 0 quarantined, one publish, and row-equal in 15 of 15 runs and in the combined prototype at S1-r2. Changeset envelopes with idempotent deletes: no quarantine, and one wrong edge even after closure |
+| How the final state was checked | W3 answers after p05, and per-kind and per-relation counts against a full rebuild of the batch-applied KB. The run recorded no rows | Table digests against one writer in line order, W3 answers after p05, and the state check against the reference applier | The same, with the tombstone and redirect tables in the digests |
+| Four writers with edge changes, deletes, and merges | W3-checked only, and count-equal. The run gave its writers upserts only and applied every delete and merge in one process afterward, so it did not interleave them | 1 to 3 of 20 envelopes quarantined as `NOTFOUND`. At S2-r2, 12 and 138 dangling edges remained and changed 6 of 124 answers. State-verified after a retry publish and a closure publish | Operation envelopes with stored tombstone and redirect facts: 0 quarantined, one publish, and state-verified, in spike 2 and in the combined prototype at S1-r2. Changeset envelopes with idempotent deletes: no quarantine, and known different. With a closure they are still known different after p20, by one edge |
 | Two writers set one field | The last write wins, and the other value is gone | A per-table policy decides (`lww`, `union`, `strict`), and the losing value stays recoverable from its envelope | The same, with retention that keeps conflict evidence |
 | One invalid record in a batch | The default load loads it, `load --validate` rejects the whole load, and the prototype quarantines it | Quarantined by the parse-stage schema check, and loaded without it | The same |
 | Readers during writes | No errors. p95 rises: record 3.4 to 23 ms and table 61 to 310 ms at S2-r2 (provisional) | No errors. p95 unchanged at 17 to 111 ms (provisional) | No errors |
 
-The one-writer state that the row comparisons use is W3-checked after p05 at both
-scales, and its entity and edge totals equal the reference applier’s for the three bulk
-batches. Its rows have not been compared with the applier’s output.
+The [state check](spikes/softschema-kb/results/state-check.json) gives each after-batch
+state its mark. Its reference states are S1-r2 after p05 and p20, and S2-r2 after p05.
+
+| After-batch state | Mark | Basis |
+| --- | --- | --- |
+| FalkorDB incremental prototype, one process | W3-checked only | Counts and all 124 answers equal a full rebuild’s after p01, p05, and p20, and the oracle’s after p05. The run recorded no rows |
+| FalkorDB incremental prototype, four writers | W3-checked only | Counts and answers equal those of its one-process state after p05. Deletes and merges were not interleaved |
+| fsqlite loader, one writer in line order | State-verified | All 32 states that the four-writer runs built for comparison, and the 6 states of spike 2’s one-writer runs through `DirectStore` and through append capture |
+| The fsqlite arm’s own one-writer run, which the timing table uses | W3-checked only | Its `SnapshotStore` lane recorded entity and edge totals, which equal the reference’s, and its `DirectStore` lane recorded timings only |
+| fsqlite today, four writers, before the closure publish | Known different, by the run’s own count | 5 and 66 dangling edges at S1-r2 and 12 and 138 at S2-r2, after p05 and p20. These states are not in the state-check file |
+| fsqlite today, four writers, after the retry and closure publishes | State-verified | 3 of 3 reference states, and row-equal in all 6 runs |
+| v2 operation envelopes with stored facts | State-verified | Spike 2: 8 of 8 runs at reference states, and row-equal in all 15 runs. Combined prototype: after p05 and p20 |
+| v2 operation envelopes, no facts, closure in the build | State-verified | Spike 2: 3 of 3 reference states, and row-equal in all 6 runs. Combined prototype: after p05 and p20 |
+| v2 operation envelopes, no facts, no closure | Known different | 3 of 3 reference states. W3 after p05: 123 of 124 at S1-r2 and 124 of 124 at S2-r2 |
+| v2 operation envelopes, no facts, cascade relations only | State-verified after p05, known different after p20 | Combined prototype: 264,194 edges against 264,200 |
+| Changeset envelopes with idempotent deletes, no closure | Known different | 3 of 3 reference states. W3 after p05: 124 of 124 at S1-r2 and 118 of 124 at S2-r2 |
+| Changeset envelopes with idempotent deletes and a closure | State-verified after p05, known different after p20 | S1-r2 only: 264,201 edges against 264,200 |
+| Spike 1: changeset envelopes with closure by deletion in the build | Known different | S1-r2 only: 235,469 edges against 235,470 after p05, with 124 of 124 answers, and 264,191 against 264,200 after p20 |
+
+- **One writer in line order reproduces the reference edges.** The reference applier’s
+  edge digest equals the one-writer digest in every run that recorded one, so a
+  row-equal state is state-verified at the three reference states.
+- **After p01, and after p20 at S2-r2, row-equal is the strongest claim.** No reference
+  state was built there.
+  Seven of spike 2’s 15 operation-envelope runs are in that group.
+- **Entity rows are checked more weakly than edges.** They are compared with the
+  reference by count, and with the one-writer state by digest.
 
 Sources: FalkorDB [S1-r2](spikes/softschema-kb/results/falkordb/S1-r2/w2.json) and
 [S2-r2](spikes/softschema-kb/results/falkordb/S2-r2/w2.json); fsqlite
@@ -650,17 +704,18 @@ A combined prototype then put the three patches in one copy, and it passes the p
 tests and the S1-r2 correctness runs.
 Letters refer to the changes in the
 [v2 design](spikes/softschema-kb/notes/fsqlite-v2-design.md).
-All timings are provisional.
+All timings are provisional, and the after-batch marks come from the
+[state check](spikes/softschema-kb/results/state-check.json).
 
 | Change | Spike | Outcome | Evidence |
 | --- | --- | --- | --- |
 | (e) Derived objects, statistics, and plan assertions built in each generation | 1 | Confirmed | Indexed search is visible with the data. The hook takes at most 16 ms for up to 100 records. The unhinted hub join falls from 5,405 to 8.6 ms. A build that asserts a plan it cannot get is refused and publishes nothing. An index change publishes in the same store in 2.5 to 4.5 s against 16.8 s for a new store |
 | (e) A 256 MiB build cache | 1 | Refuted at S2-r2 | No consistent effect at 2 GB. The 24 to 26% gain comes from building derived objects after the rows |
 | (e) Sampled statistics | 1 | Changed | `analysis_limit = 1000` moved a count off its index, 0.14 to 15.7 ms. The build runs a full `ANALYZE`, 1.0 to 1.7 s at S2, and asserts the plan |
-| (e) Closure by deletion in the build | 1 | Changed | It removes dangling edges in milliseconds. It cannot retarget an edge to a merge survivor, so merges need stored tombstone and redirect facts |
-| (k) Operation envelopes applied by a serial reducer | 2 | Confirmed | Capture takes 0.47 ms at S2 against 1.1 to 1.3 s. Four writers need one publish, with no quarantine and one writer’s rows in 15 of 15 runs. Without stored facts or closure, 1 to 70 dangling edges remain |
+| (e) Closure by deletion in the build | 1 | Changed | It removes dangling edges in milliseconds. It cannot retarget an edge to a merge survivor, so its four-writer states are known different: 235,469 edges against 235,470 after p05, and 264,191 against 264,200 after p20. Merges need stored tombstone and redirect facts |
+| (k) Operation envelopes applied by a serial reducer | 2 | Confirmed | Capture takes 0.47 ms at S2 against 1.1 to 1.3 s. Four writers need one publish, with no quarantine, and are row-equal to one writer in 15 of 15 runs. The 8 runs at reference states are state-verified. Without stored facts or closure, 1 to 70 dangling edges remain, and the states are known different |
 | (l) Sparse-seed changeset capture | 2 | Confirmed, with a hazard | 3.2 ms for one record and 7.8 ms for 100, with digests equal to a full copy. A row that the hydration plan misses changes the result without an error, and the detecting helper is not built |
-| (n) Missing-row policy and changeset admission | 2 | Confirmed, and not sufficient | No `NOTFOUND` quarantine. The dangling edges stay until a closure runs, 17 and 470 at S2-r2, and changesets with closure still leave one wrong edge at S1-r2, so cross-record structures need operation envelopes |
+| (n) Missing-row policy and changeset admission | 2 | Confirmed, and not sufficient | No `NOTFOUND` quarantine. The dangling edges stay until a closure runs, 17 and 470 at S2-r2, and those states are known different. Changesets with closure are state-verified after p05 and known different after p20 at S1-r2, by one edge, so cross-record structures need operation envelopes |
 | (d) Coalescing publisher | 2 | Confirmed | 172 records per second published at S2, with a p95 delay of 1.39 cycles, against 0.6 per second |
 | (i) gc against a pinned, verified generation | 3 | Confirmed, and changed | 0 of 20 refusals against 6 to 10, measured with the link commit (h) in the same patch. Collecting only against a full verification kept every generation between scrubs, 147 in 20 s at S0, so the prototype also collects against the publish check |
 | (g) Envelope retention and a ledger floor | 3 | Confirmed at S0 and S1 | The import store is 1.00 times the head against 1.61 to 1.63 times, also with (h) in the patch |
@@ -675,9 +730,9 @@ It checks answers and states at S1-r2 and reports no timing:
 | --- | --- |
 | Package tests | 279 run: 278 pass and 1 is skipped, as in the unmodified package |
 | W3 on a fresh load, by scan and by the in-file FTS5 index | 124 of 124 each |
-| Four writers with operation envelopes, batch p05 | One publish, 0 quarantined, W3-checked, and row-equal to one writer |
-| Four writers, batch p20 | 0 dangling edges, and row-equal to one writer |
-| Merges at p20 with a reducer that keeps no facts | One closure at build moved 13 edges to their merge survivors and removed 15 edges of deleted nodes, so the survivors carry their 557 one-writer edges. Cascade relations alone delete those edges and leave 551 |
+| Four writers with operation envelopes, batch p05 | One publish, 0 quarantined, W3-checked, and state-verified |
+| Four writers, batch p20 | 0 dangling edges, and state-verified. No W3 run followed p20 |
+| Merges at p20 with a reducer that keeps no facts | One closure at build moved 13 edges to their merge survivors and removed 15 edges of deleted nodes, so the survivors carry their 557 one-writer edges, and the state is state-verified. Cascade relations alone delete those edges and leave 551, a known-different state of 264,194 edges against 264,200 |
 | Kill during publication, holding the lease | Recovered with no operator step and no lost generation, and 360 envelopes applied exactly once |
 
 - **The combination leaves gaps.** The schema-agnostic CLI cannot roll a corrupt head
@@ -734,13 +789,14 @@ patches and [results](spikes/softschema-kb/results/fsqlite-v2/).
   (provisional).
 - **Concurrent capture bought nothing in either engine.** One serial applier fed by
   cheap appends was faster, and of the arrangements that interleaved deletes and merges
-  it was the only one whose rows equaled one writer’s. A row changeset replays the
-  consequences one writer saw and none of the rule that produced them, so envelopes
-  should carry facts and builds should derive.
-- **A query oracle is not a state oracle.** Four after-batch states with wrong rows gave
-  all 124 oracle answers, because the batches leave queried entities alone and the
+  it was the only one that was state-verified after one publish at every reference
+  state. A row changeset replays the consequences one writer saw and none of the rule
+  that produced them, so envelopes should carry facts and builds should derive.
+- **A query oracle is not a state oracle.** Four after-batch states with wrong edges
+  gave all 124 oracle answers, because the batches leave queried entities alone and the
   queries join through entities.
-  An incremental backend needs a row-level check against the reference applier.
+  The state check against the reference applier marks all four as known different, and
+  an incremental backend should record its rows for that check.
 - **Export fidelity is a storage-content decision.** Documents, bodies, and export lines
   take a third of the SQLite file at S2 and buy a byte-exact export.
 - **The remaining v2 cost is structural.** Without reflinks, a store can have only two
@@ -763,7 +819,7 @@ Rows marked (provisional) hold contended timings.
 | 5% batch, visible then durable (provisional) | 5.6 s, then 8.9 s (prototype); 217 s as built | Not run | 9.3 s with one writer; 77 s with four | 10.4 s with four writers |
 | Sustained one-record writes, by load model (provisional) | Closed loop, not durable: 376 per second at S1-r2, and 1.0 at S2-r2 with the workaround for the suspected defect | Not run | Closed loop, saturated: 0.6 per second | Offered 200 per second, all published: 172 per second with the final drain |
 | Batch atomic and durable when visible | No | Yes, per transaction | Yes, per generation | Yes |
-| Four writers with deletes and merges | Count-equal and W3-checked; deletes and merges were applied serially afterward, not interleaved | Writers queue on one file; not run | Rows differ from one writer’s until two repair publishes | Row-equal to one writer in one publish |
+| Four writers with deletes and merges | W3-checked only, with equal counts; deletes and merges were applied serially afterward, not interleaved | Writers queue on one file; not run | Known different until two repair publishes, then state-verified | State-verified in one publish |
 | Conflicting writes | Last write wins; the loser is lost | Last commit wins | Per-table policy; the loser is recoverable | The same |
 | Table page, record, substring search (provisional) | 17.5, 0.66, 378 ms | 0.24, 0.039, 43.5 ms | 0.30, 0.036, 46.6 ms | The same reads |
 | Hub neighborhood, slowest path (provisional) | 329, 398 ms | 272, 150 ms | 256, 154 ms | The same reads |
@@ -850,8 +906,9 @@ at a temporary path and renames it into place, or updates it in WAL mode on one 
 
 - Every publish copies the whole file: 2.6 s for one record at S2 and 0.6 records per
   second sustained (provisional)
-- Four writers take 46 to 92 s at S2-r2 (provisional) and produce a wrong merge for
-  edges, deletes, and merges without repair passes
+- Four writers take 46 to 92 s at S2-r2 (provisional), and their merged state is known
+  different for edge changes, deletes, and merges until repair passes make it
+  state-verified
 - No virtual tables, so indexed search is a sidecar rebuilt for every version
 - An index change is a new store, and statistics cannot travel in an envelope
 - gc refuses under contention, the envelope archive is never pruned, and a lock-holding
@@ -868,7 +925,7 @@ Put the entity, edge, and softschema logic in a separate package.
 **Pros:**
 
 - Capture cost stops depending on the head, and producers in any language can append
-- Four writers publish once with one writer’s result
+- Four writers publish once with a state-verified result
 - Search, statistics, and summaries travel inside the standard file
 - An index change stays in the same store
 - gc no longer refuses, the store stays near one head in size, and crashes recover
@@ -955,8 +1012,9 @@ The records stay softschema records at every scale, and their container changes.
 - **Above that, append-only record batches over a consolidated base.** A batch holds
   full records with their upsert, delete, and merge operations, as the spike’s batch
   format v2 does. The reference applier rebuilds the per-entity tree from a base and a
-  batch, and each arm that applied a batch gave the oracle’s answers for that tree after
-  p05. Batches as the record were not run at scale.
+  batch. After p05 each arm that applied a batch gave the oracle’s answers for that tree,
+  and the fsqlite loader’s one-writer state is also state-verified against it.
+  Batches as the record were not run at scale.
 - **Per-entity files remain** for the records that people review, and as an export of
   the rest.
 - **Splitting the corpus across repositories delays the switch.** Paraverse already
@@ -1019,7 +1077,8 @@ the link commit (h) present, and (n) ran bundled with (k), (l), and (d).
    closure. Only then enable the missing-row policy of (n). Alone,
    `missingDelete: 'ignore'` removes the `NOTFOUND` quarantine and leaves the dangling
    edges, 17 and 470 at S2-r2, so it turns a reported conflict into an unreported wrong
-   state. Add sparse capture (l) only with a helper that detects a missing hydration.
+   state, which the state check marks known different.
+   Add sparse capture (l) only with a helper that detects a missing hydration.
 3. **Third: the commit.** Implement the link commit with an expirable lease (h) after a
    written model of its interleavings and a run on a shared filesystem.
 4. **Fourth: measure before building.** Clone copies (a) on a reflink filesystem,
@@ -1099,9 +1158,11 @@ The phases follow the order above, which is inferred.
   In the same pass, measure the resident file pages after W3, a FalkorDB scan over
   stored lower-case properties or a SQLite scan that lower-cases at query time, and W3
   from Python’s `sqlite3`.
-- [ ] Add a row-level state check to the harness: compare each backend’s nodes and edge
-  multiset after p01, p05, and p20 with the reference applier’s output, starting with
-  the fsqlite one-writer state and the FalkorDB incremental state.
+- [ ] Close the gaps of the
+  [state check](spikes/softschema-kb/harness/README.md#state-check): record row digests
+  in the FalkorDB arm and in the fsqlite arm’s own one-writer run, compare entity rows
+  with the reference and not only their count, and build reference states for p01 and
+  for S2-r2 after p20.
 - [ ] Write the fsqlite v2 implementation plan as a separate specification under
   [the project specs](../project/specs/), starting from the combined patch and its
   tests. It should fix the format marker, the semantics of collecting against a quick
@@ -1126,8 +1187,8 @@ The phases follow the order above, which is inferred.
 - [ ] Time the combined prototype on a quiet machine at S2 scale: W1 with the derived
   build, the trickle and sustained runs that its harness does not carry, and the three
   kill points it did not run.
-- [ ] Give the FalkorDB prototype the interleaved four-writer test, with an
-  edge-multiset comparison.
+- [ ] Give the FalkorDB prototype the interleaved four-writer test, with an edge digest
+  that the state check can compare.
 - [ ] Run S3 on a machine with at least 64 GB of disk, and run W4 case 6 and W7.
 - [ ] Measure git itself at S2 and S3: status, commit, and clone times and repository
   size, since the limit of files as the system of record is inferred.
@@ -1153,8 +1214,10 @@ implementations.
    The oracle is the executable definition.
 4. Write one result file per scale and workflow with the machine, versions, per-phase
    timings, and plans, and check every W3 file with the comparison tool against the
-   expected results. After each batch, also compare the stored nodes and edge multiset
-   with the reference applier’s output, because a W3 match alone can pass a wrong state.
+   expected results. After each batch, also record the count and digest of the stored
+   node rows and edge multiset, and compare them with those that the
+   [state check](spikes/softschema-kb/harness/README.md#state-check) holds for the
+   reference applier’s output, because a W3 match alone can pass a wrong state.
 5. Report parse separately, compare on ingest through durable, and report visible and
    durable times separately.
 6. Rerun the plain SQLite control in the same session, because the numbers do not
@@ -1186,33 +1249,52 @@ prototypes.
   includes the plain SQLite control.
 - **Correctness.** A pure-Python oracle computes every W3 result from the KB files, and
   a reference applier builds the KB that a batch produces.
-  For this brief the comparison tool was rerun on the 55 W3 answer files then in the
-  repository: 50 matched in full, 3 held only the five recursive-path queries and
-  matched on those, and 2 were the deliberate no-closure ablations of spike 2. The
-  answers have since been replaced by digests and the recorded verdict, and the five W3
-  files of the combined prototype carry that verdict only.
-- **After a batch, a W3 match is necessary and not sufficient.** Four states whose rows
-  differ from one writer’s match 124 of 124 after p05:
+  The comparison tool was rerun for this brief on the 60 W3 answer files in the
+  repository: 55 match in full, 3 hold only the five recursive-path queries and match on
+  those, and 2 are the deliberate no-closure ablations of spike 2. A matching file keeps
+  its path answers and a digest of every other answer, and it records the hash of its
+  expected file and the KB that the harness checked its paths against.
+  The rerun compared the digests and the path lengths.
+- **After a batch, a W3 match is necessary and not sufficient.** The
+  [state check](spikes/softschema-kb/harness/README.md#state-check) builds the reference
+  state with the applier for S1-r2 after p05 and p20 and for S2-r2 after p05, and
+  compares each run’s recorded edge digest and entity count with it.
+  Of the 22 W3 files taken after a batch, its
+  [result file](spikes/softschema-kb/results/state-check.json) marks 12 verified, 6
+  known different, and 4 unverified, which this brief calls W3-checked only.
+  Of the 76 after-batch states that the runs recorded, it marks 58, 12, and 6. The six
+  known-different files are:
   - spike 1 at S1-r2, four writers with the closure in the build: 235,469 edges against
-    235,470
+    235,470, and 124 of 124 answers
     ([run](spikes/softschema-kb/results/fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json));
   - spike 2 at S1-r2, sparse changesets with idempotent deletes and no closure: 235,474
-    against 235,470
+    against 235,470, and 124 of 124
     ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json));
   - spike 2 at S1-r2, full-copy changesets with idempotent deletes and no closure:
-    235,474 against 235,470
+    235,474 against 235,470, and 124 of 124
     ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json));
   - spike 2 at S2-r2, operation envelopes with the reducer that keeps no facts and no
-    closure: 1,204,889 edges on both sides, with different rows
-    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S2-r2/w2-ops-naive.json)).
+    closure: 1,204,889 edges on both sides with different rows, and 124 of 124
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S2-r2/w2-ops-naive.json));
+  - the same configuration at S1-r2: 235,473 against 235,470, and 123 of 124
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S1-r2/w2-ops-naive.json));
+  - spike 2 at S2-r2, sparse changesets with idempotent deletes and no closure:
+    1,204,901 against 1,204,889, and 118 of 124
+    ([run](spikes/softschema-kb/results/fsqlite-v2/spike2/S2-r2/w2-sparse-missingdelete.json)).
 - **What each correctness claim rests on.** fsqlite states are compared by table digests
   with one writer that applies the batch in line order: entities, the edge multiset,
   documents, search text, quarantine, and in spike 2 the tombstone and redirect tables.
-  That one-writer state is W3-checked after p05 at both scales, and its entity and edge
-  totals equal the reference applier’s for p01, p05, and p20. Its rows have not been
-  compared with the applier’s. FalkorDB’s incremental and four-writer states are
-  compared with a full rebuild by per-kind and per-relation counts and by W3 answers,
-  which is a weaker check.
+  The reference applier’s edge digest equals that one-writer digest in every run that
+  recorded one, at all three reference states, so the applier and the fsqlite loader
+  agree edge for edge, properties included.
+  Entity rows are compared with the reference by count and with the one-writer state by
+  digest, because the entity digest covers payloads and derived columns that the
+  reference does not hold.
+  FalkorDB’s incremental state is compared with a full rebuild, and its four-writer
+  state with the incremental state, by per-kind and per-relation counts and by W3
+  answers. That is a weaker check, because the runs recorded no rows.
+  [The W2 findings](#incremental-accumulation-and-concurrent-writers-w2) list the mark
+  of each after-batch state.
 - **Prototypes.** Each [v2 spike](spikes/softschema-kb/fsqlite-v2/), and the combined
   prototype, is a pair of patches against scratch copies.
   Nothing under `packages/` changed.
@@ -1258,9 +1340,13 @@ Threats to validity:
   upserts only and applied every delete and merge in one process afterward, and the
   fsqlite runs interleaved them.
   FalkorDB’s final state was checked by counts and W3 answers, and fsqlite’s by row
-  digests.
-- **After-batch correctness.** A W3 match after a batch is necessary and not sufficient,
-  and no after-batch state was compared row by row with the reference applier’s output.
+  digests and by the state check.
+- **After-batch correctness.** A W3 match after a batch is necessary and not sufficient.
+  The state check has three reference states and none for p01 or for S2-r2 after p20,
+  where a claim rests on the one-writer comparison.
+  It compares entity rows with the reference by count only, and it has no rows for
+  FalkorDB or for the fsqlite arm’s own one-writer run.
+  It compares digests that the runs recorded, and it did not reopen their stores.
 - **Different parsers and job counts.** W1 parses in one process in the FalkorDB arm and
   in 4 workers in the fsqlite arm, and no W1 run includes softschema validation.
 - **Process boundaries and client runtime.** FalkorDB latencies include a socket round
@@ -1294,6 +1380,8 @@ Spike documents, as primary evidence:
   candidate changes, target design, and probes
 - [Corpus](spikes/softschema-kb/corpus/README.md) and
   [harness](spikes/softschema-kb/harness/README.md)
+- [State check](spikes/softschema-kb/results/state-check.json): the row-level verdict of
+  every after-batch state against the reference applier
 - [FalkorDB arm](spikes/softschema-kb/falkordb/README.md) and
   [fsqlite arm](spikes/softschema-kb/fsqlite/README.md)
 - v2 prototypes: [spike 1](spikes/softschema-kb/fsqlite-v2/spike1/README.md),
