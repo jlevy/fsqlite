@@ -76,13 +76,25 @@ Each tool expresses the exemption differently:
   `exclude-newer-package = { flowmark-rs = false }` under `[tool.uv]` in
   `pyproject.toml` or at the top level of `uv.toml`. A date in place of `false` gives
   the package its own cutoff; `true` is rejected.
-  `uvx`, as this repository runs it, reads only the user’s `~/.config/uv/uv.toml` or a
-  file passed with `--config-file`, not a `uv.toml` in the working directory, and uv
-  documents no environment variable for this setting.
+  `uvx`, as this repository runs it, reads the user’s `~/.config/uv/uv.toml`, the file
+  that `UV_CONFIG_FILE` names, or a file passed with `--config-file`, not a `uv.toml` in
+  the working directory, and uv documents no environment variable for this setting.
+  These are inherited: a stricter `exclude-newer` there applies to the formatter too,
+  and stops it, unless that file also exempts the package.
   This was verified with uv 0.11.32.
 - **tbd launcher fallback.** The hook launchers’ npx fallback runs the pinned `get-tbd`
-  release with `--ignore-scripts` and a dedicated `--cache`, and with no `--before`
-  cutoff.
+  release with `--ignore-scripts`, `--registry=https://registry.npmjs.org/`, and a
+  dedicated `--cache`. No lockfile pins get-tbd’s third-party dependencies there, so the
+  launcher first reads the pin’s own publish time from the public registry
+  (`npm view --registry=https://registry.npmjs.org/ get-tbd@<pin> time --json`) and
+  passes it as `--before`: the pin and the dependency versions it resolved to at release
+  install with no cool-off, and nothing published later does.
+  If that lookup fails, the launcher stops without running the fallback.
+  Command-line flags take precedence over environment variables and `.npmrc` files, so
+  an inherited `registry`, `before`, or `ignore-scripts` setting does not change these.
+  The dedicated cache is trust on first use: npx reuses an exact-spec install without
+  verifying it again, and looks in the project’s `node_modules` and the global prefix
+  before the cache.
 
 `scripts/check-supply-chain.mjs` fails unless every `minimumReleaseAgeExclude` entry is
 an exact package name, optionally with exact versions, and has a list item in this

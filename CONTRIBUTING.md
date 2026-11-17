@@ -61,11 +61,15 @@ The tbd hook scripts are project-maintained adaptations of the files `tbd setup 
 generates. `tbd-session.sh` and `tbd-closing-reminder.sh` locate the repository from
 their own path rather than through git, the closing hook detects pushes with
 `scripts/detect-git-push.mjs`, and both pass failures through instead of hiding them.
-Their pinned npx fallback passes `--ignore-scripts` and a dedicated `--cache` as
-command-line flags. It applies no cool-off, because get-tbd is a first-party package,
-which [SUPPLY-CHAIN-SECURITY.md](SUPPLY-CHAIN-SECURITY.md) exempts from the 14-day
-cool-off. The closing hook fails closed without a working `node`, which push detection
-needs.
+Their pinned npx fallback passes `--ignore-scripts`, the public `--registry`, a
+dedicated `--cache`, and `--before` set to the pin’s own publish time, which it first
+reads with `npm view`, as command-line flags.
+It applies no cool-off, because get-tbd is a first-party package, which
+[SUPPLY-CHAIN-SECURITY.md](SUPPLY-CHAIN-SECURITY.md) exempts from the 14-day cool-off,
+but the `--before` bound keeps get-tbd’s third-party dependencies at the versions they
+resolved to when the pin was released.
+Both hooks fail closed without a working `node`, which the publish-time lookup needs, as
+does the closing hook’s push detection, and without a readable publish time.
 The Codex `PostToolUse` wrapper in `.codex/hooks.json` searches upward only to the
 project boundary, the first directory containing `.git` or `.codex/hooks.json`. The
 `.claude/` and `.codex/` copies of each script are byte-identical.

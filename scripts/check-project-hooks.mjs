@@ -127,34 +127,53 @@ const hookTestDir = mkdtempSync(join(tmpdir(), 'fsqlite-project-hooks-'))
 const closingMarker = join(hookTestDir, 'closing-ran')
 const primeMarker = join(hookTestDir, 'prime-ran')
 const npxMarker = join(hookTestDir, 'npx-ran')
+const npmMarker = join(hookTestDir, 'npm-ran')
 const shadowMarker = join(hookTestDir, 'shadow-ran')
 const FALLBACK_CACHE_DIR_NAME = 'tbd-fallback-npm'
+const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
+// The publish time the npm shim reports for the pin (get-tbd 0.10.0's real one).
+const MOCK_PUBLISHED = '2026-10-02T07:04:22.880Z'
 const resetNpxMarker = () => {
   rmSync(npxMarker, { force: true })
+  rmSync(npmMarker, { force: true })
 }
 /**
  * The npx fallback must run exactly the configured pin under the repository's
- * supply-chain rules, passed as flags so inherited npm environment settings cannot
- * override them: no install scripts, and a dedicated cache that other npx runs never
- * fill. get-tbd is first-party, so the fallback applies no cool-off cutoff.
+ * supply-chain rules, passed as flags so inherited npm settings cannot override them: no
+ * install scripts, the public registry, a dedicated cache that other npx runs never fill,
+ * and `--before` set to the pin's own publish time, which the hook first reads from the
+ * public registry with `npm view`. get-tbd is first-party, so the bound is its release,
+ * not a cool-off; it keeps every third-party dependency at the version it resolved to then.
  * @param {string} label
  * @param {string} pin
  * @param {string[]} args
  * @param {string} [expectedCache]
  */
 const assertFallbackInvocation = (label, pin, args, expectedCache) => {
-  const argv = readFileSync(npxMarker, 'utf8').split('\n').slice(0, -1)
-  const [yes, ignoreScripts, cache, ...command] = argv
-  const argvText = JSON.stringify(argv)
-  assert.ok(
-    !argv.some((arg) => arg === '--before' || arg.startsWith('--before=')),
-    `${label} fallback passed a cool-off cutoff to first-party get-tbd: ${argvText}`,
+  const lookup = readFileSync(npmMarker, 'utf8').split('\n').slice(0, -1)
+  assert.deepEqual(
+    lookup,
+    ['view', `--registry=${PUBLIC_REGISTRY}`, `get-tbd@${pin}`, 'time', '--json'],
+    `${label} fallback did not look up the pin's publish time on the public registry`,
   )
+  const argv = readFileSync(npxMarker, 'utf8').split('\n').slice(0, -1)
+  const [yes, ignoreScripts, registry, before, cache, ...command] = argv
+  const argvText = JSON.stringify(argv)
   assert.equal(yes, '--yes', `${label} fallback did not pass --yes first: ${argvText}`)
   assert.equal(
     ignoreScripts,
     '--ignore-scripts',
     `${label} fallback did not pass --ignore-scripts: ${argvText}`,
+  )
+  assert.equal(
+    registry,
+    `--registry=${PUBLIC_REGISTRY}`,
+    `${label} fallback did not pin the public registry: ${argvText}`,
+  )
+  assert.equal(
+    before,
+    `--before=${MOCK_PUBLISHED}`,
+    `${label} fallback did not bound its tree at the pin's publish time: ${argvText}`,
   )
   assert.ok(
     cache?.startsWith('--cache=') && cache.endsWith(`/${FALLBACK_CACHE_DIR_NAME}`),
@@ -181,6 +200,20 @@ try {
     '#!/bin/bash\nprintf "%s\\n" "$@" > "$TBD_HOOK_TEST_NPX_MARKER"\nexit "${TBD_HOOK_TEST_NPX_STATUS:-0}"\n',
     { mode: EXECUTABLE_MODE },
   )
+  // The publish-time lookup: records argv, and prints the registry's `time` object with
+  // the requested version, or TBD_HOOK_TEST_NPM_OUTPUT in its place.
+  writeFileSync(
+    join(hookTestDir, 'npm'),
+    [
+      '#!/bin/bash',
+      'printf "%s\\n" "$@" > "${TBD_HOOK_TEST_NPM_MARKER:-/dev/null}"',
+      'if [ -n "${TBD_HOOK_TEST_NPM_OUTPUT+x}" ]; then printf "%s" "$TBD_HOOK_TEST_NPM_OUTPUT"',
+      `else printf '{"created":"2026-01-28T03:49:41.107Z","%s":"%s"}' "\${3#get-tbd@}" "${MOCK_PUBLISHED}"; fi`,
+      'exit "${TBD_HOOK_TEST_NPM_STATUS:-0}"',
+      '',
+    ].join('\n'),
+    { mode: EXECUTABLE_MODE },
+  )
   const shadowBin = join(hookTestDir, '.local', 'bin')
   mkdirSync(shadowBin, { recursive: true })
   writeFileSync(
@@ -197,6 +230,7 @@ try {
     TBD_HOOK_TEST_MARKER: closingMarker,
     TBD_HOOK_TEST_PRIME_MARKER: primeMarker,
     TBD_HOOK_TEST_NPX_MARKER: npxMarker,
+    TBD_HOOK_TEST_NPM_MARKER: npmMarker,
     TBD_HOOK_TEST_SHADOW_MARKER: shadowMarker,
   }
 
@@ -279,10 +313,12 @@ try {
   )
   symlinkSync(process.execPath, join(npxOnlyBin, 'node'))
   symlinkSync(join(hookTestDir, 'npx'), join(npxOnlyBin, 'npx'))
+  symlinkSync(join(hookTestDir, 'npm'), join(npxOnlyBin, 'npm'))
   const npxOnlyEnv = {
     ...noCliEnv,
     PATH: npxOnlyBin,
     TBD_HOOK_TEST_NPX_MARKER: npxMarker,
+    TBD_HOOK_TEST_NPM_MARKER: npmMarker,
     TBD_HOOK_TEST_NPX_STATUS: '37',
   }
   const noGitBin = join(hookTestDir, 'no-git-bin')
@@ -686,14 +722,15 @@ try {
   const fixtureNpxArgs = { session: 'prime', closing: 'closing' }
 
   writeFileSync(fixtureConfig, 'tbd_format: f08\ntbd_fallback_version: 9.9.9-rc.1+build.5\n')
-  // A PATH with npx but no node: push detection in the closing hook needs node, and the
-  // session hook does not.
+  // A PATH with npm and npx but no node: push detection in the closing hook and the
+  // publish-time lookup in both hooks need node.
   const noNodeBin = join(hookTestDir, 'no-node-bin')
   mkdirSync(noNodeBin)
   writeFileSync(join(noNodeBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
     mode: EXECUTABLE_MODE,
   })
   symlinkSync(join(hookTestDir, 'npx'), join(noNodeBin, 'npx'))
+  symlinkSync(join(hookTestDir, 'npm'), join(noNodeBin, 'npm'))
   const bashOnlyBin = join(hookTestDir, 'bash-only-bin')
   mkdirSync(bashOnlyBin)
   symlinkSync(join(noNodeBin, 'bash'), join(bashOnlyBin, 'bash'))
@@ -713,6 +750,8 @@ try {
       ...fixtureEnv,
       NPM_CONFIG_IGNORE_SCRIPTS: 'false',
       npm_config_ignore_scripts: 'false',
+      NPM_CONFIG_REGISTRY: 'https://registry.example.invalid/',
+      npm_config_before: '2099-01-01T00:00:00.000Z',
       XDG_CACHE_HOME: xdgCacheHome,
     })
     assert.equal(overridden.status, 0, `fixture ${kind} hook failed:\n${overridden.stderr}`)
@@ -727,21 +766,33 @@ try {
     const failing = runFixtureHook(kind, { ...fixtureEnv, TBD_HOOK_TEST_NPX_STATUS: '41' })
     assert.equal(failing.status, 41, `fixture ${kind} hook hid an npx fallback failure`)
 
-    // Without node, the closing hook cannot detect a push, so it fails closed before npx.
-    // The session hook needs no node.
+    // A publish time the hook cannot read means no bound, so it fails closed before npx:
+    // a failed lookup, a reply without the pin, a malformed time, or a reply that is not JSON.
+    for (const [lookupCase, lookupEnv] of Object.entries({
+      'a failed lookup': { TBD_HOOK_TEST_NPM_STATUS: '1' },
+      'no time for the pin': { TBD_HOOK_TEST_NPM_OUTPUT: '{"0.1.0":"2026-01-28T03:49:41.468Z"}' },
+      'a malformed time': {
+        TBD_HOOK_TEST_NPM_OUTPUT: '{"9.9.9-rc.1+build.5":"2026-10-02 07:04:22 --registry=x"}',
+      },
+      'an empty time': { TBD_HOOK_TEST_NPM_OUTPUT: '{"9.9.9-rc.1+build.5":""}' },
+      'a reply that is not JSON': { TBD_HOOK_TEST_NPM_OUTPUT: 'npm warn: offline' },
+    })) {
+      resetNpxMarker()
+      const unbounded = runFixtureHook(kind, { ...fixtureEnv, ...lookupEnv })
+      assert.equal(unbounded.status, 1, `fixture ${kind} hook ran its fallback after ${lookupCase}`)
+      assert.match(
+        unbounded.stderr,
+        /Cannot read the publish time of get-tbd@9\.9\.9-rc\.1\+build\.5/u,
+      )
+      assert.equal(existsSync(npxMarker), false, `fixture ${kind} hook ran npx after ${lookupCase}`)
+    }
+
+    // Without node, the closing hook cannot detect a push and neither hook can read the
+    // publish time, so both fail closed before npx.
     resetNpxMarker()
     const withoutNode = runFixtureHook(kind, { ...fixtureEnv, PATH: noNodeBin })
-    if (kind === 'closing') {
-      assert.equal(withoutNode.status, 1, 'fixture closing hook accepted a missing node')
-      assert.equal(existsSync(npxMarker), false, 'fixture closing hook ran npx without node')
-    } else {
-      assert.equal(
-        withoutNode.status,
-        0,
-        `fixture session hook needed node:\n${withoutNode.stderr}`,
-      )
-      assertFallbackInvocation('fixture session without node', '9.9.9-rc.1+build.5', ['prime'])
-    }
+    assert.equal(withoutNode.status, 1, `fixture ${kind} hook accepted a missing node`)
+    assert.equal(existsSync(npxMarker), false, `fixture ${kind} hook ran npx without node`)
 
     // Without npx, the hook names the exact pin to install, with no cool-off.
     const withoutNpx = runFixtureHook(kind, {
@@ -759,6 +810,45 @@ try {
       /--before|days ago|cool-off/,
       `fixture ${kind} hook applied a cool-off to first-party get-tbd`,
     )
+  }
+
+  // The argv assertion must catch a launcher that loosens the fallback: each mutation of
+  // the npx line or the lookup, applied to a fixture copy, makes it fail.
+  const npxLine = /^\s*npx --yes .*$/mu
+  for (const [mutation, mutate] of Object.entries({
+    'no --before': (/** @type {string} */ text) => text.replace(' --before="$published"', ''),
+    'another registry': (/** @type {string} */ text) =>
+      text.replace(npxLine, (line) =>
+        line.replace(PUBLIC_REGISTRY, 'https://registry.example.invalid/'),
+      ),
+    'no --registry': (/** @type {string} */ text) =>
+      text.replace(npxLine, (line) => line.replace(` --registry=${PUBLIC_REGISTRY}`, '')),
+    'a fixed cutoff in place of the lookup': (/** @type {string} */ text) =>
+      text.replace('--before="$published"', '--before=2099-01-01T00:00:00.000Z'),
+    'no --ignore-scripts': (/** @type {string} */ text) =>
+      text.replace(npxLine, (line) => line.replace(' --ignore-scripts', '')),
+  })) {
+    for (const kind of /** @type {const} */ (['session', 'closing'])) {
+      const original = readFileSync(fixtureScripts[kind], 'utf8')
+      const mutated = mutate(original)
+      assert.notEqual(mutated, original, `mutation ${mutation} did not change the ${kind} hook`)
+      writeFileSync(fixtureScripts[kind], mutated)
+      try {
+        resetNpxMarker()
+        runFixtureHook(kind, fixtureEnv)
+        assert.throws(
+          () => {
+            assertFallbackInvocation(`mutated ${kind}`, '9.9.9-rc.1+build.5', [
+              fixtureNpxArgs[kind],
+            ])
+          },
+          assert.AssertionError,
+          `the fallback check missed a ${kind} hook with ${mutation}`,
+        )
+      } finally {
+        writeFileSync(fixtureScripts[kind], original)
+      }
+    }
   }
 
   // A script copy outside .claude/scripts, .claude/hooks, or .codex refuses to guess.

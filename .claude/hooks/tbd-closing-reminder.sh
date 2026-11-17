@@ -56,16 +56,43 @@ tbd_configured_fallback_version() {
   return 1
 }
 
-# Run the pinned fallback under this repository's supply-chain rules. get-tbd is
-# first-party, so it has no cool-off (see SUPPLY-CHAIN-SECURITY.md). npm does not read
-# pnpm-workspace.yaml, so pass the no-install-scripts rule as a flag: npm's config
-# precedence puts command-line flags above environment variables, so an inherited
-# NPM_CONFIG_IGNORE_SCRIPTS cannot loosen it. npx keys its cache by the spec string alone,
+# Run the pinned fallback under this repository's supply-chain rules (see
+# SUPPLY-CHAIN-SECURITY.md). get-tbd is first-party and has no cool-off, but npx resolves
+# its third-party dependency ranges afresh and no lockfile pins them. So the fallback
+# looks up the pin's own publish time on the public registry and passes it as --before:
+# the pin and the dependency versions it resolved to at release need no cool-off, and
+# nothing published later is installed. If the lookup fails, the fallback does not run.
+# npm does not read pnpm-workspace.yaml, so the rules are flags, and npm's config
+# precedence puts command-line flags above environment variables and .npmrc files: an
+# inherited registry, before, or ignore-scripts setting cannot change them. npx keys its
+# cache by the spec string alone and reuses a cached install without checking it again,
 # so a dedicated cache that only these runs fill keeps out a copy that another npx run
-# fetched with install scripts or from another registry. Push detection above needs node,
-# so this hook still fails closed without it.
+# fetched; the first run that fills it is trusted.
+# Push detection above needs node, so this hook fails closed without it.
+tbd_pin_publish_time() {
+  local times
+  times=$(npm view --registry=https://registry.npmjs.org/ "get-tbd@$configured_fallback_version" time --json) || return 1
+  printf '%s' "$times" | node -e '
+    let text = ""
+    process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
+      let time
+      try {
+        time = JSON.parse(text)[process.argv[1]]
+      } catch {
+        process.exit(1)
+      }
+      if (typeof time !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$/.test(time)) process.exit(1)
+      process.stdout.write(time)
+    })' "$configured_fallback_version"
+}
+
 tbd_run_fallback() {
-  npx --yes --ignore-scripts --cache="${XDG_CACHE_HOME:-$HOME/.cache}/tbd-fallback-npm" "get-tbd@$configured_fallback_version" "$@"
+  local published
+  if ! published=$(tbd_pin_publish_time) || [ -z "$published" ]; then
+    echo "[tbd] Cannot read the publish time of get-tbd@$configured_fallback_version from registry.npmjs.org; not running the fallback without a --before bound." >&2
+    return 1
+  fi
+  npx --yes --ignore-scripts --registry=https://registry.npmjs.org/ --before="$published" --cache="${XDG_CACHE_HOME:-$HOME/.cache}/tbd-fallback-npm" "get-tbd@$configured_fallback_version" "$@"
 }
 
 tbd_print_install_hint() {
