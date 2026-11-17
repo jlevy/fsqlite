@@ -1,0 +1,570 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S1-r2",
+  "workflow": "w2-full-missingdelete",
+  "recorded_at": "2026-11-17T05:01:56.596Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 10150,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S1-r2/kb",
+    "corpus": {
+      "scale": "S1-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 46927,
+      "edges": 226281,
+      "record_files": 44057,
+      "record_bytes": 135246904,
+      "files": 44081,
+      "bytes": 225144535,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 1249,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r8",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 408
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r8",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 31
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r8",
+          "p99": 29
+        },
+        "organization": {
+          "max": 3712,
+          "max_node": "org:github",
+          "p99": 10
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r8",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r8",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r8",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r8",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r8",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r8",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r8",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r8",
+          "p99": 3
+        },
+        "software": {
+          "max": 4781,
+          "max_node": "software:github-copilot",
+          "p99": 4781
+        },
+        "term": {
+          "max": 1666,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 613
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r8",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r8",
+          "p99": 6
+        },
+        "_all": {
+          "max": 4781,
+          "p99": 75
+        }
+      },
+      "workers": 4,
+      "seconds": 14.9
+    },
+    "node_total": 46927,
+    "edge_total": 226281
+  },
+  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/fsqlite-spike/S1-r2/store-direct",
+  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S1-r2/deltas",
+  "writers": 4,
+  "envelopes_per_writer": 5,
+  "strategy": "snapshot",
+  "store_options": {
+    "missing": "delete",
+    "closure": false,
+    "repair_steps": false
+  },
+  "reps": 1,
+  "batches": [
+    {
+      "batch": "p01",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 469,
+        "counts": {
+          "delete": 9,
+          "merge": 5,
+          "new": 375,
+          "update_refs": 40,
+          "update_value": 40
+        },
+        "edges": 2663
+      },
+      "w3_check_against_reference": null,
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": true,
+        "differing_tables": [],
+        "concurrent": {
+          "entity": "47288:420b4826f31f39c0",
+          "edge": "228150:2881184debfb62f9",
+          "doc": "44418:c30639ad8ce9b7b4",
+          "search_text": "66338:323c156bd9d979bf",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "9:338ab282e6a5b92c",
+          "kb_redirect": "5:c83581b36316ba91"
+        },
+        "line_order": {
+          "entity": "47288:420b4826f31f39c0",
+          "edge": "228150:2881184debfb62f9",
+          "doc": "44418:c30639ad8ce9b7b4",
+          "search_text": "66338:323c156bd9d979bf",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "9:338ab282e6a5b92c",
+          "kb_redirect": "5:c83581b36316ba91"
+        }
+      },
+      "units": 469,
+      "parse_ms": 380.92,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 806.799,
+        "p95_ms": 1118.716,
+        "max_ms": 1198.415
+      },
+      "envelope_bytes_total": null,
+      "dangling_edges_after_publish": 0,
+      "store_options": {
+        "missing": "delete",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 5073,
+      "writer_max_rss_mib": 98.5,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 179.52729900181293,
+          "open_ms": 0.5006379969418049,
+          "apply_ms": 151.72791900113225,
+          "gate_ms": 222.8956990018487,
+          "fsync_ms": 227.86422800272703,
+          "commit_ms": 2.790295999497175,
+          "published_at_epoch_ms": 1794891659651,
+          "settle_ms": 1.183117002248764
+        },
+        "ms": 789.09,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 5873,
+      "visible_after_first_capture_ms": 5379.67724609375,
+      "fts_sidecar_rebuild": {
+        "rows": 66338,
+        "build_ms": 718.653,
+        "bytes": 35196928
+      },
+      "indexed_search_visible_after_ms": 6688,
+      "published_after_ms": 5863,
+      "complete_after_ms": 5863,
+      "versions_published": 1,
+      "entities": {
+        "before": 46927,
+        "after": 47288,
+        "added": 361
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": {
+        "bytes": 380334080,
+        "median_ms": 181.256,
+        "mib_per_s": 2001.1
+      },
+      "head_copy": {
+        "bytes": 382922752,
+        "median_ms": 110.917,
+        "mib_per_s": 3292.4
+      },
+      "reader": {
+        "queries": 1362,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 121,
+          "p50_ms": 0.649,
+          "p95_ms": 14.62,
+          "max_ms": 47.963
+        },
+        "during_writes": {
+          "n": 950,
+          "p50_ms": 0.575,
+          "p95_ms": 21.91,
+          "max_ms": 189.247
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 11.116,
+          "p95_ms": 11.417,
+          "max_ms": 11.417
+        },
+        "max_rss_mib": 228.6
+      }
+    },
+    {
+      "batch": "p05",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 2346,
+        "counts": {
+          "delete": 47,
+          "merge": 23,
+          "new": 1877,
+          "update_refs": 199,
+          "update_value": 200
+        },
+        "edges": 13538
+      },
+      "w3_check_against_reference": {
+        "expected": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/spike/harness/expected/S1-r2-p05/w3.json",
+        "result": "MATCH: 124 ok, 0 differ",
+        "differing": []
+      },
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": false,
+        "differing_tables": [
+          "edge"
+        ],
+        "concurrent": {
+          "entity": "48734:d4acd2f3dba97af5",
+          "edge": "235474:720474ca6b0d3b76",
+          "doc": "45864:e4c04bdf03467115",
+          "search_text": "68444:806202840d260297",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "47:9a175e4d10fa0815",
+          "kb_redirect": "23:7379f0ed8301f160"
+        },
+        "line_order": {
+          "entity": "48734:d4acd2f3dba97af5",
+          "edge": "235470:e6146c67c7b9f4ac",
+          "doc": "45864:e4c04bdf03467115",
+          "search_text": "68444:806202840d260297",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "47:9a175e4d10fa0815",
+          "kb_redirect": "23:7379f0ed8301f160"
+        }
+      },
+      "units": 2346,
+      "parse_ms": 1646.372,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 677.747,
+        "p95_ms": 971.505,
+        "max_ms": 1038.193
+      },
+      "envelope_bytes_total": null,
+      "dangling_edges_after_publish": 5,
+      "store_options": {
+        "missing": "delete",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 4196,
+      "writer_max_rss_mib": 115.9,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 191.72065899893641,
+          "open_ms": 0.4090210013091564,
+          "apply_ms": 435.3882200010121,
+          "gate_ms": 183.5894519984722,
+          "fsync_ms": 483.89582700282335,
+          "commit_ms": 19.979770999401808,
+          "published_at_epoch_ms": 1794891674535,
+          "settle_ms": 1.5980070009827614
+        },
+        "ms": 1318.353,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 5619,
+      "visible_after_first_capture_ms": 5293.481201171875,
+      "fts_sidecar_rebuild": {
+        "rows": 68444,
+        "build_ms": 818.772,
+        "bytes": 33427456
+      },
+      "indexed_search_visible_after_ms": 6462,
+      "published_after_ms": 5514,
+      "complete_after_ms": 5514,
+      "versions_published": 1,
+      "entities": {
+        "before": 46927,
+        "after": 48734,
+        "added": 1807
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": {
+        "bytes": 380334080,
+        "median_ms": 237.609,
+        "mib_per_s": 1526.5
+      },
+      "head_copy": {
+        "bytes": 393084928,
+        "median_ms": 194.475,
+        "mib_per_s": 1927.6
+      },
+      "reader": {
+        "queries": 1460,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 96,
+          "p50_ms": 1.016,
+          "p95_ms": 17.89,
+          "max_ms": 28.622
+        },
+        "during_writes": {
+          "n": 1076,
+          "p50_ms": 0.465,
+          "p95_ms": 18.138,
+          "max_ms": 251.764
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 5.185,
+          "p95_ms": 108.891,
+          "max_ms": 108.891
+        },
+        "max_rss_mib": 227.9
+      }
+    },
+    {
+      "batch": "p20",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 9385,
+        "counts": {
+          "delete": 188,
+          "merge": 94,
+          "new": 7508,
+          "update_refs": 797,
+          "update_value": 798
+        },
+        "edges": 54562
+      },
+      "w3_check_against_reference": null,
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": false,
+        "differing_tables": [
+          "edge"
+        ],
+        "concurrent": {
+          "entity": "54153:940b345277d17a1e",
+          "edge": "264275:e0a21cec4440b7a6",
+          "doc": "51283:0a55f1a64796897a",
+          "search_text": "76192:3730306dadb23fe9",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "188:b9e1e34c9c4700b1",
+          "kb_redirect": "94:3527a437d18a77d6"
+        },
+        "line_order": {
+          "entity": "54153:940b345277d17a1e",
+          "edge": "264200:9addee2c48afd645",
+          "doc": "51283:0a55f1a64796897a",
+          "search_text": "76192:3730306dadb23fe9",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "188:b9e1e34c9c4700b1",
+          "kb_redirect": "94:3527a437d18a77d6"
+        }
+      },
+      "units": 9385,
+      "parse_ms": 5149.521,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 859.973,
+        "p95_ms": 2331.651,
+        "max_ms": 2515.852
+      },
+      "envelope_bytes_total": null,
+      "dangling_edges_after_publish": 105,
+      "store_options": {
+        "missing": "delete",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 7049,
+      "writer_max_rss_mib": 166.1,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 6,
+        "closure": null,
+        "timings": {
+          "copy_ms": 142.3974939994514,
+          "open_ms": 0.35314900055527687,
+          "apply_ms": 2951.0828339979053,
+          "gate_ms": 299.01405300199986,
+          "fsync_ms": 226.0353339985013,
+          "commit_ms": 2.1455189995467663,
+          "published_at_epoch_ms": 1794891707532,
+          "settle_ms": 1.4844149984419346
+        },
+        "ms": 3624.05,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 10693,
+      "visible_after_first_capture_ms": 10118.97509765625,
+      "fts_sidecar_rebuild": {
+        "rows": 76192,
+        "build_ms": 838.024,
+        "bytes": 36691968
+      },
+      "indexed_search_visible_after_ms": 11644,
+      "published_after_ms": 10673,
+      "complete_after_ms": 10673,
+      "versions_published": 1,
+      "entities": {
+        "before": 46927,
+        "after": 54153,
+        "added": 7226
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": {
+        "bytes": 380334080,
+        "median_ms": 324.916,
+        "mib_per_s": 1116.3
+      },
+      "head_copy": {
+        "bytes": 432746496,
+        "median_ms": 112.274,
+        "mib_per_s": 3675.8
+      },
+      "reader": {
+        "queries": 2058,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 79,
+          "p50_ms": 0.462,
+          "p95_ms": 19.593,
+          "max_ms": 26.96
+        },
+        "during_writes": {
+          "n": 1682,
+          "p50_ms": 0.647,
+          "p95_ms": 23.267,
+          "max_ms": 224.918
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 6.312,
+          "p95_ms": 146.102,
+          "max_ms": 146.102
+        },
+        "max_rss_mib": 231.5
+      }
+    }
+  ]
+}

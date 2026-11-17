@@ -146,16 +146,16 @@ restarted server serves the previous load.
 
 ## Round 2 Results (S1-r2, S2-r2)
 
-The round-2 corpora share software, the top organizations and the topic taxonomy
-across replicas, so hubs grow (max degree 4,781 at S1-r2 and 24,428 at S2-r2), and
-values and text are perturbed per replica (see `../corpus/README.md`). Every W3 v2
-result equals the oracle's at both scales (124 of 124). Results are in
-`../results/falkordb/S1-r2/` and `S2-r2/`; `run.py --scale S2-r2 --steps w1 w1nosave w3
+The round-2 corpora share software, the top organizations and the topic taxonomy across
+replicas, so hubs grow (max degree 4,781 at S1-r2 and 24,428 at S2-r2), and values and
+text are perturbed per replica (see `../corpus/README.md`). Every W3 v2 result equals
+the oracle’s at both scales (124 of 124). Results are in `../results/falkordb/S1-r2/`
+and `S2-r2/`; `run.py --scale S2-r2 --steps w1 w1nosave w3
 compare w2v2 w4 w5 w6` reproduces them.
 
-**W1**: S1-r2 is servable in 32 s and S2-r2 in 183 s (durable 186 s), with a loader
-peak of 1.07 and 5.18 GB and a server peak of 0.39 and 1.74 GB (3.14 GB with the BGSAVE
-fork; 1.76 GB with saves off).
+**W1**: S1-r2 is servable in 32 s and S2-r2 in 183 s (durable 186 s), with a loader peak
+of 1.07 and 5.18 GB and a server peak of 0.39 and 1.74 GB (3.14 GB with the BGSAVE fork;
+1.76 GB with saves off).
 
 **W3 v2** (warm p50, median over 20 parameter sets, max in parentheses):
 
@@ -176,19 +176,48 @@ Typical lookups stay flat, but the growing hubs and the scans grow with the corp
 
 **W2 v2** (upserts with edge changes, deletes, merges; visible, then durable):
 
-R2_W2_TABLE
+| Scale | Batch | paraverse as built | incremental prototype |
+| --- | --- | --- | --- |
+| S1-r2 | p01 (469) | 36 s (36 s) | 0.31 s (0.86 s) |
+| S1-r2 | p05 (2,346) | 39 s (40 s) | 1.5 s (2.2 s) |
+| S1-r2 | p20 (9,385) | 44 s (45 s) | 6.9 s (7.6 s) |
+| S1-r2 | t0001, t0010, t0100 | 34 s (any size) | 7, 21, 78 ms |
+| S2-r2 | p01 (2,390) | 198 s (202 s) | 2.8 s (5.5 s) |
+| S2-r2 | p05 (11,948) | 217 s (220 s) | 12 s (15 s) |
+| S2-r2 | p20 (47,791) | 313 s (317 s) | 62 s (66 s) |
+| S2-r2 | t0001, t0010, t0100 | 226 s (any size) | 0.75, 0.67, 0.71 s |
 
-The incremental prototype replaces a record's edges by `origin`, deletes with
-`DETACH DELETE`, and merges by re-creating the absorbed node's edges on the survivor.
-Its counts and all 124 W3 results equal the full rebuild's for every bulk batch and
-t0001, and equal the oracle's after p05. One record at a time it sustains R2_RATE
-records per second with a median visibility delay of R2_VIS. The invalid record is loaded
-by paraverse's default load, rejects the whole load under `load --validate`, and is
-quarantined by the prototype with per-record validation. Four disjoint writers reach
-the same final state as one sequential writer; two conflicting writers end with one
-value (last writer wins), and the other is not recoverable.
+The incremental prototype replaces a record’s edges by `origin`, deletes with
+`DETACH DELETE`, and merges by re-creating the absorbed node’s edges on the survivor.
+Its counts and all 124 W3 results equal the full rebuild’s for every bulk batch and
+t0001, and equal the oracle’s after p05. One record at a time it sustains 376 (S1-r2)
+and 1.0 (S2-r2) records per second with a median visibility delay of 2 ms and 0.94 s; at
+S2-r2 nearly all of it is the label reads of the engine workaround (see Caveats), run
+five times per apply.
+The invalid record is loaded by paraverse’s default load, rejects the whole load under
+`load --validate`, and is quarantined by the prototype with per-record validation.
+Four disjoint writers reach the same final state as one sequential writer; two
+conflicting writers end with one value (last writer wins), and the other is not
+recoverable.
 
-R2_W456
+**W4 (S2-r2)**: a new kind fails unmodified paraverse (`MappingError`) and needs 2 lines
+of code plus a rebuild (228 s); the other cases need only a rebuild (174 to 252 s). In
+place, each migration took 7 to 21 s and matched the rebuild on counts, all 124 W3
+results and sampled node properties.
+Changing `primary_language` to an object still empties every filter on it (7,590 Python
+repositories to 0).
+
+**W5 (S2-r2)**: the export of 224,800 records takes 447 s. Every payload and every
+parsed document round-trips, a 500-record sample of the export passes softschema, and
+the reloaded export (155 s) gives identical W3 results; but no file is byte-identical,
+64,195 Markdown bodies are lost, and 26,542 profiles lose their export names.
+
+**W6 (S2-r2)**: two files (a 282 MB RDB); start-up to the first query 11.7 s; 1.36 GB
+`used_memory` at rest.
+Killing the client mid-load leaves the live graph intact and an orphan staging graph.
+Killing the server mid-load, or 5 s after a completed load, also restarts on the
+previous load, now with an orphan partial staging graph that a BGSAVE captured during
+the load (23,895 nodes in the second case); the completed load is lost.
 
 ## Caveats
 
@@ -209,6 +238,12 @@ R2_W456
 - **Search.** The compared figure is a substring scan over `display_name`, `title` and
   `bio`. paraverse’s own `/api/search` uses the stemmed RediSearch index, which matches
   different nodes, so it is an uncompared extra.
+- **Engine issue (round 2).** At S2-r2, applying the p05 batch’s write phases back to
+  back (node upserts, edge creates, then `DETACH DELETE`) left Repository nodes that
+  every later Repository scan rejected with “Attempted to access undefined attribute”,
+  with or without saves.
+  Reading every label once between write phases avoids it (a read through the `Entity`
+  label alone does not), so `w2_v2.py` does that; S1-r2 did not show it.
 - **Memory.** `load_kb` holds every parsed artifact in the loader process before
   `load_graph` writes, so loader memory grows linearly with the corpus.
   The embedded server is daemonized (its parent is PID 1), so its RSS is sampled by PID,

@@ -1,0 +1,184 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S1",
+  "workflow": "W2 conflicting writes (C20)",
+  "recorded_at": "2026-11-17T05:08:27.928Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 10956,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike2/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "record": "person:dylan-ratcliffe-r4",
+  "field": "payload.bio (and its search_text rank 2 row)",
+  "note": "Envelopes apply in byte-sorted tx-id order; tx ids start with a millisecond timestamp, so agentA (captured first) applies first.",
+  "results": {
+    "lww": {
+      "envelope_order": [
+        "1794892097247-000000000000-agentA-f4ee76adec",
+        "1794892097464-000000000001-agentB-9d0403ae12"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 2,
+        "quarantined": 0,
+        "attempts": 1,
+        "appliedTxIds": [
+          "1794892097247-000000000000-agentA-f4ee76adec",
+          "1794892097464-000000000001-agentB-9d0403ae12"
+        ],
+        "quarantineReasons": [],
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 122.23156100139022,
+          "open_ms": 0.4560669995844364,
+          "apply_ms": 2.4802349992096424,
+          "gate_ms": 171.89167499914765,
+          "fsync_ms": 287.6172519996762,
+          "commit_ms": 273.76936200261116,
+          "published_at_epoch_ms": 1794892098324,
+          "settle_ms": 0.7886569984257221
+        }
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent B.",
+      "winner": "agentB",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "applied",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": []
+    },
+    "union": {
+      "envelope_order": [
+        "1794892101428-000000000000-agentA-c6e1a3be1a",
+        "1794892101705-000000000001-agentB-a21a929021"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 2,
+        "quarantined": 0,
+        "attempts": 1,
+        "appliedTxIds": [
+          "1794892101428-000000000000-agentA-c6e1a3be1a",
+          "1794892101705-000000000001-agentB-a21a929021"
+        ],
+        "quarantineReasons": [],
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 159.05396499857306,
+          "open_ms": 0.5385829992592335,
+          "apply_ms": 2.295737002044916,
+          "gate_ms": 227.5292939990759,
+          "fsync_ms": 238.66697100177407,
+          "commit_ms": 2.240812998265028,
+          "published_at_epoch_ms": 1794892102337,
+          "settle_ms": 0.7205139994621277
+        }
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent A.",
+      "winner": "agentA",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "applied",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": []
+    },
+    "strict": {
+      "envelope_order": [
+        "1794892104064-000000000000-agentA-319402322b",
+        "1794892104328-000000000001-agentB-ae83bd1c32"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 1,
+        "attempts": 1,
+        "appliedTxIds": [
+          "1794892104064-000000000000-agentA-319402322b"
+        ],
+        "quarantineReasons": [
+          [
+            "1794892104328-000000000001-agentB-ae83bd1c32.txn",
+            "strict-conflict: DATA"
+          ]
+        ],
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 98.63637199997902,
+          "open_ms": 0.40119700133800507,
+          "apply_ms": 1.6011409983038902,
+          "gate_ms": 162.1552850008011,
+          "fsync_ms": 149.47610000148416,
+          "commit_ms": 1.7471619993448257,
+          "published_at_epoch_ms": 1794892104743,
+          "settle_ms": 0.6513420008122921
+        }
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent A.",
+      "winner": "agentA",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "quarantine",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": [
+        "1794892104328-000000000001-agentB-ae83bd1c32.txn"
+      ]
+    }
+  }
+}
