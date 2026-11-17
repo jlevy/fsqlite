@@ -186,6 +186,11 @@ def migrate(server: Server, variant: Path, base: Path, case: str) -> dict[str, A
     }
 
 
+def _python_repos(graph: Any) -> int:
+    """What the repos_by_stars table filters on: repositories whose primary_language is Python."""
+    return graph.ro_query("MATCH (n:Repository) WHERE n.primary_language = 'Python' RETURN count(n)").result_set[0][0]
+
+
 def _sample_props(graph: Any, ids: list[str]) -> dict[str, Any]:
     rows = graph.ro_query(
         "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id, labels(n), properties(n)", {"ids": ids}
@@ -231,12 +236,12 @@ def run_case(scale: str, corpus: Path, base_rdb: Path, work: Path, case: str) ->
     sample_ids = [r["id"] for r in _changed_nodes(variant, base, case)]
     sample_ids = random.Random(case).sample(sample_ids, min(200, len(sample_ids)))
     rebuilt_props = _sample_props(server.graph, sample_ids)
-    repo_table = rebuilt_w3.get("table.repos_by_stars.p1", {}).get("total")
+    repo_table = _python_repos(server.graph)
     server.shutdown(save=False)
 
     # 3. In-place migration.
     server = fresh_server(base_rdb, work / "migrate")
-    base_repo_table = _norm(w3_results(server.graph, scale)).get("table.repos_by_stars.p1", {}).get("total")
+    base_repo_table = _python_repos(server.graph)
     result["in_place"] = migrate(server, variant, base, case)
     inc_counts = graph_counts(server.graph)
     inc_w3 = _norm(w3_results(server.graph, scale))
@@ -256,7 +261,7 @@ def run_case(scale: str, corpus: Path, base_rdb: Path, work: Path, case: str) ->
             "sampled_props_match_rebuild": props_equal,
         }
     )
-    result["query_impact"] = {"repos_by_stars_total_before": base_repo_table, "repos_by_stars_total_after": repo_table}
+    result["query_impact"] = {"python_repositories_before": base_repo_table, "python_repositories_after": repo_table}
     server.shutdown(save=False)
     _patch_award(False)
     return result

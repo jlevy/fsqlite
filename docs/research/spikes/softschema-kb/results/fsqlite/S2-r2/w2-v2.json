@@ -1,0 +1,694 @@
+{
+  "backend": "fsqlite",
+  "scale": "S2-r2",
+  "workflow": "W2 v2 batches, one writer in line order (both arms)",
+  "recorded_at": "2026-11-17T03:50:58.168Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 8474,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S2-r2/store-direct",
+  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2/deltas",
+  "gc": "gc({ retain: 0 }) after each publish",
+  "results": {
+    "p01": {
+      "parse": {
+        "wall_ms": 1818.173,
+        "seconds": 1.623,
+        "counts": {
+          "node": 2318,
+          "op": 2390,
+          "doc": 2318,
+          "entity": 2318,
+          "edge": 14040
+        },
+        "validation_seconds": 0.356,
+        "validated": 2318,
+        "ops": 2390,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 2566.021,
+          "reconcile_ms": 3152.782,
+          "visible_ms": 5718.864,
+          "fts_rebuild_ms": 4094.326,
+          "gc_retain0_ms": 4377.708,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 2566.021,
+              "envelope_bytes": 10594186,
+              "reconcile_ms": 3152.782,
+              "quarantined_envelopes": 0,
+              "visible_ms": 5718.864,
+              "fts_rebuild_ms": 4094.326,
+              "gc_retain0_ms": 4377.708,
+              "state": "{\"entities\":240797,\"edges\":1165554,\"quarantine\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 4558.931,
+          "fts_rebuild_ms": 3942.773,
+          "gc_retain0_ms": 3702.378,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 4558.931,
+              "fts_rebuild_ms": 3942.773,
+              "gc_retain0_ms": 3702.378
+            }
+          ]
+        }
+      }
+    },
+    "p05": {
+      "parse": {
+        "wall_ms": 7839.618,
+        "seconds": 7.716,
+        "counts": {
+          "node": 11590,
+          "op": 11948,
+          "doc": 11590,
+          "entity": 11590,
+          "edge": 70371
+        },
+        "validation_seconds": 1.727,
+        "validated": 11590,
+        "ops": 11948,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 7066.33,
+          "reconcile_ms": 5473.295,
+          "visible_ms": 12539.678,
+          "fts_rebuild_ms": 4185.025,
+          "gc_retain0_ms": 4410.859,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 7066.33,
+              "envelope_bytes": 52453974,
+              "reconcile_ms": 5473.295,
+              "quarantined_envelopes": 0,
+              "visible_ms": 12539.678,
+              "fts_rebuild_ms": 4185.025,
+              "gc_retain0_ms": 4410.859,
+              "state": "{\"entities\":248157,\"edges\":1204889,\"quarantine\":[]}",
+              "w3_check_against_reference": "{\"expected\":\"/home/user/fsqlite/docs/research/spikes/softschema-kb/harness/expected/S2-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 9335.842,
+          "fts_rebuild_ms": 4032.083,
+          "gc_retain0_ms": 4071.958,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 9335.842,
+              "fts_rebuild_ms": 4032.083,
+              "gc_retain0_ms": 4071.958
+            }
+          ]
+        }
+      }
+    },
+    "p20": {
+      "parse": {
+        "wall_ms": 31273.099,
+        "seconds": 31.16,
+        "counts": {
+          "node": 46357,
+          "op": 47791,
+          "doc": 46357,
+          "entity": 46357,
+          "edge": 278409
+        },
+        "validation_seconds": 6.687,
+        "validated": 46357,
+        "ops": 47791,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 17102.256,
+          "reconcile_ms": 8339.034,
+          "visible_ms": 25441.328,
+          "fts_rebuild_ms": 4345.665,
+          "gc_retain0_ms": 4586.713,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 17102.256,
+              "envelope_bytes": 207411818,
+              "reconcile_ms": 8339.034,
+              "quarantined_envelopes": 0,
+              "visible_ms": 25441.328,
+              "fts_rebuild_ms": 4345.665,
+              "gc_retain0_ms": 4586.713,
+              "state": "{\"entities\":275756,\"edges\":1349094,\"quarantine\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 19381.2,
+          "fts_rebuild_ms": 4624.739,
+          "gc_retain0_ms": 4960.069,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 19381.2,
+              "fts_rebuild_ms": 4624.739,
+              "gc_retain0_ms": 4960.069
+            }
+          ]
+        }
+      }
+    },
+    "t0001": {
+      "parse": {
+        "wall_ms": 246.507,
+        "seconds": 0.004,
+        "counts": {
+          "node": 1,
+          "op": 1,
+          "doc": 1,
+          "entity": 1,
+          "edge": 88
+        },
+        "validation_seconds": 0.002,
+        "validated": 1,
+        "ops": 1,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 1323.759,
+          "reconcile_ms": 2644.483,
+          "visible_ms": 3970.34,
+          "fts_rebuild_ms": 3821.465,
+          "gc_retain0_ms": 3718.975,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1494.659,
+              "envelope_bytes": 20362,
+              "reconcile_ms": 2603.327,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4098.019,
+              "fts_rebuild_ms": 3823.153,
+              "gc_retain0_ms": 3630.804,
+              "state": "{\"entities\":238958,\"edges\":1155846,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1323.759,
+              "envelope_bytes": 20362,
+              "reconcile_ms": 2646.544,
+              "quarantined_envelopes": 0,
+              "visible_ms": 3970.34,
+              "fts_rebuild_ms": 3821.465,
+              "gc_retain0_ms": 3755.701
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1259.378,
+              "envelope_bytes": 20362,
+              "reconcile_ms": 2644.483,
+              "quarantined_envelopes": 0,
+              "visible_ms": 3903.9,
+              "fts_rebuild_ms": 3805.479,
+              "gc_retain0_ms": 3718.975
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 2873.483,
+          "fts_rebuild_ms": 3948.97,
+          "gc_retain0_ms": 3993.58,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3113.09,
+              "fts_rebuild_ms": 3847.357,
+              "gc_retain0_ms": 3657.343
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2873.483,
+              "fts_rebuild_ms": 3948.97,
+              "gc_retain0_ms": 4164.148
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2811.5,
+              "fts_rebuild_ms": 4033.774,
+              "gc_retain0_ms": 3993.58
+            }
+          ]
+        }
+      }
+    },
+    "t0010": {
+      "parse": {
+        "wall_ms": 143.995,
+        "seconds": 0.017,
+        "counts": {
+          "node": 10,
+          "op": 10,
+          "doc": 10,
+          "entity": 10,
+          "edge": 52
+        },
+        "validation_seconds": 0.01,
+        "validated": 10,
+        "ops": 10,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 1332.557,
+          "reconcile_ms": 2807.585,
+          "visible_ms": 4140.209,
+          "fts_rebuild_ms": 3869.012,
+          "gc_retain0_ms": 3698.885,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1332.557,
+              "envelope_bytes": 41973,
+              "reconcile_ms": 2807.585,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4140.209,
+              "fts_rebuild_ms": 3856.706,
+              "gc_retain0_ms": 3649.98,
+              "state": "{\"entities\":238965,\"edges\":1155796,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1071.768,
+              "envelope_bytes": 41973,
+              "reconcile_ms": 1657.257,
+              "quarantined_envelopes": 0,
+              "visible_ms": 2729.061,
+              "fts_rebuild_ms": 3869.012,
+              "gc_retain0_ms": 3889.602
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1383.598,
+              "envelope_bytes": 41973,
+              "reconcile_ms": 2944.306,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4327.939,
+              "fts_rebuild_ms": 4101.051,
+              "gc_retain0_ms": 3698.885
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 2511.806,
+          "fts_rebuild_ms": 4008.512,
+          "gc_retain0_ms": 4141.916,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2853.491,
+              "fts_rebuild_ms": 3952.927,
+              "gc_retain0_ms": 4116.934
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2511.806,
+              "fts_rebuild_ms": 4010.216,
+              "gc_retain0_ms": 4312.042
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2269.26,
+              "fts_rebuild_ms": 4008.512,
+              "gc_retain0_ms": 4141.916
+            }
+          ]
+        }
+      }
+    },
+    "t0100": {
+      "parse": {
+        "wall_ms": 186.174,
+        "seconds": 0.079,
+        "counts": {
+          "node": 97,
+          "op": 100,
+          "doc": 97,
+          "entity": 97,
+          "edge": 449
+        },
+        "validation_seconds": 0.028,
+        "validated": 97,
+        "ops": 100,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 1294.801,
+          "reconcile_ms": 2744.815,
+          "visible_ms": 4177.507,
+          "fts_rebuild_ms": 4098.966,
+          "gc_retain0_ms": 4099.215,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1432.652,
+              "envelope_bytes": 458367,
+              "reconcile_ms": 2744.815,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4177.507,
+              "fts_rebuild_ms": 4098.966,
+              "gc_retain0_ms": 3988.511,
+              "state": "{\"entities\":239034,\"edges\":1156077,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1091.058,
+              "envelope_bytes": 458367,
+              "reconcile_ms": 1536.129,
+              "quarantined_envelopes": 0,
+              "visible_ms": 2627.221,
+              "fts_rebuild_ms": 3940.905,
+              "gc_retain0_ms": 4099.215
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1294.801,
+              "envelope_bytes": 458367,
+              "reconcile_ms": 3014.701,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4309.547,
+              "fts_rebuild_ms": 4179.029,
+              "gc_retain0_ms": 4566.335
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 2919.549,
+          "fts_rebuild_ms": 3952.048,
+          "gc_retain0_ms": 3871.809,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3063.043,
+              "fts_rebuild_ms": 4039.655,
+              "gc_retain0_ms": 4347.985
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2919.549,
+              "fts_rebuild_ms": 3952.048,
+              "gc_retain0_ms": 3871.809
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2858.968,
+              "fts_rebuild_ms": 3884.496,
+              "gc_retain0_ms": 3624.451
+            }
+          ]
+        }
+      }
+    },
+    "t0010-invalid": {
+      "parse": {
+        "wall_ms": 110.616,
+        "seconds": 0.014,
+        "counts": {
+          "node": 10,
+          "op": 9,
+          "doc": 9,
+          "entity": 9,
+          "edge": 71,
+          "invalid": 1
+        },
+        "validation_seconds": 0.008,
+        "validated": 10,
+        "ops": 10,
+        "quarantined": [
+          {
+            "path": "accounts/bluesky/sammorrowdrums.bsky.social-r39.yaml",
+            "id": "acct:bluesky/sammorrowdrums.bsky.social-r39",
+            "errors": [
+              "$: unexpected property unexpected_field (additionalProperties: false)"
+            ]
+          }
+        ]
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 1420.057,
+          "reconcile_ms": 2661.479,
+          "visible_ms": 4081.565,
+          "fts_rebuild_ms": 4068.993,
+          "gc_retain0_ms": 4296.663,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1209.333,
+              "envelope_bytes": 36903,
+              "reconcile_ms": 1973.948,
+              "quarantined_envelopes": 0,
+              "visible_ms": 3183.316,
+              "fts_rebuild_ms": 3856.275,
+              "gc_retain0_ms": 4120.168,
+              "state": "{\"entities\":238965,\"edges\":1155805,\"quarantine\":[{\"path\":\"accounts/bluesky/sammorrowdrums.bsky.social-r39.yaml\",\"id\":\"acct:bluesky/sammorrowdrums.bsky.social-r39\",\"reason\":\"[\\\"$: unexpected property unexpected_field (additionalProperties: false)\\\"]\",\"op\":\"upsert\"}]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 1420.057,
+              "envelope_bytes": 36903,
+              "reconcile_ms": 2661.479,
+              "quarantined_envelopes": 0,
+              "visible_ms": 4081.565,
+              "fts_rebuild_ms": 4090.406,
+              "gc_retain0_ms": 4296.663
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 5159.867,
+              "envelope_bytes": 36903,
+              "reconcile_ms": 4132.7,
+              "quarantined_envelopes": 0,
+              "visible_ms": 9292.61,
+              "fts_rebuild_ms": 4068.993,
+              "gc_retain0_ms": 4453.817
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 2547.849,
+          "fts_rebuild_ms": 3891.919,
+          "gc_retain0_ms": 3775.59,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2992.05,
+              "fts_rebuild_ms": 4051.238,
+              "gc_retain0_ms": 3775.59
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2547.849,
+              "fts_rebuild_ms": 3837.094,
+              "gc_retain0_ms": 3704.801
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2448.429,
+              "fts_rebuild_ms": 3891.919,
+              "gc_retain0_ms": 4113.254
+            }
+          ]
+        }
+      },
+      "without_validation": {
+        "invalid_record_loaded": true,
+        "quarantine_rows": 0
+      }
+    }
+  }
+}

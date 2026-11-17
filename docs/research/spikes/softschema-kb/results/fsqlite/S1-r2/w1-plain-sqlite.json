@@ -2,12 +2,12 @@
   "backend": "fsqlite",
   "scale": "S1-r2",
   "workflow": "W1 control (C15)",
-  "recorded_at": "2026-11-17T03:13:39.197Z",
+  "recorded_at": "2026-11-17T03:51:48.735Z",
   "machine": {
     "cpus": 4,
     "cpu_model": "Intel(R) Xeon(R) Processor",
     "mem_total_mib": 16088,
-    "mem_free_mib": 12785,
+    "mem_free_mib": 6623,
     "os": "linux 6.18.44-fc-v553",
     "filesystem": "ext2/ext3",
     "node": "v22.23.4",
@@ -169,16 +169,16 @@
     },
     "count_problems": [],
     "phases": {
-      "ddl_ms": 1.502,
-      "decode_ms": 480.496,
-      "transform_ms": 310.383,
-      "ingest_ms": 2173.211,
+      "ddl_ms": 1.287,
+      "decode_ms": 504.173,
+      "transform_ms": 298.774,
+      "ingest_ms": 2316.535,
       "index_ms": 0,
-      "verify_counts_ms": 15.645,
-      "commit_durable_ms": 449.556,
-      "ingest_through_durable_ms": 3349.126
+      "verify_counts_ms": 18.438,
+      "commit_durable_ms": 488.865,
+      "ingest_through_durable_ms": 3580.752
     },
-    "total_ms": 3829.622,
+    "total_ms": 4084.925,
     "file_bytes": 380309504,
     "config": {
       "journal_mode": "DELETE",
@@ -204,16 +204,16 @@
     },
     "count_problems": [],
     "phases": {
-      "ddl_ms": 0.986,
-      "decode_ms": 496.966,
-      "transform_ms": 307.1,
-      "ingest_ms": 1159.672,
-      "index_ms": 607.684,
-      "verify_counts_ms": 15.917,
-      "commit_durable_ms": 535.999,
-      "ingest_through_durable_ms": 3104.689
+      "ddl_ms": 1.137,
+      "decode_ms": 521.33,
+      "transform_ms": 334.086,
+      "ingest_ms": 1196.369,
+      "index_ms": 654.76,
+      "verify_counts_ms": 12.28,
+      "commit_durable_ms": 583.383,
+      "ingest_through_durable_ms": 3397.059
     },
-    "total_ms": 3601.655,
+    "total_ms": 3918.389,
     "file_bytes": 372047872,
     "config": {
       "journal_mode": "DELETE",
@@ -222,5 +222,5 @@
       "node": "v22.23.4"
     }
   },
-  "max_rss_mib": 451.4
+  "max_rss_mib": 440.5
 }

@@ -282,6 +282,43 @@ async function batch(
       const again = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
       reconcile.retry = { envelopes: retried, ...again, ms: round(nowMs() - t2) }
     }
+    if (opts.v2BaseKb) {
+      // Closure: writers captured their deletes and merges from the old head, so another
+      // writer's new edges can still name a deleted or absorbed node. Replaying every
+      // delete and merge of the batch in one envelope on the final head is idempotent and
+      // moves or drops exactly those edges.
+      const dangling = (): number =>
+        handle.read(
+          (db) =>
+            (
+              db
+                .prepare(
+                  `SELECT count(*) AS n FROM edge g
+                   WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
+                      OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
+                )
+                .get() as { n: number }
+            ).n,
+        )
+      const before = dangling()
+      const t3 = nowMs()
+      const tx = handle.write('closure', (db) => {
+        const loader = new GenericLoader(db)
+        forEachRowSync(rows, (row) => {
+          if (row.t === 'op' && row.op !== 'upsert') {
+            loader.add(row)
+          }
+        })
+      })
+      const closed = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+      reconcile.closure = {
+        dangling_edges_before: before,
+        changed: tx !== null,
+        ...closed,
+        ms: round(nowMs() - t3),
+        dangling_edges_after: dangling(),
+      }
+    }
   }
   const complete = Date.now()
   const published = Date.now()

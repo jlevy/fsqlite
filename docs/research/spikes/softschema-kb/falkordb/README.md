@@ -144,6 +144,52 @@ does not remove. After a server SIGKILL, redislite will not restart until its st
 `.settings` file is deleted, and a load completed 5 s before the kill is lost: the
 restarted server serves the previous load.
 
+## Round 2 Results (S1-r2, S2-r2)
+
+The round-2 corpora share software, the top organizations and the topic taxonomy
+across replicas, so hubs grow (max degree 4,781 at S1-r2 and 24,428 at S2-r2), and
+values and text are perturbed per replica (see `../corpus/README.md`). Every W3 v2
+result equals the oracle's at both scales (124 of 124). Results are in
+`../results/falkordb/S1-r2/` and `S2-r2/`; `run.py --scale S2-r2 --steps w1 w1nosave w3
+compare w2v2 w4 w5 w6` reproduces them.
+
+**W1**: S1-r2 is servable in 32 s and S2-r2 in 183 s (durable 186 s), with a loader
+peak of 1.07 and 5.18 GB and a server peak of 0.39 and 1.74 GB (3.14 GB with the BGSAVE
+fork; 1.76 GB with saves off).
+
+**W3 v2** (warm p50, median over 20 parameter sets, max in parentheses):
+
+| Category | S1-r2 | S2-r2 |
+| --- | --- | --- |
+| table | 4.0 ms (14) | 18 ms (131) |
+| record | 0.7 ms (2.4) | 0.7 ms (2.2) |
+| search (substring scan) | 72 ms (77) | 378 ms (438) |
+| path (BFS) | 1.3 ms (68) | 1.2 ms (398) |
+| facet | 7.2 ms (32) | 39 ms (203) |
+| neighborhood | 0.7 ms (25) | 0.7 ms (144) |
+| deep page, all repositories | 14 ms | 131 ms |
+| hub record (org:openai) | 3.9 ms | 20 ms |
+| hub neighborhood (software:vs-code) | 56 ms | 329 ms |
+| hub facet (mentions per target) | 6.6 ms | 35 ms |
+
+Typical lookups stay flat, but the growing hubs and the scans grow with the corpus.
+
+**W2 v2** (upserts with edge changes, deletes, merges; visible, then durable):
+
+R2_W2_TABLE
+
+The incremental prototype replaces a record's edges by `origin`, deletes with
+`DETACH DELETE`, and merges by re-creating the absorbed node's edges on the survivor.
+Its counts and all 124 W3 results equal the full rebuild's for every bulk batch and
+t0001, and equal the oracle's after p05. One record at a time it sustains R2_RATE
+records per second with a median visibility delay of R2_VIS. The invalid record is loaded
+by paraverse's default load, rejects the whole load under `load --validate`, and is
+quarantined by the prototype with per-record validation. Four disjoint writers reach
+the same final state as one sequential writer; two conflicting writers end with one
+value (last writer wins), and the other is not recoverable.
+
+R2_W456
+
 ## Caveats
 
 - **Socket timeout.** redis-py 8.1.0, which paraverse’s lock pins, defaults

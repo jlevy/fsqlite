@@ -52,6 +52,7 @@ Python steps run as
 | `w6.ts` | W6 operations: artifacts, standard tools, start-up, memory, crash tests |
 | `common.ts`, `fsq.ts`, `measure.py` | Shared helpers, the fsqlite import, wall time and peak RSS |
 | `summary.py`, `run.sh` | Headline tables, and the per-scale run order |
+| `w2v2.ts`, `summary_r2.py`, `run_r2.sh` | Round 2: v2 batches in line order through both arms, its tables, its run order |
 
 ## Mapping Design
 
@@ -389,6 +390,151 @@ SnapshotStore import about 13.5 GiB with its archived envelopes, and W2’s four
 concurrent working copies plus the head about 34 GiB. About 14 GiB were free, shared
 with the FalkorDB arm, so the run would have filled the disk
 (`results/fsqlite/S3/feasibility.json`).
+
+## Round 2
+
+Round 2 reruns the arm on the regenerated corpora `S1-r2` (46,927 nodes, 226,281 edges)
+and `S2-r2` (238,957 nodes, 1,155,758 edges), where shared entities make hub degrees
+grow with the scale (24,428 at S2-r2, against 533 in round 1), values and 30% of the
+text are perturbed per replica, and every edge carries an `origin` record path.
+It runs the 124 `queries_v2` instances (one cold run, 20 warm), the
+`softschema-kb-delta/v2` batches, and the same three W3 arms.
+Results are in `results/fsqlite/S1-r2/` and `S2-r2/`.
+
+### What Changed in the Arm
+
+- **Mapping.** An expression index on `props ->> '$.origin'` serves the upsert’s
+  delete-by-origin. A third table view, `repos_all_by_stars`, has no filter, so its
+  partial index is `((stars) DESC, id)`. A `quarantine` table keeps records that fail
+  their schema.
+- **Batches.** `parse_kb.py --delta2` turns `ops.jsonl` into `op` rows in line order,
+  each followed by the rows it writes.
+  The loader follows the reference applier, `corpus/delta2.py`. An upsert deletes the
+  record’s edges by origin and writes the new rows.
+  A delete removes the record, its nodes, its edges by origin, and every incident edge.
+  A merge re-inserts every edge of the absorbed node on the survivor, rewrites the
+  origin, and removes the absorbed node.
+  New edges take the next free `ord` for their triple.
+- **No cascades.** Deletes are explicit statements, so each removed edge is one DELETE
+  in the session changeset.
+  The schema still declares no foreign keys, because SnapshotStore checks them at each
+  envelope boundary and would quarantine by envelope order.
+- **Schema check** (C22). A stdlib checker for the JSON Schema subset the compiled
+  schemas use runs in the parse workers.
+  W1 reports it as a phase; a batch record that fails it goes to `quarantine` and its
+  operation is skipped, while the rest of the batch applies.
+- **Plans** (C7). SQLite 3.53 serves the unfiltered view from the `(kind, label)` index
+  and sorts: 16.7 ms at S1-r2. `INDEXED BY ix_view_<name>` on every view page brings it
+  to 0.034 ms (`w3-plans.json` keeps both).
+
+### Correctness
+
+| Check | S1-r2 | S2-r2 |
+| --- | --- | --- |
+| W3 v2: scan, FTS5 sidecar, plain SQLite control | 124 of 124 each | 124 of 124 each |
+| After p05, one writer in line order (`w3-after-p05.json`) | 124 of 124 | 124 of 124 |
+| After p05, 4 writers with retry and closure (`w3-after-p05-4writers.json`) | 124 of 124 | 124 of 124 |
+| 4-writer rows equal to one writer in line order (p01, p05, p20) | all 3 | all 3 |
+
+The 24 round-1 queries still match `expected/S0` with the round-2 code.
+
+### W1
+
+| Scale | Parse s (incl. check) | Schema check CPU s | DirectStore s | SnapshotStore s | Plain SQLite s | Snapshot MiB |
+| --- | --- | --- | --- | --- | --- | --- |
+| S1 | 8.0 | not run | 4.1 | 8.1 | 3.0 | 335 |
+| S1-r2 | 16.2 | 8.003 | 4.3 | 12.4 | 3.6 | 363 |
+| S2 | 71.4 | not run | 19.1 | 44.1 | 16.6 | 1,717 |
+| S2-r2 | 49.9 | 41.611 | 22.3 | 57.4 | 19.0 | 1,856 |
+
+The schema check costs 8 CPU-seconds at S1-r2 and 42 at S2-r2, spread over 4 workers.
+Every corpus record passes it.
+The r2 snapshots are 8% larger than round 1’s although they hold fewer nodes, because
+every edge row now carries its origin path and an index on it.
+
+### W3
+
+| Category | S1 median p50 (max p50) ms | S1-r2 median p50 (max p50) ms | S2 median p50 (max p50) ms | S2-r2 median p50 (max p50) ms |
+| --- | --- | --- | --- | --- |
+| table | 0.138 (0.268) | 0.0827 (2.26) | 0.29 (0.564) | 0.3 (13.3) |
+| record | 0.0721 (0.112) | 0.0345 (0.449) | 0.0715 (0.108) | 0.0357 (2.39) |
+| search | 8.84 (9.28) | 9.32 (13.1) | 46.4 (52.1) | 46.6 (51.6) |
+| path | 1.85 (2.62) | 0.125 (19.4) | 2.04 (2.98) | 0.128 (154) |
+| facet | 5.53 (6.76) | 4.18 (15.1) | 29.5 (36.9) | 17.9 (50) |
+| neighborhood | 0.944 (1.6) | 0.208 (43) | 1.15 (1.76) | 0.207 (256) |
+| search via FTS5 sidecar (r2) | n/a | 0.487 (7.15) | n/a | 2.05 (34.8) |
+
+Round-1 columns are the 24 v1 queries and round-2 columns the 124 v2 instances, so the
+medians describe different query sets; the maximums show the hubs.
+
+### Hub Growth
+
+| Query | S1-r2 p50 ms | S2-r2 p50 ms | Growth | Non-hub median p50, S1-r2 / S2-r2 | Plan of the slowest statement at S2-r2 |
+| --- | --- | --- | --- | --- | --- |
+| v2.record.hub | 0.449 | 2.39 | 5.3x | 0.0329 / 0.035 | SEARCH g USING PRIMARY KEY (source=?); SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?) |
+| v2.neighborhood.hub | 43 | 256 | 6.0x | 0.202 / 0.202 | MATERIALIZE near; MATERIALIZE walk; SETUP; SCAN CONSTANT ROW |
+| v2.path.hub | 0.125 | 0.131 | 1.0x | 0.123 / 0.127 | COMPOUND QUERY; LEFT-MOST SUBQUERY; SCAN json_each VIRTUAL TABLE INDEX 1:; SEARCH g USING PRIMARY KEY (source=?) |
+| v2.facet.hub | 6.19 | 16.1 | 2.6x | 3.93 / 18.5 | MATERIALIZE groups; SEARCH g USING COVERING INDEX ix_edge_rel (relation=?); SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?); SCAN gr |
+
+- **Neighborhoods grow with the hub.** Hop 1 of `software:vs-code` is its whole
+  neighborhood, and hop 2 expands every non-hub neighbor (software is not a hub kind),
+  so the recursive CTE walks about 6 times more rows at S2-r2. The plan stays index
+  lookups per row (`SEARCH g USING PRIMARY KEY`, `ix_edge_in`); the cost is the row
+  count. Ordinary people and sessions next to a shared entity grow too (up to 97 ms at
+  S2-r2, against 1.8 ms in round 1), while the non-hub median stays at 0.2 ms.
+- **Records grow linearly with degree.** `org:openai` takes 2.4 ms at S2-r2: one primary
+  key range and one `ix_edge_in` range, each row joined to its entity for its kind.
+- **Facets scan the relation**, hub or not: `ix_edge_rel (relation=?)` plus a covering
+  `(id, kind)` lookup per edge, so they grow with the relation’s edge count.
+- **Paths through hubs stay fast** when the search meets early (0.13 ms), but the
+  slowest v2 path takes 154 ms at S2-r2: its frontier reaches shared entities with
+  thousands of neighbors, and the BFS fetches every edge of each.
+
+### W2 With v2 Batches
+
+| Scale | Batch | Ops | One writer, SnapshotStore ms (capture + reconcile) | One writer, DirectStore ms | 4 writers visible ms | 4-writer state vs oracle |
+| --- | --- | --- | --- | --- | --- | --- |
+| S1-r2 | p01 | 469 | 943 (352 + 590) | 732 | 5796 | n/a |
+| S1-r2 | p05 | 2346 | 1664 (848 + 815) | 1376 | 7013 | MATCH: 124 ok, 0 differ |
+| S1-r2 | p20 | 9385 | 5351 (3301 + 2050) | 3111 | 13478 | n/a |
+| S1-r2 | t0001 | 1 | 819 (263 + 556) | 584 | n/a | n/a |
+| S1-r2 | t0010 | 10 | 854 (286 + 568) | 654 | n/a | n/a |
+| S1-r2 | t0100 | 100 | 777 (259 + 492) | 598 | n/a | n/a |
+| S1-r2 | t0010-invalid | 10 | 762 (248 + 513) | 551 | n/a | n/a |
+| S2-r2 | p01 | 2390 | 5719 (2566 + 3153) | 4559 | 46361 | n/a |
+| S2-r2 | p05 | 11948 | 12540 (7066 + 5473) | 9336 | 77344 | MATCH: 124 ok, 0 differ |
+| S2-r2 | p20 | 47791 | 25441 (17102 + 8339) | 19381 | 91865 | n/a |
+| S2-r2 | t0001 | 1 | 3970 (1324 + 2644) | 2873 | n/a | n/a |
+| S2-r2 | t0010 | 10 | 4140 (1333 + 2808) | 2512 | n/a | n/a |
+| S2-r2 | t0100 | 100 | 4178 (1295 + 2745) | 2920 | n/a | n/a |
+| S2-r2 | t0010-invalid | 10 | 4082 (1420 + 2661) | 2548 | n/a | n/a |
+
+- **One writer in line order is exact.** Applied as one envelope, p05 answers all 124
+  queries like the oracle’s post-batch KB at both scales.
+  Cost follows the head copy, not the batch: a 1-record batch takes 0.8 s at S1-r2 and
+  4.0 s at S2-r2 through SnapshotStore, 0.6 s and 2.9 s through DirectStore.
+- **Four concurrent writers are not.** The ops are dealt round-robin to 4 writers of 5
+  envelopes each. Each writer’s last envelope holds its deletes and merges.
+  Those deleted edge rows that another writer’s envelope had already deleted, for
+  example an edge that another writer’s upsert dropped by origin.
+  So reconcile quarantines that envelope as `permanent-conflict: NOTFOUND`, which no
+  conflict policy can replace: 2 of 20 at S1-r2 p20, 1 at S2-r2 p05, and 3 at S2-r2 p20.
+  Recovery re-captures the quarantined envelopes’ operations on the new head, in one
+  envelope, because separate retries from the same head conflicted again.
+  Even then the state was wrong.
+  Writers captured their deletes and merges from the old head, so other writers’ new
+  edges still named the deleted or absorbed nodes: 66 dangling edges at S1-r2 p20 and
+  138 at S2-r2 p20. At S2-r2 they changed 6 of the 124 p05 answers (facet group counts).
+  A closure step that replays the batch’s deletes and merges in one more envelope is
+  idempotent and leaves no dangling edges.
+  After it, the 4-writer rows equal the line-order rows at both scales.
+- **The invalid record is quarantined, not loaded.** In `t0010-invalid` the checker
+  rejects the one record (`unexpected property unexpected_field`). Its upsert is skipped
+  and recorded in `quarantine`, and the other 9 records apply.
+  Without the check, fsqlite and SQLite load it, since nothing in the schema constrains
+  payload JSON.
+- **Visibility under 4 writers** is 5.8 to 13.5 s at S1-r2 and 46 to 92 s at S2-r2,
+  including retries and closure, with no reader errors and a reader p95 of 17 to 111 ms.
 
 ## Configuration
 

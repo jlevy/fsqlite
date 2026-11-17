@@ -11,14 +11,14 @@
   },
   "config": {
     "page_size": 4096,
-    "page_count": 95968,
+    "page_count": 95963,
     "journal_mode": "delete",
     "reader_cache_size": -65536,
     "reader_mmap_size": 0,
     "sqlite_version": "3.53.4",
     "node": "v22.23.4"
   },
-  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1-r2/w2-snapshot/p05/store/snapshots/000000000002.fsqlite.sqlite",
+  "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1-r2/w2-snapshot/p05/store/snapshots/000000000003.fsqlite.sqlite",
   "queries": [
     {
       "name": "v2.record.00",
@@ -100,8 +100,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.3253,
-        "cold_open_ms": 0.7557,
+        "cold_ms": 3.0718,
+        "cold_open_ms": 1.4199,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -222,8 +222,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.734,
-        "cold_open_ms": 0.4468,
+        "cold_ms": 1.8173,
+        "cold_open_ms": 0.4331,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -312,8 +312,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.8809,
-        "cold_open_ms": 0.4956,
+        "cold_ms": 1.4936,
+        "cold_open_ms": 0.4,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -431,8 +431,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.099,
-        "cold_open_ms": 0.4981,
+        "cold_ms": 1.8065,
+        "cold_open_ms": 0.423,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -630,8 +630,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.1654,
-        "cold_open_ms": 0.4976,
+        "cold_ms": 2.4322,
+        "cold_open_ms": 0.4031,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -1068,8 +1068,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.882,
-        "cold_open_ms": 0.403,
+        "cold_ms": 4.0641,
+        "cold_open_ms": 0.4557,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -1573,8 +1573,8 @@
         "in": {}
       },
       "timings": {
-        "cold_ms": 1.2358,
-        "cold_open_ms": 0.4303,
+        "cold_ms": 1.6255,
+        "cold_open_ms": 0.4153,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -2068,8 +2068,8 @@
         "in": {}
       },
       "timings": {
-        "cold_ms": 1.1474,
-        "cold_open_ms": 0.392,
+        "cold_ms": 1.8447,
+        "cold_open_ms": 0.6594,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -2386,8 +2386,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.42,
-        "cold_open_ms": 0.4186,
+        "cold_ms": 3.3591,
+        "cold_open_ms": 0.4978,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -3241,8 +3241,8 @@
         }
       },
       "timings": {
-        "cold_ms": 4.552,
-        "cold_open_ms": 0.3855,
+        "cold_ms": 5.7721,
+        "cold_open_ms": 0.3857,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -3319,8 +3319,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.0402,
-        "cold_open_ms": 0.3786,
+        "cold_ms": 1.0251,
+        "cold_open_ms": 0.3846,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -3531,8 +3531,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.3199,
-        "cold_open_ms": 0.3672,
+        "cold_ms": 1.8857,
+        "cold_open_ms": 0.3759,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -3623,8 +3623,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.1746,
-        "cold_open_ms": 0.4576,
+        "cold_ms": 1.0994,
+        "cold_open_ms": 0.377,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -3935,8 +3935,8 @@
         }
       },
       "timings": {
-        "cold_ms": 2.6043,
-        "cold_open_ms": 0.4714,
+        "cold_ms": 2.4186,
+        "cold_open_ms": 0.3254,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4025,8 +4025,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.2033,
-        "cold_open_ms": 0.4489,
+        "cold_ms": 1.0847,
+        "cold_open_ms": 0.3523,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4161,8 +4161,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.7099,
-        "cold_open_ms": 0.4287,
+        "cold_ms": 1.5642,
+        "cold_open_ms": 0.3435,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4224,8 +4224,8 @@
         "in": {}
       },
       "timings": {
-        "cold_ms": 0.964,
-        "cold_open_ms": 0.4239,
+        "cold_ms": 0.8291,
+        "cold_open_ms": 0.3404,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4300,8 +4300,8 @@
         "in": {}
       },
       "timings": {
-        "cold_ms": 0.9443,
-        "cold_open_ms": 0.3098,
+        "cold_ms": 0.9672,
+        "cold_open_ms": 0.3781,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4393,8 +4393,8 @@
         }
       },
       "timings": {
-        "cold_ms": 1.499,
-        "cold_open_ms": 0.4106,
+        "cold_ms": 1.0989,
+        "cold_open_ms": 0.3607,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4718,8 +4718,8 @@
         }
       },
       "timings": {
-        "cold_ms": 4.8883,
-        "cold_open_ms": 0.5119,
+        "cold_ms": 3.1758,
+        "cold_open_ms": 0.3331,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -4828,8 +4828,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.0515,
-        "cold_open_ms": 0.5607,
+        "cold_ms": 2.0672,
+        "cold_open_ms": 0.3358,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -5072,8 +5072,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.746,
-        "cold_open_ms": 0.5082,
+        "cold_ms": 4.1798,
+        "cold_open_ms": 0.3893,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -5226,8 +5226,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.5599,
-        "cold_open_ms": 0.3948,
+        "cold_ms": 1.9639,
+        "cold_open_ms": 0.3642,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -5440,8 +5440,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.769,
-        "cold_open_ms": 0.4033,
+        "cold_ms": 3.7332,
+        "cold_open_ms": 0.3693,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -6494,8 +6494,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 135.8969,
-        "cold_open_ms": 0.3977,
+        "cold_ms": 118.6627,
+        "cold_open_ms": 0.3203,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -7548,8 +7548,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 115.1742,
-        "cold_open_ms": 0.4799,
+        "cold_ms": 102.9922,
+        "cold_open_ms": 0.4665,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -7687,8 +7687,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.4228,
-        "cold_open_ms": 0.4593,
+        "cold_ms": 2.3355,
+        "cold_open_ms": 0.3616,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -7791,8 +7791,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 1.898,
-        "cold_open_ms": 0.3688,
+        "cold_ms": 1.9255,
+        "cold_open_ms": 0.3793,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -8845,8 +8845,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 116.8171,
-        "cold_open_ms": 0.3872,
+        "cold_ms": 125.6909,
+        "cold_open_ms": 0.3599,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -9899,8 +9899,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 75.3576,
-        "cold_open_ms": 0.4661,
+        "cold_ms": 66.4675,
+        "cold_open_ms": 0.4017,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -10013,8 +10013,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.0358,
-        "cold_open_ms": 0.4979,
+        "cold_ms": 2.6385,
+        "cold_open_ms": 0.4631,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -10302,8 +10302,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.5359,
-        "cold_open_ms": 0.4314,
+        "cold_ms": 4.615,
+        "cold_open_ms": 0.3718,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -10426,8 +10426,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.1803,
-        "cold_open_ms": 0.398,
+        "cold_ms": 2.6336,
+        "cold_open_ms": 0.3716,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -11480,8 +11480,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 41.7613,
-        "cold_open_ms": 0.3972,
+        "cold_ms": 35.1851,
+        "cold_open_ms": 0.3389,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -11689,8 +11689,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.2644,
-        "cold_open_ms": 0.4994,
+        "cold_ms": 3.538,
+        "cold_open_ms": 0.4006,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -11858,8 +11858,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.1799,
-        "cold_open_ms": 0.4219,
+        "cold_ms": 3.3577,
+        "cold_open_ms": 0.3294,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -11911,8 +11911,8 @@
         "nodes": []
       },
       "timings": {
-        "cold_ms": 1.0773,
-        "cold_open_ms": 0.3722,
+        "cold_ms": 0.9682,
+        "cold_open_ms": 0.3784,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -11964,8 +11964,8 @@
         "nodes": []
       },
       "timings": {
-        "cold_ms": 1.0517,
-        "cold_open_ms": 0.381,
+        "cold_ms": 3.327,
+        "cold_open_ms": 0.38,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -12068,8 +12068,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.5797,
-        "cold_open_ms": 0.3914,
+        "cold_ms": 5.7434,
+        "cold_open_ms": 3.9803,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -12887,8 +12887,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 11.0513,
-        "cold_open_ms": 0.3734,
+        "cold_ms": 11.9883,
+        "cold_open_ms": 0.4626,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -12944,8 +12944,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.1588,
-        "cold_open_ms": 0.3909,
+        "cold_ms": 4.1751,
+        "cold_open_ms": 0.3581,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -12986,8 +12986,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.8508,
-        "cold_open_ms": 0.3648,
+        "cold_ms": 2.7972,
+        "cold_open_ms": 0.3826,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13028,8 +13028,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.2561,
-        "cold_open_ms": 0.3891,
+        "cold_ms": 4.0511,
+        "cold_open_ms": 0.348,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13070,8 +13070,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.6215,
-        "cold_open_ms": 0.3682,
+        "cold_ms": 3.4488,
+        "cold_open_ms": 0.3588,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13112,8 +13112,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.3482,
-        "cold_open_ms": 0.4166,
+        "cold_ms": 3.468,
+        "cold_open_ms": 0.393,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13155,8 +13155,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.4334,
-        "cold_open_ms": 0.3918,
+        "cold_ms": 3.9816,
+        "cold_open_ms": 0.4082,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13198,8 +13198,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.0893,
-        "cold_open_ms": 0.4603,
+        "cold_ms": 3.9748,
+        "cold_open_ms": 0.3775,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13241,8 +13241,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.7184,
-        "cold_open_ms": 0.456,
+        "cold_ms": 5.5757,
+        "cold_open_ms": 0.3555,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13284,8 +13284,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.1715,
-        "cold_open_ms": 0.4204,
+        "cold_ms": 5.1191,
+        "cold_open_ms": 0.3984,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13327,8 +13327,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.5332,
-        "cold_open_ms": 0.406,
+        "cold_ms": 4.4066,
+        "cold_open_ms": 0.3548,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13371,8 +13371,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.4311,
-        "cold_open_ms": 0.3831,
+        "cold_ms": 5.3264,
+        "cold_open_ms": 0.3651,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13415,8 +13415,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 83.1416,
-        "cold_open_ms": 0.3937,
+        "cold_ms": 84.3509,
+        "cold_open_ms": 0.3911,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13459,8 +13459,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.1865,
-        "cold_open_ms": 0.4705,
+        "cold_ms": 5.2001,
+        "cold_open_ms": 0.4624,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13503,8 +13503,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 5.6298,
-        "cold_open_ms": 0.4319,
+        "cold_ms": 5.6405,
+        "cold_open_ms": 0.5819,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13547,8 +13547,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 151.8166,
-        "cold_open_ms": 0.4357,
+        "cold_ms": 145.1746,
+        "cold_open_ms": 0.3944,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13585,8 +13585,8 @@
         "path": []
       },
       "timings": {
-        "cold_ms": 163.4975,
-        "cold_open_ms": 0.454,
+        "cold_ms": 174.9129,
+        "cold_open_ms": 0.5144,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13623,8 +13623,8 @@
         "path": []
       },
       "timings": {
-        "cold_ms": 8.3951,
-        "cold_open_ms": 0.4374,
+        "cold_ms": 8.5287,
+        "cold_open_ms": 0.4766,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13661,8 +13661,8 @@
         "path": []
       },
       "timings": {
-        "cold_ms": 2.5559,
-        "cold_open_ms": 0.3841,
+        "cold_ms": 2.7915,
+        "cold_open_ms": 0.4179,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13699,8 +13699,8 @@
         "path": []
       },
       "timings": {
-        "cold_ms": 27.4223,
-        "cold_open_ms": 0.3869,
+        "cold_ms": 28.6106,
+        "cold_open_ms": 0.4086,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13737,8 +13737,8 @@
         "path": []
       },
       "timings": {
-        "cold_ms": 52.5193,
-        "cold_open_ms": 0.4399,
+        "cold_ms": 55.5232,
+        "cold_open_ms": 0.4404,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -13895,8 +13895,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 115.1088,
-        "cold_open_ms": 0.4533,
+        "cold_ms": 118.9208,
+        "cold_open_ms": 0.5153,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14051,8 +14051,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 116.0084,
-        "cold_open_ms": 0.447,
+        "cold_ms": 118.577,
+        "cold_open_ms": 0.483,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14207,8 +14207,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 118.0163,
-        "cold_open_ms": 0.4477,
+        "cold_ms": 118.8415,
+        "cold_open_ms": 0.4261,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14351,8 +14351,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 121.1131,
-        "cold_open_ms": 0.5603,
+        "cold_ms": 117.6109,
+        "cold_open_ms": 0.4935,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14507,8 +14507,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 120.7667,
-        "cold_open_ms": 0.5375,
+        "cold_ms": 112.8267,
+        "cold_open_ms": 0.6579,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14663,8 +14663,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 123.882,
-        "cold_open_ms": 0.6143,
+        "cold_ms": 90.5499,
+        "cold_open_ms": 0.5168,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14819,8 +14819,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 120.3966,
-        "cold_open_ms": 0.4903,
+        "cold_ms": 109.5528,
+        "cold_open_ms": 0.4586,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -14975,8 +14975,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 120.5066,
-        "cold_open_ms": 0.5132,
+        "cold_ms": 114.2856,
+        "cold_open_ms": 0.4832,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15131,8 +15131,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 101.41,
-        "cold_open_ms": 0.475,
+        "cold_ms": 102.1864,
+        "cold_open_ms": 0.4736,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15287,8 +15287,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 97.6207,
-        "cold_open_ms": 0.4525,
+        "cold_ms": 93.1114,
+        "cold_open_ms": 0.4761,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15443,8 +15443,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 86.2041,
-        "cold_open_ms": 0.4377,
+        "cold_ms": 119.0716,
+        "cold_open_ms": 0.4434,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15599,8 +15599,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 94.4378,
-        "cold_open_ms": 0.4577,
+        "cold_ms": 103.9181,
+        "cold_open_ms": 0.4802,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15755,8 +15755,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 101.6388,
-        "cold_open_ms": 0.5311,
+        "cold_ms": 124.8251,
+        "cold_open_ms": 0.4802,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -15911,8 +15911,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 120.4506,
-        "cold_open_ms": 0.4664,
+        "cold_ms": 133.1098,
+        "cold_open_ms": 0.5302,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16067,8 +16067,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 123.8407,
-        "cold_open_ms": 0.5182,
+        "cold_ms": 92.2087,
+        "cold_open_ms": 0.7111,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16223,8 +16223,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 114.6915,
-        "cold_open_ms": 0.4963,
+        "cold_ms": 91.9988,
+        "cold_open_ms": 0.4669,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16379,8 +16379,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 111.675,
-        "cold_open_ms": 0.5074,
+        "cold_ms": 126.3776,
+        "cold_open_ms": 0.5092,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16535,8 +16535,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 119.9538,
-        "cold_open_ms": 0.5061,
+        "cold_ms": 106.3905,
+        "cold_open_ms": 0.5237,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16691,8 +16691,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 128.9635,
-        "cold_open_ms": 0.5483,
+        "cold_ms": 98.2232,
+        "cold_open_ms": 0.4864,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -16847,8 +16847,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 126.3837,
-        "cold_open_ms": 0.5313,
+        "cold_ms": 118.1141,
+        "cold_open_ms": 0.625,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -17134,8 +17134,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 41.4323,
-        "cold_open_ms": 0.4992,
+        "cold_ms": 39.4128,
+        "cold_open_ms": 0.4604,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -17422,8 +17422,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 26.5073,
-        "cold_open_ms": 0.6217,
+        "cold_ms": 26.0742,
+        "cold_open_ms": 0.6102,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -17710,8 +17710,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 24.5547,
-        "cold_open_ms": 0.442,
+        "cold_ms": 19.3146,
+        "cold_open_ms": 0.4212,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -17998,8 +17998,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 19.0139,
-        "cold_open_ms": 0.4545,
+        "cold_ms": 15.26,
+        "cold_open_ms": 0.424,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -18286,8 +18286,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 18.8547,
-        "cold_open_ms": 0.41,
+        "cold_ms": 14.7586,
+        "cold_open_ms": 0.3749,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -18574,8 +18574,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 13.8779,
-        "cold_open_ms": 0.4125,
+        "cold_ms": 11.1208,
+        "cold_open_ms": 0.363,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -18862,8 +18862,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 16.7275,
-        "cold_open_ms": 0.4195,
+        "cold_ms": 13.1902,
+        "cold_open_ms": 0.3683,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -19150,8 +19150,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 26.8026,
-        "cold_open_ms": 0.4425,
+        "cold_ms": 22.2703,
+        "cold_open_ms": 0.3715,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -19438,8 +19438,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 14.3647,
-        "cold_open_ms": 0.3939,
+        "cold_ms": 13.8637,
+        "cold_open_ms": 0.4191,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -19726,8 +19726,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 19.5044,
-        "cold_open_ms": 0.4627,
+        "cold_ms": 19.4827,
+        "cold_open_ms": 0.4226,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -20014,8 +20014,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 16.5956,
-        "cold_open_ms": 0.4245,
+        "cold_ms": 17.3646,
+        "cold_open_ms": 0.3987,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -20232,8 +20232,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 11.0042,
-        "cold_open_ms": 0.4486,
+        "cold_ms": 10.7206,
+        "cold_open_ms": 0.4138,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -20520,8 +20520,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 18.0576,
-        "cold_open_ms": 0.4114,
+        "cold_ms": 18.1789,
+        "cold_open_ms": 0.3687,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -20808,8 +20808,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 8.4344,
-        "cold_open_ms": 0.4175,
+        "cold_ms": 9.0797,
+        "cold_open_ms": 0.3664,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -21096,8 +21096,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 13.5089,
-        "cold_open_ms": 0.3846,
+        "cold_ms": 15.8773,
+        "cold_open_ms": 0.3653,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -21384,8 +21384,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 15.0455,
-        "cold_open_ms": 0.3611,
+        "cold_ms": 47.2807,
+        "cold_open_ms": 8.1486,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -21672,8 +21672,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 11.4949,
-        "cold_open_ms": 0.426,
+        "cold_ms": 10.9548,
+        "cold_open_ms": 0.435,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -21960,8 +21960,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 8.6205,
-        "cold_open_ms": 0.4037,
+        "cold_ms": 7.4313,
+        "cold_open_ms": 0.3886,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -22248,8 +22248,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 9.9143,
-        "cold_open_ms": 0.3731,
+        "cold_ms": 9.7001,
+        "cold_open_ms": 0.4697,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -22466,8 +22466,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 9.0425,
-        "cold_open_ms": 0.4479,
+        "cold_ms": 7.1509,
+        "cold_open_ms": 0.4234,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -22754,8 +22754,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.662,
-        "cold_open_ms": 0.4206,
+        "cold_ms": 3.6019,
+        "cold_open_ms": 0.3892,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -22769,7 +22769,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
           ]
@@ -23041,8 +23041,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.4141,
-        "cold_open_ms": 0.3799,
+        "cold_ms": 3.3093,
+        "cold_open_ms": 0.3798,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -23056,7 +23056,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
           ]
@@ -23328,8 +23328,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 4.8029,
-        "cold_open_ms": 0.3362,
+        "cold_ms": 3.3139,
+        "cold_open_ms": 0.3814,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -23343,7 +23343,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
           ]
@@ -23496,8 +23496,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.8082,
-        "cold_open_ms": 0.3884,
+        "cold_ms": 3.5643,
+        "cold_open_ms": 0.42,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -23511,7 +23511,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
           ]
@@ -23784,8 +23784,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 41.7911,
-        "cold_open_ms": 0.3762,
+        "cold_ms": 44.9008,
+        "cold_open_ms": 0.3943,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24079,8 +24079,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 10.8203,
-        "cold_open_ms": 0.5011,
+        "cold_ms": 12.6409,
+        "cold_open_ms": 0.4818,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24264,8 +24264,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 1.6967,
-        "cold_open_ms": 0.4202,
+        "cold_ms": 1.9808,
+        "cold_open_ms": 0.4052,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24539,8 +24539,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.0675,
-        "cold_open_ms": 0.4268,
+        "cold_ms": 2.3817,
+        "cold_open_ms": 0.3883,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24589,8 +24589,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 0.9255,
-        "cold_open_ms": 0.4405,
+        "cold_ms": 0.9519,
+        "cold_open_ms": 0.4061,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24639,8 +24639,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 0.8844,
-        "cold_open_ms": 0.4395,
+        "cold_ms": 0.8518,
+        "cold_open_ms": 0.4073,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24689,8 +24689,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 0.8424,
-        "cold_open_ms": 0.4199,
+        "cold_ms": 0.8238,
+        "cold_open_ms": 0.4091,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24754,8 +24754,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 1.1386,
-        "cold_open_ms": 0.4065,
+        "cold_ms": 1.1286,
+        "cold_open_ms": 0.405,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -24930,8 +24930,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 55.9012,
-        "cold_open_ms": 0.3918,
+        "cold_ms": 40.1986,
+        "cold_open_ms": 0.5298,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -25225,8 +25225,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.3308,
-        "cold_open_ms": 0.5162,
+        "cold_ms": 2.4328,
+        "cold_open_ms": 0.4531,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -25240,7 +25240,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -25513,8 +25513,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 3.2415,
-        "cold_open_ms": 0.4405,
+        "cold_ms": 2.689,
+        "cold_open_ms": 0.446,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -25528,7 +25528,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -25801,8 +25801,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 2.4461,
-        "cold_open_ms": 0.4181,
+        "cold_ms": 2.0877,
+        "cold_open_ms": 0.47,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -25816,7 +25816,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -26089,8 +26089,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 1.7376,
-        "cold_open_ms": 0.384,
+        "cold_ms": 1.4399,
+        "cold_open_ms": 0.398,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -26104,7 +26104,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -26377,8 +26377,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 1.9693,
-        "cold_open_ms": 0.4059,
+        "cold_ms": 1.6326,
+        "cold_open_ms": 0.3845,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -26392,7 +26392,7 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
             "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
           ]
@@ -26664,8 +26664,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 94.0276,
-        "cold_open_ms": 0.3897,
+        "cold_ms": 7.6972,
+        "cold_open_ms": 0.4397,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -26679,10 +26679,9 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_all_by_stars WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
-            "SEARCH entity USING INDEX ix_entity_kind_label (kind=?)",
-            "USE TEMP B-TREE FOR ORDER BY"
+            "SCAN entity USING INDEX ix_view_repos_all_by_stars"
           ]
         }
       ]
@@ -26873,8 +26872,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 104.6071,
-        "cold_open_ms": 0.4671,
+        "cold_ms": 11.3656,
+        "cold_open_ms": 0.3974,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -26888,10 +26887,9 @@
           ]
         },
         {
-          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_all_by_stars WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
           "plan": [
-            "SEARCH entity USING INDEX ix_entity_kind_label (kind=?)",
-            "USE TEMP B-TREE FOR ORDER BY"
+            "SCAN entity USING INDEX ix_view_repos_all_by_stars"
           ]
         }
       ]
@@ -28357,8 +28355,8 @@
         }
       },
       "timings": {
-        "cold_ms": 12.4,
-        "cold_open_ms": 0.4926,
+        "cold_ms": 8.849,
+        "cold_open_ms": 0.3875,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -29402,8 +29400,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 292.4464,
-        "cold_open_ms": 0.5522,
+        "cold_ms": 279.0953,
+        "cold_open_ms": 0.4367,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -29459,8 +29457,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 6.1657,
-        "cold_open_ms": 0.5002,
+        "cold_ms": 11.1492,
+        "cold_open_ms": 0.5645,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,
@@ -29748,8 +29746,8 @@
         ]
       },
       "timings": {
-        "cold_ms": 18.3254,
-        "cold_open_ms": 0.4051,
+        "cold_ms": 18.0141,
+        "cold_open_ms": 0.4786,
         "cold_evicted": true,
         "warm_ms": [],
         "p50_ms": null,

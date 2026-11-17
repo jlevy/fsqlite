@@ -46,6 +46,8 @@ from paraverse_graph.kb import KbEdge, KbNode, _find_by_id, load_kb, read_artifa
 from paraverse_graph.loader import BATCH_SIZE, load_graph  # noqa: E402
 from paraverse_graph.mapping import (  # noqa: E402
     ENTITY_LABEL,
+    LABELS,
+    PARTICIPATION_LABELS,
     TYPED_REF,
     edge_properties,
     labels_for,
@@ -115,7 +117,7 @@ def prepare(batch: Path, ops: list[dict[str, Any]], graph: Any) -> dict[str, Any
     for op in ops:
         if op["op"] != "upsert":
             continue
-        origins.append({"ids": [n["id"] for n in op["nodes"]], "path": op["path"]})
+        origins.extend({"id": n["id"], "path": op["path"]} for n in op["nodes"])
         for e in op["edges"]:
             attrs = {k: v for k, v in e.items() if k not in ("source", "relation", "target")}
             kb_edge = KbEdge(source=e["source"], relation=e["relation"], target=e["target"], attrs=attrs)
@@ -129,16 +131,33 @@ def prepare(batch: Path, ops: list[dict[str, Any]], graph: Any) -> dict[str, Any
     }
 
 
+# FalkorDB 4.18.3 at S2-r2: running the write phases below back to back (node upserts,
+# edge creates, then DETACH DELETE) left Repository nodes that every later read rejects
+# with "Attempted to access undefined attribute". Reading every label between phases
+# avoids it (see the W2 notes).
+# A read through the Entity label is not enough: the stale entries are in the per-label
+# matrices, so each label paraverse assigns is read once.
+SYNC_LABELS = sorted({*LABELS.values(), *PARTICIPATION_LABELS.values(), "Account", "Sponsor", ENTITY_LABEL})
+SYNC_READ = " UNION ALL ".join(f"MATCH (n:{label}) RETURN count(n.id) AS c" for label in SYNC_LABELS)
+
+
+def _sync(graph: Any) -> None:
+    graph.ro_query(SYNC_READ)
+
+
 def apply_prepared(graph: Any, prep: dict[str, Any]) -> dict[str, float]:
     t: dict[str, float] = {}
     t0 = time.perf_counter()
+    # One row per node, so each lookup uses the Entity id index (`n.id IN row.ids` does
+    # not, and scans every Entity per row).
     for batch in _batches(prep["origins"]):
         for arrow in ("-[r]->()", "<-[r]-()"):
             graph.query(
-                f"UNWIND $rows AS row MATCH (n:{ENTITY_LABEL}) WHERE n.id IN row.ids "
+                f"UNWIND $rows AS row MATCH (n:{ENTITY_LABEL} {{id: row.id}}) "
                 f"MATCH (n){arrow} WHERE r.origin = row.path DELETE r",
                 {"rows": batch},
             )
+    _sync(graph)
     t["drop_origin_edges_s"] = time.perf_counter() - t0
     t0 = time.perf_counter()
     for labels, rows in sorted(prep["nodes"].items()):
@@ -147,6 +166,7 @@ def apply_prepared(graph: Any, prep: dict[str, Any]) -> dict[str, float]:
                 f"UNWIND $rows AS row MERGE (n:{ENTITY_LABEL} {{id: row.id}}) SET n = row.props SET n:{':'.join(labels)}",
                 {"rows": batch},
             )
+    _sync(graph)
     t["upsert_nodes_s"] = time.perf_counter() - t0
     t0 = time.perf_counter()
     for rel_type, rows in sorted(prep["edges"].items()):
@@ -156,14 +176,17 @@ def apply_prepared(graph: Any, prep: dict[str, Any]) -> dict[str, float]:
                 f"CREATE (a)-[e:{rel_type}]->(b) SET e += row.p",
                 {"rows": batch},
             )
+    _sync(graph)
     t["create_edges_s"] = time.perf_counter() - t0
     t0 = time.perf_counter()
     for batch in _batches(prep["deletes"]):
         graph.query(f"UNWIND $ids AS id MATCH (n:{ENTITY_LABEL} {{id: id}}) DETACH DELETE n", {"ids": batch})
+    _sync(graph)
     t["delete_s"] = time.perf_counter() - t0
     t0 = time.perf_counter()
     for m in prep["merges"]:
         merge(graph, m)
+    _sync(graph)
     t["merge_s"] = time.perf_counter() - t0
     return t
 
@@ -475,6 +498,7 @@ def run(scale: str, corpus: Path, data: Path, rebuild_trickle: bool, rebuild_inv
             "visible_s: until a new reader sees the change; durable_s adds an explicit SAVE (waiting out any BGSAVE).",
             "W3 after p05 for the incremental arm is in w3-after-p05.json and is compared with harness/expected/<scale>-p05.",
             "Search documents (_search) are not stored by paraverse, so batches' search rows are not applied in FalkorDB.",
+            "FalkorDB 4.18.3 engine issue: at S2-r2 p05 (11,948 ops), the incremental write phases run back to back corrupted Repository nodes; every later read touching them failed with 'Attempted to access undefined attribute', with or without saves. Reading every label once between write phases (w2_v2.SYNC_READ) avoids it; a read through the Entity label alone does not. The run uses that workaround. Not seen at S1-r2, whose run predates the workaround.",
         ],
     }
 

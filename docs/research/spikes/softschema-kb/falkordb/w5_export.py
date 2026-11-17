@@ -139,7 +139,7 @@ def compare_kb(src: Path, exp: Path) -> dict[str, Any]:
     exp_edges = Counter(edge_key(e) for e in _jsonl(exp / "_graph" / "edges.jsonl"))
 
     paths = sorted({n["path"] for n in src_nodes.values() if n["kind"] not in NESTED})
-    payload_equal = block_equal = title_equal = byte_equal = 0
+    payload_equal = block_equal = title_equal = byte_equal = document_equal = 0
     body_lost = 0
     payload_diffs: list[str] = []
     src_bytes = exp_bytes = 0
@@ -158,6 +158,7 @@ def compare_kb(src: Path, exp: Path) -> dict[str, Any]:
             payload_diffs.append(rel)
         block_equal += sdoc.get("softschema") == edoc.get("softschema")
         title_equal += sdoc.get("title") == edoc.get("title")
+        document_equal += sdoc == edoc  # every frontmatter or YAML key, parsed
         text = sb.decode("utf-8")
         if text.startswith("---\n"):
             body = text.split("\n---\n", 1)[1] if "\n---\n" in text else ""
@@ -176,6 +177,7 @@ def compare_kb(src: Path, exp: Path) -> dict[str, Any]:
         "payload_equal": payload_equal,
         "payload_diff_samples": payload_diffs,
         "softschema_block_equal": block_equal,
+        "documents_equal_parsed": document_equal,
         "frontmatter_title_equal": title_equal,
         "byte_identical_files": byte_equal,
         "record_bytes_source": src_bytes,
@@ -206,6 +208,21 @@ def run(scale: str, corpus: Path, data: Path, results_dir: Path) -> dict[str, An
     exported = export(server.graph, exp)
     server.shutdown(save=False)
     comparison = compare_kb(kb, exp)
+    import random
+
+    from paraverse_graph.validation import validate_artifacts
+
+    records = sorted({row["path"] for row in _jsonl(exp / "_graph" / "nodes.jsonl") if row["kind"] not in NESTED})
+    sample = random.Random(20261117).sample(records, min(500, len(records)))
+    t0 = time.perf_counter()
+    report = validate_artifacts(exp, sample)
+    comparison["export_softschema_validation"] = {
+        "sampled": report.checked,
+        "problems": len(report.problems),
+        "problem_samples": [p.line()[:200] for p in report.problems[:3]],
+        "seconds": round(time.perf_counter() - t0, 3),
+        "note": "each exported record against the schema its reconstructed softschema block names",
+    }
 
     # Reload the export with paraverse and run W3 on it.
     reload_dir = work / "reload"
