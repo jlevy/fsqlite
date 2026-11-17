@@ -1,0 +1,2948 @@
+diff -ruN '--exclude=__pycache__' a/common.ts b/common.ts
+--- a/common.ts	2026-11-17 03:07:40.146461225 +0000
++++ b/common.ts	2026-11-17 06:20:11.850311336 +0000
+@@ -17,14 +17,26 @@
+ import { DatabaseSync } from 'node:sqlite'
+ 
+ export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+-export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
+-export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
+-export const SCRATCH =
+-  process.env.KB_SCRATCH ??
+-  '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
++// Combined v2 copy (spikes 3, 1, 2): the package copy beside this tree, and results under
++// results/<KB_RESULTS_ARM>, by default results/fsqlite-v2/combined.
++export const FSQLITE_SRC = resolve(SPIKE_DIR, '../package/src/index.ts')
++// KB_RESULTS_ARM names a variant's results directory, for example `fsqlite-v2/combined`.
++export const RESULTS_ARM = process.env.KB_RESULTS_ARM ?? 'fsqlite-v2/combined'
++export const RESULTS_DIR = join(SPIKE_DIR, 'results', RESULTS_ARM)
++export const SCRATCH = process.env.KB_SCRATCH ?? resolve(SPIKE_DIR, '../kbscratch')
+ export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
+ export const WORK_DIR = join(SCRATCH, 'fsqlite-spike')
+-export const S0_KB = resolve(SPIKE_DIR, '../../../../attic/paraverse/vendor/universe2026-md/kb')
++export const S0_KB =
++  process.env.KB_S0_KB ?? '/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb'
++
++/**
++ * Spike 3: extra gc options for every maintenance call the workflows make, from the
++ * KB_GC_OPTS environment variable (JSON), for example
++ * {"verifyMaxAgeMs":60000,"collectOn":"quick"}. Empty means the package defaults.
++ */
++export const GC_OPTS: Record<string, unknown> = process.env.KB_GC_OPTS
++  ? (JSON.parse(process.env.KB_GC_OPTS) as Record<string, unknown>)
++  : {}
+ 
+ /** The KB directory for a scale: S0 is the vendored KB, others come from the corpus dir. */
+ export function kbDirFor(scale: string): string {
+@@ -240,6 +252,7 @@
+   const path = join(dir, `${workflow}.json`)
+   const doc = {
+     backend: 'fsqlite',
++    variant: `${RESULTS_ARM} (v2 prototype: spikes 3, 1, and 2 combined)`,
+     scale,
+     workflow,
+     recorded_at: new Date().toISOString(),
+diff -ruN '--exclude=__pycache__' a/conflict.ts b/conflict.ts
+--- a/conflict.ts	2026-11-17 01:18:41.453876838 +0000
++++ b/conflict.ts	2026-11-17 06:19:51.827126782 +0000
+@@ -13,7 +13,7 @@
+ import { DatabaseSync } from 'node:sqlite'
+ import { SnapshotStore } from './fsq.ts'
+ import { WORK_DIR, cloneStore, isMain, parseArgs, writeResult } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { GENERIC_POLICY, genericOptions } from './mapping.ts'
+ import { queryInstances } from './w3.ts'
+ 
+ type Action = 'lww' | 'union' | 'strict'
+@@ -64,11 +64,7 @@
+     const dir = join(work, action)
+     cloneStore(base ?? '', dir)
+     const policy = Object.fromEntries(Object.keys(GENERIC_POLICY).map((t) => [t, action]))
+-    const store = new SnapshotStore(dir, {
+-      schema: genericDdl(),
+-      schemaVersion: GENERIC_SCHEMA_VERSION,
+-      conflictPolicy: policy,
+-    }).init()
++    const store = new SnapshotStore(dir, { ...genericOptions(), conflictPolicy: policy }).init()
+     const baseSnapshot = store.snapshotPath(store.currentVersion())
+     const before = store.read((db) => bioOf(db, id))
+     const update = (value: string) => (db: DatabaseSync) => {
+diff -ruN '--exclude=__pycache__' a/fsq.ts b/fsq.ts
+--- a/fsq.ts	2026-11-17 00:35:06.213994286 +0000
++++ b/fsq.ts	2026-11-17 06:19:39.587766098 +0000
+@@ -1,2 +1,3 @@
+ // The spike uses fsqlite only through its public API, imported from the package source.
+-export * from '../../../../../packages/fsqlite/src/index.ts'
++// Spike 3 copy: the fsqlite v2 prototype (maintenance and publication) in ../../package.
++export * from '../../package/src/index.ts'
+diff -ruN '--exclude=__pycache__' a/h3.ts b/h3.ts
+--- a/h3.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/h3.ts	2026-11-17 06:19:51.827220290 +0000
+@@ -0,0 +1,107 @@
++// v2 Spike 1 (H3): publish a new view index in the same store, several times, by bumping the
++// derived version with alternating view definitions. Each publish is one reconcile with no
++// pending envelopes; gc({ retain: 0 }) follows, then a warm per-table quick_check of the new
++// head separates a cold gate from the build.
++//
++// Usage: node h3.ts <store-dir> --scale S2-r2 [--reps 3]
++// Writes results/fsqlite-v2/spike1/<scale>/w4-case5-repeat.json.
++
++import { DatabaseSync } from 'node:sqlite'
++import { SnapshotStore, readStoreMarker } from './fsq.ts'
++import { isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
++import { BUILDS, GENERIC_DERIVED_VERSION, TABLE_VIEWS, genericOptions, genericPlans } from './mapping.ts'
++import { openReader } from './w3.ts'
++
++const LOCK = { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } }
++
++function warmTableCheckMs(path: string): number {
++  const db = new DatabaseSync(path, { readOnly: true })
++  try {
++    const tables = (db.prepare('PRAGMA main.table_list').all() as { name: string; type: string }[])
++      .filter((r) => (r.type === 'table' || r.type === 'shadow') && r.name !== 'sqlite_schema')
++      .map((r) => r.name)
++    const t = nowMs()
++    for (const name of tables) {
++      db.prepare(`PRAGMA main.quick_check("${name}")`).all()
++    }
++    return round(nowMs() - t)
++  } finally {
++    db.close()
++  }
++}
++
++function main(): void {
++  const { flags, args } = parseArgs(process.argv.slice(2))
++  const dir = args[0] ?? ''
++  const scale = flags.scale ?? 'S2-r2'
++  const reps = Number(flags.reps ?? 3)
++  const id = readStoreMarker(dir).store_id
++  const variants = [
++    TABLE_VIEWS.map((v) =>
++      v.name === 'repos_by_stars' ? { ...v, filter: "payload ->> '$.primary_language.name'" } : v,
++    ),
++    TABLE_VIEWS,
++  ]
++  const runs = []
++  for (let r = 0; r < reps; r++) {
++    const views = variants[r % 2] ?? TABLE_VIEWS
++    // The variant's filter is NULL on these string-valued payloads, so its total assertion
++    // is left out; the page assertions stay.
++    const plans = genericPlans(views).filter((p) => r % 2 === 1 || !p.name.endsWith('total'))
++    const version = GENERIC_DERIVED_VERSION + 1 + r
++    const t0 = nowMs()
++    const store = new SnapshotStore(dir, genericOptions({ views, derivedVersion: version, plans })).init()
++    const res = store.reconcile(LOCK)
++    const publishMs = nowMs() - t0
++    const build = BUILDS.at(-1)
++    const head = store.snapshotPath(store.currentVersion())
++    const tGc = nowMs()
++    store.gc({ retain: 0 })
++    const gcMs = nowMs() - tGc
++    const db = openReader(head)
++    const plan = (
++      db
++        .prepare(
++          `EXPLAIN QUERY PLAN SELECT id FROM entity INDEXED BY ix_view_repos_by_stars
++           WHERE kind = 'repository' AND ${views.find((v) => v.name === 'repos_by_stars')?.filter} = ?
++           ORDER BY payload ->> '$.stars' DESC, id LIMIT 50`,
++        )
++        .all('Python') as { detail: string }[]
++    ).map((x) => x.detail)
++    db.close()
++    runs.push({
++      derived_version: version,
++      published: res.published,
++      publish_ms: round(publishMs),
++      build_index_ms: build?.derive_ms,
++      statistics_ms: build?.statistics_ms,
++      gate: build?.gate,
++      gate_ms: build?.gate_ms,
++      hook_ms: build?.hook_ms,
++      created: build?.createdObjects,
++      dropped: build?.droppedObjects,
++      warm_table_check_after_ms: warmTableCheckMs(head),
++      gc_ms: round(gcMs),
++      plan,
++      store_id_unchanged: readStoreMarker(dir).store_id === id,
++    })
++  }
++  const sorted = (k: string) =>
++    runs.map((x) => Number((x as Record<string, unknown>)[k])).sort((a, b) => a - b)
++  const median = (k: string) => sorted(k)[Math.floor((runs.length - 1) / 2)]
++  console.log(
++    writeResult(scale, 'w4-case5-repeat', {
++      workflow: 'W4 case 5 (view index change) as a derived version bump, repeated',
++      reps: runs.length,
++      publish_ms_median: median('publish_ms'),
++      gate_ms_median: median('gate_ms'),
++      build_index_ms_median: median('build_index_ms'),
++      warm_table_check_after_ms_median: median('warm_table_check_after_ms'),
++      runs,
++    }),
++  )
++}
++
++if (isMain(import.meta.url)) {
++  main()
++}
+diff -ruN '--exclude=__pycache__' a/load.ts b/load.ts
+--- a/load.ts	2026-11-17 01:14:36.189887853 +0000
++++ b/load.ts	2026-11-17 06:19:51.827322377 +0000
+@@ -12,7 +12,7 @@
+ import { DirectStore, SnapshotStore } from './fsq.ts'
+ import { forEachLineSync, isMain, maxRssMiB, nowMs, parseArgs, round } from './common.ts'
+ import type { KbRow } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { BUILDS, BUILD_CACHE_KIB, GenericLoader, genericOptions } from './mapping.ts'
+ 
+ /** Compare loaded counts with the export's own `stats.json`, as paraverse's loader does. */
+ export function countProblems(db: DatabaseSync): string[] {
+@@ -55,6 +55,22 @@
+     'DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync',
+   lock_options: IMPORT_LOCK,
+   gc: 'none during the import; w1.ts then runs gc({ retain: 0 }) and times it',
++  v2_spike1: {
++    control_without_derived: process.env.FSQ_NO_DERIVED === '1',
++    derived:
++      'indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics ' +
++      'built inside the generation build; the DirectStore import drops them before the rows and ' +
++      'rebuilds them after (indexes after rows); a bulk reconcile does the same',
++    build_cache_kib: BUILD_CACHE_KIB,
++    analysis_limit: Number(process.env.FSQ_ANALYSIS_LIMIT ?? 0),
++    rebuild_above_ratio: Number(process.env.FSQ_REBUILD_RATIO ?? 0.5),
++  },
++}
++
++/** The derived build fsqlite reported for the import's publish. */
++function lastBuild(): Record<string, unknown> | null {
++  const b = BUILDS.at(-1)
++  return b ? { ...b } : null
+ }
+ 
+ /**
+@@ -103,10 +119,7 @@
+ 
+ export function loadDirect(jsonl: string, dir: string): Record<string, unknown> {
+   const t0 = nowMs()
+-  const store = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  }).init()
++  const store = new DirectStore(dir, genericOptions()).init()
+   const tInit = nowMs()
+   let counts: GenericLoader['counts'] | undefined
+   let phases: Record<string, number> = {}
+@@ -127,16 +140,19 @@
+         throw new Error(`load does not match stats.json: ${problems.slice(0, 5).join('; ')}`)
+       }
+     },
+-    { lockOpts: IMPORT_LOCK },
++    { lockOpts: IMPORT_LOCK, derived: 'rebuild' },
+   )
+   const tWrite = nowMs()
++  const build = lastBuild()
+   const snapshot = store.snapshotPath(version)
+   const publishMs = tWrite - tInit - callbackMs
+   const qc = quickCheckMs(snapshot)
+   return {
+     arm: 'DirectStore',
+-    route: 'init() with the DDL, then one DirectStore.write streaming every row',
++    route:
++      'init() with the base DDL, then one DirectStore.write({ derived: "rebuild" }) streaming every row',
+     version,
++    build,
+     counts,
+     phases: {
+       init_ddl_ms: round(tInit - t0),
+@@ -144,7 +160,13 @@
+       verify_counts_ms: round(verifyMs),
+       publish_ms: round(publishMs),
+       publish_note:
+-        'COMMIT, quick_check, foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs',
++        'derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check ' +
++        '(full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs',
++      derived_hook_ms: build ? round(Number(build.hook_ms)) : null,
++      gate_ms: build ? round(Number(build.gate_ms)) : null,
++      publish_without_hook_and_gate_ms: build
++        ? round(publishMs - Number(build.hook_ms) - Number(build.gate_ms))
++        : null,
+       quick_check_warm_ms: qc,
+       ingest_through_durable_ms: round(tWrite - t0 - (phases.decode_ms ?? 0)),
+     },
+@@ -157,11 +179,7 @@
+ 
+ export function loadSnapshot(jsonl: string, dir: string, batch: number): Record<string, unknown> {
+   const t0 = nowMs()
+-  const store = new SnapshotStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-    conflictPolicy: GENERIC_POLICY,
+-  }).init()
++  const store = new SnapshotStore(dir, genericOptions()).init()
+   const tInit = nowMs()
+   // Rows are buffered per batch because a capture callback must run synchronously.
+   let pending: KbRow[] = []
+@@ -202,6 +220,7 @@
+   const tCaptured = nowMs()
+   const result = store.reconcile({ lockOpts: IMPORT_LOCK })
+   const tReconciled = nowMs()
++  const build = lastBuild()
+   const problems = store.read((db) => countProblems(db))
+   const snapshot = store.snapshotPath(result.published)
+   return {
+@@ -211,6 +230,7 @@
+     captures,
+     counts,
+     reconcile: result,
++    build,
+     phases: {
+       init_ddl_ms: round(tInit - t0),
+       decode_ms: round(decodeMs),
+diff -ruN '--exclude=__pycache__' a/mapping.ts b/mapping.ts
+--- a/mapping.ts	2026-11-17 03:08:11.802428951 +0000
++++ b/mapping.ts	2026-11-17 06:23:38.899903032 +0000
+@@ -14,8 +14,18 @@
+ // Every table has a non-null primary key, and the schema declares no triggers, virtual
+ // tables, foreign keys, or ON CONFLICT clauses, so SnapshotStore and DirectStore both
+ // accept it and concurrent envelopes never quarantine on ordering.
++//
++// fsqlite v2 Spike 2 (design section 3.6): deletes and merges are facts too. A v2 delete
++// writes a `kb_tombstone` row per node and a merge a `kb_redirect` row, both keyed by the
++// affected id, so a later envelope, in this build or a later one, can resolve an edge
++// endpoint through them instead of relying on one loader's memory of the batch.
+ 
+ import type { DatabaseSync, StatementSync } from 'node:sqlite'
++import type { BuildInfo, ChangedKeys, DerivedSpec, PlanAssertion, Relation } from './fsq.ts'
++// Combined v2: the Spike 2 side of the mapping (reducers, missing-row policy, and the
++// closure over tombstones and redirects). v2.ts imports this module back; neither uses the
++// other's bindings at module top level, so the cycle is safe.
++import { kbClosure, v2StoreOptions } from './v2.ts'
+ import type {
+   DocRow,
+   EdgeRow,
+@@ -146,11 +156,234 @@
+   reason TEXT NOT NULL,
+   op TEXT NOT NULL
+ );
++CREATE TABLE kb_tombstone (
++  id TEXT PRIMARY KEY NOT NULL,
++  path TEXT NOT NULL
++) WITHOUT ROWID;
++CREATE TABLE kb_redirect (
++  absorbed TEXT PRIMARY KEY NOT NULL,
++  survivor TEXT NOT NULL,
++  absorbed_path TEXT NOT NULL,
++  survivor_path TEXT NOT NULL
++) WITHOUT ROWID;
+ `.trim()
+ }
+ 
+ export const GENERIC_SCHEMA_VERSION = 1
+ 
++// ---------------------------------------------------------------------------------------
++// fsqlite v2 Spike 1: the same mapping split into base tables (the changeset contract) and
++// derived objects that every generation build maintains (indexes, an FTS5 trigram index,
++// a facet summary, statistics), plus closure relations and plan assertions.
++
++/** The base tables only: what envelopes carry and the schema hash covers. */
++export function baseDdl(): string {
++  return genericDdl()
++    .split('\n')
++    .filter((line) => !line.startsWith('CREATE INDEX'))
++    .join('\n')
++}
++
++/** Derived objects: every secondary index, the in-file search index, the facet summary. */
++export function derivedDdl(views: readonly TableView[] = TABLE_VIEWS): string {
++  const indexes = genericDdl(views)
++    .split('\n')
++    .filter((line) => line.startsWith('CREATE INDEX'))
++  return [
++    ...indexes,
++    // Search: a contentless trigram index whose rowids map to search_text keys.
++    'CREATE TABLE search_doc (docid INTEGER PRIMARY KEY, id TEXT NOT NULL, r INTEGER NOT NULL, UNIQUE (id, r));',
++    "CREATE VIRTUAL TABLE search_fts USING fts5(text, content = '', contentless_delete = 1, tokenize = 'trigram');",
++    // Facets: distinct sources per (relation, source kind, target).
++    `CREATE TABLE facet_count (relation TEXT NOT NULL, target TEXT NOT NULL, source_kind TEXT NOT NULL,
++  n INTEGER NOT NULL, PRIMARY KEY (relation, target, source_kind)) WITHOUT ROWID;`,
++    'CREATE INDEX ix_facet_top ON facet_count (relation, source_kind, n DESC, target);',
++  ].join('\n')
++}
++
++const FACET_GROUP = `INSERT INTO facet_count (relation, target, source_kind, n)
++  SELECT g.relation, g.target, s.kind, count(DISTINCT g.source)
++  FROM edge g JOIN entity s ON s.id = g.source`
++
++/** Fill the derived tables from the base tables (they are empty when this runs). */
++function rebuildDerived(db: DatabaseSync): void {
++  db.exec(`
++    INSERT INTO search_doc (id, r) SELECT id, rank FROM search_text ORDER BY id, rank;
++    INSERT INTO search_fts (rowid, text)
++      SELECT d.docid, s.text FROM search_doc d JOIN search_text s ON s.id = d.id AND s.rank = d.r
++      ORDER BY d.docid;
++    INSERT INTO search_fts (search_fts) VALUES ('optimize');
++    ${FACET_GROUP} GROUP BY g.relation, g.target, s.kind;
++  `)
++}
++
++/** Bring the search index and the facet summary up to date for the changed base rows. */
++function updateDerived(db: DatabaseSync, changes: ChangedKeys): void {
++  const ids = new Set<string>()
++  for (const table of ['search_text', 'entity']) {
++    for (const r of changes.get(table) ?? []) {
++      ids.add(String(r.key[0]))
++    }
++  }
++  if (ids.size > 0) {
++    const docs = db.prepare('SELECT docid FROM search_doc WHERE id = ?')
++    const ftsDelete = db.prepare('DELETE FROM search_fts WHERE rowid = ?')
++    const docDelete = db.prepare('DELETE FROM search_doc WHERE id = ?')
++    const docInsert = db.prepare(
++      'INSERT INTO search_doc (id, r) SELECT id, rank FROM search_text WHERE id = ? ORDER BY rank',
++    )
++    const ftsInsert = db.prepare(
++      `INSERT INTO search_fts (rowid, text) SELECT d.docid, s.text FROM search_doc d
++       JOIN search_text s ON s.id = d.id AND s.rank = d.r WHERE d.id = ? ORDER BY d.docid`,
++    )
++    for (const id of [...ids].sort()) {
++      for (const d of docs.all(id) as { docid: number }[]) {
++        ftsDelete.run(d.docid)
++      }
++      docDelete.run(id)
++      docInsert.run(id)
++      ftsInsert.run(id)
++    }
++  }
++  // Facet groups: every (relation, target) a changed edge names, and every group a changed
++  // entity is a source of (its kind may have changed).
++  const groups = new Set<string>()
++  for (const r of changes.get('edge') ?? []) {
++    groups.add(JSON.stringify([r.key[1], r.key[2]]))
++  }
++  const out = db.prepare('SELECT DISTINCT relation, target FROM edge WHERE source = ?')
++  for (const r of changes.get('entity') ?? []) {
++    for (const g of out.all(r.key[0] as string) as { relation: string; target: string }[]) {
++      groups.add(JSON.stringify([g.relation, g.target]))
++    }
++  }
++  if (groups.size > 0) {
++    const drop = db.prepare('DELETE FROM facet_count WHERE relation = ? AND target = ?')
++    const add = db.prepare(`${FACET_GROUP} WHERE g.relation = ? AND g.target = ? GROUP BY s.kind`)
++    for (const g of [...groups].sort()) {
++      const [relation, target] = JSON.parse(g) as [string, string]
++      drop.run(relation, target)
++      add.run(relation, target)
++    }
++  }
++}
++
++/** The view page as W3 runs it, for a plan assertion. */
++function viewPageSql(v: TableView, hinted: boolean): string {
++  const from = hinted ? `entity INDEXED BY ix_view_${v.name}` : 'entity'
++  return `SELECT id, label, ${v.value} AS value FROM ${from} WHERE kind = '${v.kind}'${
++    v.filter ? ` AND ${v.filter} = ?` : ''
++  } ORDER BY ${v.sort}${v.descending ? ' DESC' : ''}, id LIMIT ? OFFSET ?`
++}
++
++export const HUB_JOIN_UNHINTED = `SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge
++  WHERE target = ? AND relation = 'affiliated_with') m
++  CROSS JOIN entity e ON e.id = m.source WHERE e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?`
++
++/**
++ * Plans every build asserts: the W3 view pages, each filtered view's total (W3 does not pin
++ * it, and sampled statistics moved it off its index), and the people-by-org join with no hint.
++ */
++export function genericPlans(views: readonly TableView[] = TABLE_VIEWS): PlanAssertion[] {
++  return [
++    ...views.map((v) => ({
++      name: `view ${v.name}`,
++      sql: viewPageSql(v, true),
++      uses: `ix_view_${v.name}`,
++    })),
++    ...views
++      .filter((v) => v.filter !== null)
++      .map((v) => ({
++        name: `view ${v.name} total`,
++        sql: `SELECT count(*) AS n FROM entity WHERE kind = '${v.kind}' AND ${v.filter} = ?`,
++        uses: `ix_view_${v.name}`,
++      })),
++    {
++      name: 'people_by_org join without a hint',
++      sql: HUB_JOIN_UNHINTED,
++      uses: ['ix_entity_id_kind', 'sqlite_autoindex_entity_1'],
++    },
++  ]
++}
++
++/** The unfiltered view page without INDEXED BY: statistics do not fix its plan (A.8). */
++export function unhintedViewPlan(): PlanAssertion {
++  const v = TABLE_VIEWS.find((x) => x.name === 'repos_all_by_stars') as TableView
++  return { name: 'repos_all_by_stars without INDEXED BY', sql: viewPageSql(v, false), uses: 'ix_view_repos_all_by_stars' }
++}
++
++export const GENERIC_DERIVED_VERSION = 1
++
++export function genericDerived(
++  views: readonly TableView[] = TABLE_VIEWS,
++  version = GENERIC_DERIVED_VERSION,
++  plans: PlanAssertion[] = genericPlans(views),
++): DerivedSpec {
++  return {
++    version,
++    ddl: derivedDdl(views),
++    rebuild: rebuildDerived,
++    update: updateDerived,
++    statistics: 'optimize',
++    analysisLimit: Number(process.env.FSQ_ANALYSIS_LIMIT ?? 0),
++    plans,
++    rebuildAboveRatio: Number(process.env.FSQ_REBUILD_RATIO ?? 0.5),
++    // Combined v2: the closure runs in every build before the cascade relations below. It
++    // moves edges of an absorbed id to its survivor and drops edges of a tombstoned id,
++    // from the stored facts, so a merge's edges move instead of being deleted.
++    // KB_V2_CLOSURE=0 leaves only the relations (Spike 1's closure), for an ablation.
++    ...(process.env.KB_V2_CLOSURE === '0' ? {} : { closure: kbClosure }),
++  }
++}
++
++/**
++ * Cascade relations: an edge whose endpoint a build deleted goes. In the combined prototype
++ * they run after the closure hook, which has already moved a merge's edges to the survivor,
++ * so they remove only edges of a node that is deleted and not redirected.
++ */
++export const GENERIC_RELATIONS: Relation[] = [
++  { child: 'edge', columns: ['source'], parent: 'entity', onMissing: 'delete' },
++  { child: 'edge', columns: ['target'], parent: 'entity', onMissing: 'delete' },
++]
++
++/** The build page cache (KiB); `FSQ_BUILD_CACHE_KIB` overrides the 256 MiB default. */
++export const BUILD_CACHE_KIB = Number(process.env.FSQ_BUILD_CACHE_KIB ?? 262144)
++
++/** Every build this process ran, as fsqlite reported it. */
++export const BUILDS: BuildInfo[] = []
++
++/** Store options for the generic mapping under v2 Spike 1. */
++export function genericOptions(
++  o: { views?: readonly TableView[]; derivedVersion?: number; plans?: PlanAssertion[] } = {},
++) {
++  const views = o.views ?? TABLE_VIEWS
++  // Spike 2: the reducers and the missing-row policy, from the environment (v2.ts).
++  const v2 = v2StoreOptions()
++  if (process.env.FSQ_NO_DERIVED === '1') {
++    // Control for H4: the f1.0 schema (indexes in the base DDL, no derived objects, no
++    // closure), with only the build page cache changed.
++    return {
++      schema: genericDdl(views),
++      schemaVersion: GENERIC_SCHEMA_VERSION,
++      conflictPolicy: v2.conflictPolicy ?? GENERIC_POLICY,
++      ...(v2.reducers ? { reducers: v2.reducers } : {}),
++      buildCacheKiB: BUILD_CACHE_KIB,
++    }
++  }
++  return {
++    schema: baseDdl(),
++    schemaVersion: GENERIC_SCHEMA_VERSION,
++    conflictPolicy: v2.conflictPolicy ?? GENERIC_POLICY,
++    ...(v2.reducers ? { reducers: v2.reducers } : {}),
++    derived: genericDerived(views, o.derivedVersion, o.plans ?? genericPlans(views)),
++    relations: GENERIC_RELATIONS,
++    buildCacheKiB: BUILD_CACHE_KIB,
++    onBuild: (info: BuildInfo) => {
++      BUILDS.push(info)
++    },
++  }
++}
++
+ /** SnapshotStore merge policy: crawler and agent writes replace whole rows. */
+ export const GENERIC_POLICY = {
+   entity: 'lww',
+@@ -161,6 +394,8 @@
+   kind_schema: 'lww',
+   search_text: 'lww',
+   quarantine: 'lww',
++  kb_tombstone: 'lww',
++  kb_redirect: 'lww',
+ } as const
+ 
+ // Typed references, as paraverse's mapping recognizes them.
+@@ -446,7 +681,13 @@
+   /** Time spent deriving labels, promoted fields and search text (the transform phase). */
+   transformMs = 0
+ 
+-  constructor(db: DatabaseSync, fresh = false) {
++  /**
++   * `facts`: start from the tombstones and redirects already stored, so an upsert applied
++   * after a delete or merge of a node it references resolves that endpoint the way a
++   * line-order load of the whole batch does (Spike 2, H3). Without it the loader knows only
++   * the deletes and merges it has applied itself.
++   */
++  constructor(db: DatabaseSync, fresh = false, opts: { facts?: boolean } = {}) {
+     this.fresh = fresh
+     this.schema = db.prepare(
+       `INSERT INTO kind_schema (kind, file, schema, fields) VALUES (?, ?, ?, ?)
+@@ -522,6 +763,29 @@
+         `INSERT INTO quarantine (path, id, reason, op) VALUES (?, ?, ?, ?)
+          ON CONFLICT (path) DO UPDATE SET id = excluded.id, reason = excluded.reason, op = excluded.op`,
+       ),
++      tombstone: db.prepare(
++        `INSERT INTO kb_tombstone (id, path) VALUES (?, ?)
++         ON CONFLICT (id) DO UPDATE SET path = excluded.path`,
++      ),
++      untombstone: db.prepare('DELETE FROM kb_tombstone WHERE id = ?'),
++      redirect: db.prepare(
++        `INSERT INTO kb_redirect (absorbed, survivor, absorbed_path, survivor_path)
++         VALUES (?, ?, ?, ?)
++         ON CONFLICT (absorbed) DO UPDATE SET survivor = excluded.survivor,
++           absorbed_path = excluded.absorbed_path, survivor_path = excluded.survivor_path`,
++      ),
++      unredirect: db.prepare('DELETE FROM kb_redirect WHERE absorbed = ?'),
++    }
++    if (opts.facts) {
++      for (const r of db.prepare('SELECT id FROM kb_tombstone').all() as { id: string }[]) {
++        this.deleted.add(r.id)
++      }
++      for (const r of db.prepare('SELECT absorbed, survivor FROM kb_redirect').all() as {
++        absorbed: string
++        survivor: string
++      }[]) {
++        this.retarget.set(r.absorbed, r.survivor)
++      }
+     }
+   }
+ 
+@@ -550,6 +814,15 @@
+     const q = this.v2
+     if (row.op === 'upsert') {
+       q.dropOrigin!.run(row.path)
++      // An upsert of an id clears its tombstone and redirect, in envelope order.
++      for (const id of row.node_ids) {
++        if (this.deleted.delete(id)) {
++          q.untombstone!.run(id)
++        }
++        if (this.retarget.delete(id)) {
++          q.unredirect!.run(id)
++        }
++      }
+     } else if (row.op === 'delete') {
+       q.dropOrigin!.run(row.path)
+       for (const id of row.node_ids) {
+@@ -557,6 +830,7 @@
+         q.dropTarget!.run(id)
+         q.dropEntity!.run(id)
+         q.dropSearch!.run(id)
++        q.tombstone!.run(id, row.path)
+         this.deleted.add(id)
+       }
+       q.dropDoc!.run(row.path)
+@@ -588,6 +862,7 @@
+       q.dropEntity!.run(row.absorbed)
+       q.dropSearch!.run(row.absorbed)
+       q.dropDoc!.run(row.absorbed_path)
++      q.redirect!.run(row.absorbed, row.survivor, row.absorbed_path, row.survivor_path)
+       this.retarget.set(row.absorbed, row.survivor)
+     }
+     this.counts.op++
+diff -ruN '--exclude=__pycache__' a/plans.ts b/plans.ts
+--- a/plans.ts	2026-11-17 03:23:55.636762802 +0000
++++ b/plans.ts	2026-11-17 06:19:51.827581915 +0000
+@@ -5,11 +5,64 @@
+ // Usage: node plans.ts <store-dir> --scale S0
+ // Writes results/fsqlite/<scale>/w3-plans.json.
+ 
+-import { isMain, nowMs, parseArgs, percentile, round, writeResult } from './common.ts'
+-import { TABLE_VIEWS } from './mapping.ts'
++import { readdirSync, rmSync } from 'node:fs'
++import { join } from 'node:path'
++import { DirectStore, FsqliteError } from './fsq.ts'
++import { cloneStore, isMain, nowMs, parseArgs, percentile, round, writeResult } from './common.ts'
++import { BUILDS, TABLE_VIEWS, genericOptions, genericPlans, unhintedViewPlan } from './mapping.ts'
+ import { genericStore, openReader, queryInstances } from './w3.ts'
+ import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
+ 
++/**
++ * v2 Spike 1 (H2): plan assertions run inside the generation build. On a hard-link clone,
++ * a no-op serialized-lane build that also asserts the unfiltered view's plan without
++ * INDEXED BY must fail and publish nothing; the same build with the declared assertions
++ * passes and publishes.
++ */
++function planAssertionBuilds(dir: string): Record<string, unknown> {
++  const clone = `${dir}-plan-clone`
++  cloneStore(dir, clone)
++  const out: Record<string, unknown> = {}
++  try {
++    const failing = new DirectStore(clone, genericOptions({ plans: [...genericPlans(), unhintedViewPlan()] }))
++    const before = failing.currentVersion()
++    const t = nowMs()
++    try {
++      failing.write(() => undefined, { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++      out.with_unhinted_view_assertion = { refused: false }
++    } catch (error) {
++      out.with_unhinted_view_assertion = {
++        refused: true,
++        code: error instanceof FsqliteError ? error.code : 'error',
++        message: (error as Error).message,
++      }
++    }
++    Object.assign(out.with_unhinted_view_assertion as object, {
++      ms: round(nowMs() - t),
++      current_before: before,
++      current_after: failing.currentVersion(),
++      transients_left: readdirSync(join(clone, 'snapshots')).filter((f) => f.startsWith('.')),
++    })
++    const passing = new DirectStore(clone, genericOptions())
++    const t2 = nowMs()
++    const version = passing.write(() => undefined, { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++    const build = BUILDS.at(-1)
++    out.with_declared_assertions = {
++      published: version,
++      ms: round(nowMs() - t2),
++      hook_ms: build?.hook_ms,
++      statistics_ms: build?.statistics_ms,
++      plans_ms: build?.plans_ms,
++      gate: build?.gate,
++      gate_ms: build?.gate_ms,
++      plans: build?.plans,
++    }
++  } finally {
++    rmSync(clone, { recursive: true, force: true })
++  }
++  return out
++}
++
+ function probe(db: DatabaseSync, sql: string, params: SQLInputValue[]) {
+   const stmt = db.prepare(sql)
+   const first = JSON.stringify(stmt.all(...params))
+@@ -108,7 +161,29 @@
+       }
+     }
+   }
+-  console.log(writeResult(scale, 'w3-plans', { workflow: 'W3 plan audit (C7)', queries: out }))
++  const stats = (() => {
++    const s = openReader(store.snapshotPath(store.currentVersion()))
++    try {
++      return {
++        sqlite_stat1_rows: (s.prepare('SELECT count(*) AS n FROM sqlite_stat1').get() as { n: number }).n,
++        derived_version: (s.prepare("SELECT value FROM fsqlite_meta WHERE key = 'derived_version'").get() as { value: string } | undefined)?.value,
++      }
++    } finally {
++      s.close()
++    }
++  })()
++  const assertions = flags['skip-assertions'] === 'true' ? null : planAssertionBuilds(args[0] ?? '')
++  console.log(
++    writeResult(scale, 'w3-plans', {
++      workflow: 'W3 plan audit (C7)',
++      v2_spike1: {
++        statistics: 'built in each generation (ANALYZE after a rebuild, PRAGMA optimize after an update)',
++        head: stats,
++        plan_assertion_builds: assertions,
++      },
++      queries: out,
++    }),
++  )
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN '--exclude=__pycache__' a/queries.ts b/queries.ts
+--- a/queries.ts	2026-11-17 03:23:55.636553255 +0000
++++ b/queries.ts	2026-11-17 06:19:51.827676938 +0000
+@@ -72,6 +72,10 @@
+ export interface QueryOptions {
+   /** Search through an attached FTS5 trigram sidecar instead of scanning `search_text`. */
+   fts?: boolean
++  /** v2 Spike 1: search through the generation's own FTS5 index (`search_fts`, `search_doc`). */
++  ftsInline?: boolean
++  /** v2 Spike 1: answer facets from the generation's `facet_count` summary. */
++  facetSummary?: boolean
+   /** Use the recursive-CTE path query instead of bidirectional BFS. */
+   pathCte?: boolean
+ }
+@@ -207,10 +211,13 @@
+   search(term: string, limit: number): unknown {
+     // A trigram index matches a quoted phrase as a substring, but only for 3+ characters;
+     // shorter terms scan. (A LIKE with an ESCAPE clause would bypass the index.)
+-    const fts = this.opts.fts === true && [...term].length >= 3
+-    const hits = fts
+-      ? 'SELECT id, min(r) AS rank FROM fts.search_fts WHERE search_fts MATCH ? GROUP BY id'
+-      : 'SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id'
++    const fts = (this.opts.fts === true || this.opts.ftsInline === true) && [...term].length >= 3
++    const hits = !fts
++      ? 'SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id'
++      : this.opts.ftsInline === true
++        ? `SELECT d.id, min(d.r) AS rank FROM search_fts f JOIN search_doc d ON d.docid = f.rowid
++           WHERE search_fts MATCH ? GROUP BY d.id`
++        : 'SELECT id, min(r) AS rank FROM fts.search_fts WHERE search_fts MATCH ? GROUP BY id'
+     const pattern = fts ? `"${term.replace(/"/g, '""')}"` : term
+     const rows = this.stmt(
+       `WITH hits AS MATERIALIZED (${hits})
+@@ -358,6 +365,19 @@
+   }
+ 
+   facet(relation: string, sourceKind: string, limit: number): unknown {
++    if (this.opts.facetSummary === true) {
++      const rows = this.stmt(
++        `SELECT f.target AS id, e.label AS name, f.n AS count,
++           (SELECT count(*) FROM facet_count WHERE relation = ?1 AND source_kind = ?2) AS total
++         FROM facet_count f JOIN entity e ON e.id = f.target
++         WHERE f.relation = ?1 AND f.source_kind = ?2
++         ORDER BY f.n DESC, f.target LIMIT ?3`,
++      ).all(relation, sourceKind, limit) as { id: string; name: string; count: number; total: number }[]
++      return {
++        groups: rows[0]?.total ?? 0,
++        top: rows.map(({ id, name, count }) => ({ id, name, count })),
++      }
++    }
+     const rows = this.stmt(
+       `WITH groups AS MATERIALIZED (
+          SELECT g.target AS id, count(DISTINCT g.source) AS n
+diff -ruN '--exclude=__pycache__' a/run.sh b/run.sh
+--- a/run.sh	2026-11-17 01:25:18.978370919 +0000
++++ b/run.sh	2026-11-17 06:19:39.587898237 +0000
+@@ -9,7 +9,7 @@
+ 
+ SCALE=${1:?usage: run.sh <scale>}
+ HERE=$(cd "$(dirname "$0")" && pwd)
+-SCRATCH=${KB_SCRATCH:-/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad}
++SCRATCH=${KB_SCRATCH:-$(cd "$(dirname "$0")/../../kbscratch" && pwd)}
+ WORK=$SCRATCH/fsqlite-spike/$SCALE
+ DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
+ NODE=(node --disable-warning=ExperimentalWarning)
+diff -ruN '--exclude=__pycache__' a/run_combined.sh b/run_combined.sh
+--- a/run_combined.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_combined.sh	2026-11-17 06:32:37.503280915 +0000
+@@ -0,0 +1,42 @@
++#!/usr/bin/env bash
++# fsqlite v2 combined prototype (spikes 3, 1, and 2): the correctness checks at a round-2
++# scale. No timing is claimed from these runs.
++#
++# Usage: fsqlite/run_combined.sh S1-r2
++#
++# Results go to results/$KB_RESULTS_ARM/<scale>/ (default fsqlite-v2/combined). Working
++# stores go to $KB_SCRATCH/fsqlite-spike/<scale> and are deleted at the end.
++set -euo pipefail
++
++SCALE=${1:?usage: run_combined.sh <round-2 scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++: "${KB_SCRATCH:?set KB_SCRATCH to the scratch directory that holds kb-corpora/}"
++export KB_RESULTS_ARM=${KB_RESULTS_ARM:-fsqlite-v2/combined}
++export KB_COPY_PROBE=0 KB_V2_MISSING=none
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++BASE=$WORK/store-direct
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++w2() { # variant strategy
++  local variant=$1 strategy=$2
++  "${NODE[@]}" w2.ts "$BASE" --scale "$SCALE" --deltas "$DELTAS" --strategy "$strategy" \
++    --variant "$variant" --batches p05,p20
++}
++
++# W1 through DirectStore (derived objects built after the rows), then W3 v2 twice: the
++# substring scan with live facets, and the in-file FTS5 index with the facet summary.
++"${NODE[@]}" w1.ts --scale "$SCALE" --validate --routes direct
++"${NODE[@]}" w3.ts "$BASE" --scale "$SCALE"
++"${NODE[@]}" w3.ts "$BASE" --scale "$SCALE" --name w3-fts --fts-inline --facet-summary
++# Four writers appending operation envelopes. `ops` is the facts reducer; `ops-naive` has
++# no base facts, so the closure in the build must move merged edges; KB_V2_CLOSURE=0 keeps
++# only Spike 1's cascade relations, which delete those edges instead.
++w2 ops ops
++w2 ops-naive-closure ops-naive
++KB_V2_CLOSURE=0 w2 ops-naive-relations-only ops-naive
++# W6: the publication kill point and its recovery.
++"${NODE[@]}" w6.ts --scale "$SCALE" --phases publication
++
++rm -rf "$WORK"
+diff -ruN '--exclude=__pycache__' a/run_spike1.sh b/run_spike1.sh
+--- a/run_spike1.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike1.sh	2026-11-17 06:19:51.827776087 +0000
+@@ -0,0 +1,58 @@
++#!/usr/bin/env bash
++# fsqlite v2 Spike 1 (derive at build): the measurements the design lists, at one scale.
++#
++# Usage: fsqlite/run_spike1.sh S1|S2|S1-r2|S2-r2
++#
++# Results go to results/fsqlite-v2/spike1/<scale>/. Working stores go to
++# $KB_SCRATCH/fsqlite-spike/<scale> and are deleted at the end. Environment:
++#   H4_ROUNDS     rounds of the round-2 build-cache matrix (default 3)
++#   W2_CLOSURE=0  skip the round-2 four-writer run that checks the in-build closure
++#   TRICKLE_SECONDS, TRICKLE_REPS as in run.sh
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike1.sh <scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++SCRATCH=${KB_SCRATCH:?set KB_SCRATCH to a directory holding kb-corpora}
++WORK=$SCRATCH/fsqlite-spike/$SCALE
++DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++case "$SCALE" in
++  *-r2)
++    # W1 with the schema check as a phase, through DirectStore; its store serves W3, the plan
++    # audit with the plan-assertion builds, and the four-writer closure check.
++    "${NODE[@]}" w1.ts --scale "$SCALE" --validate --routes direct
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE" --name w3-fts --fts-inline --facet-summary
++    "${NODE[@]}" plans.ts "$WORK/store-direct" --scale "$SCALE"
++    if [ "${W2_CLOSURE:-1}" != 0 ]; then
++      "${NODE[@]}" w2.ts "$WORK/store-direct" --scale "$SCALE" --deltas "$DELTAS" \
++        --no-closure-envelope --name w2-inbuild-closure
++    fi
++    rm -rf "$WORK/store-direct"
++    # H4: the SnapshotStore import's reconcile with a 256 MiB and the default 2 MB build
++    # cache, with the derived objects and, as a control, with the f1.0 schema.
++    for r in $(seq 1 "${H4_ROUNDS:-3}"); do
++      "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot --reuse-rows --name "w1-h4-v2-256m-r$r"
++      FSQ_BUILD_CACHE_KIB=2000 "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot \
++        --reuse-rows --name "w1-h4-v2-2m-r$r"
++      FSQ_NO_DERIVED=1 "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot --reuse-rows \
++        --name "w1-h4-f10-256m-r$r"
++      FSQ_NO_DERIVED=1 FSQ_BUILD_CACHE_KIB=2000 "${NODE[@]}" w1.ts --scale "$SCALE" \
++        --routes snapshot --reuse-rows --name "w1-h4-f10-2m-r$r"
++    done
++    ;;
++  *)
++    "${NODE[@]}" w1.ts --scale "$SCALE" --routes direct
++    rm -f "$WORK/rows.jsonl"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE" --name w3-fts --fts-inline --facet-summary
++    "${NODE[@]}" plans.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" trickle.ts "$WORK/store-direct" --scale "$SCALE" --delta "$DELTAS/p20" \
++      --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-3}"
++    "${NODE[@]}" w4.ts --scale "$SCALE" --cases string_to_object --skip-typed --name w4-case5
++    ;;
++esac
++
++rm -rf "$WORK"
+diff -ruN '--exclude=__pycache__' a/run_spike2.sh b/run_spike2.sh
+--- a/run_spike2.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike2.sh	2026-11-17 06:20:43.531390427 +0000
+@@ -0,0 +1,59 @@
++#!/usr/bin/env bash
++# fsqlite v2 Spike 2: cheap capture and serial apply, at one scale.
++#
++# Usage: fsqlite/run_spike2.sh S1-r2|S2-r2 [reps]   # four writers on v2 batches (H2, H3, H4)
++#        fsqlite/run_spike2.sh S1|S2 [reps]         # trickle capture and sustained (H1, H5)
++#
++# The base store must exist at $KB_SCRATCH/fsqlite-spike/<scale>/store-direct (w1.ts
++# --routes direct). Results go to results/$KB_RESULTS_ARM/<scale>/.
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike2.sh <scale> [reps]}
++REPS=${2:-3}
++HERE=$(cd "$(dirname "$0")" && pwd)
++: "${KB_SCRATCH:?set KB_SCRATCH to the scratch directory that holds kb-corpora/}"
++export KB_RESULTS_ARM=${KB_RESULTS_ARM:-fsqlite-v2/spike2}
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++BASE=$WORK/store-direct
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++w2() { # variant strategy missing closure [extra flags]
++  local variant=$1 strategy=$2 missing=$3 closure=$4
++  shift 4
++  KB_V2_MISSING=$missing KB_V2_CLOSURE=$closure "${NODE[@]}" w2.ts "$BASE" --scale "$SCALE" \
++    --deltas "$DELTAS" --strategy "$strategy" --variant "$variant" "$@"
++}
++
++case "$SCALE" in
++*-r2)
++  # H2, H3: operation envelopes, the serial reducer with base facts, closure in the build.
++  w2 ops ops none 1 --reps "$REPS"
++  # Ablation: a reducer without base facts, without and with the closure.
++  w2 ops-naive ops-naive none 0
++  w2 ops-naive-closure ops-naive none 1
++  # H4: changeset envelopes with idempotent deletes and no closure, then with the closure.
++  w2 sparse-missingdelete sparse delete 0
++  w2 sparse-missingdelete-closure sparse delete 1
++  if [ "${FULL_CAPTURE:-0}" = 1 ]; then
++    w2 full-missingdelete snapshot delete 0
++  fi
++  # One writer in line order: DirectStore (the H2 reference) and one operation envelope.
++  KB_V2_MISSING=none KB_V2_CLOSURE=1 "${NODE[@]}" w2v2.ts "$BASE" --scale "$SCALE" \
++    --arms DirectStore,Append --batches p01,p05,p20 --batch-reps "$REPS" --name w2-v2-one-writer
++  ;;
++*)
++  # H1 and H5: one-record to 100-record captures through each capture path, then the
++  # sustained trickle through the coalescing publisher.
++  KB_V2_MISSING=none KB_V2_CLOSURE=0 "${NODE[@]}" trickle.ts "$BASE" --scale "$SCALE" \
++    --delta "$DELTAS/p20" --reps "$REPS" --arms SnapshotStore,Sparse,Ops --skip-sustained \
++    --name w2-trickle-capture
++  for strategy in ops sparse; do
++    KB_V2_MISSING=none KB_V2_CLOSURE=0 "${NODE[@]}" trickle.ts "$BASE" --scale "$SCALE" \
++      --delta "$DELTAS/p20" --skip-batches --strategy "$strategy" \
++      --rate "${TRICKLE_RATE:-200}" --seconds "${TRICKLE_SECONDS:-30}" \
++      --name "w2-trickle-sustained-$strategy"
++  done
++  ;;
++esac
+diff -ruN '--exclude=__pycache__' a/run_spike3.sh b/run_spike3.sh
+--- a/run_spike3.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike3.sh	2026-11-17 06:19:39.588033623 +0000
+@@ -0,0 +1,50 @@
++#!/usr/bin/env bash
++# Spike 3 (fsqlite v2: maintenance and publication): the workflows that test its four
++# hypotheses, at one scale, against the package copy in ../../package.
++#
++# Usage: fsqlite/run_spike3.sh S0|S1|S2
++#
++# Results go to results/fsqlite-v2/spike3/<scale>/. Working stores go to
++# $KB_SCRATCH/fsqlite-spike/<scale> and are deleted at the end.
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike3.sh <scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++export KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++RESULTS=$HERE/../results/fsqlite-v2/spike3/$SCALE
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++# H3: W1 through both routes; w1.ts runs gc({ retain: 0 }) and records store_over_head.
++"${NODE[@]}" w1.ts --scale "$SCALE"
++# Every W3 run must still match the oracle.
++"${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++python3 "$HERE/../harness/compare.py" "$HERE/../harness/expected/$SCALE/w3.json" "$RESULTS/w3.json" \
++  | tail -1 | tee "$RESULTS/w3-compare.txt"
++
++# H1: DirectStore W2 with 4 contending writers and gc({ retain: 0 }) after every write,
++# with the package defaults (a full scrub of the pinned head on every collecting gc).
++"${NODE[@]}" w2.ts "$WORK/store-direct" --scale "$SCALE" --deltas "$DELTAS" --strategy direct
++
++# H2: the trickle, three gc configurations. Defaults (scrub every gc); the gate's quick
++# records pin gc and a full scrub runs once a minute; and the design's literal rule (pin
++# the newest full record, scrub once a minute), which collects nothing between scrubs and
++# so keeps one head per publish: S0 only (trickle.ts refuses it above S0 for disk).
++# S2 runs through run_spike3_s2.sh instead of this script.
++TRICKLE=(trickle.ts "$WORK/store-direct" --scale "$SCALE" --delta "$DELTAS/p20"
++  --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-3}")
++"${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle
++KB_GC_OPTS='{"verifyMaxAgeMs":60000,"collectOn":"quick"}' \
++  "${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle-quick
++if [ "$SCALE" = S0 ]; then
++  KB_GC_OPTS='{"verifyMaxAgeMs":60000,"collectOn":"full"}' \
++    "${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle-full-record
++fi
++
++# H4: W6, including the four crash kill points (S0 and S1; S2 skips them, as round 1 did).
++case "$SCALE" in S0 | S1) ;; *) rm -f "$WORK/rows.jsonl" ;; esac
++"${NODE[@]}" w6.ts --scale "$SCALE"
++
++rm -rf "$WORK"
+diff -ruN '--exclude=__pycache__' a/run_spike3_s2.sh b/run_spike3_s2.sh
+--- a/run_spike3_s2.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike3_s2.sh	2026-11-17 06:19:39.588140951 +0000
+@@ -0,0 +1,40 @@
++#!/usr/bin/env bash
++# Spike 3 at S2, limited by this VM's free disk: W1 through DirectStore only (the
++# SnapshotStore route needs about 5 GB more), the W3 check, one full scrub, the trickle
++# through the f1.0 arm and the v2 arm on the same store, and W2 DirectStore p01 through
++# both arms. Run it only with at least 6 GB free; it deletes its stores at the end.
++#
++# Usage: fsqlite/run_spike3_s2.sh <f1.0 arm fsqlite dir>
++set -euo pipefail
++BASE_ARM=${1:?usage: run_spike3_s2.sh <f1.0 arm fsqlite dir>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++export KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}
++WORK=$KB_SCRATCH/fsqlite-spike/S2
++DELTAS=$KB_SCRATCH/kb-corpora/S2/deltas
++RESULTS=$HERE/../results/fsqlite-v2/spike3/S2
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++df -h "$KB_SCRATCH" | tail -1
++
++"${NODE[@]}" w1.ts --scale S2 --routes direct
++rm -f "$WORK/rows.jsonl"
++"${NODE[@]}" w3.ts "$WORK/store-direct" --scale S2
++python3 "$HERE/../harness/compare.py" "$HERE/../harness/expected/S2/w3.json" "$RESULTS/w3.json" \
++  | tail -1 | tee "$RESULTS/w3-compare.txt"
++# A scrub within the hour: the v2 trickle then pins the gate's quick records and keeps
++# this full-verified generation, which the clones share by hard link.
++"${NODE[@]}" --input-type=module -e "
++  const { genericStore } = await import('$HERE/w3.ts')
++  const t = performance.now(); const r = genericStore('$WORK/store-direct').init().verify()
++  console.log(JSON.stringify({ scrub_ms: performance.now() - t, ...r }))" | tee "$RESULTS/scrub.json"
++
++TRICKLE=(--scale S2 --delta "$DELTAS/p20" --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-2}")
++(cd "$BASE_ARM" && KB_SCRATCH="$KB_SCRATCH/base" "${NODE[@]}" trickle.ts "$WORK/store-direct" "${TRICKLE[@]}" --name w2-trickle)
++KB_GC_OPTS='{"verifyMaxAgeMs":3600000,"collectOn":"quick"}' \
++  "${NODE[@]}" trickle.ts "$WORK/store-direct" "${TRICKLE[@]}" --name w2-trickle-quick
++
++mkdir -p "$WORK/deltas-p01" && ln -sfn "$DELTAS/p01" "$WORK/deltas-p01/p01"
++(cd "$BASE_ARM" && KB_SCRATCH="$KB_SCRATCH/base" "${NODE[@]}" w2.ts "$WORK/store-direct" --scale S2 \
++  --deltas "$WORK/deltas-p01" --strategy direct)
++"${NODE[@]}" w2.ts "$WORK/store-direct" --scale S2 --deltas "$WORK/deltas-p01" --strategy direct
++rm -rf "$WORK" "$KB_SCRATCH/base"
+diff -ruN '--exclude=__pycache__' a/summary_spike2.py b/summary_spike2.py
+--- a/summary_spike2.py	1970-01-01 00:00:00.000000000 +0000
++++ b/summary_spike2.py	2026-11-17 06:20:43.531498515 +0000
+@@ -0,0 +1,139 @@
++"""Headline tables for fsqlite v2 Spike 2, from results/fsqlite-v2/spike2/<scale>/.
++
++Usage: python3 fsqlite/summary_spike2.py [S1-r2 S2-r2 S1 S2]
++
++Baselines come from results/fsqlite/<scale>/ (round 1 and round 2 of the spike), or from
++$KB_BASELINE_RESULTS/<scale>/.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import statistics
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parent.parent / "results"
++V2 = ROOT / "fsqlite-v2" / "spike2"
++# The round-1 and round-2 baselines; KB_BASELINE_RESULTS points elsewhere for a scratch copy.
++BASE = Path(os.environ.get("KB_BASELINE_RESULTS", ROOT / "fsqlite"))
++
++
++def load(path: Path) -> dict | None:
++    return json.loads(path.read_text()) if path.exists() else None
++
++
++def med(values: list[float]) -> float | None:
++    values = [v for v in values if v is not None]
++    return round(statistics.median(values), 1) if values else None
++
++
++def by_batch(doc: dict | None) -> dict[str, list[dict]]:
++    out: dict[str, list[dict]] = {}
++    for b in (doc or {}).get("batches", []):
++        out.setdefault(b["batch"], []).append(b)
++    return out
++
++
++def one_writer(scale: str) -> dict[str, dict[str, float | None]]:
++    """Median one-writer visible ms per batch: this run's DirectStore and Append, and round 2's."""
++    mine = load(V2 / scale / "w2-v2-one-writer.json") or {"results": {}}
++    base = load(BASE / scale / "w2-v2.json") or {"results": {}}
++    out = {}
++    # w2v2.ts reports the lower of two runs as its median, so take the median of the runs.
++    def runs_median(arm: dict | None, key: str) -> float | None:
++        return med([r.get(key) for r in (arm or {}).get("runs", [])])
++
++    for name in ("p01", "p05", "p20"):
++        arms = mine["results"].get(name, {}).get("arms", {})
++        out[name] = {
++            "direct": runs_median(arms.get("DirectStore"), "visible_ms"),
++            "direct_n": (arms.get("DirectStore") or {}).get("reps"),
++            "append": runs_median(arms.get("Append"), "visible_ms"),
++            "append_reconcile": runs_median(arms.get("Append"), "reconcile_ms"),
++            "round2_direct": base["results"].get(name, {}).get("arms", {}).get("DirectStore", {}).get("visible_ms"),
++            "same_rows": mine["results"].get(name, {}).get("same_rows_across_arms"),
++        }
++    return out
++
++
++def four_writers(scale: str) -> None:
++    ref = one_writer(scale)
++    base = by_batch(load(BASE / scale / "w2.json"))
++    print(f"\n## {scale}: four writers (H2, H3, H4)\n")
++    print("| Variant | Batch | Runs | Visible ms (median) | Ratio to this run's 1-writer DirectStore | Ratio to round 2's | Capture p50 ms | Reconcile ms | Quarantined | Missing omitted | Closure removed/moved | Dangling after publish | Rows equal line order | W3 after p05 |")
++    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
++    for name, runs in base.items():
++        b = runs[0]
++        r = b["reconcile"] or {}
++        direct = ref[name]["round2_direct"]
++        print(
++            f"| round 2 (f1.0, repair) | {name} | 1 | {b['visible_after_ms']} | n/a | "
++            f"{round(b['visible_after_ms'] / direct, 2) if direct else 'n/a'} | {b['capture_ms']['p50_ms']} | "
++            f"{r.get('ms')} | {r.get('quarantined')} | n/a | n/a | {(r.get('closure') or {}).get('dangling_edges_before')} (before repair) | "
++            f"{(b.get('same_rows_as_one_writer_in_line_order') or {}).get('equal')} | {(b.get('w3_check_against_reference') or {}).get('result', '')} |"
++        )
++    for variant in ("ops", "ops-naive", "ops-naive-closure", "sparse-missingdelete", "sparse-missingdelete-closure", "full-missingdelete"):
++        doc = load(V2 / scale / f"w2-{variant}.json")
++        for name, runs in by_batch(doc).items():
++            vis = med([x["visible_after_ms"] for x in runs])
++            direct = ref[name]["direct"]
++            r2 = ref[name]["round2_direct"]
++            recon = [x["reconcile"] for x in runs]
++            closure = [rc.get("closure") or {} for rc in recon]
++            checks = sorted({(x.get("w3_check_against_reference") or {}).get("result", "") for x in runs} - {""})
++            print(
++                f"| {variant} | {name} | {len(runs)} | {vis} | {round(vis / direct, 2) if direct and vis else 'n/a'} | "
++                f"{round(vis / r2, 2) if r2 and vis else 'n/a'} | {med([x['capture_ms']['p50_ms'] for x in runs])} | "
++                f"{med([rc['ms'] for rc in recon])} | {sorted({rc['quarantined'] for rc in recon})} | "
++                f"{sorted({rc.get('omittedMissing', 0) for rc in recon})} | "
++                f"{sorted({(c.get('removed'), c.get('moved')) for c in closure if c}) or '-'} | "
++                f"{sorted({x['dangling_edges_after_publish'] for x in runs})} | "
++                f"{sorted({(x['same_rows_as_one_writer_in_line_order'] or {}).get('equal') for x in runs})} | {'; '.join(checks)} |"
++            )
++    print("\nOne writer in line order (this run):\n")
++    print("| Batch | DirectStore visible ms (runs) | One operation envelope visible ms (reconcile ms) | Same rows | Round 2 DirectStore ms |")
++    print("| --- | --- | --- | --- | --- |")
++    for name, v in ref.items():
++        print(f"| {name} | {v['direct']} ({v['direct_n']}) | {v['append']} ({v['append_reconcile']}) | {v['same_rows']} | {v['round2_direct']} |")
++
++
++def trickle(scale: str) -> None:
++    cap = load(V2 / scale / "w2-trickle-capture.json")
++    base = load(BASE / scale / "w2-trickle.json")
++    print(f"\n## {scale}: trickle (H1, H5)\n")
++    if cap:
++        print("| Arm | Records | Runs | Capture p50 ms | Reconcile ms | Visible ms | Round 1 full-copy capture ms |")
++        print("| --- | --- | --- | --- | --- | --- | --- |")
++        for key, v in cap["batches"].items():
++            size = v["records"]
++            b = (base or {}).get("batches", {}).get(f"SnapshotStore.{size}", {})
++            print(f"| {v['arm']} | {size} | {v['reps']} | {v['capture_ms']} | {v['reconcile_ms']} | {v['visible_ms_median']} | {b.get('capture_ms')} |")
++    for strategy in ("ops", "sparse"):
++        s = (load(V2 / scale / f"w2-trickle-sustained-{strategy}.json") or {}).get("sustained")
++        if not s:
++            continue
++        print(
++            f"\nSustained, {strategy}: offered {s['offered_records_per_s']}/s, captured {s['records_captured']} "
++            f"({s['capture_records_per_s']}/s, capture p50 {s['capture_ms']['p50']} ms), published "
++            f"{s['records_published']} ({s['published_records_per_s']}/s) in {s['publishes']} publishes; "
++            f"cycle median {s['publish_cycle_ms']['median']} ms (build {s['build_ms_median']}, gc {s['gc_retain0_ms_median']}); "
++            f"visibility p50 {s['visibility_delay_ms']['p50']} ms, p95 {s['visibility_delay_ms']['p95']} ms, "
++            f"{s['visibility_delay_in_cycles']['p50']} and {s['visibility_delay_in_cycles']['p95']} cycles."
++        )
++    if base:
++        print(f"\nRound 1 sustained: {json.dumps(base['sustained'])}")
++
++
++def main() -> None:
++    scales = sys.argv[1:] or ["S1-r2", "S2-r2", "S1", "S2"]
++    for scale in scales:
++        if scale.endswith("-r2"):
++            four_writers(scale)
++        else:
++            trickle(scale)
++
++
++if __name__ == "__main__":
++    main()
+diff -ruN '--exclude=__pycache__' a/trickle.ts b/trickle.ts
+--- a/trickle.ts	2026-11-17 01:18:03.429878546 +0000
++++ b/trickle.ts	2026-11-17 06:23:58.468659362 +0000
+@@ -15,6 +15,7 @@
+ import type { DatabaseSync } from 'node:sqlite'
+ import { DirectStore } from './fsq.ts'
+ import {
++  GC_OPTS,
+   SPIKE_DIR,
+   WORK_DIR,
+   cloneStore,
+@@ -26,8 +27,7 @@
+   writeResult,
+ } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { BUILDS, GenericLoader, genericOptions } from './mapping.ts'
+ import { NODE, UV_PYTHON } from './w1.ts'
+ import { readUnits } from './w2_worker.ts'
+ import { genericStore } from './w3.ts'
+@@ -56,15 +56,12 @@
+   }
+ }
+ 
+-function batches(base: string, rows: string, work: string, reps: number, sidecar: string) {
++function batches(base: string, rows: string, work: string, reps: number) {
+   const { nodes, units } = readUnits(rows)
+   const dir = join(work, 'store')
+   cloneStore(base, dir)
+   const snap = genericStore(dir).init()
+-  const direct = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  })
++  const direct = new DirectStore(dir, genericOptions())
+   let next = 0
+   const take = (n: number): KbRow[][] => {
+     const out = units.slice(next, next + n)
+@@ -92,16 +89,28 @@
+           direct.write(applyUnits(nodes, batch), LOCK)
+         }
+         const visible = nowMs() - t0
+-        const head = snap.snapshotPath(snap.currentVersion())
+-        const fts = buildFtsSidecar(head, sidecar)
++        // v2 Spike 1: the FTS5 index and the facet summary are in the published generation,
++        // so indexed search is visible exactly when the data is; there is no sidecar.
++        const build = BUILDS.at(-1)
+         const tGc = nowMs()
+-        snap.gc({ retain: 0 })
++        const gc = snap.gc({ retain: 0, ...GC_OPTS })
+         runs.push({
+           capture_ms: round(captureMs),
+           reconcile_ms: round(reconcileMs),
+           visible_ms: round(visible),
+-          fts_rebuild_ms: fts.build_ms ?? 0,
++          indexed_search_visible_ms: round(visible),
++          publish_ms: round(arm === 'SnapshotStore' ? reconcileMs : visible),
++          hook_ms: round(build?.hook_ms ?? Number.NaN),
++          gate_ms: round(build?.gate_ms ?? Number.NaN),
++          apply_ms: round(build?.apply_ms ?? Number.NaN),
++          changed_rows: build?.changedRows ?? Number.NaN,
++          derive_ms: round(build?.derive_ms ?? Number.NaN),
++          statistics_ms: round(build?.statistics_ms ?? Number.NaN),
++          closure_ms: round(build?.closure_ms ?? Number.NaN),
+           gc_ms: round(nowMs() - tGc),
++          gc_verify_ms: gc.timings.verify_ms,
++          gc_unlink_ms: gc.timings.unlink_ms,
++          gc_integrity_checked: gc.integrityChecked ? 1 : 0,
+         })
+       }
+       const stat = (k: string): number => median(runs.map((x) => x[k] ?? Number.NaN))
+@@ -112,9 +121,16 @@
+         capture_ms: arm === 'SnapshotStore' ? stat('capture_ms') : null,
+         reconcile_ms: arm === 'SnapshotStore' ? stat('reconcile_ms') : null,
+         visible_ms_median: stat('visible_ms'),
++        visible_after_ms: stat('visible_ms'),
++        indexed_search_visible_after_ms: stat('indexed_search_visible_ms'),
++        publish_ms_median: stat('publish_ms'),
++        hook_ms_median: stat('hook_ms'),
++        gate_ms_median: stat('gate_ms'),
+         records_per_s: round((size * 1000) / stat('visible_ms'), 2),
+-        fts_rebuild_ms_median: stat('fts_rebuild_ms'),
++        fts_rebuild_ms_median: 0,
+         gc_retain0_ms_median: stat('gc_ms'),
++        gc_unlink_ms_median: stat('gc_unlink_ms'),
++        gc_scrubs: runs.filter((x) => x.gc_integrity_checked === 1).length,
+         runs,
+       }
+     }
+@@ -152,7 +168,15 @@
+   const recOut = await reconciler
+   const w = JSON.parse(writerOut) as { captures: { tx: string; start: number; end: number }[] }
+   const r = JSON.parse(recOut) as {
+-    rounds: { pending: string[]; published: number; reconcile_ms: number; gc_ms: number }[]
++    rounds: {
++      pending: string[]
++      published: number
++      reconcile_ms: number
++      gc_ms: number
++      gc_integrity_checked: boolean
++      gc_timings?: { verify_ms: number; locked_ms: number; unlink_ms: number }
++      generations: number
++    }[]
+   }
+   const publishedAt = new Map<string, number>()
+   for (const round_ of r.rounds) {
+@@ -176,6 +200,11 @@
+     records_per_reconcile_median: median(r.rounds.map((x) => x.pending.length)),
+     reconcile_ms_median: median(r.rounds.map((x) => x.reconcile_ms)),
+     gc_retain0_ms_median: median(r.rounds.map((x) => x.gc_ms)),
++    round_ms_median: median(r.rounds.map((x) => x.reconcile_ms + x.gc_ms)),
++    gc_scrubs: r.rounds.filter((x) => x.gc_integrity_checked).length,
++    gc_verify_ms_median: median(r.rounds.map((x) => x.gc_timings?.verify_ms ?? Number.NaN)),
++    gc_unlink_ms_median: median(r.rounds.map((x) => x.gc_timings?.unlink_ms ?? Number.NaN)),
++    generations_max: Math.max(...r.rounds.map((x) => x.generations)),
+     visibility_delay_ms: {
+       p50: round(percentile(delays, 50)),
+       p95: round(percentile(delays, 95)),
+@@ -192,6 +221,17 @@
+   if (!base || !flags.delta) {
+     throw new Error('usage: trickle.ts <base-store> --scale S0 --delta <delta-dir>')
+   }
++  if (GC_OPTS.collectOn === 'full' && Number(GC_OPTS.verifyMaxAgeMs ?? 0) > 0 && scale !== 'S0') {
++    // Pinned to a full record, gc collects nothing between scrubs, so every publish adds a
++    // head-sized generation (147 at S0 in 20 s). Above S0 that exceeds this VM's free disk.
++    console.log(
++      writeResult(scale, flags.name ?? 'w2-trickle', {
++        gc_opts: GC_OPTS,
++        skipped: 'one head per publish is retained between scrubs; exceeds free disk above S0',
++      }),
++    )
++    return
++  }
+   const work = join(flags.work ?? WORK_DIR, scale, 'trickle')
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+@@ -209,12 +249,12 @@
+   const result = {
+     workflow: 'W2 trickle (C18)',
+     delta: flags.delta,
+-    gc: 'gc({ retain: 0 }) after every publish',
+-    batches: batches(base, rows, work, Number(flags.reps ?? 3), join(work, 'search-fts.sqlite')),
++    gc: `gc({ retain: 0, ...${JSON.stringify(GC_OPTS)} }) after every publish`,
++    batches: batches(base, rows, work, Number(flags.reps ?? 3)),
+     sustained: await sustained(base, rows, work, Number(flags.seconds ?? 20)),
+   }
+   rmSync(work, { recursive: true, force: true })
+-  console.log(writeResult(scale, 'w2-trickle', result))
++  console.log(writeResult(scale, flags.name ?? 'w2-trickle', { gc_opts: GC_OPTS, ...result }))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN '--exclude=__pycache__' a/v2.ts b/v2.ts
+--- a/v2.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/v2.ts	2026-11-17 06:23:38.900114881 +0000
+@@ -0,0 +1,254 @@
++// fsqlite v2 Spike 2: the knowledge-base side of operation envelopes (design (k)), sparse
++// capture (l), the missing-row policy (n), and closure in the build (section 3.6).
++//
++// - `kb-delta` v2 is the serial reducer: an operation envelope's payload is intermediate
++//   JSONL rows (the delta-v2 `op` rows and the rows each writes, plus the node rows they
++//   reference), and the reducer feeds them to one GenericLoader per build, started from the
++//   stored tombstones and redirects, so envelope order resolves endpoints like line order.
++// - `kb-delta-naive` v1 is the ablation: a fresh loader per envelope that knows only its
++//   own envelope's deletes and merges, which is what a reducer without base facts sees.
++// - `kbClosure` runs inside every build after the envelopes: it removes edges incident to
++//   tombstoned ids and moves edges of absorbed ids to their survivors, so the published
++//   graph has no edge to a deleted or absorbed node whatever order the envelopes arrived
++//   in. Combined v2: it is the `closure` hook of Spike 1's derived specification
++//   (mapping.ts), which runs it before the cascade relations, under a session, so the rows
++//   it moves reach the derived update as changed keys.
++// - `hydrateRows` is the sparse-capture hydration plan for the same rows.
++//
++// The store configuration comes from the environment, so every process of a run (writers,
++// reader, reconciler) opens the store the same way:
++//   KB_V2_MISSING   none | delete | delete,update  (missingDelete / missingUpdate: ignore)
++//   KB_V2_CLOSURE   0 to leave kbClosure out of the derived specification (combined v2:
++//                   it runs in every build by default, before Spike 1's cascade relations)
++
++import type { DatabaseSync } from 'node:sqlite'
++import type { ConflictPolicyInput, HydrateCopy, Reducer, StoreOptions } from './fsq.ts'
++import type { KbRow, NodeRow } from './common.ts'
++import { GENERIC_POLICY, GenericLoader, TYPED_REF } from './mapping.ts'
++
++export const KB_REDUCER = 'kb-delta'
++export const KB_REDUCER_NAIVE = 'kb-delta-naive'
++
++function rowsOf(payload: Uint8Array): KbRow[] {
++  const text = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('utf8')
++  const rows: KbRow[] = []
++  for (const line of text.split('\n')) {
++    if (line !== '') {
++      rows.push(JSON.parse(line) as KbRow)
++    }
++  }
++  return rows
++}
++
++/** The serial reducer: one loader per build, seeded with the stored base facts. */
++export const kbReducer: Reducer = {
++  version: '2',
++  apply(db, payload, ctx) {
++    let loader = ctx.build.get('kb-loader') as GenericLoader | undefined
++    if (!loader) {
++      loader = new GenericLoader(db, false, { facts: true })
++      ctx.build.set('kb-loader', loader)
++    }
++    for (const row of rowsOf(payload)) {
++      loader.add(row)
++    }
++  },
++}
++
++/** The ablation: a fresh loader per envelope, with no memory of other envelopes. */
++export const kbReducerNaive: Reducer = {
++  version: '1',
++  apply(db, payload) {
++    const loader = new GenericLoader(db)
++    for (const row of rowsOf(payload)) {
++      loader.add(row)
++    }
++  },
++}
++
++// Edges incident to a tombstoned or absorbed id. The IN forms keep the planner on the edge
++// indexes: without statistics, a join from the fact table scans every edge instead.
++const GONE = '(SELECT id FROM kb_tombstone UNION ALL SELECT absorbed FROM kb_redirect)'
++const DANGLING_FACTS = `
++  SELECT (SELECT count(*) FROM edge WHERE source IN ${GONE})
++       + (SELECT count(*) FROM edge WHERE target IN ${GONE} AND source NOT IN ${GONE})
++    AS n`
++
++/**
++ * Closure in the build: remove edges incident to tombstoned ids, then replay every stored
++ * redirect as a merge, which moves the edges still incident to an absorbed id to its
++ * survivor and rewrites their origin. Both are idempotent and driven by the base facts.
++ */
++export function kbClosure(db: DatabaseSync): Record<string, unknown> {
++  const t0 = performance.now()
++  const before = (db.prepare(DANGLING_FACTS).get() as { n: number }).n
++  let removed = 0
++  let moved = 0
++  if (before > 0) {
++    removed += Number(
++      db.prepare('DELETE FROM edge WHERE source IN (SELECT id FROM kb_tombstone)').run().changes,
++    )
++    removed += Number(
++      db.prepare('DELETE FROM edge WHERE target IN (SELECT id FROM kb_tombstone)').run().changes,
++    )
++    const redirects = db
++      .prepare(
++        `SELECT absorbed, survivor, absorbed_path, survivor_path FROM kb_redirect r
++         WHERE EXISTS (SELECT 1 FROM edge g WHERE g.source = r.absorbed)
++            OR EXISTS (SELECT 1 FROM edge g WHERE g.target = r.absorbed)`,
++      )
++      .all() as {
++      absorbed: string
++      survivor: string
++      absorbed_path: string
++      survivor_path: string
++    }[]
++    if (redirects.length > 0) {
++      const loader = new GenericLoader(db, false, { facts: true })
++      for (const r of redirects) {
++        const n = (
++          db
++            .prepare('SELECT count(*) AS n FROM edge WHERE source = ?1 OR target = ?1')
++            .get(r.absorbed) as { n: number }
++        ).n
++        moved += n
++        loader.add({ t: 'op', op: 'merge', ...r })
++      }
++    }
++  }
++  const after = (db.prepare(DANGLING_FACTS).get() as { n: number }).n
++  return {
++    edges_on_deleted_or_absorbed_before: before,
++    removed,
++    moved,
++    edges_on_deleted_or_absorbed_after: after,
++    ms: Math.round((performance.now() - t0) * 1000) / 1000,
++  }
++}
++
++/** The store options a run's environment selects: reducers and the missing-row policy. */
++export function v2StoreOptions(): Partial<StoreOptions> {
++  const missing = (process.env.KB_V2_MISSING ?? 'none').split(',')
++  const table = {
++    conflict: 'lww' as const,
++    ...(missing.includes('delete') ? { missingDelete: 'ignore' as const } : {}),
++    ...(missing.includes('update') ? { missingUpdate: 'ignore' as const } : {}),
++  }
++  const policy: ConflictPolicyInput = missing.some((m) => m === 'delete' || m === 'update')
++    ? Object.fromEntries(Object.keys(GENERIC_POLICY).map((t) => [t, table]))
++    : { ...GENERIC_POLICY }
++  return {
++    conflictPolicy: policy,
++    reducers: { [KB_REDUCER]: kbReducer, [KB_REDUCER_NAIVE]: kbReducerNaive },
++  }
++}
++
++/** Every typed reference a JSON payload text names, for display-name hydration. */
++function refsIn(text: string): string[] {
++  const out: string[] = []
++  for (const m of text.matchAll(/"([a-z]+:[a-z0-9][a-z0-9._/@+-]*)"/g)) {
++    if (m[1] && TYPED_REF.test(m[1])) {
++      out.push(m[1])
++    }
++  }
++  return out
++}
++
++/**
++ * The node rows a set of rows needs for display names: every batch node named by an edge
++ * endpoint or by a typed reference in a payload. Over-inclusion is harmless.
++ */
++export function referencedNodes(rows: KbRow[], nodes: Map<string, NodeRow>): NodeRow[] {
++  const ids = new Set<string>()
++  for (const row of rows) {
++    if (row.t === 'entity') {
++      ids.add(row.id)
++      for (const ref of refsIn(row.payload)) {
++        ids.add(ref)
++      }
++    } else if (row.t === 'edge') {
++      ids.add(row.source)
++      ids.add(row.target)
++    }
++  }
++  return [...ids].flatMap((id) => {
++    const node = nodes.get(id)
++    return node ? [node] : []
++  })
++}
++
++/**
++ * The sparse-capture hydration plan for intermediate rows: every head row the loader will
++ * read, update, or delete for them (design (l): the API hydrates through a helper rather
++ * than relying on the callback).
++ */
++export function hydrateRows(rows: KbRow[]): (db: DatabaseSync, copy: HydrateCopy) => void {
++  return (_db, copy) => {
++    copy('kb_tombstone', '1')
++    copy('kb_redirect', '1')
++    const entity = (id: string): void => {
++      copy('entity', 'id = ?', id)
++      copy('search_text', 'id = ?', id)
++    }
++    const incident = (id: string): void => {
++      copy('edge', 'source = ?', id)
++      copy('edge', 'target = ?', id)
++    }
++    const byOrigin = (path: string): void => {
++      copy('edge', "props ->> '$.origin' = ?", path)
++    }
++    for (const row of rows) {
++      switch (row.t) {
++        case 'op':
++          if (row.op === 'merge') {
++            entity(row.absorbed)
++            incident(row.absorbed)
++            incident(row.survivor)
++            byOrigin(row.absorbed_path)
++            copy('doc', 'path = ?', row.absorbed_path)
++          } else {
++            for (const id of row.node_ids) {
++              entity(id)
++              if (row.op === 'delete') {
++                incident(id)
++              }
++            }
++            byOrigin(row.path)
++            copy('doc', 'path = ?', row.path)
++          }
++          break
++        case 'entity':
++          entity(row.id)
++          for (const ref of refsIn(row.payload)) {
++            copy('entity', 'id = ?', ref)
++          }
++          break
++        case 'doc':
++          copy('doc', 'path = ?', row.path)
++          break
++        case 'edge':
++          if (row.ord === null) {
++            copy(
++              'edge',
++              'source = ? AND relation = ? AND target = ?',
++              row.source,
++              row.relation,
++              row.target,
++            )
++          } else {
++            copy(
++              'edge',
++              'source = ? AND relation = ? AND target = ? AND ord = ?',
++              row.source,
++              row.relation,
++              row.target,
++              row.ord,
++            )
++          }
++          break
++        default:
++          break
++      }
++    }
++  }
++}
+diff -ruN '--exclude=__pycache__' a/w1.ts b/w1.ts
+--- a/w1.ts	2026-11-17 03:08:26.557581109 +0000
++++ b/w1.ts	2026-11-17 06:19:51.828070421 +0000
+@@ -7,10 +7,11 @@
+ // <work>/<scale>/store-direct for the later workflows.
+ 
+ import { spawnSync } from 'node:child_process'
+-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
++import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
++  GC_OPTS,
+   SPIKE_DIR,
+   WORK_DIR,
+   isMain,
+@@ -20,7 +21,6 @@
+   round,
+   writeResult,
+ } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+ import { genericStore } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+@@ -97,7 +97,12 @@
+   const rows = join(work, 'rows.jsonl')
+ 
+   const validate = flags.validate === 'true' ? ['--validate'] : []
+-  const parse = measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows, ...validate])
++  // v2 Spike 1: --reuse-rows keeps an earlier parse of the same corpus, so the routes can run
++  // one at a time within the disk budget. The parse figures then come from that earlier run.
++  const reuse = flags['reuse-rows'] === 'true' && existsSync(rows)
++  const parse = reuse
++    ? { reused: true, seconds: Number.NaN }
++    : measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows, ...validate])
+   const result: Record<string, unknown> = {
+     kb_bytes: dirBytes(kb),
+     parse: {
+@@ -129,7 +134,7 @@
+     // SnapshotStore the archived envelopes stay (gc never prunes tx/applied).
+     const handle = genericStore(store).init()
+     const tGc = nowMs()
+-    const gc = handle.gc({ retain: 0 })
++    const gc = handle.gc({ retain: 0, ...GC_OPTS })
+     const gcMs = nowMs() - tGc
+     const entry: Record<string, unknown> = {
+       ...load,
+@@ -142,18 +147,30 @@
+       gc: { retain: 0, ms: round(gcMs), ...gc },
+       store_bytes: dirBytes(store),
+       snapshot_bytes: statSync(snapshot).size,
++      store_over_head: round(dirBytes(store) / statSync(snapshot).size, 4),
+       breakdown: route === 'direct' ? sizeBreakdown(snapshot) : undefined,
+     }
++    // v2 Spike 1: indexed search lives in the generation, so there is no sidecar to build.
++    entry.fts_sidecar = 'none: the FTS5 index is a derived object inside the generation'
+     if (route === 'direct') {
+-      // The FTS5 search sidecar is part of making the store servable with indexed search.
+-      entry.fts_sidecar = buildFtsSidecar(snapshot, join(work, 'search-fts.sqlite'))
++      const sizes = entry.breakdown as Record<string, number>
++      const derivedBytes = (pred: (n: string) => boolean): number =>
++        Object.entries(sizes).reduce((n, [k, v]) => (pred(k) ? n + v : n), 0)
++      entry.derived_bytes = {
++        search_fts_and_search_doc: derivedBytes(
++          (k) => k.startsWith('search_fts') || k.startsWith('search_doc') || k === 'sqlite_autoindex_search_doc_1',
++        ),
++        facet_count: derivedBytes((k) => k.startsWith('facet_count') || k === 'ix_facet_top'),
++        secondary_indexes: derivedBytes((k) => k.startsWith('ix_') && k !== 'ix_facet_top'),
++        sqlite_stat1: derivedBytes((k) => k === 'sqlite_stat1'),
++      }
+     }
+     result[route] = entry
+     if (route !== 'direct' && !flags.keep) {
+       rmSync(store, { recursive: true, force: true })
+     }
+   }
+-  console.log(writeResult(scale, 'w1', result))
++  console.log(writeResult(scale, flags.name ?? 'w1', result))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN '--exclude=__pycache__' a/w2.ts b/w2.ts
+--- a/w2.ts	2026-11-17 03:47:21.114002383 +0000
++++ b/w2.ts	2026-11-17 06:25:30.196526571 +0000
+@@ -2,7 +2,14 @@
+ // 4 concurrent writer processes while a reader runs the W3 queries, then reconcile.
+ //
+ // Usage: node w2.ts <base-store> --scale S0 --deltas <dir with p01 p05 p20>
+-//        [--writers 4] [--envelopes 5] [--strategy snapshot|direct] [--work <dir>]
++//        [--writers 4] [--envelopes 5] [--strategy snapshot|direct|sparse|ops|ops-naive]
++//        [--work <dir>] [--variant <name>] [--batches p01,p05] [--reps 1] [--repair]
++//
++// Spike 2 (fsqlite v2): `sparse` captures sparse-seed changesets, `ops` and `ops-naive`
++// append operation envelopes for the serial reducer or its ablation. The store options
++// (missing-row policy, closure) come from KB_V2_MISSING and KB_V2_CLOSURE (see v2.ts).
++// `--repair` keeps round 2's recovery steps (re-capture of quarantined envelopes and a
++// closure envelope); without it the run reports the state after the single reconcile.
+ //
+ // Each batch starts from a fresh copy of the base store, since the batches are drawn
+ // independently from the base KB. Times are wall-clock milliseconds from the moment the
+@@ -20,9 +27,10 @@
+   writeFileSync,
+ } from 'node:fs'
+ import { createHash } from 'node:crypto'
+-import { join } from 'node:path'
++import { dirname, join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
++  GC_OPTS,
+   RESULTS_DIR,
+   SPIKE_DIR,
+   WORK_DIR,
+@@ -38,10 +46,10 @@
+   writeResult,
+ } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+-import { GenericLoader } from './mapping.ts'
++import { BUILDS, GenericLoader, genericOptions } from './mapping.ts'
+ import { readUnits } from './w2_worker.ts'
+ import { genericStore, isV2, runOnSnapshot } from './w3.ts'
++import { DirectStore } from './fsq.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+ const NODE = [process.execPath, '--disable-warning=ExperimentalWarning']
+@@ -78,7 +86,7 @@
+ }
+ 
+ /** Median time to copy a file, the floor of every capture and reconcile build. */
+-export function copyCost(path: string, runs = 3): Record<string, number> {
++export function copyCost(path: string, runs = 1): Record<string, number> {
+   const tmp = `${path}.copy-probe`
+   const times: number[] = []
+   for (let i = 0; i < runs; i++) {
+@@ -186,6 +194,8 @@
+ }
+ 
+ export interface BatchOptions {
++  /** Keep round 2's recovery steps: retry quarantined envelopes, then a closure envelope. */
++  repair?: boolean
+   /** A v2 batch: parse with --delta2 against this base KB, and split by operation. */
+   v2BaseKb?: string
+   /** After publishing, run W3 v2 on the head and compare it with this expected file. */
+@@ -222,7 +232,9 @@
+   cloneStore(base, store)
+   const handle = genericStore(store).init()
+   const baseVersion = handle.currentVersion()
+-  const baseCopy = copyCost(handle.snapshotPath(baseVersion))
++  // KB_COPY_PROBE=0 skips the head-copy probes, which need one more head of free disk.
++  const probe = process.env.KB_COPY_PROBE !== '0'
++  const baseCopy = probe ? copyCost(handle.snapshotPath(baseVersion)) : null
+   const before = handle.read(
+     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+   )
+@@ -254,26 +266,21 @@
+   const reports = outs.map(
+     (o) =>
+       JSON.parse(o.stdout) as {
+-        captures: { ms: number; tx?: string | null }[]
++        captures: { ms: number; tx?: string | null; bytes?: number }[]
+         total_ms: number
+         envelopes: number
+         max_rss_mib: number
+       },
+   )
+   let reconcile: Record<string, unknown> | null = null
++  const buildsBefore = BUILDS.length
+   if (strategy !== 'direct') {
+     const t = nowMs()
+     const result = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+-    // Each quarantined envelope keeps its reason in tx/quarantine/<tx>.txn/QUARANTINE (f1.0).
+-    const qdir = join(store, 'tx', 'quarantine')
+-    const reasons = existsSync(qdir)
+-      ? readdirSync(qdir).map((txn) => ({
+-          txn,
+-          reason: readFileSync(join(qdir, txn, 'QUARANTINE'), 'utf8').trim(),
+-        }))
+-      : []
+-    reconcile = { ...result, ms: round(nowMs() - t), quarantine_reasons: reasons }
+-    if (reasons.length > 0) {
++    const reasons = (result.quarantineReasons ?? []).map(([txn, reason]) => ({ txn, reason }))
++    const { appliedTxIds: _ids, quarantineReasons: _reasons, ...summary } = result
++    reconcile = { ...summary, ms: round(nowMs() - t), quarantine_reasons: reasons }
++    if (reasons.length > 0 && opts.repair) {
+       // Recovery: a NOTFOUND quarantine is permanent, so re-capture each quarantined
+       // envelope's operations on the new head, where its deletes find nothing left to
+       // delete, and reconcile again.
+@@ -282,24 +289,39 @@
+       const again = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+       reconcile.retry = { envelopes: retried, ...again, ms: round(nowMs() - t2) }
+     }
++    const dangling = (): number =>
++      handle.read(
++        (db) =>
++          (
++            db
++              .prepare(
++                `SELECT count(*) AS n FROM edge g
++                 WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
++                    OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
++              )
++              .get() as { n: number }
++          ).n,
++      )
+     if (opts.v2BaseKb) {
+-      // Closure: writers captured their deletes and merges from the old head, so another
+-      // writer's new edges can still name a deleted or absorbed node. Replaying every
+-      // delete and merge of the batch in one envelope on the final head is idempotent and
+-      // moves or drops exactly those edges.
+-      const dangling = (): number =>
+-        handle.read(
+-          (db) =>
+-            (
+-              db
+-                .prepare(
+-                  `SELECT count(*) AS n FROM edge g
+-                   WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
+-                      OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
+-                )
+-                .get() as { n: number }
+-            ).n,
+-        )
++      // Combined v2: the closure runs inside every build. The knowledge-base hook resolves
++      // the stored redirects and tombstones first (edges move to a merge survivor or go),
++      // then the cascade relations remove edges whose endpoint the build deleted.
++      const inBuild = BUILDS.slice(buildsBefore)
++      reconcile.closure_in_build = {
++        builds: inBuild.length,
++        hook: inBuild.map((b) => b.closure),
++        hook_changed_rows: inBuild.map((b) => b.closureChanged),
++        relation_removed_edges: inBuild.reduce((n, b) => n + b.closureRemoved, 0),
++        closure_ms: inBuild.map((b) => b.closure_ms),
++        hook_ms: inBuild.map((b) => b.hook_ms),
++        dangling_edges_after: dangling(),
++      }
++    }
++    if (opts.v2BaseKb && opts.repair) {
++      // Round 2's closure envelope: writers captured their deletes and merges from the old
++      // head, so another writer's new edges can still name a deleted or absorbed node.
++      // Replaying every delete and merge of the batch in one envelope on the final head is
++      // idempotent and moves or drops exactly those edges.
+       const before = dangling()
+       const t3 = nowMs()
+       const tx = handle.write('closure', (db) => {
+@@ -323,9 +345,25 @@
+   const complete = Date.now()
+   const published = Date.now()
+   const head = handle.currentVersion()
+-  // Indexed search follows each publish: rebuild the FTS5 sidecar for the new head.
+-  const sidecar = buildFtsSidecar(handle.snapshotPath(head), join(dir, 'search-fts.sqlite'))
+-  const searchVisible = Date.now()
++  // Edges whose endpoint is no entity, by a full referential scan of the published head
++  // (outside the timed path): what the closure must leave at zero.
++  const danglingAfterPublish = opts.v2BaseKb
++    ? handle.read(
++        (db) =>
++          (
++            db
++              .prepare(
++                `SELECT count(*) AS n FROM edge g
++                 WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
++                    OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
++              )
++              .get() as { n: number }
++          ).n,
++      )
++    : null
++  // v2 Spike 1: the FTS5 index is inside the published generation; there is no sidecar.
++  const sidecar = 'none: in-file FTS5 index built by the generation build'
++  const searchVisible = published
+   // The reader checks `current` before every query; give it time to reopen on the head.
+   await new Promise((r) => setTimeout(r, 500))
+   writeFileSync(stop, '')
+@@ -339,7 +377,7 @@
+   const after = handle.read(
+     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+   )
+-  const headCopy = copyCost(handle.snapshotPath(head))
++  const headCopy = probe ? copyCost(handle.snapshotPath(head)) : null
+   // v2: does the concurrently applied state answer W3 like the reference post-batch KB,
+   // and does it hold the same rows as one writer applying the batch in line order?
+   let check: Record<string, unknown> | null = null
+@@ -348,23 +386,54 @@
+   }
+   let sameAsLineOrder: Record<string, unknown> | null = null
+   if (opts.v2BaseKb) {
+-    const ref = join(dir, 'line-order')
+-    cloneStore(base, ref)
+-    const refStore = genericStore(ref).init()
+-    refStore.write('lineorder', (db) => {
+-      const loader = new GenericLoader(db)
+-      forEachRowSync(rows, (row) => loader.add(row))
+-    })
+-    refStore.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++    // The line-order digest depends only on the base and the batch, so it is computed once
++    // per scale and batch and reused by every variant (one head less of disk at S2-r2).
++    const cache = join(WORK_DIR, scale, `line-order-${name}.json`)
++    const mergeCache = join(WORK_DIR, scale, `line-order-${name}-merges.json`)
++    let b: Record<string, string>
++    let mb: Record<string, unknown>
++    if (existsSync(cache) && existsSync(mergeCache)) {
++      b = JSON.parse(readFileSync(cache, 'utf8')) as Record<string, string>
++      mb = JSON.parse(readFileSync(mergeCache, 'utf8')) as Record<string, unknown>
++    } else {
++      const ref = join(dir, 'line-order')
++      cloneStore(base, ref)
++      // One writer in line order: the whole batch through one loader in one DirectStore
++      // write, which round 2 checked against the oracle.
++      // Combined v2: the same base schema and derived objects as every other store.
++      const refStore = new DirectStore(ref, genericOptions()).init()
++      refStore.write(
++        (db) => {
++          const loader = new GenericLoader(db)
++          forEachRowSync(rows, (row) => loader.add(row))
++        },
++        { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } },
++      )
++      b = semanticDigest(refStore.snapshotPath(refStore.currentVersion()))
++      mb = mergeEdges(refStore.snapshotPath(refStore.currentVersion()))
++      rmSync(ref, { recursive: true, force: true })
++      mkdirSync(dirname(cache), { recursive: true })
++      writeFileSync(cache, JSON.stringify(b))
++      writeFileSync(mergeCache, JSON.stringify(mb))
++    }
+     const a = semanticDigest(handle.snapshotPath(head))
+-    const b = semanticDigest(refStore.snapshotPath(refStore.currentVersion()))
++    const ma = mergeEdges(handle.snapshotPath(head))
+     sameAsLineOrder = {
+       equal: Object.keys(a).every((k) => a[k] === b[k]),
+       differing_tables: Object.keys(a).filter((k) => a[k] !== b[k]),
+       concurrent: a,
+       line_order: b,
++      // Combined v2: a merge's edges are on its survivor, not on the absorbed id, and the
++      // survivors carry exactly the edges they carry after one writer in line order.
++      merges: {
++        concurrent: ma,
++        line_order: mb,
++        moved_to_survivors:
++          ma.edges_on_absorbed === 0 &&
++          ma.survivor_edges === mb.survivor_edges &&
++          ma.redirects === mb.redirects,
++      },
+     }
+-    rmSync(ref, { recursive: true, force: true })
+   }
+   // Every updated record must now differ from the base.
+   const updatedIds =
+@@ -394,10 +463,18 @@
+   const during = r.samples.filter(([at]) => at >= started && at <= published).map(([, ms]) => ms)
+   const quiet = r.samples.filter(([at]) => at < started).map(([, ms]) => ms)
+   const captureMs = reports.flatMap((rep) => rep.captures.map((c) => c.ms))
++  const envelopeBytes = reports.flatMap((rep) => rep.captures.map((c) => c.bytes ?? 0))
+   const result = {
+     batch: name,
+     strategy,
+-    arm: strategy === 'direct' ? 'DirectStore' : 'SnapshotStore',
++    arm:
++      strategy === 'direct'
++        ? 'DirectStore'
++        : strategy.startsWith('ops')
++          ? 'SnapshotStore, operation envelopes'
++          : strategy === 'sparse'
++            ? 'SnapshotStore, sparse capture'
++            : 'SnapshotStore',
+     delta: opts.v2BaseKb
+       ? { changes: manifest.changes, counts: manifest.counts, edges: manifest.edges_in_upserts }
+       : {
+@@ -413,6 +490,13 @@
+     writers: writers,
+     envelopes: reports.reduce((n, rep) => n + rep.envelopes, 0),
+     capture_ms: stats(captureMs),
++    envelope_bytes_total: envelopeBytes.reduce((a, b) => a + b, 0) || null,
++    dangling_edges_after_publish: danglingAfterPublish,
++    store_options: {
++      missing: process.env.KB_V2_MISSING ?? 'none',
++      closure: process.env.KB_V2_CLOSURE !== '0',
++      repair_steps: Boolean(opts.repair),
++    },
+     gc_refusals:
+       strategy === 'direct'
+         ? reports
+@@ -498,6 +582,41 @@
+ }
+ 
+ /**
++ * For the stored merge redirects of a head: how many there are, how many edges still name
++ * an absorbed id (the closure must leave none), and a digest of every edge that names a
++ * survivor, as a multiset without ordinals.
++ */
++export function mergeEdges(snapshot: string): Record<string, unknown> {
++  const db = new DatabaseSync(snapshot, { readOnly: true })
++  try {
++    const one = (sql: string): number => (db.prepare(sql).get() as { n: number }).n
++    const hash = createHash('sha256')
++    let n = 0
++    for (const row of db
++      .prepare(
++        `SELECT source, relation, target, props FROM edge
++         WHERE source IN (SELECT survivor FROM kb_redirect)
++            OR target IN (SELECT survivor FROM kb_redirect)
++         ORDER BY source, relation, target, props`,
++      )
++      .iterate()) {
++      hash.update(JSON.stringify(Object.values(row)))
++      n++
++    }
++    return {
++      redirects: one('SELECT count(*) AS n FROM kb_redirect'),
++      edges_on_absorbed: one(
++        `SELECT count(*) AS n FROM edge WHERE source IN (SELECT absorbed FROM kb_redirect)
++           OR target IN (SELECT absorbed FROM kb_redirect)`,
++      ),
++      survivor_edges: `${n}:${hash.digest('hex').slice(0, 16)}`,
++    }
++  } finally {
++    db.close()
++  }
++}
++
++/**
+  * Row digests that ignore edge ordinals, which concurrent writers allocate differently:
+  * entities, documents, search text and quarantine by key, and edges as a sorted multiset.
+  */
+@@ -521,6 +640,8 @@
+       doc: digest('SELECT * FROM doc ORDER BY path'),
+       search_text: digest('SELECT * FROM search_text ORDER BY id, rank'),
+       quarantine: digest('SELECT * FROM quarantine ORDER BY path'),
++      kb_tombstone: digest('SELECT * FROM kb_tombstone ORDER BY id'),
++      kb_redirect: digest('SELECT * FROM kb_redirect ORDER BY absorbed'),
+     }
+   } finally {
+     db.close()
+@@ -538,6 +659,7 @@
+   out: string,
+ ): Record<string, unknown> {
+   const report = runOnSnapshot(snapshot, scale, { warm: 0 })
++  mkdirSync(dirname(out), { recursive: true })
+   writeFileSync(out, `${JSON.stringify({ workflow: 'W3', scale, ...report }, null, 2)}\n`)
+   const r = spawnSync('python3', [join(SPIKE_DIR, 'harness', 'compare.py'), expected, out], {
+     encoding: 'utf8',
+@@ -562,19 +684,28 @@
+   const work = flags.work ?? join(WORK_DIR, scale, `w2-${strategy}`)
+   const writers = Number(flags.writers ?? 4)
+   const envelopes = Number(flags.envelopes ?? 5)
++  const reps = Number(flags.reps ?? 1)
++  const only = flags.batches ? new Set(flags.batches.split(',')) : null
++  const variant = flags.variant ?? null
+   const batches = []
+   for (const name of readdirSync(deltas)
+-    .filter((d) => /^p\d+$/.test(d))
+-    .sort()) {
++    .filter((d) => /^p\d+$/.test(d) && (only === null || only.has(d)))
++    .sort()
++    .flatMap((d) => Array.from({ length: reps }, () => d))) {
+     // Round-2 scales use the v2 batch format; p05 is checked against the oracle's state.
+     const v2 = isV2(scale)
+     const opts: BatchOptions = v2
+       ? {
++          repair: flags.repair === 'true',
+           v2BaseKb: kbDirFor(scale),
+           expected: join(SPIKE_DIR, 'harness', 'expected', `${scale}-${name}`, 'w3.json'),
+-          checkOut: join(RESULTS_DIR, scale, `w3-after-${name}-${writers}writers.json`),
++          checkOut: join(
++            RESULTS_DIR,
++            scale,
++            `w3-after-${name}-${writers}writers${variant ? `-${variant}` : ''}.json`,
++          ),
+         }
+-      : {}
++      : { repair: flags.repair === 'true' }
+     const b = await batch(base, scale, join(deltas, name), work, writers, envelopes, strategy, opts)
+     console.error(
+       JSON.stringify({
+@@ -585,7 +716,8 @@
+     )
+     batches.push(b)
+   }
+-  const workflow = strategy === 'direct' ? 'w2-direct' : 'w2'
++  const workflow =
++    flags.name ?? (variant ? `w2-${variant}` : strategy === 'direct' ? 'w2-direct' : 'w2')
+   console.log(
+     writeResult(scale, workflow, {
+       base_store: base,
+@@ -593,6 +725,13 @@
+       writers,
+       envelopes_per_writer: envelopes,
+       strategy,
++      gc_opts: GC_OPTS,
++      store_options: {
++        missing: process.env.KB_V2_MISSING ?? 'none',
++        closure: process.env.KB_V2_CLOSURE !== '0',
++        repair_steps: flags.repair === 'true',
++      },
++      reps,
+       batches,
+     }),
+   )
+diff -ruN '--exclude=__pycache__' a/w2_worker.ts b/w2_worker.ts
+--- a/w2_worker.ts	2026-11-17 03:11:09.077573810 +0000
++++ b/w2_worker.ts	2026-11-17 06:21:41.060682038 +0000
+@@ -6,14 +6,17 @@
+ //
+ // The writer prints one JSON report. Strategy `snapshot` captures SnapshotStore envelopes
+ // (published later by reconcile); `direct` publishes each envelope with DirectStore.write.
++// Spike 2 adds `sparse` (sparse-seed changeset capture, design (l)), and `ops` and
++// `ops-naive` (operation envelopes for the `kb-delta` reducer or its ablation, design (k)).
+ 
+ import { existsSync, writeFileSync } from 'node:fs'
+ import type { DatabaseSync } from 'node:sqlite'
+ import { DirectStore, FsqliteError } from './fsq.ts'
+ import type { ReadLease } from './fsq.ts'
+-import { forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
++import { GC_OPTS, forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { GenericLoader, genericOptions } from './mapping.ts'
++import { KB_REDUCER, KB_REDUCER_NAIVE, hydrateRows, referencedNodes } from './v2.ts'
+ import { KbQueries } from './queries.ts'
+ import { genericStore, openReader, queryInstances } from './w3.ts'
+ 
+@@ -61,18 +64,18 @@
+   })
+   const perEnvelope = Math.max(1, Math.ceil(units.length / envelopes))
+   const snapshot = genericStore(dir)
+-  const direct = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  })
++  const direct = new DirectStore(dir, genericOptions())
+   const captures: {
+     ms: number
+     units: number
+     version?: number
+     tx?: string | null
++    bytes?: number
+     gc_ms?: number
+     gcRetries?: number | string
++    gc?: Record<string, unknown>
+   }[] = []
++  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+   const t0 = nowMs()
+   for (let i = 0; i < units.length; i += perEnvelope) {
+     const batch = units.slice(i, i + perEnvelope)
+@@ -95,9 +98,15 @@
+       // during its full integrity check. A later gc collects whatever this one left.
+       const tGc = nowMs()
+       let gcRetries: number | string
++      let gcResult: Record<string, unknown> | undefined
+       try {
+         gcRetries = gcWithRetry(
+-          () => direct.gc({ retain: 0, lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } }),
++          () =>
++            (gcResult = direct.gc({
++              retain: 0,
++              lockOpts: { timeoutMs: 600_001, staleMs: 600_000 },
++              ...GC_OPTS,
++            }) as unknown as Record<string, unknown>),
+           3,
+         )
+       } catch (error) {
+@@ -106,7 +115,32 @@
+         }
+         gcRetries = 'refused 3 times'
+       }
+-      captures.push({ ms, units: batch.length, version, gc_ms: round(nowMs() - tGc), gcRetries })
++      captures.push({
++        ms,
++        units: batch.length,
++        version,
++        gc_ms: round(nowMs() - tGc),
++        gcRetries,
++        ...(gcResult === undefined
++          ? {}
++          : {
++              gc: {
++                removed: gcResult.removed,
++                integrityChecked: gcResult.integrityChecked,
++                verified: gcResult.verified,
++                timings: gcResult.timings,
++              },
++            }),
++      })
++    } else if (strategy === 'ops' || strategy === 'ops-naive') {
++      const tx = appendRows(snapshot, writerId, strategy, batch.flat(), nodeMap)
++      captures.push({ ms: round(nowMs() - t), units: batch.length, ...tx })
++    } else if (strategy === 'sparse') {
++      const tx = snapshot.write(writerId, apply, {
++        seed: 'sparse',
++        hydrate: hydrateRows(batch.flat()),
++      })
++      captures.push({ ms: round(nowMs() - t), units: batch.length, tx })
+     } else {
+       const tx = snapshot.write(writerId, apply)
+       captures.push({ ms: round(nowMs() - t), units: batch.length, tx })
+@@ -126,6 +160,23 @@
+   )
+ }
+ 
++/**
++ * Append one operation envelope: the rows, preceded by the batch node rows they reference
++ * (the loader resolves display names from them), serialized as JSON lines.
++ */
++export function appendRows(
++  store: ReturnType<typeof genericStore>,
++  writerId: string,
++  strategy: string,
++  rows: KbRow[],
++  nodeMap: Map<string, NodeRow>,
++): { tx: string; bytes: number } {
++  const lines = [...referencedNodes(rows, nodeMap), ...rows].map((r) => JSON.stringify(r))
++  const payload = Buffer.from(lines.join('\n'))
++  const reducer = strategy === 'ops-naive' ? KB_REDUCER_NAIVE : KB_REDUCER
++  return { tx: store.append(writerId, reducer, payload), bytes: payload.length }
++}
++
+ function reader(dir: string, scale: string, outPath: string, stopFile: string) {
+   const store = genericStore(dir)
+   const instances = queryInstances(scale)
+@@ -199,28 +250,84 @@
+   return { nodes, units }
+ }
+ 
+-/** Sustained trickle: capture one-record envelopes until the deadline. */
+-function trickleWriter(dir: string, rowsPath: string, writerId: string, deadline: number) {
++/**
++ * Sustained trickle: capture one-record envelopes until the deadline, at most `rate` per
++ * second (0: as fast as capture allows), with strategy `snapshot` (full copy), `sparse`, or
++ * `ops` (Spike 2).
++ */
++function trickleWriter(
++  dir: string,
++  rowsPath: string,
++  writerId: string,
++  deadline: number,
++  strategy = 'snapshot',
++  rate = 0,
++) {
+   const { nodes, units } = readUnits(rowsPath)
++  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+   const store = genericStore(dir)
+-  const captures: { tx: string | null; start: number; end: number }[] = []
+-  for (const unit of units) {
++  const captures: { tx: string | null; start: number; end: number; ms: number }[] = []
++  const began = Date.now()
++  for (const [i, unit] of units.entries()) {
++    if (rate > 0) {
++      const due = began + (i * 1000) / rate
++      while (Date.now() < due) {
++        Atomics.wait(SLEEP, 0, 0, Math.max(1, due - Date.now()))
++      }
++    }
+     if (Date.now() >= deadline) {
+       break
+     }
+     const start = Date.now()
+-    const tx = store.write(writerId, (db) => {
+-      const loader = new GenericLoader(db)
+-      for (const node of nodes) {
+-        loader.add(node)
+-      }
+-      for (const row of unit) {
+-        loader.add(row)
++    const t = nowMs()
++    let tx: string | null
++    if (strategy === 'ops') {
++      tx = appendRows(store, writerId, strategy, unit, nodeMap).tx
++    } else {
++      // A sparse capture gets only the node rows its record references, as `ops` sends;
++      // a full copy keeps round 1's behavior of loading every batch node name.
++      const names = strategy === 'sparse' ? referencedNodes(unit, nodeMap) : nodes
++      const apply = (db: DatabaseSync): void => {
++        const loader = new GenericLoader(db)
++        for (const node of names) {
++          loader.add(node)
++        }
++        for (const row of unit) {
++          loader.add(row)
++        }
+       }
+-    })
+-    captures.push({ tx, start, end: Date.now() })
++      tx =
++        strategy === 'sparse'
++          ? store.write(writerId, apply, { seed: 'sparse', hydrate: hydrateRows(unit) })
++          : store.write(writerId, apply)
++    }
++    captures.push({ tx, start, end: Date.now(), ms: round(nowMs() - t, 4) })
+   }
+-  console.log(JSON.stringify({ writer: writerId, captures, max_rss_mib: maxRssMiB() }))
++  console.log(
++    JSON.stringify({ writer: writerId, strategy, rate, captures, max_rss_mib: maxRssMiB() }),
++  )
++}
++
++const SLEEP = new Int32Array(new SharedArrayBuffer(4))
++
++/**
++ * The coalescing publisher (design (d)): fold everything pending into one build per round,
++ * then gc with the given retention after each publish, until told to stop.
++ */
++function publisher(dir: string, stopFile: string, retain: number, intervalFactor: number) {
++  const store = genericStore(dir)
++  const report = store.runPublisher({
++    until: () => existsSync(stopFile),
++    intervalFactor,
++    lockOpts: { timeoutMs: 600_001, staleMs: 600_000 },
++    afterPublish: (round) => {
++      const t = Date.now()
++      let gc = { removed: 0, integrityChecked: false }
++      gcWithRetry(() => (gc = store.gc({ retain })))
++      ;(round as unknown as Record<string, unknown>).gc = { ms: Date.now() - t, ...gc }
++    },
++  })
++  console.log(JSON.stringify({ rounds: report.rounds, max_rss_mib: maxRssMiB() }))
+ }
+ 
+ /** Reconcile whatever is pending, then gc with the given retention, until told to stop. */
+@@ -242,8 +349,10 @@
+     const start = Date.now()
+     const result = store.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+     const published = Date.now()
+-    let gc = { removed: 0, integrityChecked: false }
+-    gcWithRetry(() => (gc = store.gc({ retain })))
++    let gc: Record<string, unknown> = { removed: 0, integrityChecked: false }
++    gcWithRetry(
++      () => (gc = store.gc({ retain, ...GC_OPTS }) as unknown as Record<string, unknown>),
++    )
+     rounds.push({
+       pending,
+       start,
+@@ -252,6 +361,9 @@
+       gc_ms: Date.now() - published,
+       gc_removed: gc.removed,
+       gc_integrity_checked: gc.integrityChecked,
++      gc_verified: gc.verified,
++      gc_timings: gc.timings,
++      generations: store.snapshotVersions().length,
+       version: result.published,
+       applied: result.applied,
+     })
+@@ -268,12 +380,15 @@
+     const [dir, scale, out, stop] = rest
+     reader(dir!, scale!, out!, stop!)
+   } else if (role === 'trickle-writer') {
+-    const [dir, rows, id, deadline] = rest
+-    trickleWriter(dir!, rows!, id!, Number(deadline))
++    const [dir, rows, id, deadline, strategy, rate] = rest
++    trickleWriter(dir!, rows!, id!, Number(deadline), strategy ?? 'snapshot', Number(rate ?? 0))
++  } else if (role === 'publisher') {
++    const [dir, stop, retain, factor] = rest
++    publisher(dir!, stop!, Number(retain ?? 0), Number(factor ?? 0))
+   } else if (role === 'reconciler') {
+     const [dir, stop, retain] = rest
+     reconciler(dir!, stop!, Number(retain ?? 0))
+   } else if (role !== undefined) {
+-    throw new Error('usage: w2_worker.ts writer|reader|trickle-writer|reconciler ...')
++    throw new Error('usage: w2_worker.ts writer|reader|trickle-writer|publisher|reconciler ...')
+   }
+ }
+diff -ruN '--exclude=__pycache__' a/w2v2.ts b/w2v2.ts
+--- a/w2v2.ts	2026-11-17 03:11:09.145573807 +0000
++++ b/w2v2.ts	2026-11-17 06:20:43.534290913 +0000
+@@ -4,6 +4,12 @@
+ // batches repeated; and the batch with one schema-invalid record.
+ //
+ // Usage: node w2v2.ts <base-store> --scale S1-r2 [--reps 3] [--work <dir>]
++//        [--arms SnapshotStore,DirectStore,Append] [--batches p01,p05] [--fts] [--gc]
++//        [--name w2-v2]
++//
++// Spike 2 (fsqlite v2) adds the `Append` arm: the whole batch as one operation envelope
++// for the `kb-delta` reducer, so the serial reducer applies it in line order. The FTS5
++// sidecar rebuild and the gc after each publish run only with `--fts` and `--gc`.
+ //
+ // The 4-writer runs with a concurrent reader are w2.ts (it reads v2 batches at -r2
+ // scales). Writes results/fsqlite/<scale>/w2-v2.json.
+@@ -28,10 +34,12 @@
+   writeResult,
+ } from './common.ts'
+ import { buildFtsSidecar } from './fts.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { GenericLoader, genericOptions } from './mapping.ts'
+ import type { DatabaseSync } from 'node:sqlite'
+ import { UV_PYTHON } from './w1.ts'
+-import { checkAgainstExpected } from './w2.ts'
++import { checkAgainstExpected, semanticDigest } from './w2.ts'
++import { KB_REDUCER } from './v2.ts'
++import { readFileSync } from 'node:fs'
+ import { genericStore } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+@@ -66,7 +74,15 @@
+ }
+ 
+ /** One batch through one arm on a fresh clone; returns timings and the clone's head. */
+-function applyOnce(base: string, rows: string, dir: string, arm: 'SnapshotStore' | 'DirectStore') {
++type Arm = 'SnapshotStore' | 'DirectStore' | 'Append'
++
++function applyOnce(
++  base: string,
++  rows: string,
++  dir: string,
++  arm: Arm,
++  extras: { fts: boolean; gc: boolean },
++) {
+   cloneStore(base, dir)
+   const snap = genericStore(dir).init()
+   const t0 = nowMs()
+@@ -81,18 +97,32 @@
+     const r = snap.reconcile(LOCK)
+     out.reconcile_ms = round(nowMs() - t1)
+     out.quarantined_envelopes = r.quarantined
++  } else if (arm === 'Append') {
++    // The parsed batch is already intermediate JSONL rows in line order.
++    const tx = snap.append('v2', KB_REDUCER, readFileSync(rows))
++    out.capture_ms = round(nowMs() - t0)
++    out.envelope_bytes = statSync(join(dir, 'tx', 'pending', `${tx}.env`)).size
++    const t1 = nowMs()
++    const r = snap.reconcile(LOCK)
++    out.reconcile_ms = round(nowMs() - t1)
++    out.quarantined_envelopes = r.quarantined
++    out.reconcile_timings = JSON.stringify(r.timings)
+   } else {
+-    new DirectStore(dir, { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }).write(
++    new DirectStore(dir, genericOptions()).write(
+       applyAll(rows),
+       LOCK,
+     )
+   }
+   out.visible_ms = round(nowMs() - t0)
+   const head = snap.snapshotPath(snap.currentVersion())
+-  out.fts_rebuild_ms = buildFtsSidecar(head, join(dir, 'search-fts.sqlite')).build_ms ?? null
++  out.fts_rebuild_ms = extras.fts
++    ? (buildFtsSidecar(head, join(dir, 'search-fts.sqlite')).build_ms ?? null)
++    : null
+   const tGc = nowMs()
+-  snap.gc({ retain: 0 })
+-  out.gc_retain0_ms = round(nowMs() - tGc)
++  if (extras.gc) {
++    snap.gc({ retain: 0 })
++  }
++  out.gc_retain0_ms = extras.gc ? round(nowMs() - tGc) : null
+   return { out, head, snap }
+ }
+ 
+@@ -113,24 +143,31 @@
+     throw new Error('usage: w2v2.ts <base-store> --scale S1-r2')
+   }
+   const reps = Number(flags.reps ?? 3)
++  const arms = (flags.arms ?? 'SnapshotStore,DirectStore').split(',') as Arm[]
++  const names = flags.batches ? flags.batches.split(',') : BATCHES
++  const extras = { fts: flags.fts === 'true', gc: flags.gc === 'true' }
+   const baseKb = kbDirFor(scale)
+   const deltas = join(CORPORA_DIR, scale, 'deltas')
+   const work = join(flags.work ?? WORK_DIR, scale, 'w2v2')
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+   const results: Record<string, unknown> = {}
+-  for (const name of BATCHES) {
++  for (const name of names) {
+     const batchDir = join(deltas, name)
+     const rows = join(work, `${name}.jsonl`)
+     const parse = parseBatch(batchDir, baseKb, rows)
+     const trickle = name.startsWith('t')
+-    const arms: Record<string, unknown> = {}
+-    for (const arm of ['SnapshotStore', 'DirectStore'] as const) {
++    const armResults: Record<string, unknown> = {}
++    const digests: Record<string, Record<string, string>> = {}
++    for (const arm of arms) {
+       const runs: Record<string, number | string | null>[] = []
+-      for (let r = 0; r < (trickle ? reps : 1); r++) {
++      for (let r = 0; r < (trickle ? reps : Number(flags['batch-reps'] ?? 1)); r++) {
+         const dir = join(work, `${name}-${arm}`)
+-        const { out, head, snap } = applyOnce(base, rows, dir, arm)
+-        if (r === 0 && arm === 'SnapshotStore') {
++        const { out, head, snap } = applyOnce(base, rows, dir, arm, extras)
++        if (r === 0) {
++          digests[arm] = semanticDigest(head)
++        }
++        if (r === 0 && arm === arms[0]) {
+           const counts = snap.read((db) => ({
+             entities: (db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number }).n,
+             edges: (db.prepare('SELECT count(*) AS n FROM edge').get() as { n: number }).n,
+@@ -142,7 +179,7 @@
+               head,
+               scale,
+               join(SPIKE_DIR, 'harness', 'expected', `${scale}-p05`, 'w3.json'),
+-              join(RESULTS_DIR, scale, 'w3-after-p05.json'),
++              join(RESULTS_DIR, scale, `w3-after-p05-${arm}.json`),
+             )
+             out.w3_check_against_reference = JSON.stringify(check)
+           }
+@@ -152,7 +189,7 @@
+       }
+       const stat = (k: string): number | null =>
+         runs.every((x) => typeof x[k] === 'number') ? median(runs.map((x) => Number(x[k]))) : null
+-      arms[arm] = {
++      armResults[arm] = {
+         reps: runs.length,
+         capture_ms: stat('capture_ms'),
+         reconcile_ms: stat('reconcile_ms'),
+@@ -162,13 +199,21 @@
+         runs,
+       }
+     }
+-    const entry: Record<string, unknown> = { parse, arms }
++    const first = digests[arms[0]!] ?? {}
++    const entry: Record<string, unknown> = {
++      parse,
++      arms: armResults,
++      same_rows_across_arms: arms.every((a) =>
++        Object.keys(first).every((k) => digests[a]?.[k] === first[k]),
++      ),
++      digests,
++    }
+     if (name === 't0010-invalid') {
+       // Without the check, nothing in fsqlite or SQLite refuses the record.
+       const loose = join(work, 'invalid-unvalidated.jsonl')
+       parseBatch(batchDir, baseKb, loose, false)
+       const dir = join(work, 'invalid-unvalidated')
+-      const { snap } = applyOnce(base, loose, dir, 'SnapshotStore')
++      const { snap } = applyOnce(base, loose, dir, 'SnapshotStore', extras)
+       const invalidId = (parse as { quarantined?: { id: string }[] }).quarantined?.[0]?.id ?? ''
+       entry.without_validation = snap.read((db) => ({
+         invalid_record_loaded:
+@@ -184,11 +229,13 @@
+   }
+   rmSync(work, { recursive: true, force: true })
+   console.log(
+-    writeResult(scale, 'w2-v2', {
++    writeResult(scale, flags.name ?? 'w2-v2', {
+       workflow: 'W2 v2 batches, one writer in line order (both arms)',
+       base_store: base,
+       deltas,
+-      gc: 'gc({ retain: 0 }) after each publish',
++      gc: extras.gc ? 'gc({ retain: 0 }) after each publish' : 'not run',
++      fts_sidecar: extras.fts ? 'rebuilt after each publish' : 'not rebuilt',
++      arms,
+       results,
+     }),
+   )
+diff -ruN '--exclude=__pycache__' a/w3.ts b/w3.ts
+--- a/w3.ts	2026-11-17 03:05:15.996674572 +0000
++++ b/w3.ts	2026-11-17 06:23:38.899463862 +0000
+@@ -27,7 +27,7 @@
+   round,
+   writeResult,
+ } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { genericOptions } from './mapping.ts'
+ import { buildFtsSidecar } from './fts.ts'
+ import { KbQueries } from './queries.ts'
+ import type { Params, QueryOptions } from './queries.ts'
+@@ -70,11 +70,7 @@
+ }
+ 
+ export function genericStore(dir: string): SnapshotStore {
+-  return new SnapshotStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-    conflictPolicy: GENERIC_POLICY,
+-  })
++  return new SnapshotStore(dir, genericOptions())
+ }
+ 
+ /** A serving connection on one snapshot, optionally with the FTS sidecar attached. */
+@@ -174,6 +170,12 @@
+   if (opts.pathCte) {
+     args.push('--path-cte')
+   }
++  if (opts.ftsInline) {
++    args.push('--fts-inline')
++  }
++  if (opts.facetSummary) {
++    args.push('--facet-summary')
++  }
+   if (opts.ftsPath) {
+     args.push('--fts-attach', opts.ftsPath)
+   }
+@@ -213,7 +215,14 @@
+   }
+   return {
+     options: {
+-      search: opts.ftsPath ? 'fts5-trigram-sidecar (MATCH phrase)' : 'search_text substring scan',
++      search: opts.ftsInline
++        ? 'in-file fts5 trigram index built by the generation build (MATCH phrase)'
++        : opts.ftsPath
++          ? 'fts5-trigram-sidecar (MATCH phrase)'
++          : 'search_text substring scan',
++      facets: opts.facetSummary
++        ? 'in-file facet_count summary built by the generation build'
++        : 'live GROUP BY over edge',
+       path: opts.pathCte
+         ? 'recursive CTE (in-engine)'
+         : 'bidirectional BFS (application-side, shared)',
+@@ -252,6 +261,8 @@
+     // queries.json v2: one cold run, then 20 warm runs per instance.
+     warm: Number(flags.warm ?? (isV2(scale) ? 20 : 50)),
+     pathCte: flags['path-cte'] === 'true',
++    ftsInline: flags['fts-inline'] === 'true',
++    facetSummary: flags['facet-summary'] === 'true',
+   }
+   if (flags.only) {
+     opts.only = flags.only
+diff -ruN '--exclude=__pycache__' a/w4.ts b/w4.ts
+--- a/w4.ts	2026-11-17 01:10:48.757898066 +0000
++++ b/w4.ts	2026-11-17 06:19:51.828702746 +0000
+@@ -17,7 +17,7 @@
+ import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+-import { DirectStore, FsqliteError, SnapshotStore } from './fsq.ts'
++import { DirectStore, FsqliteError, SnapshotStore, readStoreMarker } from './fsq.ts'
+ import {
+   CORPORA_DIR,
+   SPIKE_DIR,
+@@ -32,11 +32,14 @@
+ } from './common.ts'
+ import { NODE, UV_PYTHON, measured, sizeBreakdown } from './w1.ts'
+ import {
++  BUILDS,
++  GENERIC_DERIVED_VERSION,
+   GENERIC_POLICY,
+   GENERIC_SCHEMA_VERSION,
+   GenericLoader,
+   TABLE_VIEWS,
+   genericDdl,
++  genericOptions,
+ } from './mapping.ts'
+ import { migrateSnapshot } from './migrate.ts'
+ import { buildTyped, readKindSchemas, typedDdl } from './typed.ts'
+@@ -210,6 +213,64 @@
+   return out
+ }
+ 
++/**
++ * v2 Spike 1 (H3), W4 case 5: the view index over the field changes. Under v2 it is a
++ * derived object, so the change is a derived version bump: the next build (one reconcile
++ * with no pending envelopes) drops the old index, creates the new one, and publishes in the
++ * same store with the same store_id.
++ */
++function indexChangeDerived(caseWork: string): Record<string, unknown> {
++  const views = TABLE_VIEWS.map((v) =>
++    v.name === 'repos_by_stars' ? { ...v, filter: "payload ->> '$.primary_language.name'" } : v,
++  )
++  const dir = join(caseWork, 'store')
++  const idBefore = readStoreMarker(dir).store_id
++  const versionBefore = genericStore(dir).currentVersion()
++  const out: Record<string, unknown> = {
++    ddl_in_callback: attempt('CREATE INDEX inside SnapshotStore.write', () =>
++      genericStore(dir).write('w4', (db) => {
++        db.exec(
++          "CREATE INDEX ix_lang ON entity ((payload ->> '$.primary_language.name')) " +
++            "WHERE kind = 'repository'",
++        )
++      }),
++    ),
++  }
++  const t0 = nowMs()
++  const store = new SnapshotStore(
++    dir,
++    genericOptions({ views, derivedVersion: GENERIC_DERIVED_VERSION + 1 }),
++  ).init()
++  const tInit = nowMs()
++  const res = store.reconcile(LOCK)
++  const t1 = nowMs()
++  const build = BUILDS.at(-1)
++  const check = openReader(store.snapshotPath(store.currentVersion()))
++  const plan = (
++    check
++      .prepare(
++        `EXPLAIN QUERY PLAN SELECT id FROM entity WHERE kind = 'repository'
++         AND payload ->> '$.primary_language.name' = 'Python'
++         ORDER BY payload ->> '$.stars' DESC, id LIMIT 50`,
++      )
++      .all() as { detail: string }[]
++  ).map((r) => r.detail)
++  check.close()
++  out.same_store = {
++    route: 'derived version bump; one reconcile with no pending envelopes publishes it',
++    open_ms: round(tInit - t0),
++    publish_ms: round(t1 - tInit),
++    total_ms: round(t1 - t0),
++    version_before: versionBefore,
++    published: res.published,
++    store_id_unchanged: readStoreMarker(dir).store_id === idBefore,
++    build,
++    plan,
++    new_index_used: plan.some((d) => d.includes('ix_view_repos_by_stars')),
++  }
++  return out
++}
++
+ /** Mapping (b): typed tables from the base head, where any schema change is DDL. */
+ function typedMapping(base: string, work: string): Record<string, unknown> {
+   const baseStore = genericStore(base).init()
+@@ -263,7 +324,11 @@
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+   const generic: Record<string, unknown> = {}
++  const only = flags.cases ? new Set(flags.cases.split(',')) : null
+   for (const name of CASES) {
++    if (only && !only.has(name)) {
++      continue
++    }
+     const variant = join(corpus, 'evolve', name, 'kb')
+     if (!existsSync(variant)) {
+       generic[name] = { skipped: `no variant at ${variant}` }
+@@ -273,16 +338,19 @@
+     mkdirSync(caseWork, { recursive: true })
+     const applied = applyVariant(base, join(corpus, 'kb'), variant, caseWork, verify)
+     if (name === 'string_to_object') {
+-      applied.index_change = indexChange(caseWork, String(applied.head))
++      applied.index_change =
++        flags['side-by-side'] === 'true'
++          ? indexChange(caseWork, String(applied.head))
++          : indexChangeDerived(caseWork)
+     }
+     delete applied.head
+     generic[name] = applied
+     rmSync(caseWork, { recursive: true, force: true })
+   }
+-  const typed = typedMapping(base, work)
++  const typed = flags['skip-typed'] === 'true' ? 'not run' : typedMapping(base, work)
+   rmSync(work, { recursive: true, force: true })
+   console.log(
+-    writeResult(scale, 'w4', {
++    writeResult(scale, flags.name ?? 'w4', {
+       workflow: 'W4',
+       inputs: join(corpus, 'evolve'),
+       verified_against_rebuild: verify,
+diff -ruN '--exclude=__pycache__' a/w6.ts b/w6.ts
+--- a/w6.ts	2026-11-17 01:19:50.564734352 +0000
++++ b/w6.ts	2026-11-17 06:25:03.343883712 +0000
+@@ -1,25 +1,26 @@
+ // W6 operations: artifact count and size, standard-tool readability, serving start-up
+ // time, crash safety during import, and resident memory at rest.
+ //
+-// Usage: node w6.ts --scale S0 [--work <dir>]
++// Usage: node w6.ts --scale S0 [--work <dir>] [--phases publication,capture] [--skip-crash]
+ //
+ // Uses the W1 store and intermediate rows under <work>/<scale>/. The crash tests kill a
+-// fresh import with SIGKILL partway through, then follow the documented recovery: run
+-// validate, remove the abandoned publish.lock only after confirming no client remains
+-// (the kill guarantees it here), run repair, validate again, and rerun the import.
++// fresh import with SIGKILL partway through, then follow the v2 recovery: validate,
++// repair (which breaks a lease whose local owner is gone, with no operator step),
++// validate again, and finish (reconcile the surviving envelopes, or rerun the import).
+ 
+ import { spawn, spawnSync } from 'node:child_process'
+ import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DirectStore, SnapshotStore } from './fsq.ts'
++import { lockStatus, pidAlive } from '../../package/src/lock.ts'
+ import { SPIKE_DIR, WORK_DIR, isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { genericOptions } from './mapping.ts'
+ import { NODE, dirBytes } from './w1.ts'
+ import { KbQueries } from './queries.ts'
+ import { READER_PRAGMAS, genericStore, openReader, queryInstances } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+-const FSQLITE_CLI = join(SPIKE_DIR, '../../../../packages/fsqlite/src/cli/bin.ts')
++const FSQLITE_CLI = join(SPIKE_DIR, '../package/src/cli/bin.ts')
+ 
+ /** Every file in the store, grouped by its role in the f1.0 layout. */
+ function artifacts(dir: string): Record<string, unknown> {
+@@ -159,6 +160,19 @@
+ 
+ type CrashPhase = 'direct-build' | 'capture' | 'reconcile-build' | 'publication'
+ 
++/** Committed generation numbers in a store, ascending. */
++function listGenerations(dir: string): number[] {
++  try {
++    return readdirSync(join(dir, 'snapshots'))
++      .map((f) => /^([0-9]+)\.fsqlite\.sqlite$/.exec(f)?.[1])
++      .filter((x): x is string => x !== undefined)
++      .map(Number)
++      .sort((a, b) => a - b)
++  } catch {
++    return []
++  }
++}
++
+ /** What to look for before killing: each phase leaves its own transient on disk. */
+ function killPoint(dir: string, phase: CrashPhase, killAtBytes: number): string | null {
+   const snaps = join(dir, 'snapshots')
+@@ -200,9 +214,9 @@
+ }
+ 
+ /**
+- * Kill an import in one phase, then follow the documented recovery: validate, remove an
+- * abandoned publish.lock only once no client can resume (the SIGKILL guarantees it),
+- * repair, validate, and finish (reconcile the surviving envelopes, or rerun the import).
++ * Kill an import in one phase, then follow the v2 recovery: validate, repair (no manual
++ * lock step: the lease of a dead local owner is broken), validate, and finish (reconcile
++ * the surviving envelopes, or rerun the import).
+  */
+ function crash(rows: string, dir: string, phase: CrashPhase, killAtBytes: number) {
+   const route = phase === 'direct-build' ? 'direct' : 'snapshot'
+@@ -233,17 +247,21 @@
+       continue
+     }
+     const killMs = round(nowMs() - t0)
+-    return { attempt, killMs, killedAt, ...recover(rows, dir, route) }
++    // Recovery starts once the crashed process is gone. A SIGKILL during heavy I/O can
++    // leave it in uninterruptible sleep for a moment, and until then its lease is live.
++    const tGone = nowMs()
++    while (pidAlive(child.pid ?? 0) && nowMs() - tGone < 60_000) {
++      // spin: this poll is synchronous on purpose, so the child stays an unreaped zombie
++    }
++    const ownerGoneAfterMs = round(nowMs() - tGone)
++    return { attempt, killMs, killedAt, owner_gone_after_ms: ownerGoneAfterMs, ...recover(rows, dir, route) }
+   }
+   return { phase, outcome: 'kill window missed in 5 attempts' }
+ }
+ 
+ function recover(rows: string, dir: string, route: string): Record<string, unknown> {
+-  const opts = { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }
+-  const handle =
+-    route === 'direct'
+-      ? new DirectStore(dir, opts)
+-      : new SnapshotStore(dir, { ...opts, conflictPolicy: GENERIC_POLICY })
++  const opts = genericOptions()
++  const handle = route === 'direct' ? new DirectStore(dir, opts) : new SnapshotStore(dir, opts)
+   const leftovers = readdirSync(dir, { recursive: true })
+     .map(String)
+     .filter((f) => /\.(direct|build|work)-|publish\.lock$|\.tmp$/.test(f))
+@@ -257,16 +275,17 @@
+   const steps: string[] = ['validate']
+   const t = nowMs()
+   const lockPresent = existsSync(join(dir, 'publish.lock'))
+-  if (lockPresent) {
+-    rmSync(join(dir, 'publish.lock'), { recursive: true, force: true })
+-    steps.push('confirm no client can resume, then remove the abandoned publish.lock (manual)')
+-  }
+-  const repair = handle.repair()
++  const lockBefore = lockStatus(join(dir, 'publish.lock'), 600_000)
++  const generationsBefore = listGenerations(dir)
++  const headBefore = handle.currentVersion()
++  // The spike's lease is 10 minutes; recovery must not wait it out.
++  const repair = handle.repair({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+   steps.push('repair')
+   const validateAfter = handle.validate()
+   steps.push('validate')
+   const recoveryMs = round(nowMs() - t)
+   const versionAfterRepair = handle.currentVersion()
++  const generationsAfter = listGenerations(dir)
+   const t2 = nowMs()
+   let finish: Record<string, unknown>
+   if (route === 'snapshot') {
+@@ -276,7 +295,26 @@
+     const counts = s.read(
+       (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+     )
+-    finish = { reconcile: result, pending_after: s.pendingTxns().length, entities: counts.n }
++    // Exactly once: every envelope the killed import captured is in the head ledger once.
++    const envelopes = ['applied', 'pending', 'quarantine'].flatMap((d) => {
++      try {
++        return readdirSync(join(dir, 'tx', d)).filter((f) => f.endsWith('.txn'))
++      } catch {
++        return []
++      }
++    })
++    const ledger = s.read((db) =>
++      (db.prepare('SELECT tx_id FROM applied_tx').all() as { tx_id: string }[]).map((r) => r.tx_id),
++    )
++    finish = {
++      reconcile: result,
++      pending_after: s.pendingTxns().length,
++      entities: counts.n,
++      envelopes_captured: envelopes.length,
++      envelopes_in_head_ledger: envelopes.filter((e) => ledger.includes(e.replace(/\.txn$/, ''))).length,
++      ledger_rows: ledger.length,
++      validate_after_finish: s.validate().state,
++    }
+     steps.push('reconcile (the importer then resumes the batches it had not captured)')
+   } else {
+     rmSync(dir, { recursive: true, force: true })
+@@ -290,12 +328,18 @@
+     route: route === 'direct' ? 'DirectStore' : 'SnapshotStore',
+     leftovers: leftovers.slice(0, 10),
+     validate_before: validateBefore,
+-    repair_refused_while_lock_present: refusal,
+-    manual_lock_recovery: lockPresent,
++    plan_refusal: refusal,
++    lock_before_recovery: lockBefore,
++    manual_lock_recovery: false,
++    lock_present_at_recovery: lockPresent,
+     repair,
+     validate_after: validateAfter,
+     recovery_ms: recoveryMs,
++    head_before_recovery: headBefore,
+     published_version_after_repair: versionAfterRepair,
++    generations_before_recovery: generationsBefore,
++    generations_after_repair: generationsAfter,
++    published_generation_lost: generationsBefore.some((v: number) => !generationsAfter.includes(v)),
+     finish_ms: round(nowMs() - t2),
+     finish,
+     steps,
+@@ -324,11 +368,12 @@
+   if (existsSync(rows) && !flags['skip-crash']) {
+     const size = statSync(snapshot).size
+     const crashDir = join(work, 'w6-crash')
++    // Combined v2: --phases runs a subset of the kill points, for example `publication`.
++    const phases = (
++      flags.phases ? flags.phases.split(',') : ['direct-build', 'capture', 'reconcile-build', 'publication']
++    ) as CrashPhase[]
+     result.crash = Object.fromEntries(
+-      (['direct-build', 'capture', 'reconcile-build', 'publication'] as CrashPhase[]).map((p) => [
+-        p,
+-        crash(rows, crashDir, p, Math.floor(size / 2)),
+-      ]),
++      phases.map((p) => [p, crash(rows, crashDir, p, Math.floor(size / 2))]),
+     )
+     rmSync(crashDir, { recursive: true, force: true })
+   }
