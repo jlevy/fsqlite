@@ -200,6 +200,17 @@ function killPoint(dir: string, phase: CrashPhase, killAtBytes: number): string 
 }
 
 /**
+ * SIGKILL one child. A spawn that failed has no pid, and pid 0 would signal this process's
+ * whole group (the runner, run.sh, and their siblings), so a missing pid is an error.
+ */
+function killChild(pid: number | undefined): void {
+  if (pid === undefined || pid <= 0) {
+    throw new Error('the import child has no pid: spawn failed')
+  }
+  process.kill(pid, 'SIGKILL')
+}
+
+/**
  * Kill an import in one phase, then follow the documented recovery: validate, remove an
  * abandoned publish.lock only once no client can resume (the SIGKILL guarantees it),
  * repair, validate, and finish (reconcile the surviving envelopes, or rerun the import).
@@ -225,11 +236,11 @@ function crash(rows: string, dir: string, phase: CrashPhase, killAtBytes: number
       }
       killedAt = killPoint(dir, phase, killAtBytes)
       if (killedAt !== null) {
-        process.kill(child.pid ?? 0, 'SIGKILL')
+        killChild(child.pid)
       }
     }
     if (killedAt === null) {
-      process.kill(child.pid ?? 0, 'SIGKILL')
+      killChild(child.pid)
       continue
     }
     const killMs = round(nowMs() - t0)

@@ -9,11 +9,13 @@ set -euo pipefail
 
 SCALE=${1:?usage: run.sh <scale>}
 HERE=$(cd "$(dirname "$0")" && pwd)
-SCRATCH=${KB_SCRATCH:-/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad}
+SCRATCH=${KB_SCRATCH:?set KB_SCRATCH to a private scratch directory}
 WORK=$SCRATCH/fsqlite-spike/$SCALE
 DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
 NODE=(node --disable-warning=ExperimentalWarning)
 cd "$HERE"
+# The scale names directories this script deletes, so only known names pass.
+case "$SCALE" in S0 | S1 | S2) ;; *) echo "run.sh: unknown scale $SCALE" >&2 && exit 2 ;; esac
 
 # W1 (DirectStore and SnapshotStore), then the plain SQLite control for W1 and W3.
 "${NODE[@]}" w1.ts --scale "$SCALE"

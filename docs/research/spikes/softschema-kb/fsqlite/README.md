@@ -25,10 +25,12 @@ python3 docs/research/spikes/softschema-kb/harness/compare.py \
 ```
 
 `run.sh` writes `results/fsqlite/<scale>/*.json` and keeps working stores under
-`$KB_SCRATCH/fsqlite-spike/<scale>/`. Synthetic corpora, W2 deltas, and W4 variants come
-from the shared `kb-corpora/` that `corpus/` generates.
+`$KB_SCRATCH/fsqlite-spike/<scale>/`; every script requires `KB_SCRATCH`, a private
+directory, and accepts only known scale names.
+Synthetic corpora, W2 deltas, and W4 variants come from the shared `kb-corpora/` that
+`corpus/` generates.
 Python steps run as
-`uv run --no-project --with pyyaml --exclude-newer 2026-11-03 python ...`.
+`uv run --no-project --no-build --with pyyaml==6.0.3 --exclude-newer 2026-11-03 python ...`.
 
 ## Files
 

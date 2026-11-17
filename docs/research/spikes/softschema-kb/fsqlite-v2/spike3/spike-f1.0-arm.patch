@@ -1,7 +1,7 @@
 diff -ruN a/common.ts b/common.ts
 --- a/common.ts	2026-11-17 03:07:40.146461225 +0000
 +++ b/common.ts	2026-11-17 05:08:42.393518484 +0000
-@@ -17,14 +17,13 @@
+@@ -17,13 +17,13 @@
  import { DatabaseSync } from 'node:sqlite'
  
  export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -9,9 +9,9 @@ diff -ruN a/common.ts b/common.ts
 -export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
 +export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../orig-package/src/index.ts')
 +export const RESULTS_DIR = join(SPIKE_DIR, '../../softschema-kb/results', 'fsqlite-v2', 'spike3-base')
- export const SCRATCH =
--  process.env.KB_SCRATCH ??
--  '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
+-/** The private scratch directory, required so that no store lands in a shared default. */
+-export const SCRATCH = requiredScratch()
++export const SCRATCH =
 +  process.env.KB_SCRATCH ?? resolve(SPIKE_DIR, '../../kbscratch-base')
  export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
  export const WORK_DIR = join(SCRATCH, 'fsqlite-spike')

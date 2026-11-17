@@ -1,15 +1,14 @@
 diff -ruN '--exclude=__pycache__' a/common.ts b/common.ts
 --- a/common.ts	2026-11-17 03:07:40.146461225 +0000
 +++ b/common.ts	2026-11-17 06:20:11.850311336 +0000
-@@ -17,14 +17,26 @@
+@@ -17,13 +17,26 @@
  import { DatabaseSync } from 'node:sqlite'
  
  export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 -export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
 -export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
--export const SCRATCH =
--  process.env.KB_SCRATCH ??
--  '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
+-/** The private scratch directory, required so that no store lands in a shared default. */
+-export const SCRATCH = requiredScratch()
 +// Combined v2 copy (spikes 3, 1, 2): the package copy beside this tree, and results under
 +// results/<KB_RESULTS_ARM>, by default results/fsqlite-v2/combined.
 +export const FSQLITE_SRC = resolve(SPIKE_DIR, '../package/src/index.ts')
@@ -802,7 +801,7 @@ diff -ruN '--exclude=__pycache__' a/run.sh b/run.sh
  
  SCALE=${1:?usage: run.sh <scale>}
  HERE=$(cd "$(dirname "$0")" && pwd)
--SCRATCH=${KB_SCRATCH:-/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad}
+-SCRATCH=${KB_SCRATCH:?set KB_SCRATCH to a private scratch directory}
 +SCRATCH=${KB_SCRATCH:-$(cd "$(dirname "$0")/../../kbscratch" && pwd)}
  WORK=$SCRATCH/fsqlite-spike/$SCALE
  DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
@@ -994,7 +993,7 @@ diff -ruN '--exclude=__pycache__' a/run_spike3.sh b/run_spike3.sh
 +
 +SCALE=${1:?usage: run_spike3.sh <scale>}
 +HERE=$(cd "$(dirname "$0")" && pwd)
-+export KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}
++KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}; export KB_SCRATCH
 +WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
 +DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
 +RESULTS=$HERE/../results/fsqlite-v2/spike3/$SCALE
@@ -1046,7 +1045,7 @@ diff -ruN '--exclude=__pycache__' a/run_spike3_s2.sh b/run_spike3_s2.sh
 +set -euo pipefail
 +BASE_ARM=${1:?usage: run_spike3_s2.sh <f1.0 arm fsqlite dir>}
 +HERE=$(cd "$(dirname "$0")" && pwd)
-+export KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}
++KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}; export KB_SCRATCH
 +WORK=$KB_SCRATCH/fsqlite-spike/S2
 +DELTAS=$KB_SCRATCH/kb-corpora/S2/deltas
 +RESULTS=$HERE/../results/fsqlite-v2/spike3/S2
@@ -1062,9 +1061,9 @@ diff -ruN '--exclude=__pycache__' a/run_spike3_s2.sh b/run_spike3_s2.sh
 +# A scrub within the hour: the v2 trickle then pins the gate's quick records and keeps
 +# this full-verified generation, which the clones share by hard link.
 +"${NODE[@]}" --input-type=module -e "
-+  const { genericStore } = await import('$HERE/w3.ts')
-+  const t = performance.now(); const r = genericStore('$WORK/store-direct').init().verify()
-+  console.log(JSON.stringify({ scrub_ms: performance.now() - t, ...r }))" | tee "$RESULTS/scrub.json"
++  const { pathToFileURL } = await import('node:url'); const [here, work] = process.argv.slice(1)
++  const { genericStore } = await import(pathToFileURL(here + '/w3.ts').href); const t = performance.now()
++  const r = genericStore(work + '/store-direct').init().verify(); console.log(JSON.stringify({ scrub_ms: performance.now() - t, ...r }))" "$HERE" "$WORK" | tee "$RESULTS/scrub.json"
 +
 +TRICKLE=(--scale S2 --delta "$DELTAS/p20" --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-2}")
 +(cd "$BASE_ARM" && KB_SCRATCH="$KB_SCRATCH/base" "${NODE[@]}" trickle.ts "$WORK/store-direct" "${TRICKLE[@]}" --name w2-trickle)
@@ -2837,7 +2836,7 @@ diff -ruN '--exclude=__pycache__' a/w6.ts b/w6.ts
 +    // Recovery starts once the crashed process is gone. A SIGKILL during heavy I/O can
 +    // leave it in uninterruptible sleep for a moment, and until then its lease is live.
 +    const tGone = nowMs()
-+    while (pidAlive(child.pid ?? 0) && nowMs() - tGone < 60_000) {
++    while (child.pid !== undefined && pidAlive(child.pid) && nowMs() - tGone < 60_000) {
 +      // spin: this poll is synchronous on purpose, so the child stays an unreaped zombie
 +    }
 +    const ownerGoneAfterMs = round(nowMs() - tGone)

@@ -3,6 +3,7 @@
 
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -19,15 +20,20 @@ import { DatabaseSync } from 'node:sqlite'
 export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
 export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
-export const SCRATCH =
-  process.env.KB_SCRATCH ??
-  '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
+/** The private scratch directory, required so that no store lands in a shared default. */
+export const SCRATCH = requiredScratch()
 export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
 export const WORK_DIR = join(SCRATCH, 'fsqlite-spike')
 export const S0_KB = resolve(SPIKE_DIR, '../../../../attic/paraverse/vendor/universe2026-md/kb')
 
 /** The KB directory for a scale: S0 is the vendored KB, others come from the corpus dir. */
 export function kbDirFor(scale: string): string {
+  if (scale === 'S0' && !existsSync(join(S0_KB, '_graph', 'nodes.jsonl'))) {
+    throw new Error(
+      `${S0_KB} is missing: check out paraverse at bb9a567 into attic/paraverse, with its ` +
+        'vendor/universe2026-md submodule at a823679 (harness/README.md, Prerequisites)',
+    )
+  }
   return scale === 'S0' ? S0_KB : join(CORPORA_DIR, scale, 'kb')
 }
 
@@ -310,5 +316,22 @@ export function parseArgs(argv: string[]): { flags: Record<string, string>; args
       args.push(arg)
     }
   }
+  // Scales are joined into the paths that tools delete, so only known names pass.
+  if (flags.scale !== undefined && !SCALE_NAME.test(flags.scale)) {
+    throw new Error(
+      `unknown --scale ${JSON.stringify(flags.scale)}; expected S0 to S3, S1-r2, or S1-r2-p05`,
+    )
+  }
   return { flags, args }
+}
+
+/** A known scale name, optionally an after-batch state: S0 to S3, S1-r2, S1-r2-p05. */
+export const SCALE_NAME = /^S[0-3](?:-r2(?:-p[0-9]{2})?)?$/
+
+function requiredScratch(): string {
+  const dir = process.env.KB_SCRATCH
+  if (!dir) {
+    throw new Error('set KB_SCRATCH to a private scratch directory for corpora and stores')
+  }
+  return resolve(dir)
 }

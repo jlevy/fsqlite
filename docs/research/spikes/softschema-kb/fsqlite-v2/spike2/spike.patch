@@ -9,9 +9,9 @@ diff -ruN '--exclude=__pycache__' a/common.ts b/common.ts
 +// KB_RESULTS_ARM names a variant's results directory, for example `fsqlite-v2/spike2`.
 +export const RESULTS_ARM = process.env.KB_RESULTS_ARM ?? 'fsqlite'
 +export const RESULTS_DIR = join(SPIKE_DIR, 'results', RESULTS_ARM)
- export const SCRATCH =
-   process.env.KB_SCRATCH ??
-   '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
+ /** The private scratch directory, required so that no store lands in a shared default. */
+ export const SCRATCH = requiredScratch()
+ export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
 @@ -240,6 +242,7 @@
    const path = join(dir, `${workflow}.json`)
    const doc = {
