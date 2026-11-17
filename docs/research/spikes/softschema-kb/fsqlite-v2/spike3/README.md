@@ -264,7 +264,7 @@ The scratch layout is one directory holding the package copy and the spike copy 
 side:
 
 ```bash
-R=/home/user/fsqlite; W=$PWD/spike3   # any empty directory
+R=/path/to/fsqlite; W=$PWD/spike3   # R is your fsqlite checkout; run from any empty directory
 mkdir -p $W/softschema-kb/results $W/kbscratch
 mkdir $W/package && tar -C $R/packages/fsqlite --exclude=./node_modules --exclude=./dist -cf - . | tar -C $W/package -xf -
 (cd $W/package && patch -p1 < $R/docs/research/spikes/softschema-kb/fsqlite-v2/spike3/package.patch)
