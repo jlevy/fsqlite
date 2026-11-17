@@ -1,0 +1,170 @@
+{
+  "workflow": "W4",
+  "backend": "falkordb",
+  "scale": "S1",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 11080716
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 11080716
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "seed": 20261117,
+    "replicas": 9,
+    "nodes": 48663,
+    "edges": 227817,
+    "record_files": 44775,
+    "bytes": 221432416
+  },
+  "cases": [
+    {
+      "case": "new_kind",
+      "needs": "Code change and full rebuild. paraverse's mapping.LABELS is a fixed table, so an unknown kind fails the load with MappingError; schemas.PREFIX_KINDS and mapping.TYPED_REF also list prefixes, so references to the new kind would not be recognized as typed refs. In place, FalkorDB itself accepts new labels with no DDL.",
+      "unmodified_paraverse": {
+        "loads": false,
+        "error": "MappingError: no label for kind `award` (award:community-2023-000000)"
+      },
+      "full_rebuild": {
+        "code_change": true,
+        "read_kb_s": 18.12,
+        "load_graph_s": 13.648,
+        "total_s": 31.768
+      },
+      "in_place": {
+        "changed": 103,
+        "steps_s": {
+          "parse_and_map_s": 0.939,
+          "write_nodes_s": 0.003,
+          "write_edges_and_stats_s": 1.364,
+          "schema_node_s": 0.136
+        },
+        "total_s": 2.442,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 103,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "repos_by_stars_total_before": 1485,
+        "repos_by_stars_total_after": 1485
+      }
+    },
+    {
+      "case": "add_field",
+      "needs": "Full rebuild only (no code change): top-level scalars become properties generically. In place: rewrite the changed nodes' properties and doc, and the kind's Schema node so the browser shows the column.",
+      "unmodified_paraverse": {
+        "loads": true
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 19.012,
+        "load_graph_s": 15.279,
+        "total_s": 34.291
+      },
+      "in_place": {
+        "changed": 1459,
+        "steps_s": {
+          "parse_and_map_s": 1.482,
+          "write_nodes_s": 0.306,
+          "schema_node_s": 0.133
+        },
+        "total_s": 1.92,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 200,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "repos_by_stars_total_before": 1485,
+        "repos_by_stars_total_after": 1485
+      }
+    },
+    {
+      "case": "rename_relation",
+      "needs": "Full rebuild only. In place: FalkorDB cannot rename a relationship type, so each edge is re-created under the new type and the old one deleted, then GraphMeta's relationship statistics recomputed.",
+      "unmodified_paraverse": {
+        "loads": true
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 17.173,
+        "load_graph_s": 13.438,
+        "total_s": 30.611
+      },
+      "in_place": {
+        "changed": 7110.0,
+        "steps_s": {
+          "retype_edges_s": 0.04,
+          "rel_stats_s": 1.257
+        },
+        "total_s": 1.298,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 0,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "repos_by_stars_total_before": 1485,
+        "repos_by_stars_total_after": 1485
+      }
+    },
+    {
+      "case": "string_to_object",
+      "needs": "Full rebuild, plus a code change for any query that filtered on the field: an object is not a FalkorDB property, so the property disappears and only `doc` keeps the value. In place: rewrite the changed nodes and the Schema node.",
+      "unmodified_paraverse": {
+        "loads": true
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 17.806,
+        "load_graph_s": 15.668,
+        "total_s": 33.474
+      },
+      "in_place": {
+        "changed": 9261,
+        "steps_s": {
+          "parse_and_map_s": 2.779,
+          "write_nodes_s": 0.897,
+          "schema_node_s": 0.163
+        },
+        "total_s": 3.842,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 200,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "repos_by_stars_total_before": 1485,
+        "repos_by_stars_total_after": 0
+      }
+    }
+  ]
+}

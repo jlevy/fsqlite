@@ -124,6 +124,7 @@ def crash_server(base_rdb: Path, kb: Path, work: Path, kill_after: float) -> dic
     restart_s = time.perf_counter() - t0
     graphs = _graphs(server)
     after = graph_counts(server.graph) if GRAPH in graphs else None
+    served = _load_id(server) if GRAPH in graphs else None
     orphans = _staging_nodes(server)
     t0 = time.perf_counter()
     proc = _spawn_loader(server, kb)
@@ -138,7 +139,7 @@ def crash_server(base_rdb: Path, kb: Path, work: Path, kill_after: float) -> dic
         "restart_s": round(restart_s, 3),
         "graphs_after_restart": graphs,
         "live_graph_intact_after_restart": after == before,
-        "restarted_serves": "previous load" if GRAPH in graphs and _load_id(server) == old_id else "other",
+        "restarted_serves": "previous load" if served == old_id else f"other ({served})",
         "orphan_staging_graphs_after_restart": orphans,
         "retry_exit_code": retry_rc,
         "retry_s": round(retry_s, 3),
@@ -207,12 +208,37 @@ def standard_tools(rdb: Path, work: Path) -> dict[str, Any]:
     proc = subprocess.run([str(check), str(rdb)], capture_output=True, text=True, timeout=600)
     tail = [line for line in (proc.stdout + proc.stderr).splitlines() if line.strip()][-3:]
     magic = rdb.read_bytes()[:9].decode(errors="replace")
+    stock = shutil.which("redis-server", path="/usr/bin:/usr/local/bin:/bin")
+    stock_result = None
+    if stock:
+        d = work / "stock-redis"
+        d.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(rdb, d / "dump.rdb")
+        sock = d / "s.sock"
+        proc = subprocess.Popen(
+            [stock, "--port", "0", "--unixsocket", str(sock), "--dir", str(d), "--dbfilename", "dump.rdb", "--save", ""],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        try:
+            out, _ = proc.communicate(timeout=20)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, _ = proc.communicate()
+        version = subprocess.run([stock, "--version"], capture_output=True, text=True).stdout.strip()
+        stock_result = {
+            "binary": stock,
+            "version": version,
+            "exit_code": proc.returncode,
+            "log_tail": [line.split("* ")[-1].split("# ")[-1] for line in out.splitlines() if line.strip()][-3:],
+        }
+        (d / "dump.rdb").unlink(missing_ok=True)
     return {
         "rdb_magic": magic,
         "redis_check_rdb_exit_code": proc.returncode,
         "redis_check_rdb_tail": tail,
-        "system_redis_server": shutil.which("redis-server", path="/usr/bin:/usr/local/bin:/bin"),
+        "stock_redis_server_without_module": stock_result,
         "notes": [
+            "redis_check_rdb is the bundled binary in check mode: it validates the file's structure, not the graph contents.",
             "The RDB is Redis's binary snapshot format; graphs are module values that only a redis-server with the FalkorDB module can load.",
             "Any Redis client (redis-cli, redis-py) can query a running server with GRAPH.QUERY; nothing reads the file directly.",
         ],

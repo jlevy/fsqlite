@@ -1,0 +1,125 @@
+{
+  "workflow": "W6",
+  "backend": "falkordb",
+  "scale": "S1",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14536920
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14537000
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1/kb",
+    "seed": 20261117,
+    "replicas": 9,
+    "nodes": 48663,
+    "edges": 227817,
+    "record_files": 44775,
+    "bytes": 221432416
+  },
+  "artifacts": {
+    "data_dir": {
+      "paraverse-graph.rdb": 55215521,
+      "paraverse-graph.rdb.settings": 366
+    },
+    "runtime_dir_while_serving": [
+      "redis.config",
+      "redis.log",
+      "redis.pid",
+      "redis.socket"
+    ],
+    "count": 2,
+    "bytes": 55215887
+  },
+  "standard_tools": {
+    "rdb_magic": "REDIS0013",
+    "redis_check_rdb_exit_code": 0,
+    "redis_check_rdb_tail": [
+      "[info] 0 expires",
+      "[info] 0 already expired",
+      "[info] 0 subexpires"
+    ],
+    "system_redis_server": "/usr/bin/redis-server",
+    "notes": [
+      "The RDB is Redis's binary snapshot format; graphs are module values that only a redis-server with the FalkorDB module can load.",
+      "Any Redis client (redis-cli, redis-py) can query a running server with GRAPH.QUERY; nothing reads the file directly."
+    ]
+  },
+  "startup": {
+    "start_to_first_query_s": [
+      2.124,
+      2.446,
+      2.533
+    ],
+    "median_s": 2.446,
+    "server_rss_at_rest": 307736576,
+    "server_used_memory_at_rest": 271636112
+  },
+  "crash_loader_killed": {
+    "staging_appeared_after_s": 18.276,
+    "killed_after_staging_s": 5.39,
+    "live_graph_unchanged": true,
+    "orphan_staging_graphs": {
+      "kb__staging_18120_b8fb2c": 48663
+    },
+    "retry_exit_code": 0,
+    "retry_s": 34.267,
+    "live_graph_after_retry_matches_kb": true,
+    "graphs_after_retry": [
+      "kb",
+      "kb__staging_18120_b8fb2c"
+    ]
+  },
+  "crash_server_killed": {
+    "killed_after_staging_s": 5.39,
+    "loader_exit_code": 1,
+    "loader_error": "redis.exceptions.ConnectionError: Connection closed by server.",
+    "rdb_present_after_kill": true,
+    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmp1y9xp3r5/redis.socket. Connection refused.",
+    "restart_s": 5.514,
+    "graphs_after_restart": [
+      "kb"
+    ],
+    "live_graph_intact_after_restart": true,
+    "restarted_serves": "other",
+    "orphan_staging_graphs_after_restart": {},
+    "retry_exit_code": 0,
+    "retry_s": 34.359,
+    "live_graph_after_retry_matches_kb": true
+  },
+  "crash_server_killed_after_load": {
+    "loader_exit_code": 0,
+    "killed_after_completed_load_s": 5.003,
+    "bgsave_between_load_and_kill": false,
+    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmpnh6ekdfz/redis.socket. Connection refused.",
+    "restart_s": 6.782,
+    "restarted_serves": "previous load",
+    "graphs_after_restart": [
+      "kb"
+    ],
+    "orphan_staging_graphs_after_restart": {}
+  }
+}

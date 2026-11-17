@@ -25,14 +25,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from compare import compare
-from fdb import GRAPH, PACKAGES, Server, corpus_info, edge_attrs, write_json
-from machine import machine, package_versions
-from paraverse_graph.kb import read_artifact_document
-from paraverse_graph.loader import load_graph
-from paraverse_graph.kb import load_kb
-from w3_queries import run as run_w3
-from yamlio import dump_yaml
+from fdb import GRAPH, PACKAGES, Server, corpus_info, edge_attrs, write_json  # sets sys.path first
+
+from compare import compare  # noqa: E402
+from machine import machine, package_versions  # noqa: E402
+from paraverse_graph.kb import load_kb, read_artifact_document  # noqa: E402
+from paraverse_graph.loader import load_graph  # noqa: E402
+from w3_queries import run as run_w3  # noqa: E402
+from yamlio import dump_yaml  # noqa: E402
 
 NESTED = {"day", "term"}
 PAGE = 5000

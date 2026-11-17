@@ -1,0 +1,83 @@
+{
+  "workflow": "W5",
+  "backend": "falkordb",
+  "scale": "S0",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 9887268
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S0",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 9887268
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0/kb",
+    "seed": 20261117,
+    "replicas": 1,
+    "nodes": 5407,
+    "edges": 25313,
+    "record_files": 4975,
+    "bytes": 24767599
+  },
+  "export": {
+    "records": 4975,
+    "nodes": 5407,
+    "edges": 25313,
+    "seconds": 9.43
+  },
+  "comparison": {
+    "records": 4975,
+    "payload_equal": 4975,
+    "payload_diff_samples": [],
+    "softschema_block_equal": 4975,
+    "frontmatter_title_equal": 4975,
+    "byte_identical_files": 0,
+    "record_bytes_source": 15257028,
+    "record_bytes_export": 13449544,
+    "markdown_bodies_lost": 1420,
+    "nodes_equal_by_id_kind_path": true,
+    "node_name_differences_by_kind": {
+      "profile": 577
+    },
+    "edges_equal_as_multiset": true,
+    "edges_source": 25313,
+    "edges_export": 25313,
+    "schemas_source": 18,
+    "schemas_exported": 16,
+    "schemas_equal": 16,
+    "not_exported": [
+      "README.md",
+      "_schemas/faq.schema.yaml",
+      "_schemas/media.schema.yaml",
+      "_search/documents.jsonl",
+      "coverage.json",
+      "faq.yaml",
+      "media.yaml"
+    ],
+    "seconds": 4.127
+  },
+  "reload_s": 3.677,
+  "reloaded_w3_matches_source_w3": true,
+  "reloaded_w3_differences": []
+}

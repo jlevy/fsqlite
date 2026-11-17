@@ -2,12 +2,12 @@
   "backend": "fsqlite",
   "scale": "S1",
   "workflow": "W5",
-  "recorded_at": "2026-11-17T01:31:30.903Z",
+  "recorded_at": "2026-11-17T01:53:13.463Z",
   "machine": {
     "cpus": 4,
     "cpu_model": "Intel(R) Xeon(R) Processor",
     "mem_total_mib": 16088,
-    "mem_free_mib": 9502,
+    "mem_free_mib": 12518,
     "os": "linux 6.18.44-fc-v553",
     "filesystem": "ext2/ext3",
     "node": "v22.23.4",
@@ -36,15 +36,15 @@
   },
   "export": {
     "label": "export",
-    "seconds": 30.287,
-    "max_rss_mib": 558.9,
+    "seconds": 74.059,
+    "max_rss_mib": 626.8,
     "exit": 0,
     "report": {
       "export": {
         "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
         "files_written": 44801,
-        "graph_and_files_seconds": 0.925,
-        "seconds": 28.425,
+        "graph_and_files_seconds": 1.067,
+        "seconds": 70.182,
         "jobs": 4
       },
       "compare": {
@@ -61,11 +61,17 @@
           "_graph/edges.jsonl",
           "_graph/nodes.jsonl"
         ],
+        "order_only_differences": [
+          "_graph/edges.jsonl",
+          "_graph/nodes.jsonl"
+        ],
+        "content_differences": [],
         "byte_differences": [
           {
             "path": "_graph/edges.jsonl",
             "bytes_equal": false,
             "parsed_equal": false,
+            "same_rows_any_order": true,
             "byte_delta": 0,
             "lines_changed": 227812
           },
@@ -73,6 +79,7 @@
             "path": "_graph/nodes.jsonl",
             "bytes_equal": false,
             "parsed_equal": false,
+            "same_rows_any_order": true,
             "byte_delta": 0,
             "lines_changed": 48660
           },
@@ -80,6 +87,7 @@
             "path": "_schemas/profile.schema.yaml",
             "bytes_equal": false,
             "parsed_equal": true,
+            "same_rows_any_order": true,
             "byte_delta": 1,
             "lines_changed": 1
           }
@@ -182,13 +190,13 @@
             "parsed_equal": 1359
           }
         },
-        "seconds": 1.667
+        "seconds": 3.582
       }
     }
   },
   "reload": {
-    "parse_seconds": 7.461,
-    "load_seconds": 4.163,
+    "parse_seconds": 9.903,
+    "load_seconds": 4.23,
     "w3_queries_checked": 24,
     "w3_mismatches": []
   }
