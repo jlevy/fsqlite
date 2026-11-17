@@ -26,10 +26,12 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 SPIKE = HERE.parent
 REPO = HERE.parents[4]
-PARAVERSE_SRC = REPO / "attic" / "paraverse" / "db" / "src"
-for p in (PARAVERSE_SRC, SPIKE / "harness", SPIKE / "corpus"):
+for p in (SPIKE / "harness", SPIKE / "corpus"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+from prereq import require_paraverse_src  # noqa: E402
+
+PARAVERSE_SRC = require_paraverse_src()
 
 from paraverse_graph.connection import engine_version, open_db  # noqa: E402
 from paraverse_graph.mapping import LABELS  # noqa: E402

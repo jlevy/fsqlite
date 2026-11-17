@@ -46,6 +46,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from idmap import DEFAULT_SEED, SCALES, own_id, own_path  # noqa: E402
+from safepath import replace_dir  # noqa: E402
 from templates import S0, load_s0, ref_replica_for, render  # noqa: E402
 from yamlio import write_doc  # noqa: E402
 
@@ -334,9 +335,7 @@ def generate(scale: str, out: Path, s0_root: Path, seed: int, workers: int) -> d
     s0 = load_s0(s0_root, replicas, seed, shared)
     s0.templates_by_owner = {t.owner: t for t in s0.templates.values()}  # type: ignore[attr-defined]
     ctx = {"out": out, "seed": seed, "shared": shared, "vocab": vocabulary(s0), "origins": edge_origins(s0, shared)}
-    kb = out / "kb"
-    if kb.exists():
-        shutil.rmtree(kb)
+    kb = replace_dir(out / "kb")
     (kb / "_graph" / ".parts").mkdir(parents=True)
     (kb / "_search").mkdir()
     shutil.copytree(s0_root / "_schemas", kb / "_schemas")

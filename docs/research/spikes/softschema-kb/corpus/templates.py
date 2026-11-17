@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from idmap import TYPED_ID_TOKEN, pair_shift, replica_suffix
+from prereq import require_kb
 
 HUB_OR_NESTED = frozenset({"event", "day", "facet", "term"})
 PARENT_ENVELOPE = {"day": "event", "term": "facet"}
@@ -70,6 +71,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def load_s0(root: Path, replicas: int, seed: int, shared: frozenset[str] = frozenset()) -> S0:
+    require_kb(root)
     nodes = _read_jsonl(root / "_graph" / "nodes.jsonl")
     edges = _read_jsonl(root / "_graph" / "edges.jsonl")
     search = _read_jsonl(root / "_search" / "documents.jsonl")

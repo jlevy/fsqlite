@@ -57,6 +57,9 @@ from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "corpus"))
+from safepath import rel_path  # noqa: E402
+
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---[ \t]*(?:\n|\Z)", re.DOTALL)
 _TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
 _BaseLoader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
@@ -78,6 +81,14 @@ PortableLoader.yaml_implicit_resolvers = {
 
 def dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+def admitted(value: Any, what: str) -> str:
+    """A batch path that stays under its root (corpus/safepath.py), or exit naming it."""
+    try:
+        return rel_path(value, what)
+    except ValueError as exc:
+        raise SystemExit(f"refusing the batch: {exc}") from None
 
 
 def read_text(path: Path) -> str:
@@ -506,6 +517,15 @@ def emit_delta2(batch: Path, schemas_dir: str | None, emit: Any) -> dict[str, An
     `invalid` line instead, and its op is skipped, so the rest of the batch still applies.
     """
     ops = list(read_jsonl(batch / "ops.jsonl"))
+    # Admission: every path a batch names stays under the KB root, checked before any read.
+    for n, op in enumerate(ops, 1):
+        for key in ("path", "absorbed_path", "survivor_path"):
+            if key in op:
+                admitted(op[key], f"ops.jsonl line {n}: {key}")
+        for node in op.get("nodes", []):
+            admitted(node.get("path"), f"ops.jsonl line {n}: node path")
+        if op.get("op") == "upsert" and (batch / "records" / op["path"]).is_symlink():
+            raise SystemExit(f"ops.jsonl line {n}: records/{op['path']} is a symbolic link")
     for op in ops:
         for node in op.get("nodes", []):
             emit(dumps({"t": "node", **{k: node.get(k) for k in ("id", "kind", "name", "path")}}), "node")

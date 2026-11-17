@@ -3,9 +3,10 @@ Run the FalkorDB workflows for one scale, each step in its own process.
 
     python run.py --scale S1 [--steps oracle w1 w3 compare w2 w4 w5 w6]
 
-Paths come from the environment: $KB_CORPORA (default: the session scratchpad's
-kb-corpora/) holds <scale>/kb, and $FALKORDB_DATA (default: a sibling fdb-data/) holds
-the RDB files. Results go to results/falkordb/<scale>/.
+Paths come from the environment: $KB_CORPORA (default: $KB_SCRATCH/kb-corpora) holds
+<scale>/kb, and $FALKORDB_DATA (default: $KB_SCRATCH/fdb-data) holds the RDB files.
+$KB_SCRATCH, the private scratch directory the fsqlite arm also uses, is required unless
+both are set. Results go to results/falkordb/<scale>/.
 """
 
 from __future__ import annotations
@@ -19,13 +20,18 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SPIKE = HERE.parent
 RESULTS = SPIKE / "results" / "falkordb"
-SCRATCH = Path(
-    os.environ.get(
-        "SPIKE_SCRATCH", "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad"
-    )
-)
-CORPORA = Path(os.environ.get("KB_CORPORA", SCRATCH / "kb-corpora"))
-DATA = Path(os.environ.get("FALKORDB_DATA", SCRATCH / "fdb-data"))
+
+
+def _scratch(name: str, default: str) -> Path:
+    if os.environ.get(name):
+        return Path(os.environ[name])
+    if not os.environ.get("KB_SCRATCH"):
+        raise SystemExit(f"set KB_SCRATCH to a private scratch directory (or set {name})")
+    return Path(os.environ["KB_SCRATCH"]) / default
+
+
+CORPORA = _scratch("KB_CORPORA", "kb-corpora")
+DATA = _scratch("FALKORDB_DATA", "fdb-data")
 
 STEPS = ("oracle", "w1", "w1nosave", "w3", "compare", "w2", "w2v2", "w4", "w5", "w6")
 
@@ -37,7 +43,7 @@ def sh(args: list[str], **kwargs) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--scale", required=True)
+    ap.add_argument("--scale", required=True, choices=("S0", "S1", "S2", "S3", "S1-r2", "S2-r2", "S3-r2"))
     ap.add_argument("--steps", nargs="+", default=["oracle", "w1", "w3", "compare"], choices=STEPS)
     args = ap.parse_args()
     s = args.scale

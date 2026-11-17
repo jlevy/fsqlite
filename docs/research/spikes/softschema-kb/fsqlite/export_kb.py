@@ -19,7 +19,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sqlite3
 import sys
 import time
@@ -28,6 +27,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "corpus"))
+from safepath import rel_path, replace_dir  # noqa: E402
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---[ \t]*(?:\n|\Z)", re.DOTALL)
 _TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
@@ -108,15 +110,14 @@ def render_docs(db_path: str, paths: list[str]) -> list[tuple[str, str]]:
 
 def export(src: Path, out: Path, jobs: int) -> dict[str, Any]:
     started = time.monotonic()
-    if out.exists():
-        shutil.rmtree(out)
-    out.mkdir(parents=True)
+    replace_dir(out)
+    out.mkdir(parents=True, exist_ok=True)
     db = connect(src)
     written = 0
 
     def write(rel: str, text: str) -> None:
         nonlocal written
-        target = out / rel
+        target = out / rel_path(rel, "stored path")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(text.encode("utf-8"))
         written += 1
@@ -124,7 +125,7 @@ def export(src: Path, out: Path, jobs: int) -> dict[str, Any]:
     for rel, text in db.execute("SELECT path, text FROM kb_file ORDER BY path"):
         write(rel, text)
     for (rel,) in db.execute("SELECT DISTINCT path FROM kb_line ORDER BY path").fetchall():
-        target = out / rel
+        target = out / rel_path(rel, "stored path")
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8", newline="") as f:
             for (text,) in db.execute("SELECT text FROM kb_line WHERE path = ? ORDER BY n", (rel,)):

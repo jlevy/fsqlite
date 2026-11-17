@@ -28,8 +28,9 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-PARAVERSE_SRC = HERE.parents[4] / "attic" / "paraverse" / "db" / "src"
-sys.path.insert(0, str(PARAVERSE_SRC))
+from prereq import require_paraverse_src  # noqa: E402
+
+PARAVERSE_SRC = require_paraverse_src()
 
 from idmap import DEFAULT_SEED, own_id  # noqa: E402
 from paraverse_graph.kb import _find_by_id, read_artifact  # noqa: E402

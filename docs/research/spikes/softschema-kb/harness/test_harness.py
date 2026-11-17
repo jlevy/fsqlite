@@ -237,5 +237,55 @@ class StateCheck(unittest.TestCase):
             state_check.source_for("arm/S1-r2/w3-after-p05-odd.json.bak")
 
 
+class BatchAdmission(unittest.TestCase):
+    """corpus/safepath.py and delta2.check_batch: what a batch or an output path may name."""
+
+    def test_rel_path(self) -> None:
+        import safepath
+
+        self.assertEqual(safepath.rel_path("people/a.yaml"), "people/a.yaml")
+        for bad in ("/etc/passwd", "../x", "a/../../b", "a\\b", "", "C:x", None):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                safepath.rel_path(bad)
+
+    def test_replace_dir_needs_its_marker(self) -> None:
+        import safepath
+
+        with tempfile.TemporaryDirectory() as d:
+            mine, theirs, empty = Path(d) / "mine", Path(d) / "theirs", Path(d) / "empty"
+            safepath.replace_dir(mine)
+            (mine / "f").mkdir(parents=True)
+            safepath.replace_dir(mine)  # created by a tool: replaced
+            self.assertFalse(mine.exists())
+            (theirs / "keep").mkdir(parents=True)
+            with self.assertRaises(SystemExit):
+                safepath.replace_dir(theirs)
+            self.assertTrue((theirs / "keep").is_dir())
+            empty.mkdir()
+            safepath.replace_dir(empty)  # an empty directory is reused, not deleted
+            self.assertTrue(empty.is_dir())
+
+    @unittest.skipUnless(
+        (HERE.parents[4] / "attic" / "paraverse" / "db" / "src").is_dir(),
+        "delta2.py imports paraverse; see README.md, Prerequisites",
+    )
+    def test_check_batch_refuses_what_line_order_would_apply_differently(self) -> None:
+        from delta2 import check_batch
+
+        up = {"op": "upsert", "path": "p/a.yaml", "nodes": [{"id": "a", "path": "p/a.yaml"}], "edges": []}
+        merge = {"op": "merge", "absorbed": "b", "survivor": "s", "absorbed_path": "p/b.yaml", "survivor_path": "p/s.yaml"}
+        check_batch([up, merge])
+        bad = [
+            [up, {"op": "delete", "path": "p/a.yaml", "node_ids": ["a"]}],
+            [up, up],
+            [merge, {"op": "delete", "path": "p/s.yaml", "node_ids": ["s"]}],
+            [{**merge, "absorbed_path": "../outside.yaml"}],
+            [{**up, "path": "/abs.yaml"}],
+        ]
+        for ops in bad:
+            with self.assertRaises(ValueError, msg=json.dumps(ops)[:80]):
+                check_batch(ops)
+
+
 if __name__ == "__main__":
     unittest.main()

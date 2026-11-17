@@ -33,6 +33,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from idmap import DEFAULT_SEED, SCALES, own_id, own_path  # noqa: E402
+from safepath import replace_dir  # noqa: E402
 from templates import S0, load_s0, ref_replica_for, render  # noqa: E402
 
 DEFAULT_S0 = HERE.parents[4] / "attic" / "paraverse" / "vendor" / "universe2026-md" / "kb"
@@ -127,9 +128,7 @@ def generate(scale: str, out: Path, s0_root: Path, seed: int, workers: int) -> d
     started = time.monotonic()
     s0 = load_s0(s0_root, replicas, seed)
     prep_s = time.monotonic() - started
-    kb = out / "kb"
-    if kb.exists():
-        shutil.rmtree(kb)
+    kb = replace_dir(out / "kb")
     (kb / "_graph" / ".parts").mkdir(parents=True)
     (kb / "_search").mkdir()
     shutil.copytree(s0_root / "_schemas", kb / "_schemas")

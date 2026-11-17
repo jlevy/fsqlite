@@ -16,6 +16,28 @@ Every backend runs the same W3 query instances and writes the same canonical res
 | `test_harness.py` | Tests for `compare.py`, `slim_results.py`, and `state_check.py` (`python3 -m unittest test_harness`) |
 | `machine.py` | Shared measurement helpers: machine description, percentiles, cold and warm timing, RSS sampling |
 
+## Prerequisites
+
+`oracle.py`, `build_queries*.py`, the corpus tools, and the FalkorDB arm import
+paraverse’s KB reader and mapping rules from an untracked checkout at `attic/paraverse`
+(`db/src`), and read S0, the real KB, from its `vendor/universe2026-md` submodule.
+Create it as `tbd shortcut checkout-third-party-repo` describes (`attic/` is
+gitignored), at the commits this spike used, from the repository root:
+
+```bash
+git clone https://github.com/jlevy/paraverse attic/paraverse
+git -C attic/paraverse checkout bb9a567
+git -C attic/paraverse submodule update --init vendor/universe2026-md   # a823679, as bb9a567 pins it
+git -C attic/paraverse/vendor/universe2026-md rev-parse --short HEAD    # prints a823679
+```
+
+Without it those scripts stop with a message that gives these steps
+(`corpus/prereq.py`). `compare.py`, `slim_results.py`, and `state_check.py` read only
+result files and KB directories, and need no checkout.
+The oracle needs Python 3.11 or later and PyYAML; the FalkorDB arm needs paraverse’s
+synced environment (`../falkordb/README.md`). Working data (corpora, stores, the applied
+KBs) goes under `$KB_SCRATCH`, a private directory that every spike script requires.
+
 ## Using the Catalog
 
 Each entry in `queries.json` has a `name`, a `category` (table, record, search, path,

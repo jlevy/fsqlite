@@ -15,12 +15,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
+
+from safepath import replace_dir
 
 GRAPH_FILES = ("_graph/nodes.jsonl", "_graph/edges.jsonl", "_graph/stats.json")
 SEARCH_FILE = "_search/documents.jsonl"
@@ -81,8 +82,7 @@ def materialize(
     recomputed stats.json.
     """
     started = time.monotonic()
-    if out.exists():
-        shutil.rmtree(out)
+    replace_dir(out)
     linked = link_tree(base, out, skip=(*GRAPH_FILES, SEARCH_FILE))
     overlaid = 0
     if records is not None and records.is_dir():

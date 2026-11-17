@@ -15,17 +15,23 @@ Two arms are reported where they differ:
 
 ## Setup
 
+The arm imports paraverse from an untracked checkout at `attic/paraverse`: paraverse at
+`bb9a567`, with its `vendor/universe2026-md` submodule at `a823679`. Create it as
+`../harness/README.md` (Prerequisites) describes; without it every script stops with
+that instruction.
+
 paraverse pins uv 0.12 and a 14-day cool-off (`db/uv.toml`: `exclude-newer = "14
-days"`). This VM had uv 0.11.32, so uv 0.12.24 was installed into the scratchpad with
-the same cool-off, without touching the system uv:
+days"`). This VM had uv 0.11.32, so uv 0.12.24 was installed into a private scratch
+directory with the same cool-off, without touching the system uv:
 
 ```bash
-SP=/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad
+export KB_SCRATCH=$(mktemp -d)   # private working data: corpora, RDB files, the venv
+SP=$KB_SCRATCH
 UV_TOOL_DIR=$SP/uvtool/tools UV_TOOL_BIN_DIR=$SP/uvtool/bin \
   uv tool install 'uv>=0.12,<0.13' --exclude-newer "$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
-The spike runs inside paraverse’s own locked environment, synced into the scratchpad.
+The spike runs inside paraverse’s own locked environment, synced into `$KB_SCRATCH`.
 `--locked` refuses to change `uv.lock`, and `--no-install-project` skips building
 paraverse itself, so no build backend or install script runs; paraverse’s source is
 imported from `db/src` by path:

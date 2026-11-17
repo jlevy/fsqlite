@@ -29,9 +29,11 @@ HERE = Path(__file__).resolve().parent
 QUERIES_PATH = HERE / "queries.json"
 
 # paraverse is the reference integration; import its reader and mapping rules.
-PARAVERSE_SRC = HERE.parents[4] / "attic" / "paraverse" / "db" / "src"
-if str(PARAVERSE_SRC) not in sys.path:
-    sys.path.insert(0, str(PARAVERSE_SRC))
+if str(HERE.parent / "corpus") not in sys.path:
+    sys.path.insert(0, str(HERE.parent / "corpus"))
+from prereq import require_paraverse_src  # noqa: E402
+
+PARAVERSE_SRC = require_paraverse_src()
 
 from paraverse_graph.kb import KbNode, _find_by_id, read_artifact  # noqa: E402
 from paraverse_graph.mapping import (  # noqa: E402
@@ -100,6 +102,8 @@ class KbIndex:
         self.payload: dict[str, dict[str, Any]] = {}
         for rel_path, ids in nodes_by_path.items():
             kinds = {PARENT_ENVELOPE.get(self.kind[i], self.kind[i]) for i in ids}
+            if len(kinds) != 1:
+                raise ValueError(f"{rel_path}: nodes of several envelopes {sorted(kinds)}; the envelope hint would be arbitrary")
             artifact = read_artifact(root / rel_path, rel_path, envelope_hint=next(iter(kinds)))
             for nid in ids:
                 payload = artifact.payload

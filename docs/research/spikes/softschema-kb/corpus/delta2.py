@@ -33,11 +33,16 @@ Operations:
 Every edge is incident to a node of its origin record, so a backend can find the edges
 of a record from its nodes. Deletes and merges never touch a record that the same batch
 upserts or an entity that a W3 v2 query names, and survivors are never deleted.
+
+`apply_batch` applies a batch as sets, which equals applying it in line order only under
+those rules, so it checks them first and refuses a batch that breaks one. It also refuses
+any path that is absolute or has a `..` segment, before it writes anything.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import re
@@ -53,6 +58,7 @@ sys.path.insert(0, str(HERE))
 from generate2 import ROUND, edge_origins, shared_entities  # noqa: E402
 from idmap import DEFAULT_SEED, SCALES, own_id, own_path  # noqa: E402
 from overlay import _jsonl, dumps, link_tree, put  # noqa: E402
+from safepath import rel_path, replace_dir  # noqa: E402
 from templates import HUB_OR_NESTED, load_s0, ref_replica_for, render  # noqa: E402
 from yamlio import read_doc, write_doc  # noqa: E402
 
@@ -205,6 +211,7 @@ def make_batch(name: str, n: int, ctx: dict[str, Any], invalid: bool = False) ->
         "scale": ctx["scale_name"],
         "batch": name,
         "seed": seed,
+        "protected_ids_sha256": protected_digest(ctx["protected"]),
         "changes": len(ops),
         "counts": dict(sorted(counts.items())),
         "edges_in_upserts": sum(len(op.get("edges", [])) for op in ops),
@@ -281,30 +288,80 @@ def protected_ids(scale_name: str) -> frozenset[str]:
     """Entities named by the W3 v2 queries: never deleted or absorbed by a batch."""
     path = HERE.parent / "harness" / "queries.json"
     if not path.is_file():
-        return frozenset()
+        raise SystemExit(f"{path} is missing; a batch made without it could delete an entity a W3 query names")
     doc = json.loads(path.read_text(encoding="utf-8"))
     out = set()
     for q in doc.get("queries_v2", []):
         p = q["params"].get(scale_name, {})
         out |= {p[k] for k in ("id", "a", "b", "org") if isinstance(p.get(k), str)}
+    if not out:
+        raise SystemExit(f"{path} names no entity for {scale_name}; refusing to make batches with nothing protected")
     return frozenset(out)
+
+
+def protected_digest(ids: frozenset[str]) -> str:
+    """A digest of the protected set, recorded in each manifest so a reader can check it."""
+    return hashlib.sha256("\n".join(sorted(ids)).encode("utf-8")).hexdigest()
 
 
 ## Applying a batch (the reference implementation)
 
 
+def check_batch(ops: list[dict[str, Any]]) -> None:
+    """
+    Refuse a batch whose set-based application could differ from line order, or whose
+    paths could leave the KB root. Raises ValueError naming the first broken rule.
+    """
+    upsert_paths: list[str] = []
+    upsert_ids: set[str] = set()
+    removed_paths: set[str] = set()
+    removed_ids: set[str] = set()
+    survivors: dict[str, str] = {}
+    for n, op in enumerate(ops, 1):
+        kind = op.get("op")
+        if kind == "upsert":
+            upsert_paths.append(rel_path(op["path"], f"line {n}: upsert path"))
+            for node in op["nodes"]:
+                rel_path(node["path"], f"line {n}: node path")
+                upsert_ids.add(node["id"])
+            for edge in op["edges"]:
+                rel_path(edge.get("origin", op["path"]), f"line {n}: edge origin")
+        elif kind == "delete":
+            removed_paths.add(rel_path(op["path"], f"line {n}: delete path"))
+            removed_ids.update(op["node_ids"])
+        elif kind == "merge":
+            removed_paths.add(rel_path(op["absorbed_path"], f"line {n}: absorbed path"))
+            rel_path(op["survivor_path"], f"line {n}: survivor path")
+            if op["absorbed"] in removed_ids:
+                raise ValueError(f"line {n}: {op['absorbed']} is removed twice")
+            removed_ids.add(op["absorbed"])
+            survivors[op["survivor"]] = op["survivor_path"]
+        else:
+            raise ValueError(f"line {n}: unknown op {kind!r}")
+    if len(set(upsert_paths)) != len(upsert_paths):
+        raise ValueError("a path is upserted twice")
+    if both := sorted(set(upsert_paths) & removed_paths):
+        raise ValueError(f"upserted and removed in one batch: {both[:3]}")
+    if both := sorted(upsert_ids & removed_ids):
+        raise ValueError(f"upserted and removed in one batch: {both[:3]}")
+    if gone := sorted(i for i, p in survivors.items() if i in removed_ids or p in removed_paths):
+        raise ValueError(f"a merge survivor is removed: {gone[:3]}")
+
+
 def apply_batch(base: Path, batch: Path, out: Path) -> dict[str, Any]:
     """Materialize the post-batch KB: hard links, overlaid records, rewritten _graph."""
-    import shutil
-
     started = time.monotonic()
-    if out.exists():
-        shutil.rmtree(out)
     ops = list(_jsonl(batch / "ops.jsonl"))
+    check_batch(ops)
+    records = [p for p in sorted((batch / "records").rglob("*")) if p.is_file() or p.is_symlink()]
+    for path in records:
+        if path.is_symlink():
+            raise ValueError(f"{path}: a batch record may not be a symbolic link")
+        rel_path(path.relative_to(batch / "records").as_posix(), "record file")
+    replace_dir(out)
     link_tree(base, out, skip=GRAPH_FILES)
-    for path in (batch / "records").rglob("*"):
-        if path.is_file():
-            put(out, str(path.relative_to(batch / "records")), path.read_bytes())
+    for path in records:
+        put(out, path.relative_to(batch / "records").as_posix(), path.read_bytes())
     upserts = {op["path"]: op for op in ops if op["op"] == "upsert"}
     removed_paths = {op["path"] for op in ops if op["op"] == "delete"} | {op["absorbed_path"] for op in ops if op["op"] == "merge"}
     deleted_nodes = {i for op in ops if op["op"] == "delete" for i in op["node_ids"]}
@@ -385,6 +442,8 @@ def main() -> None:
     if args.apply:
         print(json.dumps(apply_batch(args.base, args.batch, args.out)))
         return
+    if not args.s0.is_dir():
+        raise SystemExit(f"{args.s0} is missing: check out paraverse as harness/README.md (Prerequisites) says")
     ctx = build_context(args.scale, args.corpus, args.seed, args.s0)
     batches = [(name, round(ctx["node_count"] * pct / 100), False) for name, pct in BULK.items()]
     batches += [(name, n, False) for name, n in TRICKLE.items()]

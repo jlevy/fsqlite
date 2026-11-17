@@ -32,6 +32,7 @@ from machine import machine, package_versions  # noqa: E402
 from paraverse_graph.kb import load_kb, read_artifact_document  # noqa: E402
 from paraverse_graph.loader import load_graph  # noqa: E402
 from w3_queries import run as run_w3  # noqa: E402
+from safepath import rel_path, replace_dir  # noqa: E402
 from yamlio import dump_yaml  # noqa: E402
 
 NESTED = {"day", "term"}
@@ -44,8 +45,7 @@ def _schema_file(kind: str) -> str:
 
 def export(graph: Any, out: Path) -> dict[str, Any]:
     started = time.perf_counter()
-    if out.exists():
-        shutil.rmtree(out)
+    replace_dir(out)
     (out / "_graph").mkdir(parents=True)
     (out / "_schemas").mkdir()
     schemas = {
@@ -91,7 +91,7 @@ def export(graph: Any, out: Path) -> dict[str, Any]:
                     "status": "enforced",
                 }
                 payload = json.loads(doc)
-                dest = out / path
+                dest = out / rel_path(path, f"stored path of {nid}")
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if path.endswith(".md"):
                     text = "---\n" + dump_yaml({"title": name, "softschema": block, kind: payload}) + "---\n"

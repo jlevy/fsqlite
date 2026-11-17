@@ -16,8 +16,10 @@ from typing import Any
 
 import yaml
 
-PARAVERSE_SRC = Path(__file__).resolve().parents[5] / "attic" / "paraverse" / "db" / "src"
-sys.path.insert(0, str(PARAVERSE_SRC))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from prereq import require_paraverse_src  # noqa: E402
+
+PARAVERSE_SRC = require_paraverse_src()
 
 from paraverse_graph.kb import _FRONTMATTER, _PortableScalarLoader  # noqa: E402
 
