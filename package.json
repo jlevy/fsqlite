@@ -20,10 +20,10 @@
     "check:docs": "pnpm --filter fsqlite check:docs",
     "test:golden": "pnpm --filter fsqlite test:golden",
     "test:project-hooks": "node scripts/check-project-hooks.mjs",
-    "test:supply-chain": "node --test scripts/supply-chain-exceptions.test.mjs && node scripts/check-supply-chain.mjs",
+    "test:supply-chain": "node scripts/check-supply-chain.mjs && node --test scripts/supply-chain-exceptions.test.mjs",
     "test:package": "pnpm --filter fsqlite test:package",
     "test:all": "pnpm --filter fsqlite test:all",
-    "verify": "pnpm format:check && pnpm lint:check && pnpm typecheck && pnpm test:project-hooks && pnpm test:supply-chain && pnpm test:all"
+    "verify": "pnpm test:supply-chain && pnpm format:check && pnpm lint:check && pnpm typecheck && pnpm test:project-hooks && pnpm test:all"
   },
   "devDependencies": {
     "lefthook": "2.2.1",

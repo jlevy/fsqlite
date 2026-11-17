@@ -21,11 +21,12 @@ pnpm install --frozen-lockfile --ignore-scripts
 pnpm verify
 ```
 
-`pnpm verify` runs, in order: the Prettier and flowmark format checks, zero-warning
-ESLint, `tsc --noEmit`, the project-hook tests, the supply-chain gate, and `test:all`
-(doc and link checks, `node:test`, CLI goldens, the build with publint, and the
-clean-room package smoke).
-Run it from the repository root.
+`pnpm verify` runs, in order: the supply-chain gate and its rule tests, first, because
+they need only Node and `pnpm config` and every later step runs installed packages; the
+Prettier and flowmark format checks, zero-warning ESLint, `tsc --noEmit`, the
+project-hook tests, and `test:all` (the doc-check tests, doc, link, and data-file
+checks, `node:test`, CLI goldens, the build with publint, and the clean-room package
+smoke). Run it from the repository root.
 The JavaScript tools resolve from this workspace’s lockfile.
 The flowmark check runs through `uvx` (pinned `flowmark-rs`), so it needs `uv` and, on
 first use, a network download of that exact release; `CONTRIBUTING.md` lists the setup.

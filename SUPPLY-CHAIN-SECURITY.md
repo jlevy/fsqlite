@@ -34,7 +34,8 @@ decide fail the install; `esbuild` and `lefthook` are the only packages in the g
 with install scripts, and both are denied because their platform binaries ship as
 optional dependencies.
 
-`pnpm verify` checks the configuration pnpm reports.
+`pnpm verify` checks the configuration pnpm reports, as its first step, before any step
+that runs an installed package.
 It requires a strict cool-off of at least 14 days that exempts only the recorded
 first-party packages, publish timestamps, lockfile policy verification, the trust policy
 and build-script controls described above, registry-only transitive sources, and engine
