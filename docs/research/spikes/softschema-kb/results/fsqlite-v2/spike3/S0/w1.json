@@ -1,0 +1,234 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "w1",
+  "recorded_at": "2026-11-17T05:12:28.256Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 8187,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "kb_bytes": 24767599,
+  "parse": {
+    "label": "parse",
+    "seconds": 2.742,
+    "max_rss_mib": 42.7,
+    "exit": 0,
+    "report": {
+      "seconds": 2.461,
+      "jobs": 4,
+      "counts": {
+        "schema": 18,
+        "line": 4796,
+        "node": 5407,
+        "file": 3,
+        "doc": 4977,
+        "entity": 5407,
+        "edge": 25313
+      }
+    },
+    "parser": "parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order",
+    "validation": "not run"
+  },
+  "intermediate_bytes": 29562686,
+  "direct": {
+    "label": "load-direct",
+    "seconds": 1.274,
+    "max_rss_mib": 173.1,
+    "exit": 0,
+    "report": {
+      "arm": "DirectStore",
+      "route": "init() with the DDL, then one DirectStore.write streaming every row",
+      "version": 1,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 4796,
+        "node": 5407,
+        "doc": 4977,
+        "entity": 5407,
+        "edge": 25313,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "phases": {
+        "init_ddl_ms": 278.881,
+        "decode_ms": 92.119,
+        "transform_ms": 68.79,
+        "ingest_ms": 289.574,
+        "verify_counts_ms": 2.453,
+        "publish_ms": 116.284,
+        "publish_note": "COMMIT, quick_check, foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+        "quick_check_warm_ms": 22.928,
+        "ingest_through_durable_ms": 886.078
+      },
+      "total_ms": 978.197,
+      "validation": "softschema validation not run (as in paraverse default load)",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it"
+      },
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 40673280,
+      "max_rss_mib": 173
+    },
+    "arm": "DirectStore",
+    "ingest_through_durable_seconds": 1.182,
+    "total_with_parse_seconds": 4.016,
+    "store_bytes_before_gc": 40784153,
+    "gc": {
+      "retain": 0,
+      "ms": 115.172,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true,
+      "verified": 1,
+      "fullVerified": 1,
+      "prunedApplied": 0,
+      "timings": {
+        "verify_ms": 93.6,
+        "locked_ms": 2.778,
+        "unlink_ms": 18.367
+      }
+    },
+    "store_bytes": 40673560,
+    "snapshot_bytes": 40673280,
+    "store_over_head": 1,
+    "breakdown": {
+      "entity": 16142336,
+      "kb_line": 9035776,
+      "doc": 4276224,
+      "edge": 2310144,
+      "ix_edge_origin": 1970176,
+      "ix_edge_rel": 1961984,
+      "ix_edge_in": 1945600,
+      "search_text": 1310720,
+      "ix_entity_kind_label": 409600,
+      "ix_entity_id_kind": 266240,
+      "ix_entity_path": 249856,
+      "sqlite_autoindex_doc_1": 233472,
+      "sqlite_autoindex_entity_1": 204800,
+      "kind_schema": 131072,
+      "ix_view_repos_by_stars": 61440,
+      "ix_view_repos_all_by_stars": 57344,
+      "kb_file": 40960,
+      "ix_view_sessions_by_start": 28672,
+      "sqlite_schema": 4096,
+      "sqlite_autoindex_quarantine_1": 4096,
+      "sqlite_autoindex_kind_schema_1": 4096,
+      "sqlite_autoindex_kb_file_1": 4096,
+      "sqlite_autoindex_fsqlite_meta_1": 4096,
+      "sqlite_autoindex_applied_tx_1": 4096,
+      "quarantine": 4096,
+      "fsqlite_meta": 4096,
+      "applied_tx": 4096
+    },
+    "fts_sidecar": {
+      "rows": 7506,
+      "build_ms": 116.208,
+      "bytes": 5111808
+    }
+  },
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 1.766,
+    "max_rss_mib": 255.8,
+    "exit": 0,
+    "report": {
+      "arm": "SnapshotStore",
+      "route": "init(), 3 envelopes of 20000 rows, one reconcile",
+      "batch": 20000,
+      "captures": 3,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 4796,
+        "node": 5407,
+        "doc": 4977,
+        "entity": 5407,
+        "edge": 25313,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 3,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "phases": {
+        "init_ddl_ms": 132.167,
+        "decode_ms": 99.753,
+        "transform_ms": 73.947,
+        "ingest_ms": 310.3,
+        "capture_overhead_ms": 266.601,
+        "capture_note": "per envelope: copy the head, session changeset, envelope files",
+        "reconcile_ms": 420.724,
+        "reconcile_note": "copy head, apply changesets, quick_check, fsync, publish",
+        "quick_check_warm_ms": 55.676,
+        "ingest_through_durable_ms": 1329.388
+      },
+      "total_ms": 1429.141,
+      "count_problems": [],
+      "validation": "softschema validation not run",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it"
+      },
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S0/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 41533440,
+      "max_rss_mib": 255.8
+    },
+    "arm": "SnapshotStore",
+    "ingest_through_durable_seconds": 1.666,
+    "total_with_parse_seconds": 4.508,
+    "store_bytes_before_gc": 67665420,
+    "gc": {
+      "retain": 0,
+      "ms": 131.02,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true,
+      "verified": 1,
+      "fullVerified": 1,
+      "prunedApplied": 3,
+      "timings": {
+        "verify_ms": 92.378,
+        "locked_ms": 8.009,
+        "unlink_ms": 30.556
+      }
+    },
+    "store_bytes": 41533716,
+    "snapshot_bytes": 41533440,
+    "store_over_head": 1
+  }
+}

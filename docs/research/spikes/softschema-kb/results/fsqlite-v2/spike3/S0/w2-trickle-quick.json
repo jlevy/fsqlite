@@ -1,0 +1,322 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W2 trickle (C18)",
+  "recorded_at": "2026-11-17T05:13:50.087Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 9156,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "gc_opts": {
+    "verifyMaxAgeMs": 60000,
+    "collectOn": "quick"
+  },
+  "delta": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/kb-corpora/S0/deltas/p20",
+  "gc": "gc({ retain: 0, ...{\"verifyMaxAgeMs\":60000,\"collectOn\":\"quick\"} }) after every publish",
+  "batches": {
+    "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 41.439,
+      "reconcile_ms": 76.679,
+      "visible_ms_median": 118.12,
+      "records_per_s": 8.47,
+      "fts_rebuild_ms_median": 160.179,
+      "gc_retain0_ms_median": 35.475,
+      "gc_unlink_ms_median": 31.207,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 39.084,
+          "reconcile_ms": 60.517,
+          "visible_ms": 99.605,
+          "fts_rebuild_ms": 190.144,
+          "gc_ms": 9.406,
+          "gc_verify_ms": 4.385,
+          "gc_unlink_ms": 0.979,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 59.792,
+          "reconcile_ms": 93.41,
+          "visible_ms": 153.222,
+          "fts_rebuild_ms": 151.953,
+          "gc_ms": 37.143,
+          "gc_verify_ms": 2.363,
+          "gc_unlink_ms": 31.404,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 41.439,
+          "reconcile_ms": 76.679,
+          "visible_ms": 118.12,
+          "fts_rebuild_ms": 160.179,
+          "gc_ms": 35.475,
+          "gc_verify_ms": 2.053,
+          "gc_unlink_ms": 31.207,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 85.766,
+      "records_per_s": 11.66,
+      "fts_rebuild_ms_median": 75.687,
+      "gc_retain0_ms_median": 41.723,
+      "gc_unlink_ms_median": 32.302,
+      "gc_scrubs": 1,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 85.766,
+          "fts_rebuild_ms": 73.345,
+          "gc_ms": 32.299,
+          "gc_verify_ms": 1.094,
+          "gc_unlink_ms": 29.769,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 75.426,
+          "fts_rebuild_ms": 75.687,
+          "gc_ms": 41.723,
+          "gc_verify_ms": 1.326,
+          "gc_unlink_ms": 38.889,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 97.651,
+          "fts_rebuild_ms": 147.738,
+          "gc_ms": 126.446,
+          "gc_verify_ms": 92.713,
+          "gc_unlink_ms": 32.302,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "SnapshotStore.10": {
+      "arm": "SnapshotStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 40.37,
+      "reconcile_ms": 67.091,
+      "visible_ms_median": 107.463,
+      "records_per_s": 93.06,
+      "fts_rebuild_ms_median": 147.842,
+      "gc_retain0_ms_median": 36.141,
+      "gc_unlink_ms_median": 32.088,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 40.37,
+          "reconcile_ms": 67.091,
+          "visible_ms": 107.463,
+          "fts_rebuild_ms": 162.118,
+          "gc_ms": 3.849,
+          "gc_verify_ms": 1.786,
+          "gc_unlink_ms": 0.563,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 49.056,
+          "reconcile_ms": 78.588,
+          "visible_ms": 127.647,
+          "fts_rebuild_ms": 147.842,
+          "gc_ms": 36.141,
+          "gc_verify_ms": 1.609,
+          "gc_unlink_ms": 32.088,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 37.714,
+          "reconcile_ms": 55.332,
+          "visible_ms": 93.049,
+          "fts_rebuild_ms": 73.683,
+          "gc_ms": 40.683,
+          "gc_verify_ms": 1.068,
+          "gc_unlink_ms": 38.389,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.10": {
+      "arm": "DirectStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 79.168,
+      "records_per_s": 126.31,
+      "fts_rebuild_ms_median": 80.192,
+      "gc_retain0_ms_median": 34.895,
+      "gc_unlink_ms_median": 31.713,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 81.562,
+          "fts_rebuild_ms": 80.192,
+          "gc_ms": 31.276,
+          "gc_verify_ms": 1.19,
+          "gc_unlink_ms": 28.227,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 79.168,
+          "fts_rebuild_ms": 74.159,
+          "gc_ms": 35.251,
+          "gc_verify_ms": 0.915,
+          "gc_unlink_ms": 33.144,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 76.227,
+          "fts_rebuild_ms": 110.212,
+          "gc_ms": 34.895,
+          "gc_verify_ms": 1.459,
+          "gc_unlink_ms": 31.713,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "SnapshotStore.100": {
+      "arm": "SnapshotStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 40.326,
+      "reconcile_ms": 70.258,
+      "visible_ms_median": 110.587,
+      "records_per_s": 904.27,
+      "fts_rebuild_ms_median": 85.011,
+      "gc_retain0_ms_median": 34.378,
+      "gc_unlink_ms_median": 31.477,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 40.326,
+          "reconcile_ms": 70.258,
+          "visible_ms": 110.587,
+          "fts_rebuild_ms": 94.323,
+          "gc_ms": 34.378,
+          "gc_verify_ms": 1.153,
+          "gc_unlink_ms": 31.477,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 43.369,
+          "reconcile_ms": 72.727,
+          "visible_ms": 116.099,
+          "fts_rebuild_ms": 78.008,
+          "gc_ms": 32.272,
+          "gc_verify_ms": 0.999,
+          "gc_unlink_ms": 30.066,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 38.014,
+          "reconcile_ms": 59.744,
+          "visible_ms": 97.761,
+          "fts_rebuild_ms": 85.011,
+          "gc_ms": 50.562,
+          "gc_verify_ms": 1.129,
+          "gc_unlink_ms": 47.567,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.100": {
+      "arm": "DirectStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 117.249,
+      "records_per_s": 852.89,
+      "fts_rebuild_ms_median": 90.234,
+      "gc_retain0_ms_median": 111.939,
+      "gc_unlink_ms_median": 109.373,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 98.664,
+          "fts_rebuild_ms": 88.126,
+          "gc_ms": 47.495,
+          "gc_verify_ms": 1.267,
+          "gc_unlink_ms": 44.798,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 117.249,
+          "fts_rebuild_ms": 92.237,
+          "gc_ms": 111.939,
+          "gc_verify_ms": 1.136,
+          "gc_unlink_ms": 109.373,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 140.662,
+          "fts_rebuild_ms": 90.234,
+          "gc_ms": 121.18,
+          "gc_verify_ms": 1.101,
+          "gc_unlink_ms": 118.569,
+          "gc_integrity_checked": 0
+        }
+      ]
+    }
+  },
+  "sustained": {
+    "seconds": 20,
+    "writers": 1,
+    "records_captured": 272,
+    "capture_records_per_s": 13.55,
+    "capture_ms_median": 68,
+    "reconciles": 123,
+    "records_per_reconcile_median": 2,
+    "reconcile_ms_median": 108,
+    "gc_retain0_ms_median": 36,
+    "round_ms_median": 145,
+    "gc_scrubs": 1,
+    "gc_verify_ms_median": 1.548,
+    "gc_unlink_ms_median": 33.377,
+    "generations_max": 2,
+    "visibility_delay_ms": {
+      "p50": 270,
+      "p95": 505,
+      "max": 753
+    },
+    "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+  }
+}

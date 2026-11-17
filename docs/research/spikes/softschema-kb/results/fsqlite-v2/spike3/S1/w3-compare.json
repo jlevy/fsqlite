@@ -1,0 +1,7 @@
+{
+  "workflow": "W3 compare",
+  "scale": "S1",
+  "expected": "harness/expected/S1/w3.json",
+  "actual": "w3.json",
+  "result": "MATCH: 24 ok, 0 differ"
+}

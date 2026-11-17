@@ -1,0 +1,357 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W6",
+  "recorded_at": "2026-11-17T05:16:39.585Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 5707,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "artifacts": {
+    "files": 5,
+    "bytes": 40673560,
+    "groups": {
+      "current": {
+        "files": 1,
+        "bytes": 1
+      },
+      "fsqlite.json": {
+        "files": 1,
+        "bytes": 135
+      },
+      "floor": {
+        "files": 1,
+        "bytes": 0
+      },
+      "snapshots": {
+        "files": 1,
+        "bytes": 40673280
+      },
+      "verified": {
+        "files": 1,
+        "bytes": 144
+      }
+    }
+  },
+  "validate": {
+    "state": "sealed",
+    "current": 1,
+    "pending": 0,
+    "issues": [],
+    "ms": 621.155
+  },
+  "standard_tools": {
+    "python_sqlite3": {
+      "sqlite": "3.53.1",
+      "tables": [
+        "applied_tx",
+        "doc",
+        "edge",
+        "entity",
+        "fsqlite_meta",
+        "kb_file",
+        "kb_line",
+        "kind_schema",
+        "quarantine",
+        "search_text"
+      ],
+      "entities": 5407,
+      "quick_check": "ok",
+      "application_id": 1179865420,
+      "sample": [
+        [
+          "repo:1password/arboard",
+          975
+        ]
+      ]
+    },
+    "sqlite3_cli": "not installed on this VM",
+    "fsqlite_cli_stats": {
+      "exit": 0,
+      "out": "fsqlite stats: /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 9930\n  file_bytes: 40673280\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=1 doc=4977 edge=25313 entity=5407 fsqlite_meta=5 kb_file=3 kb_line=4796 kind_schema=18 quarantine=0 search_text=7506"
+    }
+  },
+  "startup_and_memory_at_rest": {
+    "process_wall_ms": 1308.29,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "import_ms": 161.355,
+    "open_ms": 34.083,
+    "first_query_ms": 1.131,
+    "rss_after_import_mib": 90.633,
+    "rss_after_first_query_mib": 93.461,
+    "rss_after_w3_mib": 102.336,
+    "rss_idle_after_w3_mib": 102.664
+  },
+  "read_overhead": {
+    "store_read_record_p50_ms": 0.7033,
+    "held_connection_record_p50_ms": 0.0866
+  },
+  "crash": {
+    "direct-build": {
+      "attempt": 1,
+      "killMs": 1644.541,
+      "killedAt": "24715264 bytes into the DirectStore build, lock held",
+      "route": "DirectStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.direct-5bce98f7-16368-d8b84d55d0.sqlite",
+        "snapshots/.direct-5bce98f7-16368-d8b84d55d0.sqlite-journal"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 0,
+        "issues": [
+          "transient build files present: .direct-5bce98f7-16368-d8b84d55d0.sqlite, .direct-5bce98f7-16368-d8b84d55d0.sqlite-journal",
+          "publish.lock present (its owner process is gone; the next lease taker breaks it)"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "dead-owner",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": true,
+      "repair": {
+        "actions": [
+          "broke the publish.lock of vm:16368",
+          "removed transient .direct-5bce98f7-16368-d8b84d55d0.sqlite",
+          "removed transient .direct-5bce98f7-16368-d8b84d55d0.sqlite-journal"
+        ],
+        "state": "sealed"
+      },
+      "validate_after": {
+        "state": "sealed",
+        "current": 0,
+        "pending": 0,
+        "issues": []
+      },
+      "recovery_ms": 38.162,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 1269.901,
+      "finish": {
+        "rerun_exit": 0,
+        "state": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "rerun the import"
+      ]
+    },
+    "capture": {
+      "attempt": 1,
+      "killMs": 739.936,
+      "killedAt": "during capture 3 (.work-import-2-5bce98f7-16384-e788748330.sqlite)",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "tx/pending/.work-import-2-5bce98f7-16384-e788748330.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 2,
+        "issues": [
+          "transient build files present: .work-import-2-5bce98f7-16384-e788748330.sqlite"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "absent",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .work-import-2-5bce98f7-16384-e788748330.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 2,
+        "issues": []
+      },
+      "recovery_ms": 28.195,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 93.564,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 2,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 0,
+        "envelopes_captured": 2,
+        "envelopes_in_head_ledger": 2,
+        "ledger_rows": 2,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "reconcile-build": {
+      "attempt": 1,
+      "killMs": 2027.213,
+      "killedAt": "during the reconcile build (.build-5bce98f7-16393-3027e3a06e.sqlite), before the lock",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "snapshots/.build-5bce98f7-16393-3027e3a06e.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 41,
+        "issues": [
+          "transient build files present: .build-5bce98f7-16393-3027e3a06e.sqlite"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "absent",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .build-5bce98f7-16393-3027e3a06e.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 41,
+        "issues": []
+      },
+      "recovery_ms": 4.215,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 740.328,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 41,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 5407,
+        "envelopes_captured": 41,
+        "envelopes_in_head_ledger": 41,
+        "ledger_rows": 41,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "publication": {
+      "attempt": 1,
+      "killMs": 2107.695,
+      "killedAt": "holding publish.lock during publication",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.build-5bce98f7-16404-0987fb52f4.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 41,
+        "issues": [
+          "transient build files present: .build-5bce98f7-16404-0987fb52f4.sqlite",
+          "publish.lock present (its owner process is gone; the next lease taker breaks it)"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "dead-owner",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": true,
+      "repair": {
+        "actions": [
+          "broke the publish.lock of vm:16404",
+          "removed transient .build-5bce98f7-16404-0987fb52f4.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 41,
+        "issues": []
+      },
+      "recovery_ms": 38.257,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 458.992,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 41,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 5407,
+        "envelopes_captured": 41,
+        "envelopes_in_head_ledger": 41,
+        "ledger_rows": 41,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    }
+  }
+}

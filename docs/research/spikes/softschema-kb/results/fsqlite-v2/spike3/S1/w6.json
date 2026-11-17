@@ -1,0 +1,376 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "W6",
+  "recorded_at": "2026-11-17T05:29:03.681Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14264,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "artifacts": {
+    "files": 5,
+    "bytes": 370663701,
+    "groups": {
+      "current": {
+        "files": 1,
+        "bytes": 1
+      },
+      "fsqlite.json": {
+        "files": 1,
+        "bytes": 135
+      },
+      "floor": {
+        "files": 1,
+        "bytes": 0
+      },
+      "snapshots": {
+        "files": 1,
+        "bytes": 370663424
+      },
+      "verified": {
+        "files": 1,
+        "bytes": 141
+      }
+    }
+  },
+  "validate": {
+    "state": "sealed",
+    "current": 1,
+    "pending": 0,
+    "issues": [],
+    "ms": 889.726
+  },
+  "standard_tools": {
+    "python_sqlite3": {
+      "sqlite": "3.53.1",
+      "tables": [
+        "applied_tx",
+        "doc",
+        "edge",
+        "entity",
+        "fsqlite_meta",
+        "kb_file",
+        "kb_line",
+        "kind_schema",
+        "quarantine",
+        "search_text"
+      ],
+      "entities": 48663,
+      "quick_check": "ok",
+      "application_id": 1179865420,
+      "sample": [
+        [
+          "repo:1password/arboard",
+          975
+        ]
+      ]
+    },
+    "sqlite3_cli": "not installed on this VM",
+    "fsqlite_cli_stats": {
+      "exit": 0,
+      "out": "fsqlite stats: /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike3/kbscratch/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 90494\n  file_bytes: 370663424\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=1 doc=44777 edge=227817 entity=48663 fsqlite_meta=5 kb_file=3 kb_line=43052 kind_schema=18 quarantine=0 search_text=67554"
+    }
+  },
+  "startup_and_memory_at_rest": {
+    "process_wall_ms": 1280.723,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "import_ms": 126.246,
+    "open_ms": 11.846,
+    "first_query_ms": 1.009,
+    "rss_after_import_mib": 85.418,
+    "rss_after_first_query_mib": 87.621,
+    "rss_after_w3_mib": 115.371,
+    "rss_idle_after_w3_mib": 115.52
+  },
+  "read_overhead": {
+    "store_read_record_p50_ms": 0.6285,
+    "held_connection_record_p50_ms": 0.0858
+  },
+  "crash": {
+    "direct-build": {
+      "attempt": 1,
+      "killMs": 3936.937,
+      "killedAt": "186204160 bytes into the DirectStore build, lock held",
+      "owner_gone_after_ms": 15.734,
+      "route": "DirectStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.direct-5bce98f7-20228-e0b6b106e4.sqlite",
+        "snapshots/.direct-5bce98f7-20228-e0b6b106e4.sqlite-journal"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 0,
+        "issues": [
+          "transient build files present: .direct-5bce98f7-20228-e0b6b106e4.sqlite, .direct-5bce98f7-20228-e0b6b106e4.sqlite-journal",
+          "publish.lock present (its owner process is gone; the next lease taker breaks it)"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "dead-owner",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": true,
+      "repair": {
+        "actions": [
+          "broke the publish.lock of vm:20228",
+          "removed transient .direct-5bce98f7-20228-e0b6b106e4.sqlite",
+          "removed transient .direct-5bce98f7-20228-e0b6b106e4.sqlite-journal"
+        ],
+        "state": "sealed"
+      },
+      "validate_after": {
+        "state": "sealed",
+        "current": 0,
+        "pending": 0,
+        "issues": []
+      },
+      "recovery_ms": 28.263,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 6514.102,
+      "finish": {
+        "rerun_exit": 0,
+        "state": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "rerun the import"
+      ]
+    },
+    "capture": {
+      "attempt": 1,
+      "killMs": 321.394,
+      "killedAt": "during capture 3 (.work-import-2-5bce98f7-20266-ba5e8f3905.sqlite)",
+      "owner_gone_after_ms": 0.061,
+      "route": "SnapshotStore",
+      "leftovers": [
+        "tx/pending/.work-import-2-5bce98f7-20266-ba5e8f3905.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 2,
+        "issues": [
+          "transient build files present: .work-import-2-5bce98f7-20266-ba5e8f3905.sqlite"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "absent",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .work-import-2-5bce98f7-20266-ba5e8f3905.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 2,
+        "issues": []
+      },
+      "recovery_ms": 4.065,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 41.25,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 2,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 0,
+        "envelopes_captured": 2,
+        "envelopes_in_head_ledger": 2,
+        "ledger_rows": 2,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "reconcile-build": {
+      "attempt": 1,
+      "killMs": 5755.86,
+      "killedAt": "during the reconcile build (.build-5bce98f7-20273-a968f23e29.sqlite), before the lock",
+      "owner_gone_after_ms": 0.074,
+      "route": "SnapshotStore",
+      "leftovers": [
+        "snapshots/.build-5bce98f7-20273-a968f23e29.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 366,
+        "issues": [
+          "transient build files present: .build-5bce98f7-20273-a968f23e29.sqlite"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "absent",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .build-5bce98f7-20273-a968f23e29.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 366,
+        "issues": []
+      },
+      "recovery_ms": 9.953,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 5735.083,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 366,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 48663,
+        "envelopes_captured": 366,
+        "envelopes_in_head_ledger": 366,
+        "ledger_rows": 366,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "publication": {
+      "attempt": 1,
+      "killMs": 13632.85,
+      "killedAt": "holding publish.lock during publication",
+      "owner_gone_after_ms": 0.049,
+      "route": "SnapshotStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.build-5bce98f7-20331-309b8bcdd4.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 366,
+        "issues": [
+          "transient build files present: .build-5bce98f7-20331-309b8bcdd4.sqlite",
+          "publish.lock present (its owner process is gone; the next lease taker breaks it)"
+        ]
+      },
+      "plan_refusal": null,
+      "lock_before_recovery": "dead-owner",
+      "manual_lock_recovery": false,
+      "lock_present_at_recovery": true,
+      "repair": {
+        "actions": [
+          "broke the publish.lock of vm:20331",
+          "removed transient .build-5bce98f7-20331-309b8bcdd4.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 366,
+        "issues": []
+      },
+      "recovery_ms": 307.921,
+      "head_before_recovery": 0,
+      "published_version_after_repair": 0,
+      "generations_before_recovery": [
+        0
+      ],
+      "generations_after_repair": [
+        0
+      ],
+      "published_generation_lost": false,
+      "finish_ms": 6415.468,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 366,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 48663,
+        "envelopes_captured": 366,
+        "envelopes_in_head_ledger": 366,
+        "ledger_rows": 366,
+        "validate_after_finish": "sealed"
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    }
+  }
+}
