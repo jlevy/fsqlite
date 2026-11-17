@@ -34,7 +34,9 @@ _ID_TRAILING = "._/@+-"
 
 # A token is (base, tail, shift, sign): the rendered text is base + suffix(replica) + tail,
 # where replica = (r + sign * shift) % R, or r itself when shift is 0. sign 0 marks the
-# record's own ID, which new delta records renumber.
+# record's own ID, which new delta records renumber. sign 2 (round 2 only) marks a
+# reference to a shared entity, which always renders as its replica-0 ID.
+SHARED_SIGN = 2
 Token = tuple[str, str, int, int]
 Segment = str | Token
 
@@ -47,6 +49,7 @@ class Template:
     node_ids: list[str]
     segments: list[Segment]
     size: int
+    refs: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -66,7 +69,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def load_s0(root: Path, replicas: int, seed: int) -> S0:
+def load_s0(root: Path, replicas: int, seed: int, shared: frozenset[str] = frozenset()) -> S0:
     nodes = _read_jsonl(root / "_graph" / "nodes.jsonl")
     edges = _read_jsonl(root / "_graph" / "edges.jsonl")
     search = _read_jsonl(root / "_search" / "documents.jsonl")
@@ -85,20 +88,26 @@ def load_s0(root: Path, replicas: int, seed: int) -> S0:
     for path, ids in by_path.items():
         owner = owner_of_path[path]
         text = (root / path).read_bytes().decode("utf-8")
+        segments = _tokenize(text, path, owner, kind, owner_of_path, replicas, seed, shared)
         templates[path] = Template(
             path=path,
             owner=owner,
             owner_kind=kind[owner],
             node_ids=ids,
-            segments=_tokenize(text, path, owner, kind, owner_of_path, replicas, seed),
+            segments=segments,
             size=len(text.encode()),
+            refs=frozenset(s[0] for s in segments if isinstance(s, tuple) and not s[1] and s[0] in kind),
         )
     return S0(root, nodes, edges, search, templates, kind, owner_of_path, replicas)
 
 
-def _shift_token(owner: str, target: str, replicas: int, seed: int) -> tuple[int, int]:
+def _shift_token(
+    owner: str, target: str, replicas: int, seed: int, shared: frozenset[str] = frozenset()
+) -> tuple[int, int]:
     if target == owner:
         return 0, 0
+    if target in shared:
+        return 0, SHARED_SIGN
     k = pair_shift(owner, target, replicas, seed)
     return k, (1 if owner < target else -1)
 
@@ -111,6 +120,7 @@ def _tokenize(
     owner_of_path: dict[str, str],
     replicas: int,
     seed: int,
+    shared: frozenset[str] = frozenset(),
 ) -> list[Segment]:
     spans: list[tuple[int, int, Token]] = []
     for m in TYPED_ID_TOKEN.finditer(text):
@@ -118,7 +128,7 @@ def _tokenize(
         while candidate and candidate not in kind and candidate[-1] in _ID_TRAILING:
             candidate = candidate[:-1]
         if candidate in kind:
-            k, sign = _shift_token(owner, candidate, replicas, seed)
+            k, sign = _shift_token(owner, candidate, replicas, seed, shared)
             spans.append((m.start(), m.start() + len(candidate), (candidate, "", k, sign)))
     record_dir = posixpath.dirname(path)
     for m in _MD_LINK.finditer(text):
@@ -128,7 +138,7 @@ def _tokenize(
         if target_owner is None:
             continue
         stem, ext = posixpath.splitext(target)
-        k, sign = _shift_token(owner, target_owner, replicas, seed)
+        k, sign = _shift_token(owner, target_owner, replicas, seed, shared)
         spans.append((m.start(1), m.end(1), (stem, ext, k, sign)))
     if kind[owner] == "facet":
         unprefixed = owner.split(":", 1)[1]
@@ -163,7 +173,9 @@ def render(segments: list[Segment], r: int, replicas: int, own_replica: int | No
             out.append(seg)
             continue
         base, tail, k, sign = seg
-        if sign == 0:
+        if sign == SHARED_SIGN:
+            rr = 0
+        elif sign == 0:
             rr = own
         elif k:
             rr = (r + sign * k) % replicas
@@ -173,6 +185,10 @@ def render(segments: list[Segment], r: int, replicas: int, own_replica: int | No
     return "".join(out)
 
 
-def ref_replica_for(owner: str, target: str, r: int, replicas: int, seed: int) -> int:
-    k, sign = _shift_token(owner, target, replicas, seed)
+def ref_replica_for(
+    owner: str, target: str, r: int, replicas: int, seed: int, shared: frozenset[str] = frozenset()
+) -> int:
+    k, sign = _shift_token(owner, target, replicas, seed, shared)
+    if sign == SHARED_SIGN:
+        return 0
     return (r + sign * k) % replicas if k else r

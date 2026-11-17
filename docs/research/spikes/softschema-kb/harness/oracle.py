@@ -144,15 +144,22 @@ def q_table(ix: KbIndex, p: dict[str, Any]) -> dict[str, Any]:
             key=lambda i: (ix.display[i], i),
         )
         rows = [{"id": i, "name": ix.display[i], "value": ix.display[i]} for i in ids]
-    elif table == "repos_by_stars":
-        lang = p["language"]
-        ids = [i for i, k in ix.kind.items() if k == "repository" and ix.language.get(i) == lang]
+    elif table in ("repos_by_stars", "repos_all_by_stars"):
+        lang = p.get("language")
+        ids = [
+            i
+            for i, k in ix.kind.items()
+            if k == "repository" and (table == "repos_all_by_stars" or ix.language.get(i) == lang)
+        ]
         stars = ix.stars
         ids.sort(key=lambda i: (stars.get(i) is None, -(stars.get(i) or 0), i))
         rows = [{"id": i, "name": ix.display[i], "value": stars.get(i)} for i in ids]
     else:
         raise ValueError(f"unknown table {table}")
     off, lim = p["offset"], p["limit"]
+    if off == "last":
+        off = max(0, (len(rows) - 1) // lim * lim)
+        return {"total": len(rows), "offset": off, "rows": rows[off : off + lim]}
     return {"total": len(rows), "rows": rows[off : off + lim]}
 
 
@@ -287,11 +294,17 @@ RUNNERS = {
 
 
 def instances(scale: str, catalog: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """The query instances for a scale: name, category and concrete parameters."""
+    """
+    The query instances for a scale: name, category and concrete parameters. Round-2
+    scales (`S1-r2`, and after-delta states such as `S1-r2-p05`) use `queries_v2`.
+    """
     catalog = catalog or load_queries()
+    v2 = "-r2" in scale
+    key = "queries_v2" if v2 else "queries"
+    params_scale = scale.split("-r2")[0] + "-r2" if v2 else scale
     return [
-        {"name": q["name"], "category": q["category"], "params": q["params"][scale]}
-        for q in catalog["queries"]
+        {"name": q["name"], "category": q["category"], "params": q["params"][params_scale]}
+        for q in catalog[key]
     ]
 
 

@@ -1,0 +1,31 @@
+{
+  "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S3/kb",
+  "nodes": 1000295,
+  "edges": 4682905,
+  "sampled_nodes": 360,
+  "sampled_refs": 2748,
+  "fidelity_checked": 360,
+  "softschema_checked": 360,
+  "softschema_contracts": {
+    "paraverse.conference:SocialAccount/v2": 20,
+    "paraverse.conference:GitHubAccount/v2": 20,
+    "paraverse.conference:Event/v2": 40,
+    "paraverse.conference:Experience/v2": 20,
+    "paraverse.conference:Organization/v2": 20,
+    "paraverse.conference:Package/v2": 20,
+    "paraverse.conference:Page/v2": 20,
+    "paraverse.conference:Person/v2": 20,
+    "paraverse.conference:Profile/v2": 20,
+    "paraverse.conference:Repository/v2": 20,
+    "paraverse.conference:Room/v2": 20,
+    "paraverse.conference:Session/v2": 20,
+    "paraverse.conference:Software/v2": 20,
+    "paraverse.conference:Facet/v2": 40,
+    "paraverse.conference:Venue/v2": 20,
+    "paraverse.conference:Website/v2": 20
+  },
+  "problems": [],
+  "problem_count": 0,
+  "ok": true,
+  "seconds": 22.07
+}

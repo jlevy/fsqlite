@@ -279,6 +279,8 @@ def build() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    from build_queries_v2 import build_v2  # the round-2 set is rebuilt alongside
+
     out = HERE / "queries.json"
-    out.write_text(json.dumps(build(), indent=2) + "\n", encoding="utf-8")
+    out.write_text(json.dumps(build_v2(build()), indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out}")
