@@ -191,5 +191,51 @@ class Slim(unittest.TestCase):
         self.assertIsNone(doc["oracle_check"]["paths_checked_against"])
 
 
+class StateCheck(unittest.TestCase):
+    def test_reference_writes_merged_origins_compact(self) -> None:
+        import hashlib
+
+        import state_check
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            base, batch, applied = root / "base", root / "batch", root / "applied"
+            for kb in (base, applied):
+                (kb / "_graph").mkdir(parents=True)
+            (batch).mkdir()
+            merge = {"op": "merge", "absorbed": "b", "survivor": "s", "absorbed_path": "b.yaml", "survivor_path": "s.yaml"}
+            (batch / "ops.jsonl").write_text(json.dumps(merge) + "\n")
+            base_edges = [
+                {"source": "s", "relation": "knows", "target": "a", "origin": "s.yaml"},
+                {"source": "b", "relation": "knows", "target": "a", "origin": "b.yaml"},
+            ]
+            (base / "_graph" / "edges.jsonl").write_text("".join(json.dumps(e) + "\n" for e in base_edges))
+            # After the merge both edges are s -> a with origin s.yaml; only one was rewritten.
+            after = [{"source": "s", "relation": "knows", "target": "a", "origin": "s.yaml"}] * 2
+            (applied / "_graph" / "edges.jsonl").write_text("".join(json.dumps(e) + "\n" for e in after))
+            nodes = [{"id": i, "kind": "person", "name": i, "path": f"{i}.yaml"} for i in ("a", "s")]
+            (applied / "_graph" / "nodes.jsonl").write_text("".join(json.dumps(n) + "\n" for n in nodes))
+            (applied / "_graph" / "stats.json").write_text(json.dumps({"node_total": 2, "edge_total": 2}))
+            ref = state_check.reference(base, batch, applied)
+        # In the order SQLite's ORDER BY props gives: a space sorts before a quote.
+        rows = [["s", "knows", "a", '{"origin": "s.yaml"}'], ["s", "knows", "a", '{"origin":"s.yaml"}']]
+        want = hashlib.sha256("".join(json.dumps(r, separators=(",", ":")) for r in rows).encode()).hexdigest()
+        self.assertEqual(ref["fsqlite_semantic_digest"], {"entity_count": 2, "edge": f"2:{want[:16]}"})
+        self.assertEqual(ref["edges"]["count"], 2)
+
+    def test_verdicts(self) -> None:
+        import state_check
+
+        ref = {"fsqlite_semantic_digest": {"entity_count": 3, "edge": "5:abc"}}
+        self.assertEqual(state_check.verdict({"digest": {"edge": "5:abc", "entity": "3:x"}}, ref)[0], "verified")
+        self.assertEqual(state_check.verdict({"digest": {"edge": "5:abd", "entity": "3:x"}}, ref)[0], "known different")
+        self.assertEqual(state_check.verdict({"digest": {"edge": "5:abc", "entity": "4:x"}}, ref)[0], "known different")
+        self.assertEqual(state_check.verdict({"counts_only": {"edges": 5}}, ref)[0], "unverified")
+        mixed = [("verified", "a"), ("known different", "b")]
+        self.assertEqual(state_check.combine(mixed)[0], "unverified")
+        with self.assertRaises(SystemExit):
+            state_check.source_for("arm/S1-r2/w3-after-p05-odd.json.bak")
+
+
 if __name__ == "__main__":
     unittest.main()

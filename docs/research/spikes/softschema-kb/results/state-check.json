@@ -1,0 +1,841 @@
+{
+  "description": "Row-level check of every after-batch W3 file's stored state against the delta2.py --apply reference; written by harness/state_check.py. A W3 match after a batch is necessary and not sufficient.",
+  "verdicts": {
+    "verified": "the run recorded an edge digest equal to the reference's and an entity count equal to its node count",
+    "known different": "the run recorded a digest or count that differs from the reference",
+    "unverified": "the run recorded only counts, or nothing about its rows"
+  },
+  "summary": {
+    "verified": 12,
+    "unverified": 4,
+    "known different": 6
+  },
+  "references": {
+    "S1-r2-p05": {
+      "batch": "p05",
+      "nodes": {
+        "count": 48734,
+        "sha256": "7bbf8a10e28bfff2e6af608e9f0bcb42bb21101bd66505adf27e725824ecec01"
+      },
+      "edges": {
+        "count": 235470,
+        "sha256": "d339139bb9674c08d6376dca76146328594077452d8d01aa8f796e5206b9acbf"
+      },
+      "fsqlite_semantic_digest": {
+        "entity_count": 48734,
+        "edge": "235470:e6146c67c7b9f4ac"
+      }
+    },
+    "S1-r2-p20": {
+      "batch": "p20",
+      "nodes": {
+        "count": 54153,
+        "sha256": "287bf86e899e12031cec1d49d906cc4e15b7f16ed304f4ccb582656115f7a4a1"
+      },
+      "edges": {
+        "count": 264200,
+        "sha256": "466f55472303d76bb6c9f749eb9163650dac7d3174cc76f85317f1ecc49584fb"
+      },
+      "fsqlite_semantic_digest": {
+        "entity_count": 54153,
+        "edge": "264200:9addee2c48afd645"
+      }
+    },
+    "S2-r2-p05": {
+      "batch": "p05",
+      "nodes": {
+        "count": 248157,
+        "sha256": "78f62a69d751e40f2061d7aa9132c0fa417c685a4ac5df83daf1d59dba4340b0"
+      },
+      "edges": {
+        "count": 1204889,
+        "sha256": "0819223fd28cb41cc7e9ea807bfedd0cf2107d496720617bf87b6702b360579c"
+      },
+      "fsqlite_semantic_digest": {
+        "entity_count": 248157,
+        "edge": "1204889:fdd9c1ee16c9ebb4"
+      }
+    }
+  },
+  "w3_files": [
+    {
+      "w3_file": "falkordb/S1-r2/w3-after-p05.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "falkordb/S1-r2/w2.json",
+      "recorded": [
+        "FalkorDB incremental prototype"
+      ],
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"per_kind_and_relation_counts_match_rebuild\":true,\"rebuild_counts_match_reference_stats\":true}"
+    },
+    {
+      "w3_file": "falkordb/S2-r2/w3-after-p05.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "falkordb/S2-r2/w2.json",
+      "recorded": [
+        "FalkorDB incremental prototype"
+      ],
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"per_kind_and_relation_counts_match_rebuild\":true,\"rebuild_counts_match_reference_stats\":true}"
+    },
+    {
+      "w3_file": "fsqlite-v2/combined/S1-r2/w3-after-p05-4writers-ops-naive-closure.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-closure.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/combined/S1-r2/w3-after-p05-4writers-ops-naive-relations-only.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-relations-only.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/combined/S1-r2/w3-after-p05-4writers-ops.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike1/S1-r2/w3-after-p05-4writers.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 235469:2f5d8e919e5b5bd8, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-full-missingdelete.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 235474:720474ca6b0d3b76, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-ops-naive-closure.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive-closure.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-ops-naive.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MISMATCH: 123 ok, 1 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 235473:253dc57b548861c4, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-ops.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "recorded": [
+        "concurrent writers",
+        "concurrent writers",
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference (all 3 repetitions); entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-sparse-missingdelete-closure.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete-closure.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-4writers-sparse-missingdelete.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 235474:720474ca6b0d3b76, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S1-r2/w3-after-p05-DirectStore.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S1-r2/w2-v2-one-writer.json",
+      "recorded": [
+        "DirectStore, one writer in line order"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S2-r2/w3-after-p05-4writers-ops-naive-closure.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive-closure.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S2-r2/w3-after-p05-4writers-ops-naive.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 1204889:b90293c870db09dd, reference 1204889:fdd9c1ee16c9ebb4"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S2-r2/w3-after-p05-4writers-ops.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops.json",
+      "recorded": [
+        "concurrent writers",
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference (all 2 repetitions); entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S2-r2/w3-after-p05-4writers-sparse-missingdelete.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MISMATCH: 118 ok, 6 differ",
+      "run": "fsqlite-v2/spike2/S2-r2/w2-sparse-missingdelete.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "known different",
+      "basis": "edge digest 1204901:bc9d49e1bb733b1d, reference 1204889:fdd9c1ee16c9ebb4"
+    },
+    {
+      "w3_file": "fsqlite-v2/spike2/S2-r2/w3-after-p05-DirectStore.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite-v2/spike2/S2-r2/w2-v2-one-writer.json",
+      "recorded": [
+        "DirectStore, one writer in line order"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite/S1-r2/w3-after-p05-4writers.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite/S1-r2/w2.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite/S1-r2/w3-after-p05.json",
+      "state": "S1-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite/S1-r2/w2-v2.json",
+      "recorded": [
+        "SnapshotStore, one writer in line order"
+      ],
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"edges\":235470,\"entities\":48734,\"quarantine\":[]}"
+    },
+    {
+      "w3_file": "fsqlite/S2-r2/w3-after-p05-4writers.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite/S2-r2/w2.json",
+      "recorded": [
+        "concurrent writers"
+      ],
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference; entity rows equal to the one-writer state"
+    },
+    {
+      "w3_file": "fsqlite/S2-r2/w3-after-p05.json",
+      "state": "S2-r2-p05",
+      "w3_against_oracle": "MATCH: 124 ok, 0 differ",
+      "run": "fsqlite/S2-r2/w2-v2.json",
+      "recorded": [
+        "SnapshotStore, one writer in line order"
+      ],
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"edges\":1204889,\"entities\":248157,\"quarantine\":[]}"
+    }
+  ],
+  "runs": [
+    {
+      "run": "falkordb/S1-r2/w2.json",
+      "batch": "p05",
+      "state": "FalkorDB incremental prototype",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"per_kind_and_relation_counts_match_rebuild\":true,\"rebuild_counts_match_reference_stats\":true}"
+    },
+    {
+      "run": "falkordb/S1-r2/w2.json",
+      "batch": "p20",
+      "state": "FalkorDB incremental prototype",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"per_kind_and_relation_counts_match_rebuild\":true,\"rebuild_counts_match_reference_stats\":true}"
+    },
+    {
+      "run": "falkordb/S2-r2/w2.json",
+      "batch": "p05",
+      "state": "FalkorDB incremental prototype",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"per_kind_and_relation_counts_match_rebuild\":true,\"rebuild_counts_match_reference_stats\":true}"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2-v2.json",
+      "batch": "p05",
+      "state": "SnapshotStore, one writer in line order",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"edges\":235470,\"entities\":48734,\"quarantine\":[]}"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2-v2.json",
+      "batch": "p20",
+      "state": "SnapshotStore, one writer in line order",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"edges\":264200,\"entities\":54153,\"quarantine\":[]}"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite/S1-r2/w2.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite/S2-r2/w2-v2.json",
+      "batch": "p05",
+      "state": "SnapshotStore, one writer in line order",
+      "verdict": "unverified",
+      "basis": "the run recorded counts only: {\"edges\":1204889,\"entities\":248157,\"quarantine\":[]}"
+    },
+    {
+      "run": "fsqlite/S2-r2/w2.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite/S2-r2/w2.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-relations-only.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-relations-only.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-relations-only.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops-naive-relations-only.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264194:9d7485fa7e666eb7, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/combined/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 235469:2f5d8e919e5b5bd8, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "run": "fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike1/S1-r2/w2-inbuild-closure.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264191:3c4f074bacbec3aa, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 235474:720474ca6b0d3b76, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-full-missingdelete.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264275:e0a21cec4440b7a6, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive-closure.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 235473:253dc57b548861c4, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops-naive.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264230:6f568ea7747fe1eb, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-ops.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete-closure.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete-closure.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete-closure.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete-closure.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264201:381eea00dfa46e53, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 235474:720474ca6b0d3b76, reference 235470:e6146c67c7b9f4ac"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json",
+      "batch": "p20",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-sparse-missingdelete.json",
+      "batch": "p20",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 264275:e0a21cec4440b7a6, reference 264200:9addee2c48afd645"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-v2-one-writer.json",
+      "batch": "p05",
+      "state": "DirectStore, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-v2-one-writer.json",
+      "batch": "p05",
+      "state": "Append, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (235470:e6146c67c7b9f4ac); 48734 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-v2-one-writer.json",
+      "batch": "p20",
+      "state": "DirectStore, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S1-r2/w2-v2-one-writer.json",
+      "batch": "p20",
+      "state": "Append, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (264200:9addee2c48afd645); 54153 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive-closure.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops-naive.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 1204889:b90293c870db09dd, reference 1204889:fdd9c1ee16c9ebb4"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-ops.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-sparse-missingdelete.json",
+      "batch": "p05",
+      "state": "one writer in line order (built by the run)",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-sparse-missingdelete.json",
+      "batch": "p05",
+      "state": "concurrent writers",
+      "verdict": "known different",
+      "basis": "edge digest 1204901:bc9d49e1bb733b1d, reference 1204889:fdd9c1ee16c9ebb4"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-v2-one-writer.json",
+      "batch": "p05",
+      "state": "DirectStore, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    },
+    {
+      "run": "fsqlite-v2/spike2/S2-r2/w2-v2-one-writer.json",
+      "batch": "p05",
+      "state": "Append, one writer in line order",
+      "verdict": "verified",
+      "basis": "edge multiset equal to the reference (1204889:fdd9c1ee16c9ebb4); 248157 entities, as the reference"
+    }
+  ]
+}

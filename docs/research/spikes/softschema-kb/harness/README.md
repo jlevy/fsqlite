@@ -12,6 +12,7 @@ Every backend runs the same W3 query instances and writes the same canonical res
 | `expected/<scale>/w3.json` | The oracle’s results per scale (S0 to S2, S1-r2, S2-r2, and after batch p05), the answer key for every backend |
 | `compare.py` | Compares two `w3.json` files and exits 1 on any difference |
 | `slim_results.py` | Replaces the non-path answers of a result file that matches its expected file with digests |
+| `state_check.py` | Checks the stored rows of every after-batch run against the `delta2.py --apply` reference and writes `../results/state-check.json` |
 | `test_harness.py` | Tests for `compare.py`, `slim_results.py`, and `state_check.py` (`python3 -m unittest test_harness`) |
 | `machine.py` | Shared measurement helpers: machine description, percentiles, cold and warm timing, RSS sampling |
 
@@ -83,18 +84,65 @@ A committed W3 result file that matched its expected file has been slimmed by
 `slim_results.py`: each non-path `result` is replaced by
 `{"sha256": ..., "json_bytes": ...}`, a digest of the answer’s canonical JSON (sorted
 keys, compact separators, integral floats written as integers).
-Two digests are equal exactly when `compare.py` finds the answers equal, so
-`compare.py` compares a digest with another digest, or with a full answer by digesting
-it, and the commands above work on slimmed files.
+Two digests are equal exactly when `compare.py` finds the answers equal, so `compare.py`
+compares a digest with another digest, or with a full answer by digesting it, and the
+commands above work on slimmed files.
 Path results are never slimmed: each keeps `hops` and `path`, which `--kb` checks again.
-The file’s `oracle_check` records the expected file and its sha256, the KB the paths were
-checked against (`$KB_CORPORA/<scale>/kb`, the vendored S0 KB, or the `delta2.py
+The file’s `oracle_check` records the expected file and its sha256, the KB the paths
+were checked against (`$KB_CORPORA/<scale>/kb`, the vendored S0 KB, or the `delta2.py
 --apply` output for an after-batch file), and the verdict.
 A file that did not match (the path-CTE subsets and the no-closure ablations) keeps its
 full answers. The full answers of every slimmed file are in the history, at commit
-`d003010`.
-`oracle_check` is about the answers only: after a batch, a W3 match does not show that
-the stored state is right (see State Check).
+`d003010`. `oracle_check` is about the answers only: after a batch, a W3 match does not
+show that the stored state is right (see State Check).
+
+## State Check
+
+After a batch, a W3 match is necessary and not sufficient.
+The batches never delete or absorb an entity that a query names, and every W3 statement
+that reads `edge` joins it to `entity`, so a missing, extra, or dangling edge changes an
+answer only when it touches a queried entity or moves an aggregate.
+Four after-batch states that hold the wrong edges match the oracle in full.
+
+`state_check.py` compares each after-batch run’s recorded rows with the reference state,
+the `delta2.py --apply` output, for S1-r2 after p05 and p20 and S2-r2 after p05:
+
+```bash
+for s in S1-r2:p05 S1-r2:p20 S2-r2:p05; do
+  python ../corpus/delta2.py --apply --base $KB_CORPORA/${s%:*}/kb \
+    --batch $KB_CORPORA/${s%:*}/deltas/${s#*:} --out $APPLIED/${s%:*}-${s#*:}
+done
+python state_check.py --corpora $KB_CORPORA --applied $APPLIED
+```
+
+For each reference state it records the count and sha256 of the node rows (`id`, `kind`,
+`name`, `path`) and of the edge multiset, the comparison a new backend should make, and
+the edge digest in the form the fsqlite runs record (`semanticDigest` in
+`fsqlite/w2.ts`). That last digest equals the one-writer line-order state of every
+fsqlite run at all three states, so the reference applier and the fsqlite loader agree
+edge for edge, properties included.
+A run is **verified** when it recorded an edge digest equal to the reference’s and an
+entity count equal to its node count; **known different** when a recorded digest or
+count differs; and **unverified** when it recorded only counts or nothing comparable.
+Entity rows are compared with the reference by count only: their digest covers payloads
+and derived columns that the reference does not hold.
+A verified run’s entity digest equals its run’s one-writer state.
+
+`../results/state-check.json` holds the table, one row per after-batch W3 file, and the
+verdict of every after-batch run that recorded its rows.
+For the 22 after-batch W3 files:
+
+| Verdict | Files |
+| --- | --- |
+| Verified (12) | fsqlite base arm with 4 writers at S1-r2 and S2-r2; spike 2 `ops`, `ops-naive-closure`, and `DirectStore` at S1-r2 and S2-r2, and `sparse-missingdelete-closure` at S1-r2; the three combined runs at S1-r2 |
+| Known different (6) | spike 1 with 4 writers (235,469 edges against 235,470); spike 2 `full-missingdelete` and `sparse-missingdelete` at S1-r2 (235,474), `ops-naive` at S1-r2 (235,473) and S2-r2 (equal count, different digest), `sparse-missingdelete` at S2-r2 (1,204,901 against 1,204,889) |
+| Unverified (4) | the fsqlite base arm’s one-writer runs (`w3-after-p05.json` at S1-r2 and S2-r2), which recorded counts only; FalkorDB at S1-r2 and S2-r2, which recorded per-kind and per-relation counts |
+
+Four of the six known-different files match the oracle in full; only `ops-naive` at
+S1-r2 (123 of 124) and `sparse-missingdelete` at S2-r2 (118 of 124) do not.
+After p20, which has no W3 file, the combined `ops-naive-relations-only` run and spike
+2’s `sparse-missingdelete-closure` run are known different too, though both are verified
+after p05.
 
 ## Caveats
 
