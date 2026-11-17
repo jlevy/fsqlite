@@ -13,13 +13,13 @@
         "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1",
         "device": "/dev/vda",
         "type": "ext4",
-        "available_kb": 14536920
+        "available_kb": 14529900
       },
       {
         "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1",
         "device": "/dev/vda",
         "type": "ext4",
-        "available_kb": 14537000
+        "available_kb": 14529892
       }
     ]
   },
@@ -56,66 +56,76 @@
   },
   "standard_tools": {
     "rdb_magic": "REDIS0013",
-    "redis_check_rdb_exit_code": 0,
+    "redis_check_rdb_exit_code": 1,
     "redis_check_rdb_tail": [
       "[info] 0 expires",
       "[info] 0 already expired",
       "[info] 0 subexpires"
     ],
-    "system_redis_server": "/usr/bin/redis-server",
+    "stock_redis_server_without_module": {
+      "binary": "/usr/bin/redis-server",
+      "version": "Redis server v=7.0.15 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=d064f9f48c901a92",
+      "exit_code": 1,
+      "log_tail": [
+        "WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.",
+        "Can't handle RDB format version 13",
+        "Fatal error loading the DB: Invalid argument. Exiting."
+      ]
+    },
     "notes": [
+      "redis_check_rdb is the bundled binary in check mode: it validates the file's structure, not the graph contents.",
       "The RDB is Redis's binary snapshot format; graphs are module values that only a redis-server with the FalkorDB module can load.",
       "Any Redis client (redis-cli, redis-py) can query a running server with GRAPH.QUERY; nothing reads the file directly."
     ]
   },
   "startup": {
     "start_to_first_query_s": [
-      2.124,
-      2.446,
-      2.533
+      3.005,
+      3.129,
+      2.904
     ],
-    "median_s": 2.446,
-    "server_rss_at_rest": 307736576,
-    "server_used_memory_at_rest": 271636112
+    "median_s": 3.005,
+    "server_rss_at_rest": 307744768,
+    "server_used_memory_at_rest": 271636704
   },
   "crash_loader_killed": {
-    "staging_appeared_after_s": 18.276,
+    "staging_appeared_after_s": 19.546,
     "killed_after_staging_s": 5.39,
     "live_graph_unchanged": true,
     "orphan_staging_graphs": {
-      "kb__staging_18120_b8fb2c": 48663
+      "kb__staging_9044_38251d": 34503
     },
     "retry_exit_code": 0,
-    "retry_s": 34.267,
+    "retry_s": 41.495,
     "live_graph_after_retry_matches_kb": true,
     "graphs_after_retry": [
       "kb",
-      "kb__staging_18120_b8fb2c"
+      "kb__staging_9044_38251d"
     ]
   },
   "crash_server_killed": {
     "killed_after_staging_s": 5.39,
     "loader_exit_code": 1,
-    "loader_error": "redis.exceptions.ConnectionError: Connection closed by server.",
+    "loader_error": "redis.exceptions.ConnectionError: Error 32 while writing to socket. Broken pipe.",
     "rdb_present_after_kill": true,
-    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmp1y9xp3r5/redis.socket. Connection refused.",
-    "restart_s": 5.514,
+    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmp3nczr0kw/redis.socket. Connection refused.",
+    "restart_s": 6.859,
     "graphs_after_restart": [
       "kb"
     ],
     "live_graph_intact_after_restart": true,
-    "restarted_serves": "other",
+    "restarted_serves": "previous load",
     "orphan_staging_graphs_after_restart": {},
     "retry_exit_code": 0,
-    "retry_s": 34.359,
+    "retry_s": 41.274,
     "live_graph_after_retry_matches_kb": true
   },
   "crash_server_killed_after_load": {
     "loader_exit_code": 0,
-    "killed_after_completed_load_s": 5.003,
+    "killed_after_completed_load_s": 5.029,
     "bgsave_between_load_and_kill": false,
-    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmpnh6ekdfz/redis.socket. Connection refused.",
-    "restart_s": 6.782,
+    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to /tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/tmp/tmphqnieic5/redis.socket. Connection refused.",
+    "restart_s": 6.89,
     "restarted_serves": "previous load",
     "graphs_after_restart": [
       "kb"

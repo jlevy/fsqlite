@@ -58,6 +58,90 @@ $PY run.py --scale S1 --steps oracle w1 w1nosave w3 compare   # then: w2 w4 w5 w
 | `w5_export.py` | W5: export the graph back to the KB layout, compare with the source, reload the export and rerun W3 |
 | `w6_ops.py` | W6: artifacts, standard tools, start-up, memory at rest, three crash tests |
 | `fdb.py` | The server wrapper and the W3 queries in Cypher |
+| `summarize.py` | Prints the headline tables below from the result files |
+
+## Results
+
+Every W3 result at S0, S1 and S2 equals the oracle's (`compare-oracle.txt`: 24 of 24).
+
+**W1, paraverse as built** (default save rules; durable adds one explicit `SAVE`):
+
+| Scale | Servable | Durable | Parse | Ingest | Loader peak RSS | Server peak RSS (with BGSAVE fork) | RDB |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| S0 | 3.6 s | 3.7 s | 1.7 s | 0.9 s | 0.23 GB | 0.12 GB | 6 MB |
+| S1 | 32 s | 33 s | 15 s | 7.3 s | 1.05 GB | 0.38 GB | 55 MB |
+| S2 | 184 s | 188 s | 79 s | 42 s | 5.07 GB | 1.70 GB (2.81 GB) | 282 MB |
+| S3 | aborted by the memory guard | | | | over 6 GB before the first artifact | | |
+
+With saves disabled during the load and one `SAVE` at the end, S2's ingest through
+durable falls from 88 s to 80 s and the server peak from 2.81 GB to 1.72 GB.
+Parse times depend on the page cache, which this shared VM does not drop.
+softschema validation, not part of paraverse's default load, takes 44 s at S0 (4,977
+artifacts, no problems).
+S3 is infeasible on this VM with paraverse's loader: `load_kb` passes 6 GB while it
+snapshots 920k files and holds 4.7M edges, before parsing any record; S2's 5.07 GB
+projects to about 20 GB.
+
+**W3, warm p50** (selected; all 24 plus extras in `w3.json` and `summarize.py`):
+
+| Query | S0 | S1 | S2 |
+| --- | --- | --- | --- |
+| table.sessions_by_start.p1 | 1.0 ms | 3.7 ms | 37 ms |
+| table.repos_by_stars.p1 | 1.1 ms | 4.7 ms | 75 ms |
+| table.people_by_org.p1 | 0.9 ms | 0.8 ms | 1.1 ms |
+| record.person | 1.2 ms | 1.0 ms | 1.2 ms |
+| search.copilot (substring scan) | 8.4 ms | 76 ms | 438 ms |
+| search.copilot (RediSearch, uncompared) | 0.5 ms | 1.7 ms | 6.6 ms |
+| path.person_person_4 (BFS) | 12 ms | 11 ms | 12 ms |
+| path.unreachable (BFS) | 8.1 ms | 7.8 ms | 8.1 ms |
+| path.unreachable (in-engine, uncompared) | 298 ms | 295 ms | 300 ms |
+| facet.sessions_per_topic | 1.7 ms | 12 ms | 65 ms |
+| neighborhood.session | 2.6 ms | 2.4 ms | 1.9 ms |
+
+Sorted pages and facets scan a label and sort (their plans show no index use, though a
+range index exists on the sort property), so they grow with the corpus. Lookups by ID
+stay flat, partly because the synthetic corpora do not grow hubs (see
+`../corpus/README.md`).
+
+**W2** (time until queries see the change; durable adds a `SAVE`):
+
+| Scale | Batch | paraverse as built | incremental prototype | Equal results |
+| --- | --- | --- | --- | --- |
+| S1 | 1% (487) | 63 s | 0.36 s | yes |
+| S1 | 5% (2,433) | 40 s | 1.65 s | yes |
+| S1 | 20% (9,733) | 67 s | 6.6 s | yes |
+| S2 | 1% (2,487) | 195 s | 1.9 s | yes |
+| S2 | 5% (12,436) | 205 s | 8.3 s | yes |
+| S2 | 20% (49,744) | 227 s | 47 s | yes |
+
+paraverse as built includes materializing the post-delta KB (the KB build's job, 3 to
+18 s). The incremental prototype matched the rebuild on per-kind and per-relation
+counts and on all 24 W3 results for every batch. With 4 concurrent writers (S1, 5%),
+the batch applied in 2.6 s with no errors; the reader saw no errors, and its record p95
+rose from 1.7 ms to 13.6 ms during the writes. At S2 (5%) the writers took 26 s, again
+with no errors, and record p95 rose from 1.7 ms to 18 ms. A full rebuild running beside
+the reader barely moved its latencies.
+
+**W4** (S1): a new kind fails unmodified paraverse (`MappingError: no label for kind
+award`) and needs a code change plus a 32 s rebuild; an added field and a renamed
+relation need only a rebuild (31 to 34 s). In place, each migration took 1.3 to 3.8 s
+and matched the rebuild. Changing `primary_language` to an object silently empties the
+repository table (1,485 rows to 0), because objects are not FalkorDB properties.
+
+**W5** (S0, S1): every payload, softschema block and edge round-trips, and the reloaded
+export gives identical W3 results, but no file is byte-identical (sorted keys, YAML
+style), every Markdown body is lost (1,420 at S0), profiles lose their export names,
+and `_search`, `coverage.json`, `faq.yaml`, `media.yaml` and two schemas are not in
+the graph. Export takes 9 s at S0 and 89 s at S1.
+
+**W6** (S1): two files (a 55 MB RDB and a settings registry). The bundled
+`redis-check-rdb` accepts the file, but the system's Redis 7.0.15 cannot open it ("Can't
+handle RDB format version 13"), and only a server with the module can read graphs.
+Start-up to the first query takes 3.0 s at S1 (W6, median of 3) and 20 s at S2 (W3); at
+rest the S1 server holds 0.27 GB (`used_memory`), 0.31 GB RSS. Killing the client mid-load leaves the live graph intact and an orphan
+staging graph that the retry does not remove. After a server SIGKILL, redislite will
+not restart until its stale `.settings` file is deleted, and a load completed 5 s
+before the kill is lost: the restarted server serves the previous load.
 
 ## Caveats
 

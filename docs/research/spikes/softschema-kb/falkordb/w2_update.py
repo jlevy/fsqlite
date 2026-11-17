@@ -378,7 +378,7 @@ def run_batch(scale: str, corpus: Path, base_rdb: Path, work: Path, pct: int, ch
     }
 
 
-def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | None, writers: int) -> dict:
+def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | None, writers: int, out: Path | None = None) -> dict:
     base_rdb = data / "paraverse-graph.rdb"
     work = data.parent / f"{data.name}-w2"
     batches = []
@@ -387,6 +387,8 @@ def run(scale: str, corpus: Path, data: Path, pcts: list[int], conc_pct: int | N
         batches.append(run_batch(scale, corpus, base_rdb, work, pct, check_w3=True))
         if pct != conc_pct:
             shutil.rmtree(work / f"post-p{pct:02d}", ignore_errors=True)
+        if out is not None:  # partial results survive a later failure
+            write_json(out.with_suffix(".partial.json"), {"scale": scale, "batches": batches})
         print(json.dumps({k: batches[-1][k] for k in ("pct", "paraverse_as_built", "incremental_prototype")}), flush=True)
     conc = None
     if conc_pct is not None:
@@ -449,7 +451,8 @@ def main() -> None:
     conc = None if args.no_concurrency else args.concurrency_pct
     if conc is not None and conc not in args.pcts:
         args.pcts = sorted({*args.pcts, conc})
-    write_json(args.out, run(args.scale, args.corpus, args.data, args.pcts, conc, args.writers))
+    write_json(args.out, run(args.scale, args.corpus, args.data, args.pcts, conc, args.writers, args.out))
+    args.out.with_suffix(".partial.json").unlink(missing_ok=True)
     print(f"wrote {args.out}")
 
 

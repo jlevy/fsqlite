@@ -1,0 +1,364 @@
+{
+  "workflow": "W2",
+  "backend": "falkordb",
+  "arms": {
+    "paraverse_as_built": "full rebuild with paraverse load_kb + load_graph, then RENAME",
+    "incremental_prototype": "spike-only upsert with paraverse's mapping functions; not part of paraverse"
+  },
+  "scale": "S2",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14485876
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14485876
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 248722,
+    "edges": 1164398,
+    "record_files": 228850,
+    "bytes": 1135690973
+  },
+  "batches": [
+    {
+      "pct": 1,
+      "changes": 2487,
+      "new": 1990,
+      "updated": 497,
+      "new_edges": 14487,
+      "post_delta_nodes": 250712,
+      "post_delta_edges": 1178885,
+      "kb_materialize": {
+        "linked": 228872,
+        "overlaid": 2487,
+        "nodes": 250712,
+        "edges": 1178885,
+        "seconds": 11.44
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 11.443,
+        "read_kb_s": 101.636,
+        "load_graph_s": 82.193,
+        "db_visible_s": 183.828,
+        "total_visible_s": 195.272,
+        "durable_save_s": 3.099,
+        "durable_s": 186.927,
+        "server_peak_rss": 3103567872,
+        "loader_peak_rss_sampled": 5141921792,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 1.225,
+        "write_s": 0.665,
+        "publish_s": 0.0,
+        "db_visible_s": 1.891,
+        "durable_save_s": 2.738,
+        "durable_s": 4.629,
+        "new_record_visible": true,
+        "counts": {
+          "new": 1990,
+          "updated": 497,
+          "edges": 14487
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "pct": 5,
+      "changes": 12436,
+      "new": 9949,
+      "updated": 2487,
+      "new_edges": 69845,
+      "post_delta_nodes": 258671,
+      "post_delta_edges": 1234243,
+      "kb_materialize": {
+        "linked": 228872,
+        "overlaid": 12436,
+        "nodes": 258671,
+        "edges": 1234243,
+        "seconds": 12.77
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 12.766,
+        "read_kb_s": 111.758,
+        "load_graph_s": 79.994,
+        "db_visible_s": 191.751,
+        "total_visible_s": 204.517,
+        "durable_save_s": 3.262,
+        "durable_s": 195.013,
+        "server_peak_rss": 3172438016,
+        "loader_peak_rss_sampled": 5324529664,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 5.001,
+        "write_s": 3.299,
+        "publish_s": 0.001,
+        "db_visible_s": 8.301,
+        "durable_save_s": 2.852,
+        "durable_s": 11.152,
+        "new_record_visible": true,
+        "counts": {
+          "new": 9949,
+          "updated": 2487,
+          "edges": 69845
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "pct": 20,
+      "changes": 49744,
+      "new": 39795,
+      "updated": 9949,
+      "new_edges": 284166,
+      "post_delta_nodes": 288517,
+      "post_delta_edges": 1448564,
+      "kb_materialize": {
+        "linked": 228872,
+        "overlaid": 49744,
+        "nodes": 288517,
+        "edges": 1448564,
+        "seconds": 15.22
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 15.219,
+        "read_kb_s": 117.707,
+        "load_graph_s": 93.887,
+        "db_visible_s": 211.594,
+        "total_visible_s": 226.813,
+        "durable_save_s": 3.321,
+        "durable_s": 214.915,
+        "server_peak_rss": 3280666624,
+        "loader_peak_rss_sampled": 6033940480,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 22.151,
+        "write_s": 25.202,
+        "publish_s": 0.001,
+        "db_visible_s": 47.354,
+        "durable_save_s": 3.1,
+        "durable_s": 50.454,
+        "new_record_visible": true,
+        "counts": {
+          "new": 39795,
+          "updated": 9949,
+          "edges": 284166
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    }
+  ],
+  "concurrency": {
+    "writers": 4,
+    "writer_exit_codes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "writers_wall_s": 25.748,
+    "writer_reports": [
+      {
+        "part": 0,
+        "prepare_s": 2.166,
+        "apply_s": 22.306,
+        "counts": {
+          "new": 2488,
+          "updated": 622,
+          "edges": 17012
+        },
+        "errors": []
+      },
+      {
+        "part": 1,
+        "prepare_s": 1.889,
+        "apply_s": 22.749,
+        "counts": {
+          "new": 2487,
+          "updated": 622,
+          "edges": 17578
+        },
+        "errors": []
+      },
+      {
+        "part": 2,
+        "prepare_s": 2.014,
+        "apply_s": 22.434,
+        "counts": {
+          "new": 2487,
+          "updated": 622,
+          "edges": 16865
+        },
+        "errors": []
+      },
+      {
+        "part": 3,
+        "prepare_s": 2.228,
+        "apply_s": 23.227,
+        "counts": {
+          "new": 2487,
+          "updated": 621,
+          "edges": 18390
+        },
+        "errors": []
+      }
+    ],
+    "counts_match_post_delta_stats": true,
+    "reader_idle": {
+      "by_category": {
+        "facet": {
+          "n": 6,
+          "p50_ms": 75.341,
+          "p95_ms": 81.874
+        },
+        "neighborhood": {
+          "n": 9,
+          "p50_ms": 2.279,
+          "p95_ms": 2.744
+        },
+        "path": {
+          "n": 15,
+          "p50_ms": 8.091,
+          "p95_ms": 12.341
+        },
+        "record": {
+          "n": 12,
+          "p50_ms": 1.198,
+          "p95_ms": 1.737
+        },
+        "search": {
+          "n": 12,
+          "p50_ms": 378.561,
+          "p95_ms": 417.795
+        },
+        "table": {
+          "n": 18,
+          "p50_ms": 26.202,
+          "p95_ms": 49.149
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 5.59
+    },
+    "reader_during_writers": {
+      "by_category": {
+        "facet": {
+          "n": 24,
+          "p50_ms": 103.94,
+          "p95_ms": 148.587
+        },
+        "neighborhood": {
+          "n": 36,
+          "p50_ms": 3.102,
+          "p95_ms": 19.406
+        },
+        "path": {
+          "n": 60,
+          "p50_ms": 12.362,
+          "p95_ms": 51.152
+        },
+        "record": {
+          "n": 48,
+          "p50_ms": 2.556,
+          "p95_ms": 18.282
+        },
+        "search": {
+          "n": 48,
+          "p50_ms": 423.626,
+          "p95_ms": 469.131
+        },
+        "table": {
+          "n": 72,
+          "p50_ms": 35.568,
+          "p95_ms": 122.992
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 27.66
+    },
+    "rebuild_with_reader_s": 177.504,
+    "reader_during_rebuild": {
+      "by_category": {
+        "facet": {
+          "n": 180,
+          "p50_ms": 71.216,
+          "p95_ms": 105.738
+        },
+        "neighborhood": {
+          "n": 270,
+          "p50_ms": 2.168,
+          "p95_ms": 4.698
+        },
+        "path": {
+          "n": 450,
+          "p50_ms": 8.521,
+          "p95_ms": 18.09
+        },
+        "record": {
+          "n": 360,
+          "p50_ms": 1.433,
+          "p95_ms": 3.243
+        },
+        "search": {
+          "n": 360,
+          "p50_ms": 382.348,
+          "p95_ms": 449.6
+        },
+        "table": {
+          "n": 540,
+          "p50_ms": 27.056,
+          "p95_ms": 59.021
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 180.61
+    },
+    "pct": 5
+  },
+  "notes": [
+    "paraverse supports only full rebuilds: a new staging graph, then RENAME over the live one.",
+    "kb_build_s stands in for the KB build that regenerates _graph; it hard-links the base and overlays the delta.",
+    "The incremental prototype is not part of paraverse: it upserts nodes with paraverse's mapping and creates new records' edges; edge changes of updated records would need an edge diff from the build (none in these deltas).",
+    "Incremental correctness: per-kind and per-relation counts and all W3 results equal those of the full rebuild.",
+    "db_visible_s is servable (queries see the change); durable_s adds an explicit SAVE, since the default save rules would persist it only at the next snapshot."
+  ]
+}

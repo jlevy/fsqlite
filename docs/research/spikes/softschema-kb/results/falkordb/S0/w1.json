@@ -15,13 +15,13 @@
         "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0/kb",
         "device": "/dev/vda",
         "type": "ext4",
-        "available_kb": 14092056
+        "available_kb": 12538016
       },
       {
         "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S0",
         "device": "/dev/vda",
         "type": "ext4",
-        "available_kb": 14092056
+        "available_kb": 12538016
       }
     ]
   },
@@ -85,47 +85,52 @@
   },
   "aborted": false,
   "phases": {
-    "discover_s": 0.491,
-    "parse_s": 1.662,
-    "validate_s": 0.004,
-    "read_other_s": 0.018,
-    "transform_s": 0.21,
-    "ingest_s": 0.972,
-    "index_s": 0.234,
-    "verify_s": 0.157,
-    "schemas_s": 0.006,
+    "discover_s": 0.395,
+    "parse_s": 1.669,
+    "validate_s": 0.002,
+    "read_other_s": 0.005,
+    "transform_s": 0.197,
+    "ingest_s": 0.863,
+    "index_s": 0.021,
+    "verify_s": 0.15,
+    "schemas_s": 0.085,
     "constraint_s": 0.052,
-    "meta_s": 0.143,
+    "meta_s": 0.189,
     "swap_s": 0.0,
-    "durable_save_s": 0.064
+    "durable_save_s": 0.078
   },
   "phase_notes": {
     "validate_s": "paraverse's envelope and contract checks only; softschema validation is not part of paraverse's default load (see softschema_validation)",
-    "read_other_s": "load_kb's payload_for pass and bookkeeping",
+    "read_other_s": "load_kb's payload_for pass and bookkeeping (a residual, clamped at 0)",
+    "parse_s": "includes reading the files, so it depends on whether the corpus is in the OS page cache; caches are not dropped on this shared VM",
     "ingest_s": "load_graph minus every other timed phase: the UNWIND/CREATE batches for nodes and edges"
   },
-  "softschema_validation": null,
+  "softschema_validation": {
+    "seconds": 44.264,
+    "checked": 4977,
+    "problems": 0
+  },
   "timings": {
-    "server_start_s": 0.122,
-    "read_kb_s": 2.175,
-    "load_graph_s": 1.773,
-    "servable_s": 3.948,
-    "durable_s": 4.031,
-    "ingest_through_durable_s": 1.856,
-    "wall_s": 4.163
+    "server_start_s": 0.118,
+    "read_kb_s": 2.071,
+    "load_graph_s": 1.558,
+    "servable_s": 3.629,
+    "durable_s": 3.724,
+    "ingest_through_durable_s": 1.653,
+    "wall_s": 48.501
   },
   "memory": {
-    "loader_peak_rss": 210759680,
-    "loader_peak_rss_sampled": 211017728,
-    "server_peak_rss": 113545216,
-    "server_peak_rss_with_children": 113545216,
-    "server_used_memory": 45865544,
-    "server_used_memory_peak": 49485792,
-    "server_used_memory_rss": 112377856,
-    "machine_available_lowest": 15527272448
+    "loader_peak_rss": 225525760,
+    "loader_peak_rss_sampled": 225861632,
+    "server_peak_rss": 115253248,
+    "server_peak_rss_with_children": 115253248,
+    "server_used_memory": 45857584,
+    "server_used_memory_peak": 49485744,
+    "server_used_memory_rss": 114233344,
+    "machine_available_lowest": 15264071680
   },
   "size": {
-    "rdb_bytes": 6185999,
+    "rdb_bytes": 6186610,
     "data_dir_files": [
       "paraverse-graph.rdb",
       "paraverse-graph.rdb.settings"

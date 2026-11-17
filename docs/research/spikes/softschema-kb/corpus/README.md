@@ -75,6 +75,23 @@ files that change. Edited schemas are re-hashed with softschema's own compiler h
 | `rename_relation` | `presents` becomes `speaks_at` in the graph export |
 | `string_to_object` | Repository `primary_language: X` becomes `{name: X, source: github-linguist}` |
 
+## Extending for the Second Round
+
+Each planned change has one place to go, so S1 to S3 can be regenerated in a new
+directory without touching the current corpora:
+
+- **Growing hubs (C8).** Add a `SHARED` set to `idmap.py` whose `own_id` ignores the
+  replica, and have `generate.py` emit those templates in replica 0 only.
+  `validate.py` can then report max and p99 degree per scale.
+- **Perturbed values and text (C9).** Add a per-replica rewrite of selected literal
+  segments in `templates.render`, seeded by `(seed, replica, path)`.
+- **Edge-changing updates, deletes, merges and origins (C19, C21).** Extend
+  `delta.make_delta` with delete and merge sections in its manifest, and write
+  `edges.jsonl` rows tagged with an `origin` record path.
+- **Trickle batches, conflicts, invalid records (C18, C20, C22).** Add a `--counts`
+  option beside `--pcts` in `delta.py` (it sizes batches in one place, `total`), and an
+  `--invalid` flag that writes one record breaking its schema.
+
 ## Caveats
 
 - Names and titles repeat across replicas, so search selectivity grows linearly with

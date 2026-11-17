@@ -104,8 +104,17 @@ class Server:
         }
 
     def save(self) -> float:
+        """
+        An explicit SAVE, after waiting out any BGSAVE that redislite's default save rules
+        forked: SAVE during a BGSAVE fails with "Background save already in progress".
+        The wait is included in the returned time and kept in `last_bgsave_wait_s`.
+        """
         started = time.perf_counter()
-        self.db.connection.execute_command("SAVE")
+        conn = self.db.connection
+        while conn.info("persistence").get("rdb_bgsave_in_progress"):
+            time.sleep(0.05)
+        self.last_bgsave_wait_s = time.perf_counter() - started
+        conn.execute_command("SAVE")
         return time.perf_counter() - started
 
     def rdb_bytes(self) -> int:
