@@ -299,6 +299,17 @@ bump keeping `store_id`, closure, bulk rebuilds, and the changeset key reader.
 - The round-1 baselines (S1, S2) predate `ix_edge_origin` and the unfiltered view’s
   index, so W1 and size comparisons at those scales include them; round 2 compares like
   with like.
+- **Owned tables are unprotected while application hooks run** (review B, B6).
+  DirectStore calls `unprotectOwnedTables` and then runs the application’s
+  `derived.rebuild` or `derived.update`, and reconcile runs them with no protection;
+  only the closure hook is audited with a session.
+  A rebuild that clears every non-base table would empty `applied_tx`, and the gate
+  would not see it. `derived.ts` also opens `new DatabaseSync(':memory:')` for the
+  caller’s DDL, the one connection that skips `connect()` and its pinned defensive flag.
+  A real v2 must keep the triggers on and stamp `fsqlite_meta` through a path they
+  allow, audit `rebuild` and `update` with a session as it audits the closure hook, fail
+  a build in which `applied_tx` changed other than by fsqlite’s own insert, and open
+  every connection through `connect()`.
 
 ## Files
 

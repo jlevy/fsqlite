@@ -414,6 +414,20 @@ runner’s 30 s per-file timeout; the next full run passed it.
   compares each envelope’s version with the reconciler’s); `publish(fn)` as one verb
   with `capture` and `append`; and patchsets for `lww` tables, which the design notes
   are 51% of a changeset.
+- **The reducer guard can be disarmed by the code it guards** (review B, B6). The guard
+  is a row in `temp.fsqlite_guard`, so `UPDATE temp.fsqlite_guard SET armed =
+  0` inside a reducer turns it off, and `assertCallbackBoundary` still passes; review B
+  reproduced an emptied ledger with nothing refused.
+  A real v2 must keep the owned-table triggers on unconditionally and stamp
+  `fsqlite_meta` and `applied_tx` through a path the triggers allow.
+- **The changeset reader used for admission disagrees with SQLite** (review B, B7).
+  `varint()` gives the ninth byte 7 bits, and SQLite gives it 8, so for a crafted 9-byte
+  length the reader and `applyChangeset` see different rows: in review B’s probe the
+  reader failed closed, but a crafted blob can make it see other tables and operations
+  than SQLite applies, which defeats table admission and the split by operation.
+  A real v2 must take table names from SQLite’s own parse (the `filter` callback of
+  `applyChangeset`), or match SQLite’s varint exactly and reject over-long encodings,
+  and keep that blob as a test.
 - **gc dominates the publish cycle.** In the sustained runs gc’s full integrity check is
   about half of each cycle at S1 and 65% at S2, so the cycle is about three builds long
   at S2. Hypothesis 5 holds against that cycle; the cycle without gc, which Spike 3

@@ -205,6 +205,39 @@ while it held the publish lease during publication, before the link.
 - **Two changeset readers** remain, one in `derived.ts` and one in `changeset.ts`.
 - **Spike 2’s trickle and sustained runs are not carried**, so `run_spike2.sh` fails for
   S1 and S2 against this harness.
+- **Owned tables are unprotected while application hooks run** (review B, B6), from
+  Spike 1. DirectStore calls `unprotectOwnedTables` and then runs the application’s
+  `derived.rebuild` or `derived.update`, and reconcile runs them with no protection;
+  only the closure hook is audited with a session.
+  A rebuild that clears every non-base table would empty `applied_tx`, and the gate
+  would not see it. `derived.ts` also opens `new DatabaseSync(':memory:')` for the
+  caller’s DDL, the one connection that skips `connect()` and its pinned defensive flag.
+  A real v2 must keep the triggers on and stamp `fsqlite_meta` through a path they
+  allow, audit `rebuild` and `update` with a session as it audits the closure hook, fail
+  a build in which `applied_tx` changed other than by fsqlite’s own insert, and open
+  every connection through `connect()`.
+- **The reducer guard can be disarmed by the code it guards** (review B, B6), from Spike
+  2\. The guard is a row in `temp.fsqlite_guard`, so
+  `UPDATE temp.fsqlite_guard SET armed =
+  0` inside a reducer turns it off, and `assertCallbackBoundary` still passes; review B
+  reproduced an emptied ledger with nothing refused.
+  A real v2 must keep the owned-table triggers on unconditionally and stamp
+  `fsqlite_meta` and `applied_tx` through a path the triggers allow.
+- **The changeset reader used for admission disagrees with SQLite** (review B, B7), from
+  Spike 2. `varint()` gives the ninth byte 7 bits, and SQLite gives it 8, so for a
+  crafted 9-byte length the reader and `applyChangeset` see different rows: in review
+  B’s probe the reader failed closed, but a crafted blob can make it see other tables
+  and operations than SQLite applies, which defeats table admission and the split by
+  operation. A real v2 must take table names from SQLite’s own parse (the `filter`
+  callback of `applyChangeset`), or match SQLite’s varint exactly and reject over-long
+  encodings, and keep that blob as a test.
+- **Lease takeover trusts hostname, pid, and wall clocks** (review B, B3), from Spike 3;
+  see its README for the four limits and what a real v2 needs.
+- **Scratch defaults in the patched copies** (review B, B10). The patched `common.ts`
+  defaults `KB_SCRATCH` to a `kbscratch/` directory beside the copy, and its `??` keeps
+  an empty `KB_SCRATCH`, so stores would then land relative to the working directory;
+  set `KB_SCRATCH` to a private directory.
+  The base spike now requires it.
 - **Not run:** the other three W6 kill points, a kill after the link (which
   `kill.test.ts` covers), changeset envelopes with the missing-row policy at S1-r2, any
   timing, and any S2 scale.

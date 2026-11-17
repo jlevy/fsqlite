@@ -233,30 +233,77 @@ The lease in these runs is 10 minutes (`staleMs: 600000`); none was waited out.
   generations at S0); it was not run above S0. The `quick` pin is a deviation from the
   design’s section 3.7, and it narrows the recovery guarantee: between scrubs, the only
   full-verified recovery point may be older than every retained generation it protects.
+
 - **The head is a directory listing**, not a probe from the hint, because gc can leave a
   leased generation below a gap.
   Every `currentVersion()` now reads `snapshots/`.
+
 - **A reader can see a generation before it is power-loss durable**: between the link
   and the directory fsync.
   A writer is never told it published before the fsync.
+
 - **A residual lock-break race** remains: a breaker that re-checks a lock, then renames
   it, can move a fresh lock created between the two calls.
   It restores what it moved; if a third process took the name meanwhile, two holders
   overlap until one fences.
   That costs a wasted build, never a publication, and the four-process race test saw
   none.
+
+- **Lease takeover decides liveness from hostname, pid, and wall clocks** (review B,
+  B3). f1.0 never takes a lock on age; this prototype lets a waiter break a lease, and
+  four of its rules must not carry into a real v2 as written:
+  - “Same host” is `hostname()` equality.
+    A waiter breaks a lock at once when the owner record names its hostname and a pid it
+    cannot see, but a hostname is not a machine identity and pids are per namespace, so
+    two machines or containers named alike that share a store path break each other’s
+    live locks. `deadLocalOwner` applies the same test to live writers’ work files and
+    builds.
+  - The waiter chooses the expiry: `staleMs` is the waiter’s option, compared on the
+    waiter’s clock with the lock’s mtime.
+    A holder renews only between steps, every step is synchronous, so a long
+    `quick_check` or index build cannot renew, and a default waiter (20 s) breaks an
+    importer configured for 600 s. `advanceLaggingHint` passes `staleMs: 500` after an
+    unlocked `dead-owner` check, so a holder that has just replaced the dead lock is
+    broken after half a second.
+    Clock skew between hosts has the same effect.
+  - Some code still assumes the lease is exclusive: repair removes `.direct-*`,
+    `current.*`, `fsqlite.json.*`, and snapshot temporaries whatever their age, because
+    their creators lost the lease, but repair may hold a lease it took from a live
+    holder. The fence is a check before a step, not atomic with it.
+  - The ledger floor follows one publisher’s clock and never moves back: a publisher
+    whose clock is far ahead raises `ledger_floor` past real time, after which every
+    other writer fails `assertWriterClock` and pending envelopes are quarantined as
+    expired until real time catches up.
+
+  A real v2 must identify a host by boot id and pid namespace, with the process start
+  time, not a hostname; let the holder’s recorded lease length decide expiry, not the
+  waiter’s option; state for every step under the lease why it is safe with two holders;
+  and bound the ledger floor against clock error.
+
 - **Zombie detection is Linux only**; elsewhere an unreaped dead owner waits for expiry.
+
 - **The spike found two bugs that the package tests had not**: overlapping gcs
   collecting each other’s tombstones, and W6 seeing a zombie as alive.
   Both are fixed and have tests.
+
 - **The format identity is unchanged**: the marker does not name the feature, so v2 and
   f1.0 clients on one store would be unsafe.
+
 - **S2 was limited by disk**, which other jobs shared and which swung between 0.7 and 16
   GB free. W1 ran through DirectStore only, so H3 has no S2 figure; W2 covers p01 in the
   v2 arm only, because a disk guard stopped the f1.0 arm’s run at 0.73 GB free; and W6
   did not run at S2, as in round 1.
+
 - **Not done**: manifests and roll-forward from manifests (design item (m)), and a
   written interleaving model of (h), which the design asks for before production code.
+
+- **Scratch defaults in the patched copies** (review B, B10). The patched `common.ts`
+  defaults `KB_SCRATCH` to a `kbscratch/` directory beside the copy, and its `??` keeps
+  an empty `KB_SCRATCH`, so stores would then land relative to the working directory;
+  set `KB_SCRATCH` to a private directory.
+  The base spike now requires it.
+  The run scripts assign `KB_SCRATCH` before exporting it, so a failed `cd` stops them,
+  and `run_spike3_s2.sh` passes its paths to `node -e` as arguments.
 
 ## How to Reproduce
 
