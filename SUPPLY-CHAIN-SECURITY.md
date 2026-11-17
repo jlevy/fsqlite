@@ -43,20 +43,26 @@ checks.
 ## First-Party Packages
 
 On 2026-11-17 the maintainer decided that first-party packages have no cool-off.
-A package is first-party when the maintainer publishes it: on GitHub as `jlevy`, on npm
-as `ojoshe`, and on PyPI as Joshua Levy with the source under github.com/jlevy.
-The dependencies of a first-party package, direct and transitive, are exempt too.
-Direct third-party dependencies keep the 14-day cool-off.
+A package is first-party when the maintainer’s registry account publishes it: npm user
+`ojoshe` (the package’s `maintainers`) or PyPI user `jlevy` (its owner), with the source
+on GitHub under `jlevy`. Author names and repository URLs in package metadata are not
+evidence, since any uploader can set them.
+The list below is closed: only an edit by the maintainer adds a name, after checking the
+registry account. The dependencies of a first-party package, direct and transitive, are
+exempt too. Direct third-party dependencies keep the 14-day cool-off.
 None of these packages is a runtime dependency: fsqlite ships with no runtime
 dependencies, and tbd is a developer-time tool.
 
 The first-party packages are:
 
-- `get-tbd` on npm, the tbd CLI.
-- `tryscript` on npm.
-- `softschema` on npm and PyPI.
-- `flowmark` on PyPI. The npm package of that name is a placeholder, not first-party.
-- `flowmark-rs` on PyPI.
+- `get-tbd` on npm
+- `tryscript` on npm
+- `softschema` on npm and PyPI
+- `flowmark` on PyPI
+- `flowmark-rs` on PyPI
+
+`get-tbd` is the tbd CLI. Neither PyPI-only name is first-party on npm: the npm package
+`flowmark` is the registry’s placeholder, and `flowmark-rs` is not registered on npm.
 
 Each tool expresses the exemption differently:
 
@@ -66,10 +72,11 @@ Each tool expresses the exemption differently:
   When a first-party package’s lockfile entry pulls a dependency that is inside the
   cool-off, list that dependency too, as `name@x.y.z` so that only that version is
   exempt, with a comment that names its first-party parent.
-  Record it in this section as a list item that opens with “`name@x.y.z` on npm” and
-  names the parent. `pnpm install --frozen-lockfile --ignore-scripts` re-verifies the
-  lockfile against the policy.
-  On 2026-11-17 every entry had cleared the cool-off, so no dependency is listed.
+  Record it directly under this heading as the line “- `name@x.y.z` on npm, a dependency
+  of `parent`”, where `parent` is a first-party npm package listed above; any
+  description goes in a sentence of its own.
+  `pnpm install --frozen-lockfile --ignore-scripts` re-verifies the lockfile against the
+  policy. On 2026-11-17 every entry had cleared the cool-off, so no dependency is listed.
 - **uv.** fsqlite sets no uv cool-off, and runs the formatter at an exact version.
   Where a developer or CI sets one, such as `UV_EXCLUDE_NEWER="14 days"`, pass
   `--exclude-newer-package flowmark-rs=false` to exempt the package, or set
@@ -97,10 +104,15 @@ Each tool expresses the exemption differently:
   before the cache.
 
 `scripts/check-supply-chain.mjs` fails unless every `minimumReleaseAgeExclude` entry is
-an exact package name, optionally with exact versions, and has a list item in this
-section that opens with that entry in a code span followed by “on npm”.
-It rejects glob and `!` patterns, and fails if pnpm reports any exclusion that
-`pnpm-workspace.yaml` does not list.
+an exact package name, optionally with exact versions, and has its record directly under
+this heading.
+A record is a whole line in one of two forms and nothing else: “- `name` on
+npm” (or “on npm and PyPI”) for a first-party package, and “- `name@x.y.z` on npm, a
+dependency of `parent`” for exact versions of a dependency, where `parent` has a
+first-party record. Lines in code fences, indented code, or HTML comments, or under any
+other heading, are not records.
+The gate rejects glob and `!` patterns, fails if pnpm reports any exclusion that
+`pnpm-workspace.yaml` does not list, and fails if pnpm does not apply one it lists.
 
 ## Release Controls
 

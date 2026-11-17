@@ -64,6 +64,7 @@ if (errors.length > 0) {
   console.log(
     `supply-chain policy verified (${ids.length} ignored advisories, ` +
       `${exclusions.entries.length} recorded trust-policy exclusions, ` +
-      `${firstParty.entries.length} recorded first-party cool-off exclusions)`,
+      `${firstParty.entries.length} recorded cool-off exclusions: ${firstParty.firstParty} ` +
+      `first-party packages, ${firstParty.dependencies} dependencies of them)`,
   )
 }
