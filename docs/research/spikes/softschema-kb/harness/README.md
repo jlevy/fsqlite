@@ -11,6 +11,8 @@ Every backend runs the same W3 query instances and writes the same canonical res
 | `oracle.py` | A pure-Python reference implementation that computes every canonical result from the KB files |
 | `expected/<scale>/w3.json` | The oracle’s results per scale (S0 to S2, S1-r2, S2-r2, and after batch p05), the answer key for every backend |
 | `compare.py` | Compares two `w3.json` files and exits 1 on any difference |
+| `slim_results.py` | Replaces the non-path answers of a result file that matches its expected file with digests |
+| `test_harness.py` | Tests for `compare.py`, `slim_results.py`, and `state_check.py` (`python3 -m unittest test_harness`) |
 | `machine.py` | Shared measurement helpers: machine description, percentiles, cold and warm timing, RSS sampling |
 
 ## Using the Catalog
@@ -62,12 +64,38 @@ Run these with paraverse’s synced environment (see `../falkordb/README.md`):
 python build_queries.py && (cd ../../../../.. && pnpm exec prettier --write docs/research/spikes/softschema-kb/harness/queries.json)
 python oracle.py --kb $KB_CORPORA/S1/kb --scale S1 --out expected/S1/w3.json
 python compare.py expected/S1/w3.json ../results/falkordb/S1/w3.json --kb $KB_CORPORA/S1/kb
-python compare.py ../results/falkordb/S1/w3.json ../results/fsqlite/S1/w3.json
+python compare.py ../results/falkordb/S1/w3.json ../results/fsqlite/S1/w3.json --kb $KB_CORPORA/S1/kb
+python slim_results.py --corpora $KB_CORPORA --applied $APPLIED ../results/fsqlite
+python3 -m unittest test_harness
 ```
 
-`compare.py` compares numbers by value and never treats a boolean as a number.
-Path results compare on `hops` only, because several shortest paths can exist; with
-`--kb` it also checks that every returned path is a real, hub-free path of that length.
+`compare.py` compares numbers by value (1 equals 1.0) and never treats a boolean as a
+number. Path results compare on `hops` only, because several shortest paths can exist,
+and a path result without `hops` is a difference; with `--kb` it also checks that every
+returned path is a real, hub-free path of that length.
+It counts every difference, whatever `--max-diffs` (which limits only the lines
+printed), and exits 1 on any difference or missing query, and 2 when a file holds no
+queries or repeats a name.
+
+## Result Files and Slimming
+
+A committed W3 result file that matched its expected file has been slimmed by
+`slim_results.py`: each non-path `result` is replaced by
+`{"sha256": ..., "json_bytes": ...}`, a digest of the answer’s canonical JSON (sorted
+keys, compact separators, integral floats written as integers).
+Two digests are equal exactly when `compare.py` finds the answers equal, so
+`compare.py` compares a digest with another digest, or with a full answer by digesting
+it, and the commands above work on slimmed files.
+Path results are never slimmed: each keeps `hops` and `path`, which `--kb` checks again.
+The file’s `oracle_check` records the expected file and its sha256, the KB the paths were
+checked against (`$KB_CORPORA/<scale>/kb`, the vendored S0 KB, or the `delta2.py
+--apply` output for an after-batch file), and the verdict.
+A file that did not match (the path-CTE subsets and the no-closure ablations) keeps its
+full answers. The full answers of every slimmed file are in the history: commit
+`2e2962b` for the files that existed then, and the restoring commit before the re-slim
+for all of them.
+`oracle_check` is about the answers only: after a batch, a W3 match does not show that
+the stored state is right (see State Check).
 
 ## Caveats
 

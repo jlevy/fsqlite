@@ -33,7 +33,7 @@ from typing import Any
 
 from fdb import GRAPH, PACKAGES, RUNNERS, Server, corpus_info, write_json
 from machine import PeakSampler, machine, package_versions, percentile
-from oracle import instances
+from oracle import instances, load_queries
 from overlay import apply_delta
 from paraverse_graph.kb import KbEdge, KbNode, _find_by_id, load_kb, read_artifact
 from paraverse_graph.loader import BATCH_SIZE, events_channel, load_graph
@@ -178,8 +178,13 @@ def w3_results(graph: Any, scale: str) -> dict[str, Any]:
     return {i["name"]: RUNNERS[i["category"]](graph, i["params"]) for i in instances(scale)}
 
 
+_CATALOG = load_queries()
+CATEGORY = {q["name"]: q["category"] for q in _CATALOG["queries"] + _CATALOG.get("queries_v2", [])}
+
+
 def _norm(results: dict[str, Any]) -> dict[str, Any]:
-    return {k: ({"hops": v["hops"]} if k.startswith("path.") else v) for k, v in results.items()}
+    """Path results compare on hops only, as in compare.py; keyed on the catalog's category."""
+    return {k: ({"hops": v["hops"]} if CATEGORY.get(k) == "path" else v) for k, v in results.items()}
 
 
 def fresh_server(base_rdb: Path, work: Path) -> Server:
