@@ -3,6 +3,7 @@
 fsqlite has no runtime dependencies and allows no dependency lifecycle scripts.
 Development dependencies are locked with pnpm and ordinarily must have been published
 for at least 14 days before they can enter the lockfile.
+First-party packages are exempt, as “First-Party Packages” below records.
 
 ## Pinned Tools
 
@@ -34,9 +35,60 @@ with install scripts, and both are denied because their platform binaries ship a
 optional dependencies.
 
 `pnpm verify` checks the configuration pnpm reports.
-It requires a strict cool-off of at least 14 days, publish timestamps, lockfile policy
-verification, the trust policy and build-script controls described above, registry-only
-transitive sources, and engine checks.
+It requires a strict cool-off of at least 14 days that exempts only the recorded
+first-party packages, publish timestamps, lockfile policy verification, the trust policy
+and build-script controls described above, registry-only transitive sources, and engine
+checks.
+
+## First-Party Packages
+
+On 2026-11-17 the maintainer decided that first-party packages have no cool-off.
+A package is first-party when the maintainer publishes it: on GitHub as `jlevy`, on npm
+as `ojoshe`, and on PyPI as Joshua Levy with the source under github.com/jlevy.
+The dependencies of a first-party package, direct and transitive, are exempt too.
+Direct third-party dependencies keep the 14-day cool-off.
+None of these packages is a runtime dependency: fsqlite ships with no runtime
+dependencies, and tbd is a developer-time tool.
+
+The first-party packages are:
+
+- `get-tbd` on npm, the tbd CLI.
+- `tryscript` on npm.
+- `softschema` on npm and PyPI.
+- `flowmark` on PyPI. The npm package of that name is a placeholder, not first-party.
+- `flowmark-rs` on PyPI.
+
+Each tool expresses the exemption differently:
+
+- **pnpm.** `minimumReleaseAgeExclude` in `pnpm-workspace.yaml` lists the first-party
+  packages that fsqlite installs through pnpm, today only `tryscript`. pnpm matches an
+  entry by package name, so it exempts that package and not its dependencies.
+  When a first-party package’s lockfile entry pulls a dependency that is inside the
+  cool-off, list that dependency too, as `name@x.y.z` so that only that version is
+  exempt, with a comment that names its first-party parent.
+  Record it in this section as a list item that opens with “`name@x.y.z` on npm” and
+  names the parent. `pnpm install --frozen-lockfile --ignore-scripts` re-verifies the
+  lockfile against the policy.
+  On 2026-11-17 every entry had cleared the cool-off, so no dependency is listed.
+- **uv.** fsqlite sets no uv cool-off, and runs the formatter at an exact version.
+  Where a developer or CI sets one, such as `UV_EXCLUDE_NEWER="14 days"`, pass
+  `--exclude-newer-package flowmark-rs=false` to exempt the package, or set
+  `exclude-newer-package = { flowmark-rs = false }` under `[tool.uv]` in
+  `pyproject.toml` or at the top level of `uv.toml`. A date in place of `false` gives
+  the package its own cutoff; `true` is rejected.
+  `uvx`, as this repository runs it, reads only the user’s `~/.config/uv/uv.toml` or a
+  file passed with `--config-file`, not a `uv.toml` in the working directory, and uv
+  documents no environment variable for this setting.
+  This was verified with uv 0.11.32.
+- **tbd launcher fallback.** The hook launchers’ npx fallback runs the pinned `get-tbd`
+  release with `--ignore-scripts` and a dedicated `--cache`, and with no `--before`
+  cutoff.
+
+`scripts/check-supply-chain.mjs` fails unless every `minimumReleaseAgeExclude` entry is
+an exact package name, optionally with exact versions, and has a list item in this
+section that opens with that entry in a code span followed by “on npm”.
+It rejects glob and `!` patterns, and fails if pnpm reports any exclusion that
+`pnpm-workspace.yaml` does not list.
 
 ## Release Controls
 

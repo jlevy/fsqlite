@@ -25,34 +25,15 @@ assert(
   'Expected .tbd/config.yml to pin an exact tbd_fallback_version',
 )
 
-// The npx fallback's cool-off must be the same as the cool-off pnpm enforces.
-const MINUTES_PER_DAY = 24 * 60
-const minimumReleaseAgeMinutes = Number(
-  /^minimumReleaseAge:\s*(\d+)\s*$/m.exec(
-    readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8'),
-  )?.[1],
-)
-assert(
-  Number.isSafeInteger(minimumReleaseAgeMinutes) && minimumReleaseAgeMinutes > 0,
-  'Expected pnpm-workspace.yaml to set minimumReleaseAge in minutes',
-)
-
 // The Claude and Codex hook scripts are maintained as byte-identical copies.
 for (const [claudePath, codexPath] of [
   ['.claude/scripts/tbd-session.sh', '.codex/tbd-session.sh'],
   ['.claude/hooks/tbd-closing-reminder.sh', '.codex/tbd-closing-reminder.sh'],
 ]) {
-  const claudeScript = readFileSync(join(repoRoot, claudePath), 'utf8')
   assert.equal(
     readFileSync(join(repoRoot, codexPath), 'utf8'),
-    claudeScript,
+    readFileSync(join(repoRoot, claudePath), 'utf8'),
     `${codexPath} must be a byte-identical copy of ${claudePath}`,
-  )
-  const coolOffDays = Number(/^TBD_FALLBACK_COOL_OFF_DAYS=(\d+)$/m.exec(claudeScript)?.[1])
-  assert.equal(
-    coolOffDays * MINUTES_PER_DAY,
-    minimumReleaseAgeMinutes,
-    `${claudePath} TBD_FALLBACK_COOL_OFF_DAYS (${coolOffDays}) must equal minimumReleaseAge (${minimumReleaseAgeMinutes} minutes) in days`,
   )
 }
 const codexHooksPath = join(repoRoot, '.codex', 'hooks.json')
@@ -147,23 +128,15 @@ const closingMarker = join(hookTestDir, 'closing-ran')
 const primeMarker = join(hookTestDir, 'prime-ran')
 const npxMarker = join(hookTestDir, 'npx-ran')
 const shadowMarker = join(hookTestDir, 'shadow-ran')
-const FALLBACK_COOL_OFF_MS = minimumReleaseAgeMinutes * 60 * 1000
-const FALLBACK_CUTOFF_TOLERANCE_MS = 10 * 60 * 1000
 const FALLBACK_CACHE_DIR_NAME = 'tbd-fallback-npm'
-const ISO_CUTOFF = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 const resetNpxMarker = () => {
   rmSync(npxMarker, { force: true })
 }
-/** @param {string | undefined} cutoff */
-const isCurrentCoolOffCutoff = (cutoff) =>
-  cutoff !== undefined &&
-  ISO_CUTOFF.test(cutoff) &&
-  Math.abs(Date.now() - FALLBACK_COOL_OFF_MS - Date.parse(cutoff)) < FALLBACK_CUTOFF_TOLERANCE_MS
 /**
  * The npx fallback must run exactly the configured pin under the repository's
  * supply-chain rules, passed as flags so inherited npm environment settings cannot
- * override them: nothing published inside the cool-off, no install scripts, and a
- * dedicated cache that npx runs without those rules never fill.
+ * override them: no install scripts, and a dedicated cache that other npx runs never
+ * fill. get-tbd is first-party, so the fallback applies no cool-off cutoff.
  * @param {string} label
  * @param {string} pin
  * @param {string[]} args
@@ -171,13 +144,13 @@ const isCurrentCoolOffCutoff = (cutoff) =>
  */
 const assertFallbackInvocation = (label, pin, args, expectedCache) => {
   const argv = readFileSync(npxMarker, 'utf8').split('\n').slice(0, -1)
-  const [yes, before, ignoreScripts, cache, ...command] = argv
+  const [yes, ignoreScripts, cache, ...command] = argv
   const argvText = JSON.stringify(argv)
-  assert.equal(yes, '--yes', `${label} fallback did not pass --yes first: ${argvText}`)
   assert.ok(
-    before?.startsWith('--before=') && isCurrentCoolOffCutoff(before.slice('--before='.length)),
-    `${label} fallback did not pass the cool-off cutoff as --before: ${argvText}`,
+    !argv.some((arg) => arg === '--before' || arg.startsWith('--before=')),
+    `${label} fallback passed a cool-off cutoff to first-party get-tbd: ${argvText}`,
   )
+  assert.equal(yes, '--yes', `${label} fallback did not pass --yes first: ${argvText}`)
   assert.equal(
     ignoreScripts,
     '--ignore-scripts',
@@ -455,15 +428,18 @@ try {
       /tbd CLI not found.*npx is unavailable/is,
       `${hook.name} closing hook did not explain the missing CLI`,
     )
-    const installHint =
-      /Install it with: npm install -g --ignore-scripts --before=(\S+) get-tbd@(\S+)\n/.exec(
-        withoutCliOutput,
-      )
-    assert.ok(
-      installHint !== null &&
-        isCurrentCoolOffCutoff(installHint[1]) &&
-        installHint[2] === tbdFallbackVersion,
-      `${hook.name} closing hook did not explain how to install the missing CLI under the cool-off:\n${withoutCliOutput}`,
+    const installHint = /Install it with: npm install -g --ignore-scripts get-tbd@(\S+)\n/.exec(
+      withoutCliOutput,
+    )
+    assert.equal(
+      installHint?.[1],
+      tbdFallbackVersion,
+      `${hook.name} closing hook did not explain how to install the missing CLI:\n${withoutCliOutput}`,
+    )
+    assert.doesNotMatch(
+      withoutCliOutput,
+      /--before|days ago|cool-off/,
+      `${hook.name} closing hook applied a cool-off to first-party get-tbd:\n${withoutCliOutput}`,
     )
 
     rmSync(closingMarker, { force: true })
@@ -710,30 +686,14 @@ try {
   const fixtureNpxArgs = { session: 'prime', closing: 'closing' }
 
   writeFileSync(fixtureConfig, 'tbd_format: f08\ntbd_fallback_version: 9.9.9-rc.1+build.5\n')
-  // PATHs for the node cases: no node at all, and a node whose `-e` cutoff computation
-  // fails or prints garbage while it still runs detect-git-push.mjs for the closing hook.
+  // A PATH with npx but no node: push detection in the closing hook needs node, and the
+  // session hook does not.
   const noNodeBin = join(hookTestDir, 'no-node-bin')
   mkdirSync(noNodeBin)
   writeFileSync(join(noNodeBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
     mode: EXECUTABLE_MODE,
   })
   symlinkSync(join(hookTestDir, 'npx'), join(noNodeBin, 'npx'))
-  const brokenNodeBin = join(hookTestDir, 'broken-node-bin')
-  mkdirSync(brokenNodeBin)
-  writeFileSync(join(brokenNodeBin, 'bash'), '#!/bin/sh\nexec /bin/bash "$@"\n', {
-    mode: EXECUTABLE_MODE,
-  })
-  writeFileSync(
-    join(brokenNodeBin, 'node'),
-    `#!/bin/bash\nif [[ "$1" == "-e" ]]; then\n  if [[ "$TBD_HOOK_TEST_NODE_MODE" == "garbage" ]]; then\n    echo "not a date"\n    exit 0\n  fi\n  exit 1\nfi\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
-    { mode: EXECUTABLE_MODE },
-  )
-  const brokenNodeWithoutNpxBin = join(hookTestDir, 'broken-node-without-npx-bin')
-  mkdirSync(brokenNodeWithoutNpxBin)
-  for (const name of ['bash', 'node']) {
-    symlinkSync(join(brokenNodeBin, name), join(brokenNodeWithoutNpxBin, name))
-  }
-  symlinkSync(join(hookTestDir, 'npx'), join(brokenNodeBin, 'npx'))
   const bashOnlyBin = join(hookTestDir, 'bash-only-bin')
   mkdirSync(bashOnlyBin)
   symlinkSync(join(noNodeBin, 'bash'), join(bashOnlyBin, 'bash'))
@@ -751,9 +711,7 @@ try {
     resetNpxMarker()
     const overridden = runFixtureHook(kind, {
       ...fixtureEnv,
-      NPM_CONFIG_BEFORE: '2099-01-01',
       NPM_CONFIG_IGNORE_SCRIPTS: 'false',
-      npm_config_before: '2099-01-01',
       npm_config_ignore_scripts: 'false',
       XDG_CACHE_HOME: xdgCacheHome,
     })
@@ -769,44 +727,37 @@ try {
     const failing = runFixtureHook(kind, { ...fixtureEnv, TBD_HOOK_TEST_NPX_STATUS: '41' })
     assert.equal(failing.status, 41, `fixture ${kind} hook hid an npx fallback failure`)
 
-    // Without a working node the cutoff cannot be computed, so npx must not run.
+    // Without node, the closing hook cannot detect a push, so it fails closed before npx.
+    // The session hook needs no node.
     resetNpxMarker()
     const withoutNode = runFixtureHook(kind, { ...fixtureEnv, PATH: noNodeBin })
-    assert.equal(withoutNode.status, 1, `fixture ${kind} hook accepted a missing node`)
-    assert.equal(existsSync(npxMarker), false, `fixture ${kind} hook ran npx without node`)
-    if (kind === 'session') {
-      // The closing hook stops earlier, because detect-git-push.mjs also needs node.
-      assert.match(withoutNode.stderr, /node is required to compute the cool-off cutoff/)
-    }
-    for (const mode of ['fail', 'garbage']) {
-      resetNpxMarker()
-      const brokenNode = runFixtureHook(kind, {
-        ...fixtureEnv,
-        PATH: brokenNodeBin,
-        TBD_HOOK_TEST_NODE_MODE: mode,
-      })
-      assert.equal(brokenNode.status, 1, `fixture ${kind} hook accepted a ${mode} node cutoff`)
-      assert.match(brokenNode.stderr, /node failed to compute the cool-off cutoff/)
+    if (kind === 'closing') {
+      assert.equal(withoutNode.status, 1, 'fixture closing hook accepted a missing node')
+      assert.equal(existsSync(npxMarker), false, 'fixture closing hook ran npx without node')
+    } else {
       assert.equal(
-        existsSync(npxMarker),
-        false,
-        `fixture ${kind} hook ran npx after a ${mode} node`,
+        withoutNode.status,
+        0,
+        `fixture session hook needed node:\n${withoutNode.stderr}`,
       )
+      assertFallbackInvocation('fixture session without node', '9.9.9-rc.1+build.5', ['prime'])
     }
 
-    // Without npx or a working node, the install hint cannot name a cutoff.
-    const withoutCutoff = runFixtureHook(kind, {
+    // Without npx, the hook names the exact pin to install, with no cool-off.
+    const withoutNpx = runFixtureHook(kind, {
       ...fixtureEnv,
-      PATH: kind === 'session' ? bashOnlyBin : brokenNodeWithoutNpxBin,
+      PATH: kind === 'session' ? bashOnlyBin : noCliBin,
     })
-    assert.equal(withoutCutoff.status, 1, `fixture ${kind} hook accepted a missing npx`)
+    assert.equal(withoutNpx.status, 1, `fixture ${kind} hook accepted a missing npx`)
     assert.match(
-      withoutCutoff.stderr,
-      new RegExp(
-        `Install it with: npm install -g --ignore-scripts get-tbd@9\\.9\\.9-rc\\.1\\+build\\.5\\n.*at least ${minimumReleaseAgeMinutes / MINUTES_PER_DAY} days ago`,
-        's',
-      ),
-      `fixture ${kind} hook gave no install hint without a cutoff`,
+      withoutNpx.stderr,
+      /Install it with: npm install -g --ignore-scripts get-tbd@9\.9\.9-rc\.1\+build\.5\n/,
+      `fixture ${kind} hook gave no install hint without npx`,
+    )
+    assert.doesNotMatch(
+      withoutNpx.stderr,
+      /--before|days ago|cool-off/,
+      `fixture ${kind} hook applied a cool-off to first-party get-tbd`,
     )
   }
 

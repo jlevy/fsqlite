@@ -7,6 +7,13 @@ engineStrict: true
 minimumReleaseAge: 20160
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+# First-party packages have no cool-off; see "First-Party Packages" in
+# SUPPLY-CHAIN-SECURITY.md. scripts/check-supply-chain.mjs accepts only exact package
+# names (optionally name@x.y.z) recorded there. An entry exempts that package alone, not
+# its dependencies; list a dependency inside the cool-off with a comment naming its
+# first-party parent.
+minimumReleaseAgeExclude:
+  - tryscript
 blockExoticSubdeps: true
 # Reject a release whose provenance or trusted-publisher evidence is weaker than an
 # earlier release of the same package. See SUPPLY-CHAIN-SECURITY.md before adding an

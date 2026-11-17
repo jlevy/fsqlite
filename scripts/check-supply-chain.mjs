@@ -1,5 +1,6 @@
 // Checks the dependency policy that pnpm applies and requires every audit or trust
-// policy exception to have a record in SUPPLY-CHAIN-SECURITY.md.
+// policy exception, and every first-party cool-off exclusion, to have a record in
+// SUPPLY-CHAIN-SECURITY.md.
 
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -10,6 +11,7 @@ import {
   PNPM_POLICY_FLOOR_COMMAND,
   PNPM_TRUST_POLICY_COMMAND,
   checkAuditExceptions,
+  checkReleaseAgeExclusions,
   checkTrustPolicyExclusions,
   crossCheckPnpmAudit,
   crossCheckPnpmPolicyFloor,
@@ -26,6 +28,8 @@ const { ids, errors } = checkAuditExceptions({
 })
 const exclusions = checkTrustPolicyExclusions({ workspaceText, policyText })
 errors.push(...exclusions.errors)
+const firstParty = checkReleaseAgeExclusions({ workspaceText, policyText })
+errors.push(...firstParty.errors)
 
 /**
  * Run a `pnpm config` command and cross-check its output.
@@ -43,7 +47,9 @@ const crossCheckWithPnpm = (args, crossCheck) => {
     errors.push(...crossCheck(pnpm.stdout))
   }
 }
-crossCheckWithPnpm(PNPM_POLICY_FLOOR_COMMAND, crossCheckPnpmPolicyFloor)
+crossCheckWithPnpm(PNPM_POLICY_FLOOR_COMMAND, (pnpmOutput) =>
+  crossCheckPnpmPolicyFloor(pnpmOutput, firstParty.entries),
+)
 crossCheckWithPnpm(PNPM_AUDIT_COMMAND, (pnpmOutput) => crossCheckPnpmAudit({ ids, pnpmOutput }))
 crossCheckWithPnpm(PNPM_TRUST_POLICY_COMMAND, (pnpmOutput) =>
   crossCheckPnpmTrustPolicy({ entries: exclusions.entries, pnpmOutput }),
@@ -57,6 +63,7 @@ if (errors.length > 0) {
 } else {
   console.log(
     `supply-chain policy verified (${ids.length} ignored advisories, ` +
-      `${exclusions.entries.length} recorded trust-policy exclusions)`,
+      `${exclusions.entries.length} recorded trust-policy exclusions, ` +
+      `${firstParty.entries.length} recorded first-party cool-off exclusions)`,
   )
 }

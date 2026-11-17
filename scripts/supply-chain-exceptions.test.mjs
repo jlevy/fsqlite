@@ -3,11 +3,13 @@ import { describe, test } from 'node:test'
 import {
   EXCEPTION_WINDOW_DAYS,
   checkAuditExceptions,
+  checkReleaseAgeExclusions,
   checkTrustPolicyExclusions,
   crossCheckPnpmAudit,
   crossCheckPnpmPolicyFloor,
   crossCheckPnpmTrustPolicy,
   findAdvisoryIds,
+  findReleaseAgeExcludes,
   findTrustPolicyExcludes,
 } from './supply-chain-exceptions.mjs'
 
@@ -54,6 +56,21 @@ describe('crossCheckPnpmPolicyFloor', () => {
   test('rejects missing, malformed, and non-object config output', () => {
     for (const output of ['', '{', '[]']) {
       assert.match(crossCheckPnpmPolicyFloor(output)[0], /pnpm config list --json/)
+    }
+  })
+
+  test('accepts exactly the first-party exclusions the workspace scan recorded', () => {
+    const output = JSON.stringify({ ...floor, minimumReleaseAgeExclude: ['tryscript'] })
+    assert.deepEqual(crossCheckPnpmPolicyFloor(output, ['tryscript']), [])
+    assert.deepEqual(crossCheckPnpmPolicyFloor(JSON.stringify(floor), ['tryscript']), [])
+  })
+
+  test('rejects an exclusion the scan did not record, or one that is not a list', () => {
+    for (const exclude of [['tryscript', 'zod'], 'tryscript', [1]]) {
+      const output = JSON.stringify({ ...floor, minimumReleaseAgeExclude: exclude })
+      const errors = crossCheckPnpmPolicyFloor(output, ['tryscript'])
+      assert.equal(errors.length, 1, JSON.stringify(errors))
+      assert.match(errors[0], /minimumReleaseAgeExclude/)
     }
   })
 })
@@ -456,5 +473,86 @@ describe('crossCheckPnpmTrustPolicy', () => {
       crossCheckPnpmTrustPolicy({ entries: [], pnpmOutput: '{}' })[0] ?? '',
       /not a list/,
     )
+  })
+})
+
+describe('checkReleaseAgeExclusions', () => {
+  /** A first-party record in the shape SUPPLY-CHAIN-SECURITY.md uses. */
+  const FIRST_PARTY_RECORD =
+    '## First-Party Packages\n\nThe first-party packages are:\n\n' +
+    '- `get-tbd` on npm, the tbd CLI.\n- `tryscript` on npm.\n' +
+    '- `flowmark` on PyPI. The npm package of that name is a placeholder.\n\n' +
+    'pnpm lists `tryscript`, and `zod` arrives through it.\n'
+  const FIRST_PARTY_POLICY = policy(`${record('2026-12-08')}\n\n${FIRST_PARTY_RECORD}`)
+  /** @param {string} list */
+  const excluding = (list) => `${CURRENT_WORKSPACE}minimumReleaseAgeExclude:\n${list}`
+  /** @param {string} workspaceText @param {string} [policyText] */
+  const checkExcludes = (workspaceText, policyText = FIRST_PARTY_POLICY) =>
+    checkReleaseAgeExclusions({ workspaceText, policyText })
+
+  test('finds the entries of a block or flow list, not minimumReleaseAge itself', () => {
+    assert.deepEqual(findReleaseAgeExcludes(CURRENT_WORKSPACE), [])
+    assert.deepEqual(
+      findReleaseAgeExcludes(excluding('  # first-party\n  - tryscript # tests\n  - "get-tbd"\n')),
+      ['tryscript', 'get-tbd'],
+    )
+    assert.deepEqual(findReleaseAgeExcludes('minimumReleaseAgeExclude: [tryscript, get-tbd]\n'), [
+      'tryscript',
+      'get-tbd',
+    ])
+  })
+
+  test('accepts recorded first-party packages, and no exclusions at all', () => {
+    assert.deepEqual(checkExcludes(excluding('  - tryscript\n  - get-tbd\n')), {
+      entries: ['tryscript', 'get-tbd'],
+      errors: [],
+    })
+    assert.deepEqual(checkExcludes(CURRENT_WORKSPACE), { entries: [], errors: [] })
+  })
+
+  test('accepts a dependency of a first-party package recorded at exact versions', () => {
+    const policyText = FIRST_PARTY_POLICY.replace(
+      '- `tryscript` on npm.\n',
+      '- `tryscript` on npm.\n- `zod@4.6.7 || 4.6.8` on npm, a dependency of `tryscript`.\n',
+    )
+    assert.deepEqual(checkExcludes(excluding('  - zod@4.6.7 || 4.6.8\n'), policyText).errors, [])
+  })
+
+  test('rejects an entry that no first-party npm record names', () => {
+    // `zod` is mentioned in the section's prose and `flowmark` is recorded for PyPI only;
+    // neither is a record that exempts an npm package.
+    for (const entry of ['zod', 'flowmark', 'left-pad', 'zod@4.6.7']) {
+      const { errors } = checkExcludes(excluding(`  - tryscript\n  - ${entry}\n`))
+      assert.equal(errors.length, 1, JSON.stringify(errors))
+      assert.match(
+        errors[0],
+        new RegExp(`^${entry} is excluded from minimumReleaseAge .* no first-party record`),
+      )
+    }
+  })
+
+  test('rejects a record outside a First-Party Packages section or in a code fence', () => {
+    const workspaceText = excluding('  - left-pad\n')
+    for (const policyText of [
+      policy(`${record('2026-12-08')}\n\n- \`left-pad\` on npm.`),
+      FIRST_PARTY_POLICY.replace(
+        'The first-party packages are:\n',
+        'The first-party packages are:\n\n```text\n- `left-pad` on npm.\n```\n',
+      ),
+    ]) {
+      assert.equal(checkExcludes(workspaceText, policyText).errors.length, 1)
+    }
+  })
+
+  test('rejects glob, negation, and range entries even when recorded', () => {
+    for (const entry of ['*', '@types/*', '!tryscript', 'tryscript@^0.3.0', 'tryscript@latest']) {
+      const policyText = FIRST_PARTY_POLICY.replace(
+        '- `tryscript` on npm.\n',
+        `- \`tryscript\` on npm.\n- \`${entry}\` on npm.\n`,
+      )
+      const { errors } = checkExcludes(excluding(`  - '${entry}'\n`), policyText)
+      assert.equal(errors.length, 1, JSON.stringify(errors))
+      assert.match(errors[0], /is not an exact package name/)
+    }
   })
 })
