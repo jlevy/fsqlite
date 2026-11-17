@@ -80,6 +80,8 @@ export class KbQueries {
   private readonly db: DatabaseSync
   private readonly opts: QueryOptions
   private readonly cache = new Map<string, StatementSync>()
+  /** When set, every SQL text a query runs is recorded here, for EXPLAIN QUERY PLAN. */
+  trace: Set<string> | null = null
 
   constructor(db: DatabaseSync, opts: QueryOptions = {}) {
     this.db = db
@@ -87,12 +89,23 @@ export class KbQueries {
   }
 
   private stmt(sql: string): StatementSync {
+    this.trace?.add(sql)
     let s = this.cache.get(sql)
     if (!s) {
       s = this.db.prepare(sql)
       this.cache.set(sql, s)
     }
     return s
+  }
+
+  /** `EXPLAIN QUERY PLAN` for each traced statement, with its parameters unbound. */
+  plans(sqls: Iterable<string>): { sql: string; plan: string[] }[] {
+    return [...sqls].map((sql) => ({
+      sql: sql.replace(/\s+/g, ' ').trim(),
+      plan: (this.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[]).map(
+        (r) => r.detail,
+      ),
+    }))
   }
 
   run(category: string, p: Params): unknown {

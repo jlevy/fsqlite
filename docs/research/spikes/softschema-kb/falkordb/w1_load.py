@@ -75,6 +75,7 @@ def run(kb_root: Path, data: Path, scale: str) -> dict:
             "load_kb parses every artifact into memory before load_graph writes; both run in this process.",
             "redislite's default config keeps `save 900 1 / 300 100 / 60 200 / 15 1000`, so BGSAVE forks can run during the load.",
             "import_s is read_kb_s + load_graph_s: from files to a servable, renamed live graph.",
+            "The client is paraverse's open_db with socket_timeout=None: with redis-py 8.1.0's default 5 s timeout, paraverse's own load fails at S2 in loader._count_edges (see fdb.open_embedded).",
         ],
     }
     server.shutdown(save=False)

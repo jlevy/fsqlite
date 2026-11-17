@@ -2,12 +2,12 @@
   "backend": "fsqlite",
   "scale": "S0",
   "workflow": "W4",
-  "recorded_at": "2026-11-17T00:59:08.613Z",
+  "recorded_at": "2026-11-17T01:11:06.802Z",
   "machine": {
     "cpus": 4,
     "cpu_model": "Intel(R) Xeon(R) Processor",
     "mem_total_mib": 16088,
-    "mem_free_mib": 14710,
+    "mem_free_mib": 8077,
     "os": "linux 6.18.44-fc-v553",
     "filesystem": "ext2/ext3",
     "node": "v22.23.4",
@@ -19,86 +19,194 @@
     "node_total": 5407,
     "edge_total": 25313
   },
-  "generic_head_bytes": 39084032,
+  "inputs": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S0/evolve",
+  "verified_against_rebuild": true,
   "generic": {
     "new_kind": {
-      "records": 520,
       "ddl": "none",
-      "route": "SnapshotStore envelope + reconcile",
-      "capture_ms": 41.589,
-      "envelope_bytes": 453510,
-      "reconcile_ms": 74.309,
-      "total_ms": 115.931,
-      "applied": 1,
-      "quarantined": 0
+      "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
+      "diff_seconds": 0.513,
+      "diff_rows": {
+        "schema": 1,
+        "node": 11,
+        "file": 1,
+        "doc": 11,
+        "entity": 11,
+        "edge": 22
+      },
+      "applied_rows": {
+        "schema": 1,
+        "file": 1,
+        "line": 0,
+        "node": 11,
+        "doc": 11,
+        "entity": 11,
+        "edge": 22,
+        "update": 0,
+        "removed": 0
+      },
+      "capture_ms": 33.804,
+      "envelope_bytes": 15632,
+      "reconcile_ms": 83.383,
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "data_change_total_seconds": 0.63,
+      "rebuild": {
+        "seconds": 1.833,
+        "parse_seconds": 1.091,
+        "load_seconds": 0.742,
+        "tables_equal_to_incremental": true,
+        "differing_tables": []
+      }
     },
-    "new_kind_check": {
-      "record_kind": "recording",
-      "session_neighborhood_has_recording": true
-    },
-    "optional_field": {
+    "add_field": {
       "ddl": "none",
-      "route": "SnapshotStore envelope + reconcile",
-      "capture_ms": 35.572,
-      "envelope_bytes": 288879,
-      "reconcile_ms": 64.275,
-      "total_ms": 99.884,
-      "applied": 1,
-      "quarantined": 0
+      "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
+      "diff_seconds": 0.505,
+      "diff_rows": {
+        "schema": 1,
+        "doc": 172,
+        "entity": 172
+      },
+      "applied_rows": {
+        "schema": 1,
+        "file": 0,
+        "line": 0,
+        "node": 0,
+        "doc": 172,
+        "entity": 172,
+        "edge": 0,
+        "update": 0,
+        "removed": 0
+      },
+      "capture_ms": 43.452,
+      "envelope_bytes": 957821,
+      "reconcile_ms": 140.67,
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "data_change_total_seconds": 0.689,
+      "rebuild": {
+        "seconds": 1.794,
+        "parse_seconds": 1.162,
+        "load_seconds": 0.632,
+        "tables_equal_to_incremental": true,
+        "differing_tables": []
+      }
     },
     "rename_relation": {
-      "edges": 1124,
       "ddl": "none",
-      "route": "SnapshotStore envelope + reconcile",
-      "capture_ms": 37.848,
-      "envelope_bytes": 205846,
-      "reconcile_ms": 73.219,
-      "total_ms": 111.096,
-      "applied": 1,
-      "quarantined": 0
-    },
-    "type_change": {
-      "records": 1029,
-      "data": {
-        "ddl": "none",
-        "route": "SnapshotStore envelope + reconcile",
-        "capture_ms": 44.045,
-        "envelope_bytes": 2016850,
-        "reconcile_ms": 78.662,
-        "total_ms": 122.735,
+      "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
+      "diff_seconds": 0.443,
+      "diff_rows": {
+        "unedge": 790,
+        "file": 1,
+        "edge": 790
+      },
+      "applied_rows": {
+        "schema": 0,
+        "file": 1,
+        "line": 0,
+        "node": 0,
+        "doc": 0,
+        "entity": 0,
+        "edge": 790,
+        "update": 0,
+        "removed": 790
+      },
+      "capture_ms": 38.481,
+      "envelope_bytes": 140071,
+      "reconcile_ms": 68.44,
+      "reconcile": {
+        "published": 2,
         "applied": 1,
-        "quarantined": 0
+        "quarantined": 0,
+        "attempts": 1
       },
-      "ddl_in_callback": {
-        "attempt": "CREATE INDEX inside SnapshotStore.write",
-        "outcome": "rejected (refused)",
-        "message": "application callback changed the SQLite schema"
+      "data_change_total_seconds": 0.55,
+      "rebuild": {
+        "seconds": 1.629,
+        "parse_seconds": 0.972,
+        "load_seconds": 0.657,
+        "tables_equal_to_incremental": true,
+        "differing_tables": []
+      }
+    },
+    "string_to_object": {
+      "ddl": "none",
+      "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
+      "diff_seconds": 0.672,
+      "diff_rows": {
+        "schema": 1,
+        "doc": 1029,
+        "entity": 1029
       },
-      "open_with_new_ddl": {
-        "attempt": "open the store with the new DDL",
-        "outcome": "rejected (incompatible)",
-        "message": "store schema version 1 is incompatible with the requested 2"
+      "applied_rows": {
+        "schema": 1,
+        "file": 0,
+        "line": 0,
+        "node": 0,
+        "doc": 1029,
+        "entity": 1029,
+        "edge": 0,
+        "update": 0,
+        "removed": 0
       },
-      "side_by_side": {
-        "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/store-v2",
-        "version": 1,
-        "rows": {
-          "kind_schema": 19,
-          "kb_file": 3,
-          "kb_line": 4796,
-          "doc": 5497,
-          "entity": 5927,
-          "search_text": 8546,
-          "edge": 25833
+      "capture_ms": 72.99,
+      "envelope_bytes": 2120015,
+      "reconcile_ms": 72.984,
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "data_change_total_seconds": 0.818,
+      "rebuild": {
+        "seconds": 1.621,
+        "parse_seconds": 1.032,
+        "load_seconds": 0.589,
+        "tables_equal_to_incremental": true,
+        "differing_tables": []
+      },
+      "index_change": {
+        "ddl_in_callback": {
+          "attempt": "CREATE INDEX inside SnapshotStore.write",
+          "outcome": "rejected (refused)",
+          "message": "application callback changed the SQLite schema"
         },
-        "init_ms": 44.187,
-        "copy_ms": 438.553,
-        "total_ms": 482.741,
-        "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/store-v2/snapshots/000000000001.fsqlite.sqlite",
-        "plan": [
-          "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
-        ],
-        "store_bytes": 39071880
+        "open_with_new_ddl": {
+          "attempt": "open the store with the new DDL, same version",
+          "outcome": "rejected (incompatible)",
+          "message": "store schema is incompatible: stamped schema_hash 137a8ed5c5a9120b does not match the requested exact DDL hash d13418979750ba3d at schemaVersion 1"
+        },
+        "side_by_side": {
+          "dest": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/string_to_object/store-v2",
+          "version": 1,
+          "rows": {
+            "kind_schema": 18,
+            "kb_file": 3,
+            "kb_line": 4796,
+            "doc": 4977,
+            "entity": 5407,
+            "search_text": 7506,
+            "edge": 25313
+          },
+          "init_ms": 48.951,
+          "copy_ms": 382.282,
+          "total_ms": 431.232,
+          "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/string_to_object/store-v2/snapshots/000000000001.fsqlite.sqlite",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
       }
     }
   },
@@ -122,12 +230,11 @@
         "t_software": 61,
         "t_facet": 34,
         "t_venue": 58,
-        "t_website": 151,
-        "t_recording": 520
+        "t_website": 151
       },
-      "total_ms": 357.534,
+      "total_ms": 323.511,
       "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed/snapshots/000000000001.fsqlite.sqlite",
-      "snapshot_bytes": 18251776
+      "snapshot_bytes": 18022400
     },
     "alter_in_callback": {
       "attempt": "ALTER TABLE ADD COLUMN inside DirectStore.write",
@@ -149,7 +256,6 @@
         "t_page": 9,
         "t_person": 577,
         "t_profile": 577,
-        "t_recording": 520,
         "t_repository": 1155,
         "t_room": 85,
         "t_session": 520,
@@ -158,27 +264,32 @@
         "t_venue": 58,
         "t_website": 151,
         "t_other": 432,
-        "edge": 25833
+        "edge": 25313
       },
-      "init_ms": 64.001,
-      "copy_ms": 255.694,
-      "total_ms": 319.695,
+      "init_ms": 62.366,
+      "copy_ms": 214.977,
+      "total_ms": 277.343,
       "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/w4/typed-v2/snapshots/000000000001.fsqlite.sqlite",
-      "snapshot_bytes": 18251776
+      "snapshot_bytes": 18022400
+    },
+    "size_comparison": {
+      "typed_records_and_edges_bytes": 17989632,
+      "generic_entity_and_edges_bytes": 23580672,
+      "generic_total_bytes": 38637568
     }
   },
   "requirements": {
     "generic": {
-      "new_kind": "data only (no DDL); a new table view for it needs an index, so a new epoch",
-      "optional_field": "data only; an index on the field needs a new epoch",
-      "rename_relation": "data only (an UPDATE of the edge key), plus query code that names it",
-      "type_change": "data only for the payload; any view or index over the field needs a new epoch"
+      "new_kind": "data only; a table view for the new kind needs an index, so a new epoch",
+      "add_field": "data only; an index on the field needs a new epoch",
+      "rename_relation": "data only (delete and insert of edge keys); query code that names it",
+      "string_to_object": "data only for payloads; the view index over it needs a new epoch"
     },
     "typed": {
-      "new_kind": "new table, so a new epoch (side-by-side copy)",
-      "optional_field": "ALTER TABLE ADD COLUMN, so a new epoch",
+      "new_kind": "new table: new epoch (side-by-side copy)",
+      "add_field": "ALTER TABLE ADD COLUMN: new epoch",
       "rename_relation": "data only while edges stay generic",
-      "type_change": "column type and transform, so a new epoch"
+      "string_to_object": "column type and transform: new epoch"
     }
   }
 }

@@ -41,6 +41,22 @@ HUB_FILTER = "x:Event OR x:Day OR x:Facet"
 PACKAGES = ["falkordb", "falkordblite", "redis", "softschema", "pyyaml", "psutil"]
 
 
+def open_embedded(rdb: Path, socket_timeout: float | None = None) -> Any:
+    """
+    paraverse's connection.open_db, plus one client setting: redis-py 8.1.0 (the version
+    paraverse's lock pins) defaults socket_timeout to 5 s, and at S2 paraverse's own
+    load check (`MATCH ()-[e]->() RETURN type(e), count(e)` over 1.16M edges) runs
+    longer than that, so the unmodified loader fails with "Timeout reading from socket".
+    `FDB_PARAVERSE_DEFAULT_TIMEOUT=1` reproduces paraverse's exact client.
+    """
+    if os.environ.get("FDB_PARAVERSE_DEFAULT_TIMEOUT") == "1":
+        return open_db(rdb)
+    from redislite.falkordb_client import FalkorDB as EmbeddedFalkorDB
+
+    rdb.parent.mkdir(parents=True, exist_ok=True)
+    return EmbeddedFalkorDB(str(rdb), socket_timeout=socket_timeout)
+
+
 class Server:
     """An embedded FalkorDBLite server on one RDB file, opened the way paraverse does."""
 
@@ -48,7 +64,7 @@ class Server:
         self.data_dir = data_dir
         self.rdb = data_dir / DB_FILE
         started = time.perf_counter()
-        self.db = open_db(self.rdb)
+        self.db = open_embedded(self.rdb)
         self.open_seconds = time.perf_counter() - started
         conn = self.db.connection
         self.pid = int(Path(conn.pidfile).read_text().strip())

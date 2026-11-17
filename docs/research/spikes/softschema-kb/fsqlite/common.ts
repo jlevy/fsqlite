@@ -1,7 +1,15 @@
 // Shared helpers for the fsqlite spike: the intermediate JSONL rows, a synchronous line
 // reader (fsqlite write callbacks are synchronous), paths, and result files.
 
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { cpus, freemem, platform, release, totalmem } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
@@ -74,7 +82,14 @@ export interface EdgeRow {
   ord: number
   props: string | null
 }
-export type KbRow = SchemaRow | FileRow | LineRow | NodeRow | DocRow | EntityRow | EdgeRow
+/** Removals a KB diff emits before its additions. */
+export type RemovalRow =
+  | { t: 'unedge'; source: string; relation: string; target: string; ord: number }
+  | { t: 'unentity'; id: string }
+  | { t: 'undoc'; path: string }
+  | { t: 'unline'; path: string; from: number }
+export type KbRow =
+  SchemaRow | FileRow | LineRow | NodeRow | DocRow | EntityRow | EdgeRow | RemovalRow
 
 /**
  * Call `fn` for each line of a UTF-8 file without loading it whole. Synchronous, so it can
@@ -229,6 +244,17 @@ export function evictFromPageCache(path: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Clone a quiescent store with hard links. This is safe only because published snapshots
+ * are immutable and `current` is replaced by atomic rename (a new inode), so neither copy
+ * can change a file the other sees. The clone keeps the source's store_id, so it is a
+ * throwaway benchmark copy, not a supported backup (use seal() or readLease() for that).
+ */
+export function cloneStore(src: string, dest: string): void {
+  rmSync(dest, { recursive: true, force: true })
+  execFileSync('cp', ['-al', src, dest])
 }
 
 /** Whether the module at `url` is the script Node was started with. */

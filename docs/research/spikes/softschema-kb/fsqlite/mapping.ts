@@ -393,7 +393,17 @@ export function entityValues(
  * record lacks, since an empty store holds none.
  */
 export class GenericLoader {
-  readonly counts = { schema: 0, file: 0, line: 0, node: 0, doc: 0, entity: 0, edge: 0, update: 0 }
+  readonly counts = {
+    schema: 0,
+    file: 0,
+    line: 0,
+    node: 0,
+    doc: 0,
+    entity: 0,
+    edge: 0,
+    update: 0,
+    removed: 0,
+  }
   private readonly names = new Map<string, string>()
   private readonly schema: StatementSync
   private readonly file: StatementSync
@@ -406,6 +416,7 @@ export class GenericLoader {
   private readonly dropEdges: StatementSync
   private readonly nameOf: StatementSync
   private readonly stored: StatementSync
+  private readonly removals: Record<string, StatementSync[]>
 
   private readonly fresh: boolean
 
@@ -448,6 +459,17 @@ export class GenericLoader {
     this.dropEdges = db.prepare('DELETE FROM edge WHERE source = ?')
     this.nameOf = db.prepare('SELECT coalesce(name, id) AS name FROM entity WHERE id = ?')
     this.stored = db.prepare('SELECT kind, name, path FROM entity WHERE id = ?')
+    this.removals = {
+      unedge: [
+        db.prepare('DELETE FROM edge WHERE source = ? AND relation = ? AND target = ? AND ord = ?'),
+      ],
+      unentity: [
+        db.prepare('DELETE FROM entity WHERE id = ?'),
+        db.prepare('DELETE FROM search_text WHERE id = ?'),
+      ],
+      undoc: [db.prepare('DELETE FROM doc WHERE path = ?')],
+      unline: [db.prepare('DELETE FROM kb_line WHERE path = ? AND n >= ?')],
+    }
   }
 
   /** A referenced entity's export name: from this load when seen, else from the database. */
@@ -470,7 +492,22 @@ export class GenericLoader {
         return this.addEntity(row)
       case 'edge':
         return this.addEdge(row)
+      case 'unedge':
+        return this.remove(row.t, [row.source, row.relation, row.target, row.ord])
+      case 'unentity':
+        return this.remove(row.t, [row.id])
+      case 'undoc':
+        return this.remove(row.t, [row.path])
+      case 'unline':
+        return this.remove(row.t, [row.path, row.from])
     }
+  }
+
+  private remove(kind: string, key: (string | number)[]): void {
+    for (const stmt of this.removals[kind] ?? []) {
+      stmt.run(...key)
+    }
+    this.counts.removed++
   }
 
   addSchema(row: SchemaRow): void {

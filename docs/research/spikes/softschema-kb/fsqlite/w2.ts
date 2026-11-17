@@ -11,7 +11,6 @@
 import { spawn } from 'node:child_process'
 import {
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -24,6 +23,7 @@ import { join } from 'node:path'
 import {
   SPIKE_DIR,
   WORK_DIR,
+  cloneStore,
   forEachRowSync,
   isMain,
   nowMs,
@@ -168,7 +168,7 @@ async function batch(
   }
   const { units, files } = partition(rows, dir, writers)
   const store = join(dir, 'store')
-  cpSync(base, store, { recursive: true })
+  cloneStore(base, store)
   const handle = genericStore(store).init()
   const baseVersion = handle.currentVersion()
   const baseCopy = copyCost(handle.snapshotPath(baseVersion))
@@ -231,6 +231,26 @@ async function batch(
     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
   )
   const headCopy = copyCost(handle.snapshotPath(head))
+  // Every updated record must now differ from the base.
+  const updatedIds =
+    (
+      JSON.parse(readFileSync(join(deltaDir, 'manifest.json'), 'utf8')) as {
+        updated_ids?: string[]
+      }
+    ).updated_ids ?? []
+  const payloads = (dirPath: string): Map<string, string> =>
+    genericStore(dirPath).read((db) => {
+      const get = db.prepare('SELECT payload FROM entity WHERE id = ?')
+      return new Map(
+        updatedIds.map((id) => [
+          id,
+          (get.get(id) as { payload: string } | undefined)?.payload ?? '',
+        ]),
+      )
+    })
+  const basePayloads = payloads(base)
+  const headPayloads = payloads(store)
+  const changed = updatedIds.filter((id) => basePayloads.get(id) !== headPayloads.get(id)).length
   const manifest = JSON.parse(readFileSync(join(deltaDir, 'manifest.json'), 'utf8')) as Record<
     string,
     unknown
@@ -260,6 +280,7 @@ async function batch(
     published_after_ms: published - started,
     versions_published: head - baseVersion,
     entities: { before: before.n, after: after.n, added: after.n - before.n },
+    updated_records_changed: `${changed}/${updatedIds.length}`,
     base_copy: baseCopy,
     head_copy: headCopy,
     reader: {

@@ -6,7 +6,15 @@
 
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { RESULTS_DIR, SPIKE_DIR, WORK_DIR, isMain, kbDirFor, parseArgs, writeResult } from './common.ts'
+import {
+  RESULTS_DIR,
+  SPIKE_DIR,
+  WORK_DIR,
+  isMain,
+  kbDirFor,
+  parseArgs,
+  writeResult,
+} from './common.ts'
 import { NODE, UV_PYTHON, measured } from './w1.ts'
 import { KbQueries } from './queries.ts'
 import { genericStore, openReader, queryInstances } from './w3.ts'

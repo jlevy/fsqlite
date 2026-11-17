@@ -2,12 +2,12 @@
   "backend": "fsqlite",
   "scale": "S0",
   "workflow": "w1",
-  "recorded_at": "2026-11-17T00:55:32.233Z",
+  "recorded_at": "2026-11-17T01:10:08.414Z",
   "machine": {
     "cpus": 4,
     "cpu_model": "Intel(R) Xeon(R) Processor",
     "mem_total_mib": 16088,
-    "mem_free_mib": 15071,
+    "mem_free_mib": 10351,
     "os": "linux 6.18.44-fc-v553",
     "filesystem": "ext2/ext3",
     "node": "v22.23.4",
@@ -22,11 +22,11 @@
   "kb_bytes": 24767599,
   "parse": {
     "label": "parse",
-    "seconds": 0.833,
-    "max_rss_mib": 42.8,
+    "seconds": 1.102,
+    "max_rss_mib": 41.7,
     "exit": 0,
     "report": {
-      "seconds": 0.719,
+      "seconds": 0.993,
       "jobs": 4,
       "counts": {
         "schema": 18,
@@ -42,8 +42,8 @@
   "intermediate_bytes": 29562686,
   "direct": {
     "label": "load-direct",
-    "seconds": 0.595,
-    "max_rss_mib": 169,
+    "seconds": 0.667,
+    "max_rss_mib": 166.1,
     "exit": 0,
     "report": {
       "route": "direct",
@@ -56,21 +56,22 @@
         "doc": 4977,
         "entity": 5407,
         "edge": 25313,
-        "update": 0
+        "update": 0,
+        "removed": 0
       },
-      "init_ms": 51.974,
-      "callback_load_ms": 334.009,
-      "callback_check_ms": 3.09,
-      "write_total_ms": 437.559,
-      "publish_overhead_ms": 100.461,
-      "total_ms": 489.533,
+      "init_ms": 69.088,
+      "callback_load_ms": 377.463,
+      "callback_check_ms": 2.843,
+      "write_total_ms": 462.998,
+      "publish_overhead_ms": 82.692,
+      "total_ms": 532.086,
       "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-direct/snapshots/000000000001.fsqlite.sqlite",
-      "snapshot_bytes": 38371328,
-      "max_rss_mib": 169
+      "snapshot_bytes": 38637568,
+      "max_rss_mib": 166.1
     },
-    "total_with_parse_seconds": 1.428,
-    "store_bytes": 38461576,
-    "snapshot_bytes": 38371328,
+    "total_with_parse_seconds": 1.769,
+    "store_bytes": 38731912,
+    "snapshot_bytes": 38637568,
     "breakdown": {
       "entity": 16142336,
       "kb_line": 9035776,
@@ -80,6 +81,7 @@
       "ix_edge_in": 1945600,
       "search_text": 1310720,
       "ix_entity_kind_label": 409600,
+      "ix_entity_id_kind": 266240,
       "ix_entity_path": 249856,
       "sqlite_autoindex_doc_1": 233472,
       "sqlite_autoindex_entity_1": 204800,
@@ -95,44 +97,5 @@
       "fsqlite_meta": 4096,
       "applied_tx": 4096
     }
-  },
-  "snapshot": {
-    "label": "load-snapshot",
-    "seconds": 1.128,
-    "max_rss_mib": 252.3,
-    "exit": 0,
-    "report": {
-      "route": "snapshot",
-      "batch": 20000,
-      "captures": 3,
-      "counts": {
-        "schema": 18,
-        "file": 3,
-        "doc": 4977,
-        "entity": 5407,
-        "edge": 25313,
-        "line": null,
-        "node": null,
-        "update": null
-      },
-      "reconcile": {
-        "published": 1,
-        "applied": 3,
-        "quarantined": 0,
-        "attempts": 1
-      },
-      "init_ms": 49.388,
-      "capture_ms": 484.471,
-      "read_and_capture_ms": 643.858,
-      "reconcile_ms": 338.929,
-      "total_ms": 1032.175,
-      "count_problems": [],
-      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S0/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
-      "snapshot_bytes": 39239680,
-      "max_rss_mib": 252.3
-    },
-    "total_with_parse_seconds": 1.961,
-    "store_bytes": 65351039,
-    "snapshot_bytes": 39239680
   }
 }

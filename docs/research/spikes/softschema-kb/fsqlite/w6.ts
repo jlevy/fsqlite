@@ -12,15 +12,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DirectStore, SnapshotStore } from './fsq.ts'
-import {
-  SPIKE_DIR,
-  WORK_DIR,
-  isMain,
-  nowMs,
-  parseArgs,
-  round,
-  writeResult,
-} from './common.ts'
+import { SPIKE_DIR, WORK_DIR, isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
 import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
 import { NODE, dirBytes } from './w1.ts'
 import { KbQueries } from './queries.ts'

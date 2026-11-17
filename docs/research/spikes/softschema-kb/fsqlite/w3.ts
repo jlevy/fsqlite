@@ -25,6 +25,7 @@ import {
   writeResult,
 } from './common.ts'
 import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
+import { buildFtsSidecar } from './fts.ts'
 import { KbQueries } from './queries.ts'
 import type { Params, QueryOptions } from './queries.ts'
 
@@ -143,16 +144,20 @@ function main(): void {
     warm: Number(flags.warm ?? 50),
     pathCte: flags['path-cte'] === 'true',
   }
+  let ftsBuild: Record<string, number> | undefined
   if (flags.fts) {
     opts.fts = true
     opts.ftsPath = flags.fts
+    // The sidecar is rebuilt from the published head, as a publisher would after reconcile.
+    const store = genericStore(dir).init()
+    ftsBuild = buildFtsSidecar(store.snapshotPath(store.currentVersion()), flags.fts)
   }
-  const report = runW3(dir, scale, opts)
+  const report = { ...runW3(dir, scale, opts), ...(ftsBuild ? { fts_sidecar: ftsBuild } : {}) }
   if (flags.out) {
     writeFileSync(flags.out, `${JSON.stringify({ scale, ...report }, null, 2)}\n`)
     console.log(flags.out)
   } else {
-    console.log(writeResult(scale, 'w3', report))
+    console.log(writeResult(scale, flags.name ?? 'w3', report))
   }
 }
 

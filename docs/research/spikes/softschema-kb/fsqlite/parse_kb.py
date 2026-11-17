@@ -26,7 +26,12 @@ A delta batch (`--delta`, the layout corpus/delta.py writes) holds `records/`,
 an update to an existing entity: its entity line has `"update": true`, and the importer
 keeps the stored kind, name and path.
 
-Usage: parse_kb.py <kb_dir | delta_dir> <out.jsonl> [--delta] [--jobs N]
+A diff (`--diff <base_kb>`) compares a changed KB with its base: files whose inode or
+bytes differ are parsed again, and the graph export is diffed row by row. Removals come
+first as {"t": "unedge" | "unentity" | "undoc" | "unline", ...} lines, so the importer can
+apply a whole schema-evolution variant as one data-only transaction.
+
+Usage: parse_kb.py <kb_dir | delta_dir> <out.jsonl> [--delta | --diff <base_kb>] [--jobs N]
 """
 
 from __future__ import annotations
@@ -187,15 +192,98 @@ def list_files(root: Path) -> list[str]:
     return sorted(files)
 
 
+def changed_files(base: Path, variant: Path) -> tuple[list[str], list[str]]:
+    """Files of `variant` that differ from `base` (new inode and new bytes), and removed ones."""
+    a, b = set(list_files(base)), set(list_files(variant))
+    changed = []
+    for rel in sorted(b):
+        if rel not in a:
+            changed.append(rel)
+            continue
+        sa, sb = (base / rel).stat(), (variant / rel).stat()
+        if (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino):
+            continue
+        if sa.st_size != sb.st_size or (base / rel).read_bytes() != (variant / rel).read_bytes():
+            changed.append(rel)
+    return changed, sorted(a - b)
+
+
+def keyed_edges(path: Path) -> dict[tuple[str, str, str, int], str | None]:
+    """Every edge by (source, relation, target, ord), with its props as JSON text."""
+    out: dict[tuple[str, str, str, int], str | None] = {}
+    seen: dict[tuple[str, str, str], int] = {}
+    for edge in read_jsonl(path):
+        key = (edge.pop("source"), edge.pop("relation"), edge.pop("target"))
+        ord_ = seen.get(key, 0)
+        seen[key] = ord_ + 1
+        out[(*key, ord_)] = dumps(edge) if edge else None
+    return out
+
+
+def emit_diff(base: Path, root: Path, emit: Any, jobs: int) -> None:
+    changed, removed = changed_files(base, root)
+    graph = {"_graph/nodes.jsonl", "_graph/edges.jsonl"}
+    base_nodes = {n["id"]: n for n in read_jsonl(base / "_graph" / "nodes.jsonl")}
+    nodes = {n["id"]: n for n in read_jsonl(root / "_graph" / "nodes.jsonl")}
+    old_edges = keyed_edges(base / "_graph" / "edges.jsonl")
+    new_edges = keyed_edges(root / "_graph" / "edges.jsonl")
+    for key, props in old_edges.items():
+        if key not in new_edges or new_edges[key] != props:
+            emit(dumps({"t": "unedge", "source": key[0], "relation": key[1], "target": key[2], "ord": key[3]}), "unedge")
+    for nid in sorted(set(base_nodes) - set(nodes)):
+        emit(dumps({"t": "unentity", "id": nid}), "unentity")
+    for rel in removed:
+        emit(dumps({"t": "undoc", "path": rel}), "undoc")
+    for rel in changed:
+        if rel in graph:
+            continue
+        if rel.startswith(SCHEMA_DIR + "/"):
+            kind = rel.removeprefix(SCHEMA_DIR + "/").removesuffix(".schema.yaml").replace("-", "_")
+            schema = yaml.load(read_text(root / rel), Loader=PortableLoader)
+            emit(dumps({"t": "schema", "kind": kind, "file": rel, "schema": dumps(schema)}), "schema")
+        elif rel.endswith(".jsonl"):
+            with open(root / rel, encoding="utf-8", newline="") as fh:
+                n = -1
+                for n, text in enumerate(fh):
+                    emit(dumps({"t": "line", "path": rel, "n": n, "text": text}), "line")
+            emit(dumps({"t": "unline", "path": rel, "from": n + 1}), "unline")
+    by_path: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for n in nodes.values():
+        node = {"id": n["id"], "kind": n["kind"], "name": n.get("name"), "path": n["path"]}
+        by_path[node["path"]].append(node)
+        if n["id"] not in base_nodes:
+            emit(dumps({"t": "node", **node}), "node")
+    records = [r for r in changed if r not in graph and not r.startswith(SCHEMA_DIR + "/") and not r.endswith(".jsonl")]
+    for line in parse_chunk(str(root), [(rel, by_path.get(rel, [])) for rel in records], False):
+        emit(line, line[7 : line.index('"', 7)])
+    for key, props in new_edges.items():
+        if key not in old_edges or old_edges[key] != props:
+            row = {"t": "edge", "source": key[0], "relation": key[1], "target": key[2]}
+            emit(dumps({**row, "ord": key[3], "props": props}), "edge")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("kb")
     ap.add_argument("out")
     ap.add_argument("--delta", action="store_true", help="the input is a W2 delta batch")
+    ap.add_argument("--diff", help="emit only the changes from this base KB")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     args = ap.parse_args()
     started = time.monotonic()
     root = Path(args.kb)
+    if args.diff:
+        counts_diff: dict[str, int] = defaultdict(int)
+        with open(args.out, "w", encoding="utf-8", newline="") as out:
+
+            def emit_line(line: str, kind: str) -> None:
+                counts_diff[kind] += 1
+                out.write(line + "\n")
+
+            emit_diff(Path(args.diff), root, emit_line, args.jobs)
+        report = {"seconds": round(time.monotonic() - started, 3), "counts": counts_diff}
+        print(json.dumps(report), file=sys.stderr)
+        return 0
     records_root = root / "records" if args.delta else root
     nodes_path = root / "nodes.jsonl" if args.delta else root / "_graph" / "nodes.jsonl"
     edges_path = root / "edges.jsonl" if args.delta else root / "_graph" / "edges.jsonl"
