@@ -1,0 +1,79 @@
+{
+ "arm": "fsqlite-v2-spike3",
+ "arm_label": "fsqlite v2 Spike 3 (maintenance and publication; gc collectOn quick)",
+ "scale": "S1-r2",
+ "workflow": "scrub-setup",
+ "description": "Spike 3 full verification of the base head before the trickle (verifyMaxAgeMs 1 h)",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": null,
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike3/package.patch; spike code plus spike3/spike.patch"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "scrub_ms": {
+   "median": 769.2,
+   "min": 769.2,
+   "max": 769.2,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:56:08Z",
+   "wall_s": 1.003,
+   "load_before": [
+    0.99,
+    1.25,
+    1.38
+   ],
+   "load_after": [
+    0.99,
+    1.25,
+    1.38
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.01,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 14.75,
+   "disk_free_gb_min": 14.75,
+   "load_samples": [
+    {
+     "t": 1794905769.5,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.01
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "scrub_ms": 769.2
+   },
+   "detail": {
+    "verify": {
+     "scrub_ms": 769.183576,
+     "version": 1,
+     "level": "full",
+     "ok": true,
+     "at_ms": 1794905769373,
+     "dev": 65024,
+     "ino": 1359848,
+     "size": 380325888,
+     "mtimeMs": 1794905765615.999,
+     "problems": []
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

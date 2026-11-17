@@ -16,12 +16,27 @@
   "sqlite": "3.53.4",
   "python": "Python 3.13.18"
  },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "not used: node:sqlite directly, the spike's DDL and SQL"
+ },
  "repetitions_kept": 1,
  "summary": {
   "file_bytes": {
    "median": 1907986432,
    "min": 1907986432,
    "max": 1907986432,
+   "n": 1
+  },
+  "ingest_through_durable_in_process_s": {
+   "median": 16.015,
+   "min": 16.015,
+   "max": 16.015,
    "n": 1
   },
   "ingest_through_durable_s": {
@@ -118,6 +133,7 @@
    "discarded_attempts": [],
    "metrics": {
     "ingest_through_durable_s": 16.015,
+    "ingest_through_durable_in_process_s": 16.015,
     "peak_rss_mib": 611.5,
     "file_bytes": 1907986432,
     "phase.decode_ms": 2320.344,
@@ -157,5 +173,6 @@
     "count_problems": []
    }
   }
- ]
+ ],
+ "superseded_runs": []
 }

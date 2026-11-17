@@ -9,41 +9,50 @@
   "cpus": 4,
   "cpu_model": "Intel(R) Xeon(R) Processor",
   "mem_total_mib": 16088,
-  "mem_free_mib": 15000,
+  "mem_free_mib": 14960,
   "os": "linux 6.18.44-fc-v553",
   "filesystem": "ext2/ext3",
   "node": "v22.23.4",
   "sqlite": "3.53.4",
   "python": "Python 3.13.18"
  },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike1/package.patch; spike code plus spike1/spike.patch"
+ },
  "repetitions_kept": 3,
  "summary": {
   "build.apply_ms": {
-   "median": 12680.4391,
-   "min": 12264.2308,
+   "median": 12264.2308,
+   "min": 12025.3027,
    "max": 12837.1963,
    "n": 3
   },
   "build.derive_ms": {
-   "median": 10348.302,
+   "median": 10626.935,
    "min": 9657.465,
    "max": 10906.08,
    "n": 3
   },
   "build.gate_ms": {
-   "median": 2536.568,
-   "min": 2511.72,
-   "max": 2876.667,
+   "median": 2876.667,
+   "min": 2536.568,
+   "max": 2948.215,
    "n": 3
   },
   "build.hook_ms": {
-   "median": 11127.699,
+   "median": 11492.193,
    "min": 10416.349,
    "max": 11806.531,
    "n": 3
   },
   "build.statistics_ms": {
-   "median": 778.694,
+   "median": 864.418,
    "min": 758.088,
    "max": 899.601,
    "n": 3
@@ -74,18 +83,24 @@
   },
   "gc_retain0_ms": {
    "median": 5321.517,
-   "min": 5047.149,
+   "min": 5269.576,
    "max": 5475.403,
    "n": 3
   },
   "import_process_wall_s": {
-   "median": 30.66,
+   "median": 30.662,
    "min": 30.566,
    "max": 33.496,
    "n": 3
   },
+  "ingest_through_durable_in_process_s": {
+   "median": 25.808,
+   "min": 24.506,
+   "max": 26.939,
+   "n": 3
+  },
   "ingest_through_durable_s": {
-   "median": 28.36,
+   "median": 28.43,
    "min": 28.325,
    "max": 31.195,
    "n": 3
@@ -93,54 +108,54 @@
   "peak_rss_mib": {
    "median": 611,
    "min": 604.6,
-   "max": 614.2,
+   "max": 620.6,
    "n": 3
   },
   "phase.decode_ms": {
-   "median": 2299.844,
-   "min": 2240.598,
+   "median": 2240.598,
+   "min": 2231.788,
    "max": 2300.534,
    "n": 3
   },
   "phase.derived_hook_ms": {
-   "median": 11127.699,
+   "median": 11492.193,
    "min": 10416.349,
    "max": 11806.531,
    "n": 3
   },
   "phase.gate_ms": {
-   "median": 2536.568,
-   "min": 2511.72,
-   "max": 2876.667,
+   "median": 2876.667,
+   "min": 2536.568,
+   "max": 2948.215,
    "n": 3
   },
   "phase.ingest_ms": {
-   "median": 6185.279,
-   "min": 5982.186,
+   "median": 5982.186,
+   "min": 5878.988,
    "max": 6258.155,
    "n": 3
   },
   "phase.publish_ms": {
-   "median": 15424.995,
+   "median": 15968.779,
    "min": 14438.464,
    "max": 16355.874,
    "n": 3
   },
   "phase.quick_check_warm_ms": {
-   "median": 2354.056,
+   "median": 2485.271,
    "min": 2097.058,
    "max": 2501.823,
    "n": 3
   },
   "phase.transform_ms": {
-   "median": 1340.281,
+   "median": 1288.059,
    "min": 1280.138,
-   "max": 1344.787,
+   "max": 1340.281,
    "n": 3
   },
   "phase.verify_counts_ms": {
    "median": 654.127,
-   "min": 636.787,
+   "min": 561.192,
    "max": 659.725,
    "n": 3
   },
@@ -175,83 +190,84 @@
   {
    "rep": 1,
    "verdict": "keep",
-   "started_at": "2026-11-17T07:09:30Z",
-   "wall_s": 39.011,
+   "started_at": "2026-11-17T08:38:06Z",
+   "wall_s": 39.009,
    "load_before": [
-    0.94,
-    1.73,
-    1.55
+    0.99,
+    1.24,
+    1.17
    ],
    "load_after": [
-    1.08,
-    1.67,
-    1.54
+    1.0,
+    1.21,
+    1.16
    ],
-   "load1_max_during": 1.1,
-   "foreign_cpu_max": 0.03,
-   "waited_for_quiet_s": 40.0,
-   "disk_free_gb_before": 15.11,
-   "disk_free_gb_min": 13.03,
+   "load1_max_during": 1.0,
+   "foreign_cpu_max": 0.032,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 14.41,
+   "disk_free_gb_min": 12.33,
    "load_samples": [
     {
-     "t": 1794899380.5,
-     "load1": 1.03,
-     "own_cpu": 1.047,
-     "foreign_cpu": 0.03
+     "t": 1794904696.5,
+     "load1": 0.99,
+     "own_cpu": 1.043,
+     "foreign_cpu": 0.005
     },
     {
-     "t": 1794899390.5,
-     "load1": 1.02,
-     "own_cpu": 0.995,
-     "foreign_cpu": 0.012
+     "t": 1794904706.5,
+     "load1": 1.0,
+     "own_cpu": 0.993,
+     "foreign_cpu": 0.032
     },
     {
-     "t": 1794899400.5,
-     "load1": 1.1,
-     "own_cpu": 0.852,
-     "foreign_cpu": 0.011
+     "t": 1794904716.6,
+     "load1": 1.0,
+     "own_cpu": 0.876,
+     "foreign_cpu": 0.005
     },
     {
-     "t": 1794899409.5,
-     "load1": 1.08,
+     "t": 1794904725.6,
+     "load1": 1.0,
      "own_cpu": 0.0,
-     "foreign_cpu": 0.009
+     "foreign_cpu": 0.024
     }
    ],
    "compare": null,
    "discarded_attempts": [],
    "metrics": {
-    "ingest_through_durable_s": 28.36,
-    "import_process_wall_s": 30.66,
-    "peak_rss_mib": 614.2,
+    "ingest_through_durable_s": 28.43,
+    "import_process_wall_s": 30.662,
+    "peak_rss_mib": 620.6,
     "snapshot_bytes": 2071281664,
     "store_bytes_after_gc": 2071281800,
     "store_over_head": 1.0,
-    "gc_retain0_ms": 5047.149,
-    "phase.decode_ms": 2299.844,
-    "phase.transform_ms": 1344.787,
-    "phase.ingest_ms": 6185.279,
-    "phase.verify_counts_ms": 636.787,
-    "phase.publish_ms": 15424.995,
-    "phase.derived_hook_ms": 11127.699,
-    "phase.gate_ms": 2511.72,
-    "phase.quick_check_warm_ms": 2354.056,
+    "gc_retain0_ms": 5269.576,
+    "ingest_through_durable_in_process_s": 25.808,
+    "phase.decode_ms": 2231.788,
+    "phase.transform_ms": 1288.059,
+    "phase.ingest_ms": 5878.988,
+    "phase.verify_counts_ms": 561.192,
+    "phase.publish_ms": 15968.779,
+    "phase.derived_hook_ms": 11492.193,
+    "phase.gate_ms": 2948.215,
+    "phase.quick_check_warm_ms": 2485.271,
     "derived_bytes.search_fts_and_search_doc": 122015744,
     "derived_bytes.facet_count": 41250816,
     "derived_bytes.secondary_indexes": 337629184,
     "derived_bytes.sqlite_stat1": 4096,
-    "build.apply_ms": 12680.439068999141,
-    "build.derive_ms": 10348.302,
-    "build.statistics_ms": 778.694,
-    "build.hook_ms": 11127.699,
-    "build.gate_ms": 2511.72
+    "build.apply_ms": 12025.302736002952,
+    "build.derive_ms": 10626.935,
+    "build.statistics_ms": 864.418,
+    "build.hook_ms": 11492.193,
+    "build.gate_ms": 2948.215
    },
    "detail": {
     "machine": {
      "cpus": 4,
      "cpu_model": "Intel(R) Xeon(R) Processor",
      "mem_total_mib": 16088,
-     "mem_free_mib": 15000,
+     "mem_free_mib": 14960,
      "os": "linux 6.18.44-fc-v553",
      "filesystem": "ext2/ext3",
      "node": "v22.23.4",
@@ -259,22 +275,22 @@
      "python": "Python 3.13.18"
     },
     "phases": {
-     "init_ddl_ms": 49.384,
-     "decode_ms": 2299.844,
-     "transform_ms": 1344.787,
-     "ingest_ms": 6185.279,
-     "verify_counts_ms": 636.787,
-     "publish_ms": 15424.995,
+     "init_ddl_ms": 46.362,
+     "decode_ms": 2231.788,
+     "transform_ms": 1288.059,
+     "ingest_ms": 5878.988,
+     "verify_counts_ms": 561.192,
+     "publish_ms": 15968.779,
      "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
-     "derived_hook_ms": 11127.699,
-     "gate_ms": 2511.72,
-     "publish_without_hook_and_gate_ms": 1785.576,
-     "quick_check_warm_ms": 2354.056,
-     "ingest_through_durable_ms": 25854.384
+     "derived_hook_ms": 11492.193,
+     "gate_ms": 2948.215,
+     "publish_without_hook_and_gate_ms": 1528.371,
+     "quick_check_warm_ms": 2485.271,
+     "ingest_through_durable_ms": 25808.197
     },
     "gc": {
      "retain": 0,
-     "ms": 5047.149,
+     "ms": 5269.576,
      "removed": 1,
      "kept": 1,
      "leased": [],
@@ -369,6 +385,7 @@
     "store_bytes_after_gc": 2071281800,
     "store_over_head": 1.0,
     "gc_retain0_ms": 5321.517,
+    "ingest_through_durable_in_process_s": 24.506,
     "phase.decode_ms": 2240.598,
     "phase.transform_ms": 1280.138,
     "phase.ingest_ms": 5982.186,
@@ -516,6 +533,7 @@
     "store_bytes_after_gc": 2071281800,
     "store_over_head": 1.0,
     "gc_retain0_ms": 5475.403,
+    "ingest_through_durable_in_process_s": 26.939,
     "phase.decode_ms": 2300.534,
     "phase.transform_ms": 1340.281,
     "phase.ingest_ms": 6258.155,
@@ -599,6 +617,84 @@
      "quarantined": 0
     },
     "store_over_head_reported": null
+   }
+  }
+ ],
+ "superseded_runs": [
+  {
+   "rep": 1,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T07:09:30Z",
+   "wall_s": 39.011,
+   "load_before": [
+    0.94,
+    1.73,
+    1.55
+   ],
+   "load_after": [
+    1.08,
+    1.67,
+    1.54
+   ],
+   "load1_max_during": 1.1,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 40.0,
+   "disk_free_gb_before": 15.11,
+   "disk_free_gb_min": 13.03,
+   "load_samples": [
+    {
+     "t": 1794899380.5,
+     "load1": 1.03,
+     "own_cpu": 1.047,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794899390.5,
+     "load1": 1.02,
+     "own_cpu": 0.995,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794899400.5,
+     "load1": 1.1,
+     "own_cpu": 0.852,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794899409.5,
+     "load1": 1.08,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.009
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 28.36,
+    "import_process_wall_s": 30.66,
+    "peak_rss_mib": 614.2,
+    "snapshot_bytes": 2071281664,
+    "store_bytes_after_gc": 2071281800,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 5047.149,
+    "ingest_through_durable_in_process_s": 25.854,
+    "phase.decode_ms": 2299.844,
+    "phase.transform_ms": 1344.787,
+    "phase.ingest_ms": 6185.279,
+    "phase.verify_counts_ms": 636.787,
+    "phase.publish_ms": 15424.995,
+    "phase.derived_hook_ms": 11127.699,
+    "phase.gate_ms": 2511.72,
+    "phase.quick_check_warm_ms": 2354.056,
+    "derived_bytes.search_fts_and_search_doc": 122015744,
+    "derived_bytes.facet_count": 41250816,
+    "derived_bytes.secondary_indexes": 337629184,
+    "derived_bytes.sqlite_stat1": 4096,
+    "build.apply_ms": 12680.439068999141,
+    "build.derive_ms": 10348.302,
+    "build.statistics_ms": 778.694,
+    "build.hook_ms": 11127.699,
+    "build.gate_ms": 2511.72
    }
   }
  ]

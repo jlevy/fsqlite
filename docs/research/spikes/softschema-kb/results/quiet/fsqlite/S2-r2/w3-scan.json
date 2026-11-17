@@ -16,6 +16,15 @@
   "sqlite": "3.53.4",
   "python": "Python 3.13.18"
  },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
  "repetitions_kept": 3,
  "summary": {
   "facet.cold_ms": {
@@ -11962,5 +11971,6 @@
     }
    }
   }
- ]
+ ],
+ "superseded_runs": []
 }

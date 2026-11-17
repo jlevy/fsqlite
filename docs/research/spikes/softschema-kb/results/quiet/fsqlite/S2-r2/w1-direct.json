@@ -16,6 +16,15 @@
   "sqlite": "3.53.4",
   "python": "Python 3.13.18"
  },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
  "repetitions_kept": 3,
  "summary": {
   "fts_sidecar_build_ms": {
@@ -40,6 +49,12 @@
    "median": 26.529,
    "min": 26.468,
    "max": 26.849,
+   "n": 3
+  },
+  "ingest_through_durable_in_process_s": {
+   "median": 21.918,
+   "min": 21.357,
+   "max": 22.225,
    "n": 3
   },
   "ingest_through_durable_s": {
@@ -193,6 +208,7 @@
     "store_bytes_after_gc": 1946153096,
     "store_over_head": 1.0,
     "gc_retain0_ms": 3937.89,
+    "ingest_through_durable_in_process_s": 21.918,
     "phase.decode_ms": 2438.563,
     "phase.transform_ms": 1278.507,
     "phase.ingest_ms": 14660.597,
@@ -315,6 +331,7 @@
     "store_bytes_after_gc": 1946153096,
     "store_over_head": 1.0,
     "gc_retain0_ms": 4397.151,
+    "ingest_through_durable_in_process_s": 21.357,
     "phase.decode_ms": 2439.612,
     "phase.transform_ms": 1318.828,
     "phase.ingest_ms": 14159.802,
@@ -437,6 +454,7 @@
     "store_bytes_after_gc": 1946153096,
     "store_over_head": 1.0,
     "gc_retain0_ms": 4358.122,
+    "ingest_through_durable_in_process_s": 22.225,
     "phase.decode_ms": 2421.967,
     "phase.transform_ms": 1345.982,
     "phase.ingest_ms": 14976.761,
@@ -503,5 +521,6 @@
     "store_over_head_reported": null
    }
   }
- ]
+ ],
+ "superseded_runs": []
 }

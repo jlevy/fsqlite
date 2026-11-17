@@ -1,0 +1,253 @@
+{
+ "arm": "fsqlite-v2-spike3",
+ "arm_label": "fsqlite v2 Spike 3 (maintenance and publication; gc collectOn quick)",
+ "scale": "S1-r2",
+ "workflow": "trickle-one",
+ "description": "one v2 record per publish, then gc({retain:0, collectOn:'quick'})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14891,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike3/package.patch; spike code plus spike3/spike.patch"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "DirectStore.fts_sidecar_rebuild_ms": {
+   "median": 714.189,
+   "min": 714.189,
+   "max": 714.189,
+   "n": 1
+  },
+  "DirectStore.gc_ms": {
+   "median": 255.558,
+   "min": 255.558,
+   "max": 255.558,
+   "n": 1
+  },
+  "DirectStore.gc_share_of_publish_plus_gc": {
+   "median": 0.2852,
+   "min": 0.2852,
+   "max": 0.2852,
+   "n": 1
+  },
+  "DirectStore.visible_ms": {
+   "median": 639.109,
+   "min": 639.109,
+   "max": 639.109,
+   "n": 1
+  },
+  "SnapshotStore.capture_ms": {
+   "median": 291.963,
+   "min": 291.963,
+   "max": 291.963,
+   "n": 1
+  },
+  "SnapshotStore.fts_sidecar_rebuild_ms": {
+   "median": 707.093,
+   "min": 707.093,
+   "max": 707.093,
+   "n": 1
+  },
+  "SnapshotStore.gc_ms": {
+   "median": 258.909,
+   "min": 258.909,
+   "max": 258.909,
+   "n": 1
+  },
+  "SnapshotStore.gc_share_of_publish_plus_gc": {
+   "median": 0.237,
+   "min": 0.237,
+   "max": 0.237,
+   "n": 1
+  },
+  "SnapshotStore.reconcile_ms": {
+   "median": 541.34,
+   "min": 541.34,
+   "max": 541.34,
+   "n": 1
+  },
+  "SnapshotStore.visible_ms": {
+   "median": 833.306,
+   "min": 833.306,
+   "max": 833.306,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:56:09Z",
+   "wall_s": 11.005,
+   "load_before": [
+    0.99,
+    1.25,
+    1.38
+   ],
+   "load_after": [
+    0.99,
+    1.24,
+    1.37
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 14.75,
+   "disk_free_gb_min": 13.95,
+   "load_samples": [
+    {
+     "t": 1794905779.5,
+     "load1": 0.99,
+     "own_cpu": 0.743,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794905780.6,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.03
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "SnapshotStore.visible_ms": 833.306,
+    "SnapshotStore.capture_ms": 291.963,
+    "SnapshotStore.reconcile_ms": 541.34,
+    "SnapshotStore.gc_ms": 258.909,
+    "SnapshotStore.gc_share_of_publish_plus_gc": 0.237,
+    "SnapshotStore.fts_sidecar_rebuild_ms": 707.093,
+    "DirectStore.visible_ms": 639.109,
+    "DirectStore.gc_ms": 255.558,
+    "DirectStore.gc_share_of_publish_plus_gc": 0.2852,
+    "DirectStore.fts_sidecar_rebuild_ms": 714.189
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14891,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": {
+     "verifyMaxAgeMs": 3600000,
+     "collectOn": "quick"
+    },
+    "batches": {
+     "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 291.963,
+      "reconcile_ms": 541.34,
+      "visible_ms_median": 833.306,
+      "records_per_s": 1.2,
+      "fts_rebuild_ms_median": 707.093,
+      "gc_retain0_ms_median": 258.909,
+      "gc_unlink_ms_median": 254.245,
+      "gc_scrubs": 0,
+      "runs": [
+       {
+        "capture_ms": 321.929,
+        "reconcile_ms": 609.811,
+        "visible_ms": 931.745,
+        "fts_rebuild_ms": 691.966,
+        "gc_ms": 6.014,
+        "gc_verify_ms": 1.726,
+        "gc_unlink_ms": 0.544,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 291.963,
+        "reconcile_ms": 541.34,
+        "visible_ms": 833.306,
+        "fts_rebuild_ms": 707.093,
+        "gc_ms": 258.909,
+        "gc_verify_ms": 1.118,
+        "gc_unlink_ms": 254.245,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 264.673,
+        "reconcile_ms": 533.283,
+        "visible_ms": 797.96,
+        "fts_rebuild_ms": 752.403,
+        "gc_ms": 272.494,
+        "gc_verify_ms": 1.313,
+        "gc_unlink_ms": 266.723,
+        "gc_integrity_checked": 0
+       }
+      ]
+     },
+     "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 639.109,
+      "records_per_s": 1.56,
+      "fts_rebuild_ms_median": 714.189,
+      "gc_retain0_ms_median": 255.558,
+      "gc_unlink_ms_median": 250.062,
+      "gc_scrubs": 0,
+      "runs": [
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 632.387,
+        "fts_rebuild_ms": 714.189,
+        "gc_ms": 255.558,
+        "gc_verify_ms": 1.24,
+        "gc_unlink_ms": 250.062,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 668.324,
+        "fts_rebuild_ms": 792.157,
+        "gc_ms": 266.655,
+        "gc_verify_ms": 2.017,
+        "gc_unlink_ms": 259.8,
+        "gc_integrity_checked": 0
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 639.109,
+        "fts_rebuild_ms": 671.022,
+        "gc_ms": 249.922,
+        "gc_verify_ms": 0.973,
+        "gc_unlink_ms": 246.434,
+        "gc_integrity_checked": 0
+       }
+      ]
+     }
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

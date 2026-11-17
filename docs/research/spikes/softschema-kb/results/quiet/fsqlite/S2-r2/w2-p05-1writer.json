@@ -9,18 +9,27 @@
   "cpus": 4,
   "cpu_model": "Intel(R) Xeon(R) Processor",
   "mem_total_mib": 16088,
-  "mem_free_mib": 14713,
+  "mem_free_mib": 14348,
   "os": "linux 6.18.44-fc-v553",
   "filesystem": "ext2/ext3",
   "node": "v22.23.4",
   "sqlite": "3.53.4",
   "python": "Python 3.13.18"
  },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
  "repetitions_kept": 3,
  "summary": {
   "capture_ms": {
-   "median": 6806.253,
-   "min": 6418.938,
+   "median": 7374.494,
+   "min": 6757.772,
    "max": 7383.851,
    "n": 3
   },
@@ -31,26 +40,26 @@
    "n": 3
   },
   "fts_sidecar_rebuild_ms": {
-   "median": 4155.164,
-   "min": 3966.989,
-   "max": 4189.979,
+   "median": 4189.979,
+   "min": 4045.218,
+   "max": 4198.076,
    "n": 3
   },
   "gc_retain0_ms": {
-   "median": 4320.309,
-   "min": 3940.956,
-   "max": 4549.77,
+   "median": 3905.324,
+   "min": 3884.338,
+   "max": 4320.309,
    "n": 3
   },
   "reconcile_ms": {
-   "median": 4805.047,
-   "min": 4246.688,
-   "max": 5351.232,
+   "median": 5351.232,
+   "min": 5066.152,
+   "max": 5402.354,
    "n": 3
   },
   "visible_ms": {
-   "median": 11224.12,
-   "min": 11053.036,
+   "median": 12440.761,
+   "min": 12160.225,
    "max": 12735.221,
    "n": 3
   }
@@ -67,53 +76,59 @@
   {
    "rep": 1,
    "verdict": "keep",
-   "started_at": "2026-11-17T06:47:21Z",
-   "wall_s": 49.01,
+   "started_at": "2026-11-17T08:29:27Z",
+   "wall_s": 50.012,
    "load_before": [
     0.92,
-    1.05,
-    1.15
+    1.01,
+    1.07
    ],
    "load_after": [
-    1.07,
-    1.07,
-    1.16
+    0.97,
+    1.0,
+    1.07
    ],
-   "load1_max_during": 1.1,
-   "foreign_cpu_max": 0.068,
-   "waited_for_quiet_s": 25.0,
-   "disk_free_gb_before": 13.5,
-   "disk_free_gb_min": 11.09,
+   "load1_max_during": 0.97,
+   "foreign_cpu_max": 0.053,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 12.32,
+   "disk_free_gb_min": 9.85,
    "load_samples": [
     {
-     "t": 1794898051.1,
+     "t": 1794904177.0,
+     "load1": 0.93,
+     "own_cpu": 0.281,
+     "foreign_cpu": 0.053
+    },
+    {
+     "t": 1794904187.0,
      "load1": 0.94,
-     "own_cpu": 0.173,
-     "foreign_cpu": 0.005
+     "own_cpu": 0.756,
+     "foreign_cpu": 0.011
     },
     {
-     "t": 1794898061.1,
-     "load1": 1.03,
-     "own_cpu": 0.752,
-     "foreign_cpu": 0.055
+     "t": 1794904197.0,
+     "load1": 0.95,
+     "own_cpu": 0.871,
+     "foreign_cpu": 0.006
     },
     {
-     "t": 1794898071.1,
-     "load1": 1.1,
-     "own_cpu": 0.855,
-     "foreign_cpu": 0.009
+     "t": 1794904207.0,
+     "load1": 0.96,
+     "own_cpu": 0.508,
+     "foreign_cpu": 0.006
     },
     {
-     "t": 1794898081.1,
-     "load1": 1.08,
-     "own_cpu": 0.533,
-     "foreign_cpu": 0.012
-    },
-    {
-     "t": 1794898090.1,
-     "load1": 1.07,
+     "t": 1794904217.0,
+     "load1": 0.97,
      "own_cpu": 0.0,
-     "foreign_cpu": 0.068
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794904217.1,
+     "load1": 0.97,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.0
     }
    ],
    "compare": {
@@ -121,11 +136,11 @@
    },
    "discarded_attempts": [],
    "metrics": {
-    "visible_ms": 11053.036,
-    "capture_ms": 6806.253,
-    "reconcile_ms": 4246.688,
-    "fts_sidecar_rebuild_ms": 4155.164,
-    "gc_retain0_ms": 4549.77,
+    "visible_ms": 12440.761,
+    "capture_ms": 7374.494,
+    "reconcile_ms": 5066.152,
+    "fts_sidecar_rebuild_ms": 4045.218,
+    "gc_retain0_ms": 3884.338,
     "envelope_bytes": 52453974
    },
    "detail": {
@@ -133,7 +148,7 @@
      "cpus": 4,
      "cpu_model": "Intel(R) Xeon(R) Processor",
      "mem_total_mib": 16088,
-     "mem_free_mib": 14713,
+     "mem_free_mib": 14348,
      "os": "linux 6.18.44-fc-v553",
      "filesystem": "ext2/ext3",
      "node": "v22.23.4",
@@ -142,19 +157,19 @@
     },
     "run": {
      "arm": "SnapshotStore",
-     "capture_ms": 6806.253,
+     "capture_ms": 7374.494,
      "envelope_bytes": 52453974,
-     "reconcile_ms": 4246.688,
+     "reconcile_ms": 5066.152,
      "quarantined_envelopes": 0,
-     "visible_ms": 11053.036,
-     "fts_rebuild_ms": 4155.164,
-     "gc_retain0_ms": 4549.77,
+     "visible_ms": 12440.761,
+     "fts_rebuild_ms": 4045.218,
+     "gc_retain0_ms": 3884.338,
      "state": "{\"entities\":248157,\"edges\":1204889,\"quarantine\":[]}",
      "w3_check_against_reference": "{\"expected\":\"<scratch>/quiet/base/repo/docs/research/spikes/softschema-kb/harness/expected/S2-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
     },
     "parse": {
-     "wall_ms": 7399.665,
-     "seconds": 7.199,
+     "wall_ms": 7070.053,
+     "seconds": 6.848,
      "counts": {
       "node": 11590,
       "op": 11948,
@@ -162,7 +177,7 @@
       "entity": 11590,
       "edge": 70371
      },
-     "validation_seconds": 1.622,
+     "validation_seconds": 1.68,
      "validated": 11590,
      "ops": 11948,
      "quarantined": []
@@ -172,53 +187,59 @@
   {
    "rep": 2,
    "verdict": "keep",
-   "started_at": "2026-11-17T06:50:20Z",
-   "wall_s": 49.013,
+   "started_at": "2026-11-17T08:30:17Z",
+   "wall_s": 50.012,
    "load_before": [
-    0.94,
-    1.04,
-    1.13
+    0.97,
+    1.0,
+    1.07
    ],
    "load_after": [
-    1.26,
-    1.11,
-    1.15
+    0.99,
+    1.0,
+    1.06
    ],
-   "load1_max_during": 1.26,
-   "foreign_cpu_max": 0.147,
-   "waited_for_quiet_s": 130.0,
-   "disk_free_gb_before": 13.02,
-   "disk_free_gb_min": 10.6,
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.016,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 12.31,
+   "disk_free_gb_min": 9.85,
    "load_samples": [
     {
-     "t": 1794898230.2,
-     "load1": 1.1,
-     "own_cpu": 0.322,
-     "foreign_cpu": 0.046
+     "t": 1794904227.1,
+     "load1": 0.97,
+     "own_cpu": 0.27,
+     "foreign_cpu": 0.007
     },
     {
-     "t": 1794898240.2,
-     "load1": 1.08,
-     "own_cpu": 0.734,
-     "foreign_cpu": 0.147
+     "t": 1794904237.1,
+     "load1": 0.98,
+     "own_cpu": 0.729,
+     "foreign_cpu": 0.016
     },
     {
-     "t": 1794898250.2,
-     "load1": 1.15,
-     "own_cpu": 0.79,
-     "foreign_cpu": 0.027
+     "t": 1794904247.1,
+     "load1": 0.98,
+     "own_cpu": 0.865,
+     "foreign_cpu": 0.009
     },
     {
-     "t": 1794898260.2,
-     "load1": 1.12,
-     "own_cpu": 0.505,
-     "foreign_cpu": 0.019
+     "t": 1794904257.1,
+     "load1": 0.98,
+     "own_cpu": 0.513,
+     "foreign_cpu": 0.009
     },
     {
-     "t": 1794898269.2,
-     "load1": 1.26,
+     "t": 1794904267.2,
+     "load1": 0.99,
      "own_cpu": 0.0,
-     "foreign_cpu": 0.051
+     "foreign_cpu": 0.004
+    },
+    {
+     "t": 1794904267.2,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.0
     }
    ],
    "compare": {
@@ -226,11 +247,11 @@
    },
    "discarded_attempts": [],
    "metrics": {
-    "visible_ms": 11224.12,
-    "capture_ms": 6418.938,
-    "reconcile_ms": 4805.047,
-    "fts_sidecar_rebuild_ms": 3966.989,
-    "gc_retain0_ms": 3940.956,
+    "visible_ms": 12160.225,
+    "capture_ms": 6757.772,
+    "reconcile_ms": 5402.354,
+    "fts_sidecar_rebuild_ms": 4198.076,
+    "gc_retain0_ms": 3905.324,
     "envelope_bytes": 52453974
    },
    "detail": {
@@ -238,7 +259,7 @@
      "cpus": 4,
      "cpu_model": "Intel(R) Xeon(R) Processor",
      "mem_total_mib": 16088,
-     "mem_free_mib": 14505,
+     "mem_free_mib": 14244,
      "os": "linux 6.18.44-fc-v553",
      "filesystem": "ext2/ext3",
      "node": "v22.23.4",
@@ -247,19 +268,19 @@
     },
     "run": {
      "arm": "SnapshotStore",
-     "capture_ms": 6418.938,
+     "capture_ms": 6757.772,
      "envelope_bytes": 52453974,
-     "reconcile_ms": 4805.047,
+     "reconcile_ms": 5402.354,
      "quarantined_envelopes": 0,
-     "visible_ms": 11224.12,
-     "fts_rebuild_ms": 3966.989,
-     "gc_retain0_ms": 3940.956,
+     "visible_ms": 12160.225,
+     "fts_rebuild_ms": 4198.076,
+     "gc_retain0_ms": 3905.324,
      "state": "{\"entities\":248157,\"edges\":1204889,\"quarantine\":[]}",
      "w3_check_against_reference": "{\"expected\":\"<scratch>/quiet/base/repo/docs/research/spikes/softschema-kb/harness/expected/S2-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
     },
     "parse": {
-     "wall_ms": 6626.172,
-     "seconds": 6.512,
+     "wall_ms": 7086.336,
+     "seconds": 6.981,
      "counts": {
       "node": 11590,
       "op": 11948,
@@ -267,7 +288,7 @@
       "entity": 11590,
       "edge": 70371
      },
-     "validation_seconds": 1.588,
+     "validation_seconds": 1.726,
      "validated": 11590,
      "ops": 11948,
      "quarantined": []
@@ -383,6 +404,138 @@
      "ops": 11948,
      "quarantined": []
     }
+   }
+  }
+ ],
+ "superseded_runs": [
+  {
+   "rep": 1,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T06:47:21Z",
+   "wall_s": 49.01,
+   "load_before": [
+    0.92,
+    1.05,
+    1.15
+   ],
+   "load_after": [
+    1.07,
+    1.07,
+    1.16
+   ],
+   "load1_max_during": 1.1,
+   "foreign_cpu_max": 0.068,
+   "waited_for_quiet_s": 25.0,
+   "disk_free_gb_before": 13.5,
+   "disk_free_gb_min": 11.09,
+   "load_samples": [
+    {
+     "t": 1794898051.1,
+     "load1": 0.94,
+     "own_cpu": 0.173,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794898061.1,
+     "load1": 1.03,
+     "own_cpu": 0.752,
+     "foreign_cpu": 0.055
+    },
+    {
+     "t": 1794898071.1,
+     "load1": 1.1,
+     "own_cpu": 0.855,
+     "foreign_cpu": 0.009
+    },
+    {
+     "t": 1794898081.1,
+     "load1": 1.08,
+     "own_cpu": 0.533,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898090.1,
+     "load1": 1.07,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.068
+    }
+   ],
+   "compare": {
+    "w3-after-p05.json": "MATCH: 124 ok, 0 differ"
+   },
+   "discarded_attempts": [],
+   "metrics": {
+    "visible_ms": 11053.036,
+    "capture_ms": 6806.253,
+    "reconcile_ms": 4246.688,
+    "fts_sidecar_rebuild_ms": 4155.164,
+    "gc_retain0_ms": 4549.77,
+    "envelope_bytes": 52453974
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T06:50:20Z",
+   "wall_s": 49.013,
+   "load_before": [
+    0.94,
+    1.04,
+    1.13
+   ],
+   "load_after": [
+    1.26,
+    1.11,
+    1.15
+   ],
+   "load1_max_during": 1.26,
+   "foreign_cpu_max": 0.147,
+   "waited_for_quiet_s": 130.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 10.6,
+   "load_samples": [
+    {
+     "t": 1794898230.2,
+     "load1": 1.1,
+     "own_cpu": 0.322,
+     "foreign_cpu": 0.046
+    },
+    {
+     "t": 1794898240.2,
+     "load1": 1.08,
+     "own_cpu": 0.734,
+     "foreign_cpu": 0.147
+    },
+    {
+     "t": 1794898250.2,
+     "load1": 1.15,
+     "own_cpu": 0.79,
+     "foreign_cpu": 0.027
+    },
+    {
+     "t": 1794898260.2,
+     "load1": 1.12,
+     "own_cpu": 0.505,
+     "foreign_cpu": 0.019
+    },
+    {
+     "t": 1794898269.2,
+     "load1": 1.26,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.051
+    }
+   ],
+   "compare": {
+    "w3-after-p05.json": "MATCH: 124 ok, 0 differ"
+   },
+   "discarded_attempts": [],
+   "metrics": {
+    "visible_ms": 11224.12,
+    "capture_ms": 6418.938,
+    "reconcile_ms": 4805.047,
+    "fts_sidecar_rebuild_ms": 3966.989,
+    "gc_retain0_ms": 3940.956,
+    "envelope_bytes": 52453974
    }
   }
  ]
