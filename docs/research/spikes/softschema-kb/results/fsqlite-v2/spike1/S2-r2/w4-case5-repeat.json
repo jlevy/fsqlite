@@ -1,0 +1,229 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S2-r2",
+  "workflow": "W4 case 5 (view index change) as a derived version bump, repeated",
+  "recorded_at": "2026-11-17T05:29:27.296Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14519,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "reps": 3,
+  "publish_ms_median": 3930.712,
+  "gate_ms_median": 1259.556,
+  "build_index_ms_median": 320.687,
+  "warm_table_check_after_ms_median": 977.518,
+  "runs": [
+    {
+      "derived_version": 2,
+      "published": 2,
+      "publish_ms": 3930.712,
+      "build_index_ms": 320.687,
+      "statistics_ms": 3.278,
+      "gate": "tables",
+      "gate_ms": 1118.967,
+      "hook_ms": 324.487,
+      "created": [
+        "ix_view_repos_by_stars"
+      ],
+      "dropped": [
+        "ix_view_repos_by_stars"
+      ],
+      "warm_table_check_after_ms": 862.583,
+      "gc_ms": 5979.107,
+      "plan": [
+        "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+      ],
+      "store_id_unchanged": true
+    },
+    {
+      "derived_version": 3,
+      "published": 3,
+      "publish_ms": 4455.848,
+      "build_index_ms": 436.969,
+      "statistics_ms": 3.906,
+      "gate": "tables",
+      "gate_ms": 2087.823,
+      "hook_ms": 441.289,
+      "created": [
+        "ix_view_repos_by_stars"
+      ],
+      "dropped": [
+        "ix_view_repos_by_stars"
+      ],
+      "warm_table_check_after_ms": 996.192,
+      "gc_ms": 6307.075,
+      "plan": [
+        "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+      ],
+      "store_id_unchanged": true
+    },
+    {
+      "derived_version": 4,
+      "published": 4,
+      "publish_ms": 2500.34,
+      "build_index_ms": 273.621,
+      "statistics_ms": 3.212,
+      "gate": "tables",
+      "gate_ms": 1259.556,
+      "hook_ms": 277.29,
+      "created": [
+        "ix_view_repos_by_stars"
+      ],
+      "dropped": [
+        "ix_view_repos_by_stars"
+      ],
+      "warm_table_check_after_ms": 977.518,
+      "gc_ms": 6759.396,
+      "plan": [
+        "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+      ],
+      "store_id_unchanged": true
+    }
+  ]
+}

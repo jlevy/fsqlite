@@ -1,0 +1,1206 @@
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/common.ts b/docs/research/spikes/softschema-kb/fsqlite/common.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/common.ts	2026-11-17 03:07:40.146461225 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/common.ts	2026-11-17 04:48:09.908813355 +0000
+@@ -18,7 +18,8 @@
+ 
+ export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+ export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
+-export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
++// fsqlite v2 Spike 1: results go beside the baseline, in the same shape.
++export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite-v2', 'spike1')
+ export const SCRATCH =
+   process.env.KB_SCRATCH ??
+   '/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad'
+@@ -240,6 +241,7 @@
+   const path = join(dir, `${workflow}.json`)
+   const doc = {
+     backend: 'fsqlite',
++    variant: 'fsqlite-v2-spike1 (derived objects built in each generation)',
+     scale,
+     workflow,
+     recorded_at: new Date().toISOString(),
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/conflict.ts b/docs/research/spikes/softschema-kb/fsqlite/conflict.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/conflict.ts	2026-11-17 01:18:41.453876838 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/conflict.ts	2026-11-17 04:49:12.802576124 +0000
+@@ -13,7 +13,7 @@
+ import { DatabaseSync } from 'node:sqlite'
+ import { SnapshotStore } from './fsq.ts'
+ import { WORK_DIR, cloneStore, isMain, parseArgs, writeResult } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { GENERIC_POLICY, genericOptions } from './mapping.ts'
+ import { queryInstances } from './w3.ts'
+ 
+ type Action = 'lww' | 'union' | 'strict'
+@@ -64,11 +64,7 @@
+     const dir = join(work, action)
+     cloneStore(base ?? '', dir)
+     const policy = Object.fromEntries(Object.keys(GENERIC_POLICY).map((t) => [t, action]))
+-    const store = new SnapshotStore(dir, {
+-      schema: genericDdl(),
+-      schemaVersion: GENERIC_SCHEMA_VERSION,
+-      conflictPolicy: policy,
+-    }).init()
++    const store = new SnapshotStore(dir, { ...genericOptions(), conflictPolicy: policy }).init()
+     const baseSnapshot = store.snapshotPath(store.currentVersion())
+     const before = store.read((db) => bioOf(db, id))
+     const update = (value: string) => (db: DatabaseSync) => {
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/h3.ts b/docs/research/spikes/softschema-kb/fsqlite/h3.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/h3.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/h3.ts	2026-11-17 05:14:52.965240411 +0000
+@@ -0,0 +1,107 @@
++// v2 Spike 1 (H3): publish a new view index in the same store, several times, by bumping the
++// derived version with alternating view definitions. Each publish is one reconcile with no
++// pending envelopes; gc({ retain: 0 }) follows, then a warm per-table quick_check of the new
++// head separates a cold gate from the build.
++//
++// Usage: node h3.ts <store-dir> --scale S2-r2 [--reps 3]
++// Writes results/fsqlite-v2/spike1/<scale>/w4-case5-repeat.json.
++
++import { DatabaseSync } from 'node:sqlite'
++import { SnapshotStore, readStoreMarker } from './fsq.ts'
++import { isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
++import { BUILDS, GENERIC_DERIVED_VERSION, TABLE_VIEWS, genericOptions, genericPlans } from './mapping.ts'
++import { openReader } from './w3.ts'
++
++const LOCK = { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } }
++
++function warmTableCheckMs(path: string): number {
++  const db = new DatabaseSync(path, { readOnly: true })
++  try {
++    const tables = (db.prepare('PRAGMA main.table_list').all() as { name: string; type: string }[])
++      .filter((r) => (r.type === 'table' || r.type === 'shadow') && r.name !== 'sqlite_schema')
++      .map((r) => r.name)
++    const t = nowMs()
++    for (const name of tables) {
++      db.prepare(`PRAGMA main.quick_check("${name}")`).all()
++    }
++    return round(nowMs() - t)
++  } finally {
++    db.close()
++  }
++}
++
++function main(): void {
++  const { flags, args } = parseArgs(process.argv.slice(2))
++  const dir = args[0] ?? ''
++  const scale = flags.scale ?? 'S2-r2'
++  const reps = Number(flags.reps ?? 3)
++  const id = readStoreMarker(dir).store_id
++  const variants = [
++    TABLE_VIEWS.map((v) =>
++      v.name === 'repos_by_stars' ? { ...v, filter: "payload ->> '$.primary_language.name'" } : v,
++    ),
++    TABLE_VIEWS,
++  ]
++  const runs = []
++  for (let r = 0; r < reps; r++) {
++    const views = variants[r % 2] ?? TABLE_VIEWS
++    // The variant's filter is NULL on these string-valued payloads, so its total assertion
++    // is left out; the page assertions stay.
++    const plans = genericPlans(views).filter((p) => r % 2 === 1 || !p.name.endsWith('total'))
++    const version = GENERIC_DERIVED_VERSION + 1 + r
++    const t0 = nowMs()
++    const store = new SnapshotStore(dir, genericOptions({ views, derivedVersion: version, plans })).init()
++    const res = store.reconcile(LOCK)
++    const publishMs = nowMs() - t0
++    const build = BUILDS.at(-1)
++    const head = store.snapshotPath(store.currentVersion())
++    const tGc = nowMs()
++    store.gc({ retain: 0 })
++    const gcMs = nowMs() - tGc
++    const db = openReader(head)
++    const plan = (
++      db
++        .prepare(
++          `EXPLAIN QUERY PLAN SELECT id FROM entity INDEXED BY ix_view_repos_by_stars
++           WHERE kind = 'repository' AND ${views.find((v) => v.name === 'repos_by_stars')?.filter} = ?
++           ORDER BY payload ->> '$.stars' DESC, id LIMIT 50`,
++        )
++        .all('Python') as { detail: string }[]
++    ).map((x) => x.detail)
++    db.close()
++    runs.push({
++      derived_version: version,
++      published: res.published,
++      publish_ms: round(publishMs),
++      build_index_ms: build?.derive_ms,
++      statistics_ms: build?.statistics_ms,
++      gate: build?.gate,
++      gate_ms: build?.gate_ms,
++      hook_ms: build?.hook_ms,
++      created: build?.createdObjects,
++      dropped: build?.droppedObjects,
++      warm_table_check_after_ms: warmTableCheckMs(head),
++      gc_ms: round(gcMs),
++      plan,
++      store_id_unchanged: readStoreMarker(dir).store_id === id,
++    })
++  }
++  const sorted = (k: string) =>
++    runs.map((x) => Number((x as Record<string, unknown>)[k])).sort((a, b) => a - b)
++  const median = (k: string) => sorted(k)[Math.floor((runs.length - 1) / 2)]
++  console.log(
++    writeResult(scale, 'w4-case5-repeat', {
++      workflow: 'W4 case 5 (view index change) as a derived version bump, repeated',
++      reps: runs.length,
++      publish_ms_median: median('publish_ms'),
++      gate_ms_median: median('gate_ms'),
++      build_index_ms_median: median('build_index_ms'),
++      warm_table_check_after_ms_median: median('warm_table_check_after_ms'),
++      runs,
++    }),
++  )
++}
++
++if (isMain(import.meta.url)) {
++  main()
++}
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/load.ts b/docs/research/spikes/softschema-kb/fsqlite/load.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/load.ts	2026-11-17 01:14:36.189887853 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/load.ts	2026-11-17 05:00:23.454068456 +0000
+@@ -12,7 +12,7 @@
+ import { DirectStore, SnapshotStore } from './fsq.ts'
+ import { forEachLineSync, isMain, maxRssMiB, nowMs, parseArgs, round } from './common.ts'
+ import type { KbRow } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { BUILDS, BUILD_CACHE_KIB, GenericLoader, genericOptions } from './mapping.ts'
+ 
+ /** Compare loaded counts with the export's own `stats.json`, as paraverse's loader does. */
+ export function countProblems(db: DatabaseSync): string[] {
+@@ -55,6 +55,22 @@
+     'DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync',
+   lock_options: IMPORT_LOCK,
+   gc: 'none during the import; w1.ts then runs gc({ retain: 0 }) and times it',
++  v2_spike1: {
++    control_without_derived: process.env.FSQ_NO_DERIVED === '1',
++    derived:
++      'indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics ' +
++      'built inside the generation build; the DirectStore import drops them before the rows and ' +
++      'rebuilds them after (indexes after rows); a bulk reconcile does the same',
++    build_cache_kib: BUILD_CACHE_KIB,
++    analysis_limit: Number(process.env.FSQ_ANALYSIS_LIMIT ?? 0),
++    rebuild_above_ratio: Number(process.env.FSQ_REBUILD_RATIO ?? 0.5),
++  },
++}
++
++/** The derived build fsqlite reported for the import's publish. */
++function lastBuild(): Record<string, unknown> | null {
++  const b = BUILDS.at(-1)
++  return b ? { ...b } : null
+ }
+ 
+ /**
+@@ -103,10 +119,7 @@
+ 
+ export function loadDirect(jsonl: string, dir: string): Record<string, unknown> {
+   const t0 = nowMs()
+-  const store = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  }).init()
++  const store = new DirectStore(dir, genericOptions()).init()
+   const tInit = nowMs()
+   let counts: GenericLoader['counts'] | undefined
+   let phases: Record<string, number> = {}
+@@ -127,16 +140,19 @@
+         throw new Error(`load does not match stats.json: ${problems.slice(0, 5).join('; ')}`)
+       }
+     },
+-    { lockOpts: IMPORT_LOCK },
++    { lockOpts: IMPORT_LOCK, derived: 'rebuild' },
+   )
+   const tWrite = nowMs()
++  const build = lastBuild()
+   const snapshot = store.snapshotPath(version)
+   const publishMs = tWrite - tInit - callbackMs
+   const qc = quickCheckMs(snapshot)
+   return {
+     arm: 'DirectStore',
+-    route: 'init() with the DDL, then one DirectStore.write streaming every row',
++    route:
++      'init() with the base DDL, then one DirectStore.write({ derived: "rebuild" }) streaming every row',
+     version,
++    build,
+     counts,
+     phases: {
+       init_ddl_ms: round(tInit - t0),
+@@ -144,7 +160,13 @@
+       verify_counts_ms: round(verifyMs),
+       publish_ms: round(publishMs),
+       publish_note:
+-        'COMMIT, quick_check, foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs',
++        'derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check ' +
++        '(full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs',
++      derived_hook_ms: build ? round(Number(build.hook_ms)) : null,
++      gate_ms: build ? round(Number(build.gate_ms)) : null,
++      publish_without_hook_and_gate_ms: build
++        ? round(publishMs - Number(build.hook_ms) - Number(build.gate_ms))
++        : null,
+       quick_check_warm_ms: qc,
+       ingest_through_durable_ms: round(tWrite - t0 - (phases.decode_ms ?? 0)),
+     },
+@@ -157,11 +179,7 @@
+ 
+ export function loadSnapshot(jsonl: string, dir: string, batch: number): Record<string, unknown> {
+   const t0 = nowMs()
+-  const store = new SnapshotStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-    conflictPolicy: GENERIC_POLICY,
+-  }).init()
++  const store = new SnapshotStore(dir, genericOptions()).init()
+   const tInit = nowMs()
+   // Rows are buffered per batch because a capture callback must run synchronously.
+   let pending: KbRow[] = []
+@@ -202,6 +220,7 @@
+   const tCaptured = nowMs()
+   const result = store.reconcile({ lockOpts: IMPORT_LOCK })
+   const tReconciled = nowMs()
++  const build = lastBuild()
+   const problems = store.read((db) => countProblems(db))
+   const snapshot = store.snapshotPath(result.published)
+   return {
+@@ -211,6 +230,7 @@
+     captures,
+     counts,
+     reconcile: result,
++    build,
+     phases: {
+       init_ddl_ms: round(tInit - t0),
+       decode_ms: round(decodeMs),
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/mapping.ts b/docs/research/spikes/softschema-kb/fsqlite/mapping.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/mapping.ts	2026-11-17 03:08:11.802428951 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/mapping.ts	2026-11-17 05:00:23.453897141 +0000
+@@ -16,6 +16,7 @@
+ // accept it and concurrent envelopes never quarantine on ordering.
+ 
+ import type { DatabaseSync, StatementSync } from 'node:sqlite'
++import type { BuildInfo, ChangedKeys, DerivedSpec, PlanAssertion, Relation } from './fsq.ts'
+ import type {
+   DocRow,
+   EdgeRow,
+@@ -151,6 +152,206 @@
+ 
+ export const GENERIC_SCHEMA_VERSION = 1
+ 
++// ---------------------------------------------------------------------------------------
++// fsqlite v2 Spike 1: the same mapping split into base tables (the changeset contract) and
++// derived objects that every generation build maintains (indexes, an FTS5 trigram index,
++// a facet summary, statistics), plus closure relations and plan assertions.
++
++/** The base tables only: what envelopes carry and the schema hash covers. */
++export function baseDdl(): string {
++  return genericDdl()
++    .split('\n')
++    .filter((line) => !line.startsWith('CREATE INDEX'))
++    .join('\n')
++}
++
++/** Derived objects: every secondary index, the in-file search index, the facet summary. */
++export function derivedDdl(views: readonly TableView[] = TABLE_VIEWS): string {
++  const indexes = genericDdl(views)
++    .split('\n')
++    .filter((line) => line.startsWith('CREATE INDEX'))
++  return [
++    ...indexes,
++    // Search: a contentless trigram index whose rowids map to search_text keys.
++    'CREATE TABLE search_doc (docid INTEGER PRIMARY KEY, id TEXT NOT NULL, r INTEGER NOT NULL, UNIQUE (id, r));',
++    "CREATE VIRTUAL TABLE search_fts USING fts5(text, content = '', contentless_delete = 1, tokenize = 'trigram');",
++    // Facets: distinct sources per (relation, source kind, target).
++    `CREATE TABLE facet_count (relation TEXT NOT NULL, target TEXT NOT NULL, source_kind TEXT NOT NULL,
++  n INTEGER NOT NULL, PRIMARY KEY (relation, target, source_kind)) WITHOUT ROWID;`,
++    'CREATE INDEX ix_facet_top ON facet_count (relation, source_kind, n DESC, target);',
++  ].join('\n')
++}
++
++const FACET_GROUP = `INSERT INTO facet_count (relation, target, source_kind, n)
++  SELECT g.relation, g.target, s.kind, count(DISTINCT g.source)
++  FROM edge g JOIN entity s ON s.id = g.source`
++
++/** Fill the derived tables from the base tables (they are empty when this runs). */
++function rebuildDerived(db: DatabaseSync): void {
++  db.exec(`
++    INSERT INTO search_doc (id, r) SELECT id, rank FROM search_text ORDER BY id, rank;
++    INSERT INTO search_fts (rowid, text)
++      SELECT d.docid, s.text FROM search_doc d JOIN search_text s ON s.id = d.id AND s.rank = d.r
++      ORDER BY d.docid;
++    INSERT INTO search_fts (search_fts) VALUES ('optimize');
++    ${FACET_GROUP} GROUP BY g.relation, g.target, s.kind;
++  `)
++}
++
++/** Bring the search index and the facet summary up to date for the changed base rows. */
++function updateDerived(db: DatabaseSync, changes: ChangedKeys): void {
++  const ids = new Set<string>()
++  for (const table of ['search_text', 'entity']) {
++    for (const r of changes.get(table) ?? []) {
++      ids.add(String(r.key[0]))
++    }
++  }
++  if (ids.size > 0) {
++    const docs = db.prepare('SELECT docid FROM search_doc WHERE id = ?')
++    const ftsDelete = db.prepare('DELETE FROM search_fts WHERE rowid = ?')
++    const docDelete = db.prepare('DELETE FROM search_doc WHERE id = ?')
++    const docInsert = db.prepare(
++      'INSERT INTO search_doc (id, r) SELECT id, rank FROM search_text WHERE id = ? ORDER BY rank',
++    )
++    const ftsInsert = db.prepare(
++      `INSERT INTO search_fts (rowid, text) SELECT d.docid, s.text FROM search_doc d
++       JOIN search_text s ON s.id = d.id AND s.rank = d.r WHERE d.id = ? ORDER BY d.docid`,
++    )
++    for (const id of [...ids].sort()) {
++      for (const d of docs.all(id) as { docid: number }[]) {
++        ftsDelete.run(d.docid)
++      }
++      docDelete.run(id)
++      docInsert.run(id)
++      ftsInsert.run(id)
++    }
++  }
++  // Facet groups: every (relation, target) a changed edge names, and every group a changed
++  // entity is a source of (its kind may have changed).
++  const groups = new Set<string>()
++  for (const r of changes.get('edge') ?? []) {
++    groups.add(JSON.stringify([r.key[1], r.key[2]]))
++  }
++  const out = db.prepare('SELECT DISTINCT relation, target FROM edge WHERE source = ?')
++  for (const r of changes.get('entity') ?? []) {
++    for (const g of out.all(r.key[0] as string) as { relation: string; target: string }[]) {
++      groups.add(JSON.stringify([g.relation, g.target]))
++    }
++  }
++  if (groups.size > 0) {
++    const drop = db.prepare('DELETE FROM facet_count WHERE relation = ? AND target = ?')
++    const add = db.prepare(`${FACET_GROUP} WHERE g.relation = ? AND g.target = ? GROUP BY s.kind`)
++    for (const g of [...groups].sort()) {
++      const [relation, target] = JSON.parse(g) as [string, string]
++      drop.run(relation, target)
++      add.run(relation, target)
++    }
++  }
++}
++
++/** The view page as W3 runs it, for a plan assertion. */
++function viewPageSql(v: TableView, hinted: boolean): string {
++  const from = hinted ? `entity INDEXED BY ix_view_${v.name}` : 'entity'
++  return `SELECT id, label, ${v.value} AS value FROM ${from} WHERE kind = '${v.kind}'${
++    v.filter ? ` AND ${v.filter} = ?` : ''
++  } ORDER BY ${v.sort}${v.descending ? ' DESC' : ''}, id LIMIT ? OFFSET ?`
++}
++
++export const HUB_JOIN_UNHINTED = `SELECT e.id, e.label FROM (SELECT DISTINCT source FROM edge
++  WHERE target = ? AND relation = 'affiliated_with') m
++  CROSS JOIN entity e ON e.id = m.source WHERE e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?`
++
++/**
++ * Plans every build asserts: the W3 view pages, each filtered view's total (W3 does not pin
++ * it, and sampled statistics moved it off its index), and the people-by-org join with no hint.
++ */
++export function genericPlans(views: readonly TableView[] = TABLE_VIEWS): PlanAssertion[] {
++  return [
++    ...views.map((v) => ({
++      name: `view ${v.name}`,
++      sql: viewPageSql(v, true),
++      uses: `ix_view_${v.name}`,
++    })),
++    ...views
++      .filter((v) => v.filter !== null)
++      .map((v) => ({
++        name: `view ${v.name} total`,
++        sql: `SELECT count(*) AS n FROM entity WHERE kind = '${v.kind}' AND ${v.filter} = ?`,
++        uses: `ix_view_${v.name}`,
++      })),
++    {
++      name: 'people_by_org join without a hint',
++      sql: HUB_JOIN_UNHINTED,
++      uses: ['ix_entity_id_kind', 'sqlite_autoindex_entity_1'],
++    },
++  ]
++}
++
++/** The unfiltered view page without INDEXED BY: statistics do not fix its plan (A.8). */
++export function unhintedViewPlan(): PlanAssertion {
++  const v = TABLE_VIEWS.find((x) => x.name === 'repos_all_by_stars') as TableView
++  return { name: 'repos_all_by_stars without INDEXED BY', sql: viewPageSql(v, false), uses: 'ix_view_repos_all_by_stars' }
++}
++
++export const GENERIC_DERIVED_VERSION = 1
++
++export function genericDerived(
++  views: readonly TableView[] = TABLE_VIEWS,
++  version = GENERIC_DERIVED_VERSION,
++  plans: PlanAssertion[] = genericPlans(views),
++): DerivedSpec {
++  return {
++    version,
++    ddl: derivedDdl(views),
++    rebuild: rebuildDerived,
++    update: updateDerived,
++    statistics: 'optimize',
++    analysisLimit: Number(process.env.FSQ_ANALYSIS_LIMIT ?? 0),
++    plans,
++    rebuildAboveRatio: Number(process.env.FSQ_REBUILD_RATIO ?? 0.5),
++  }
++}
++
++/** Closure: an edge whose endpoint a build deleted (a delete, or a merge's absorbed node) goes. */
++export const GENERIC_RELATIONS: Relation[] = [
++  { child: 'edge', columns: ['source'], parent: 'entity', onMissing: 'delete' },
++  { child: 'edge', columns: ['target'], parent: 'entity', onMissing: 'delete' },
++]
++
++/** The build page cache (KiB); `FSQ_BUILD_CACHE_KIB` overrides the 256 MiB default. */
++export const BUILD_CACHE_KIB = Number(process.env.FSQ_BUILD_CACHE_KIB ?? 262144)
++
++/** Every build this process ran, as fsqlite reported it. */
++export const BUILDS: BuildInfo[] = []
++
++/** Store options for the generic mapping under v2 Spike 1. */
++export function genericOptions(
++  o: { views?: readonly TableView[]; derivedVersion?: number; plans?: PlanAssertion[] } = {},
++) {
++  const views = o.views ?? TABLE_VIEWS
++  if (process.env.FSQ_NO_DERIVED === '1') {
++    // Control for H4: the f1.0 schema (indexes in the base DDL, no derived objects, no
++    // closure), with only the build page cache changed.
++    return {
++      schema: genericDdl(views),
++      schemaVersion: GENERIC_SCHEMA_VERSION,
++      conflictPolicy: GENERIC_POLICY,
++      buildCacheKiB: BUILD_CACHE_KIB,
++    }
++  }
++  return {
++    schema: baseDdl(),
++    schemaVersion: GENERIC_SCHEMA_VERSION,
++    conflictPolicy: GENERIC_POLICY,
++    derived: genericDerived(views, o.derivedVersion, o.plans ?? genericPlans(views)),
++    relations: GENERIC_RELATIONS,
++    buildCacheKiB: BUILD_CACHE_KIB,
++    onBuild: (info: BuildInfo) => {
++      BUILDS.push(info)
++    },
++  }
++}
++
+ /** SnapshotStore merge policy: crawler and agent writes replace whole rows. */
+ export const GENERIC_POLICY = {
+   entity: 'lww',
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/plans.ts b/docs/research/spikes/softschema-kb/fsqlite/plans.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/plans.ts	2026-11-17 03:23:55.636762802 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/plans.ts	2026-11-17 04:49:55.869080246 +0000
+@@ -5,11 +5,64 @@
+ // Usage: node plans.ts <store-dir> --scale S0
+ // Writes results/fsqlite/<scale>/w3-plans.json.
+ 
+-import { isMain, nowMs, parseArgs, percentile, round, writeResult } from './common.ts'
+-import { TABLE_VIEWS } from './mapping.ts'
++import { readdirSync, rmSync } from 'node:fs'
++import { join } from 'node:path'
++import { DirectStore, FsqliteError } from './fsq.ts'
++import { cloneStore, isMain, nowMs, parseArgs, percentile, round, writeResult } from './common.ts'
++import { BUILDS, TABLE_VIEWS, genericOptions, genericPlans, unhintedViewPlan } from './mapping.ts'
+ import { genericStore, openReader, queryInstances } from './w3.ts'
+ import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
+ 
++/**
++ * v2 Spike 1 (H2): plan assertions run inside the generation build. On a hard-link clone,
++ * a no-op serialized-lane build that also asserts the unfiltered view's plan without
++ * INDEXED BY must fail and publish nothing; the same build with the declared assertions
++ * passes and publishes.
++ */
++function planAssertionBuilds(dir: string): Record<string, unknown> {
++  const clone = `${dir}-plan-clone`
++  cloneStore(dir, clone)
++  const out: Record<string, unknown> = {}
++  try {
++    const failing = new DirectStore(clone, genericOptions({ plans: [...genericPlans(), unhintedViewPlan()] }))
++    const before = failing.currentVersion()
++    const t = nowMs()
++    try {
++      failing.write(() => undefined, { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++      out.with_unhinted_view_assertion = { refused: false }
++    } catch (error) {
++      out.with_unhinted_view_assertion = {
++        refused: true,
++        code: error instanceof FsqliteError ? error.code : 'error',
++        message: (error as Error).message,
++      }
++    }
++    Object.assign(out.with_unhinted_view_assertion as object, {
++      ms: round(nowMs() - t),
++      current_before: before,
++      current_after: failing.currentVersion(),
++      transients_left: readdirSync(join(clone, 'snapshots')).filter((f) => f.startsWith('.')),
++    })
++    const passing = new DirectStore(clone, genericOptions())
++    const t2 = nowMs()
++    const version = passing.write(() => undefined, { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++    const build = BUILDS.at(-1)
++    out.with_declared_assertions = {
++      published: version,
++      ms: round(nowMs() - t2),
++      hook_ms: build?.hook_ms,
++      statistics_ms: build?.statistics_ms,
++      plans_ms: build?.plans_ms,
++      gate: build?.gate,
++      gate_ms: build?.gate_ms,
++      plans: build?.plans,
++    }
++  } finally {
++    rmSync(clone, { recursive: true, force: true })
++  }
++  return out
++}
++
+ function probe(db: DatabaseSync, sql: string, params: SQLInputValue[]) {
+   const stmt = db.prepare(sql)
+   const first = JSON.stringify(stmt.all(...params))
+@@ -108,7 +161,29 @@
+       }
+     }
+   }
+-  console.log(writeResult(scale, 'w3-plans', { workflow: 'W3 plan audit (C7)', queries: out }))
++  const stats = (() => {
++    const s = openReader(store.snapshotPath(store.currentVersion()))
++    try {
++      return {
++        sqlite_stat1_rows: (s.prepare('SELECT count(*) AS n FROM sqlite_stat1').get() as { n: number }).n,
++        derived_version: (s.prepare("SELECT value FROM fsqlite_meta WHERE key = 'derived_version'").get() as { value: string } | undefined)?.value,
++      }
++    } finally {
++      s.close()
++    }
++  })()
++  const assertions = flags['skip-assertions'] === 'true' ? null : planAssertionBuilds(args[0] ?? '')
++  console.log(
++    writeResult(scale, 'w3-plans', {
++      workflow: 'W3 plan audit (C7)',
++      v2_spike1: {
++        statistics: 'built in each generation (ANALYZE after a rebuild, PRAGMA optimize after an update)',
++        head: stats,
++        plan_assertion_builds: assertions,
++      },
++      queries: out,
++    }),
++  )
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/queries.ts b/docs/research/spikes/softschema-kb/fsqlite/queries.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/queries.ts	2026-11-17 03:23:55.636553255 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/queries.ts	2026-11-17 04:48:09.909037745 +0000
+@@ -72,6 +72,10 @@
+ export interface QueryOptions {
+   /** Search through an attached FTS5 trigram sidecar instead of scanning `search_text`. */
+   fts?: boolean
++  /** v2 Spike 1: search through the generation's own FTS5 index (`search_fts`, `search_doc`). */
++  ftsInline?: boolean
++  /** v2 Spike 1: answer facets from the generation's `facet_count` summary. */
++  facetSummary?: boolean
+   /** Use the recursive-CTE path query instead of bidirectional BFS. */
+   pathCte?: boolean
+ }
+@@ -207,10 +211,13 @@
+   search(term: string, limit: number): unknown {
+     // A trigram index matches a quoted phrase as a substring, but only for 3+ characters;
+     // shorter terms scan. (A LIKE with an ESCAPE clause would bypass the index.)
+-    const fts = this.opts.fts === true && [...term].length >= 3
+-    const hits = fts
+-      ? 'SELECT id, min(r) AS rank FROM fts.search_fts WHERE search_fts MATCH ? GROUP BY id'
+-      : 'SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id'
++    const fts = (this.opts.fts === true || this.opts.ftsInline === true) && [...term].length >= 3
++    const hits = !fts
++      ? 'SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id'
++      : this.opts.ftsInline === true
++        ? `SELECT d.id, min(d.r) AS rank FROM search_fts f JOIN search_doc d ON d.docid = f.rowid
++           WHERE search_fts MATCH ? GROUP BY d.id`
++        : 'SELECT id, min(r) AS rank FROM fts.search_fts WHERE search_fts MATCH ? GROUP BY id'
+     const pattern = fts ? `"${term.replace(/"/g, '""')}"` : term
+     const rows = this.stmt(
+       `WITH hits AS MATERIALIZED (${hits})
+@@ -358,6 +365,19 @@
+   }
+ 
+   facet(relation: string, sourceKind: string, limit: number): unknown {
++    if (this.opts.facetSummary === true) {
++      const rows = this.stmt(
++        `SELECT f.target AS id, e.label AS name, f.n AS count,
++           (SELECT count(*) FROM facet_count WHERE relation = ?1 AND source_kind = ?2) AS total
++         FROM facet_count f JOIN entity e ON e.id = f.target
++         WHERE f.relation = ?1 AND f.source_kind = ?2
++         ORDER BY f.n DESC, f.target LIMIT ?3`,
++      ).all(relation, sourceKind, limit) as { id: string; name: string; count: number; total: number }[]
++      return {
++        groups: rows[0]?.total ?? 0,
++        top: rows.map(({ id, name, count }) => ({ id, name, count })),
++      }
++    }
+     const rows = this.stmt(
+       `WITH groups AS MATERIALIZED (
+          SELECT g.target AS id, count(DISTINCT g.source) AS n
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/run_spike1.sh b/docs/research/spikes/softschema-kb/fsqlite/run_spike1.sh
+--- a/docs/research/spikes/softschema-kb/fsqlite/run_spike1.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/run_spike1.sh	2026-11-17 05:04:41.941267852 +0000
+@@ -0,0 +1,58 @@
++#!/usr/bin/env bash
++# fsqlite v2 Spike 1 (derive at build): the measurements the design lists, at one scale.
++#
++# Usage: fsqlite/run_spike1.sh S1|S2|S1-r2|S2-r2
++#
++# Results go to results/fsqlite-v2/spike1/<scale>/. Working stores go to
++# $KB_SCRATCH/fsqlite-spike/<scale> and are deleted at the end. Environment:
++#   H4_ROUNDS     rounds of the round-2 build-cache matrix (default 3)
++#   W2_CLOSURE=0  skip the round-2 four-writer run that checks the in-build closure
++#   TRICKLE_SECONDS, TRICKLE_REPS as in run.sh
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike1.sh <scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++SCRATCH=${KB_SCRATCH:?set KB_SCRATCH to a directory holding kb-corpora}
++WORK=$SCRATCH/fsqlite-spike/$SCALE
++DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++case "$SCALE" in
++  *-r2)
++    # W1 with the schema check as a phase, through DirectStore; its store serves W3, the plan
++    # audit with the plan-assertion builds, and the four-writer closure check.
++    "${NODE[@]}" w1.ts --scale "$SCALE" --validate --routes direct
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE" --name w3-fts --fts-inline --facet-summary
++    "${NODE[@]}" plans.ts "$WORK/store-direct" --scale "$SCALE"
++    if [ "${W2_CLOSURE:-1}" != 0 ]; then
++      "${NODE[@]}" w2.ts "$WORK/store-direct" --scale "$SCALE" --deltas "$DELTAS" \
++        --no-closure-envelope --name w2-inbuild-closure
++    fi
++    rm -rf "$WORK/store-direct"
++    # H4: the SnapshotStore import's reconcile with a 256 MiB and the default 2 MB build
++    # cache, with the derived objects and, as a control, with the f1.0 schema.
++    for r in $(seq 1 "${H4_ROUNDS:-3}"); do
++      "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot --reuse-rows --name "w1-h4-v2-256m-r$r"
++      FSQ_BUILD_CACHE_KIB=2000 "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot \
++        --reuse-rows --name "w1-h4-v2-2m-r$r"
++      FSQ_NO_DERIVED=1 "${NODE[@]}" w1.ts --scale "$SCALE" --routes snapshot --reuse-rows \
++        --name "w1-h4-f10-256m-r$r"
++      FSQ_NO_DERIVED=1 FSQ_BUILD_CACHE_KIB=2000 "${NODE[@]}" w1.ts --scale "$SCALE" \
++        --routes snapshot --reuse-rows --name "w1-h4-f10-2m-r$r"
++    done
++    ;;
++  *)
++    "${NODE[@]}" w1.ts --scale "$SCALE" --routes direct
++    rm -f "$WORK/rows.jsonl"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE" --name w3-fts --fts-inline --facet-summary
++    "${NODE[@]}" plans.ts "$WORK/store-direct" --scale "$SCALE"
++    "${NODE[@]}" trickle.ts "$WORK/store-direct" --scale "$SCALE" --delta "$DELTAS/p20" \
++      --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-3}"
++    "${NODE[@]}" w4.ts --scale "$SCALE" --cases string_to_object --skip-typed --name w4-case5
++    ;;
++esac
++
++rm -rf "$WORK"
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/trickle.ts b/docs/research/spikes/softschema-kb/fsqlite/trickle.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/trickle.ts	2026-11-17 01:18:03.429878546 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/trickle.ts	2026-11-17 04:48:51.402707910 +0000
+@@ -26,8 +26,7 @@
+   writeResult,
+ } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { BUILDS, GenericLoader, genericOptions } from './mapping.ts'
+ import { NODE, UV_PYTHON } from './w1.ts'
+ import { readUnits } from './w2_worker.ts'
+ import { genericStore } from './w3.ts'
+@@ -56,15 +55,12 @@
+   }
+ }
+ 
+-function batches(base: string, rows: string, work: string, reps: number, sidecar: string) {
++function batches(base: string, rows: string, work: string, reps: number) {
+   const { nodes, units } = readUnits(rows)
+   const dir = join(work, 'store')
+   cloneStore(base, dir)
+   const snap = genericStore(dir).init()
+-  const direct = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  })
++  const direct = new DirectStore(dir, genericOptions())
+   let next = 0
+   const take = (n: number): KbRow[][] => {
+     const out = units.slice(next, next + n)
+@@ -92,15 +88,24 @@
+           direct.write(applyUnits(nodes, batch), LOCK)
+         }
+         const visible = nowMs() - t0
+-        const head = snap.snapshotPath(snap.currentVersion())
+-        const fts = buildFtsSidecar(head, sidecar)
++        // v2 Spike 1: the FTS5 index and the facet summary are in the published generation,
++        // so indexed search is visible exactly when the data is; there is no sidecar.
++        const build = BUILDS.at(-1)
+         const tGc = nowMs()
+         snap.gc({ retain: 0 })
+         runs.push({
+           capture_ms: round(captureMs),
+           reconcile_ms: round(reconcileMs),
+           visible_ms: round(visible),
+-          fts_rebuild_ms: fts.build_ms ?? 0,
++          indexed_search_visible_ms: round(visible),
++          publish_ms: round(arm === 'SnapshotStore' ? reconcileMs : visible),
++          hook_ms: round(build?.hook_ms ?? Number.NaN),
++          gate_ms: round(build?.gate_ms ?? Number.NaN),
++          apply_ms: round(build?.apply_ms ?? Number.NaN),
++          changed_rows: build?.changedRows ?? Number.NaN,
++          derive_ms: round(build?.derive_ms ?? Number.NaN),
++          statistics_ms: round(build?.statistics_ms ?? Number.NaN),
++          closure_ms: round(build?.closure_ms ?? Number.NaN),
+           gc_ms: round(nowMs() - tGc),
+         })
+       }
+@@ -112,8 +117,13 @@
+         capture_ms: arm === 'SnapshotStore' ? stat('capture_ms') : null,
+         reconcile_ms: arm === 'SnapshotStore' ? stat('reconcile_ms') : null,
+         visible_ms_median: stat('visible_ms'),
++        visible_after_ms: stat('visible_ms'),
++        indexed_search_visible_after_ms: stat('indexed_search_visible_ms'),
++        publish_ms_median: stat('publish_ms'),
++        hook_ms_median: stat('hook_ms'),
++        gate_ms_median: stat('gate_ms'),
+         records_per_s: round((size * 1000) / stat('visible_ms'), 2),
+-        fts_rebuild_ms_median: stat('fts_rebuild_ms'),
++        fts_rebuild_ms_median: 0,
+         gc_retain0_ms_median: stat('gc_ms'),
+         runs,
+       }
+@@ -210,7 +220,7 @@
+     workflow: 'W2 trickle (C18)',
+     delta: flags.delta,
+     gc: 'gc({ retain: 0 }) after every publish',
+-    batches: batches(base, rows, work, Number(flags.reps ?? 3), join(work, 'search-fts.sqlite')),
++    batches: batches(base, rows, work, Number(flags.reps ?? 3)),
+     sustained: await sustained(base, rows, work, Number(flags.seconds ?? 20)),
+   }
+   rmSync(work, { recursive: true, force: true })
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w1.ts b/docs/research/spikes/softschema-kb/fsqlite/w1.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w1.ts	2026-11-17 03:08:26.557581109 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w1.ts	2026-11-17 04:48:32.747209594 +0000
+@@ -7,7 +7,7 @@
+ // <work>/<scale>/store-direct for the later workflows.
+ 
+ import { spawnSync } from 'node:child_process'
+-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
++import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
+@@ -20,7 +20,6 @@
+   round,
+   writeResult,
+ } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+ import { genericStore } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+@@ -97,7 +96,12 @@
+   const rows = join(work, 'rows.jsonl')
+ 
+   const validate = flags.validate === 'true' ? ['--validate'] : []
+-  const parse = measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows, ...validate])
++  // v2 Spike 1: --reuse-rows keeps an earlier parse of the same corpus, so the routes can run
++  // one at a time within the disk budget. The parse figures then come from that earlier run.
++  const reuse = flags['reuse-rows'] === 'true' && existsSync(rows)
++  const parse = reuse
++    ? { reused: true, seconds: Number.NaN }
++    : measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows, ...validate])
+   const result: Record<string, unknown> = {
+     kb_bytes: dirBytes(kb),
+     parse: {
+@@ -144,16 +148,27 @@
+       snapshot_bytes: statSync(snapshot).size,
+       breakdown: route === 'direct' ? sizeBreakdown(snapshot) : undefined,
+     }
++    // v2 Spike 1: indexed search lives in the generation, so there is no sidecar to build.
++    entry.fts_sidecar = 'none: the FTS5 index is a derived object inside the generation'
+     if (route === 'direct') {
+-      // The FTS5 search sidecar is part of making the store servable with indexed search.
+-      entry.fts_sidecar = buildFtsSidecar(snapshot, join(work, 'search-fts.sqlite'))
++      const sizes = entry.breakdown as Record<string, number>
++      const derivedBytes = (pred: (n: string) => boolean): number =>
++        Object.entries(sizes).reduce((n, [k, v]) => (pred(k) ? n + v : n), 0)
++      entry.derived_bytes = {
++        search_fts_and_search_doc: derivedBytes(
++          (k) => k.startsWith('search_fts') || k.startsWith('search_doc') || k === 'sqlite_autoindex_search_doc_1',
++        ),
++        facet_count: derivedBytes((k) => k.startsWith('facet_count') || k === 'ix_facet_top'),
++        secondary_indexes: derivedBytes((k) => k.startsWith('ix_') && k !== 'ix_facet_top'),
++        sqlite_stat1: derivedBytes((k) => k === 'sqlite_stat1'),
++      }
+     }
+     result[route] = entry
+     if (route !== 'direct' && !flags.keep) {
+       rmSync(store, { recursive: true, force: true })
+     }
+   }
+-  console.log(writeResult(scale, 'w1', result))
++  console.log(writeResult(scale, flags.name ?? 'w1', result))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w2.ts b/docs/research/spikes/softschema-kb/fsqlite/w2.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w2.ts	2026-11-17 03:47:21.114002383 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w2.ts	2026-11-17 04:55:25.008210321 +0000
+@@ -38,8 +38,7 @@
+   writeResult,
+ } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { buildFtsSidecar } from './fts.ts'
+-import { GenericLoader } from './mapping.ts'
++import { BUILDS, GenericLoader } from './mapping.ts'
+ import { readUnits } from './w2_worker.ts'
+ import { genericStore, isV2, runOnSnapshot } from './w3.ts'
+ 
+@@ -191,6 +190,11 @@
+   /** After publishing, run W3 v2 on the head and compare it with this expected file. */
+   expected?: string
+   checkOut?: string
++  /**
++   * v2 Spike 1: skip the closure envelope, so the state after the first publish (and any
++   * retry) shows what the closure relations inside the build left.
++   */
++  noClosureEnvelope?: boolean
+ }
+ 
+ async function batch(
+@@ -261,6 +265,7 @@
+       },
+   )
+   let reconcile: Record<string, unknown> | null = null
++  const buildsBefore = BUILDS.length
+   if (strategy !== 'direct') {
+     const t = nowMs()
+     const result = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+@@ -301,6 +306,30 @@
+             ).n,
+         )
+       const before = dangling()
++      const inBuild = BUILDS.slice(buildsBefore)
++      reconcile.closure_in_build = {
++        builds: inBuild.length,
++        removed_edges: inBuild.reduce((n, b) => n + b.closureRemoved, 0),
++        closure_ms: inBuild.map((b) => b.closure_ms),
++        hook_ms: inBuild.map((b) => b.hook_ms),
++        dangling_edges_after: before,
++      }
++    }
++    if (opts.v2BaseKb && !opts.noClosureEnvelope) {
++      const dangling = (): number =>
++        handle.read(
++          (db) =>
++            (
++              db
++                .prepare(
++                  `SELECT count(*) AS n FROM edge g
++                   WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
++                      OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
++                )
++                .get() as { n: number }
++            ).n,
++        )
++      const before = dangling()
+       const t3 = nowMs()
+       const tx = handle.write('closure', (db) => {
+         const loader = new GenericLoader(db)
+@@ -323,9 +352,9 @@
+   const complete = Date.now()
+   const published = Date.now()
+   const head = handle.currentVersion()
+-  // Indexed search follows each publish: rebuild the FTS5 sidecar for the new head.
+-  const sidecar = buildFtsSidecar(handle.snapshotPath(head), join(dir, 'search-fts.sqlite'))
+-  const searchVisible = Date.now()
++  // v2 Spike 1: the FTS5 index is inside the published generation; there is no sidecar.
++  const sidecar = 'none: in-file FTS5 index built by the generation build'
++  const searchVisible = published
+   // The reader checks `current` before every query; give it time to reopen on the head.
+   await new Promise((r) => setTimeout(r, 500))
+   writeFileSync(stop, '')
+@@ -575,6 +604,7 @@
+           checkOut: join(RESULTS_DIR, scale, `w3-after-${name}-${writers}writers.json`),
+         }
+       : {}
++    opts.noClosureEnvelope = flags['no-closure-envelope'] === 'true'
+     const b = await batch(base, scale, join(deltas, name), work, writers, envelopes, strategy, opts)
+     console.error(
+       JSON.stringify({
+@@ -585,7 +615,7 @@
+     )
+     batches.push(b)
+   }
+-  const workflow = strategy === 'direct' ? 'w2-direct' : 'w2'
++  const workflow = flags.name ?? (strategy === 'direct' ? 'w2-direct' : 'w2')
+   console.log(
+     writeResult(scale, workflow, {
+       base_store: base,
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w2_worker.ts b/docs/research/spikes/softschema-kb/fsqlite/w2_worker.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w2_worker.ts	2026-11-17 03:11:09.077573810 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w2_worker.ts	2026-11-17 04:48:51.402875542 +0000
+@@ -13,7 +13,7 @@
+ import type { ReadLease } from './fsq.ts'
+ import { forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { GenericLoader, genericOptions } from './mapping.ts'
+ import { KbQueries } from './queries.ts'
+ import { genericStore, openReader, queryInstances } from './w3.ts'
+ 
+@@ -61,10 +61,7 @@
+   })
+   const perEnvelope = Math.max(1, Math.ceil(units.length / envelopes))
+   const snapshot = genericStore(dir)
+-  const direct = new DirectStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-  })
++  const direct = new DirectStore(dir, genericOptions())
+   const captures: {
+     ms: number
+     units: number
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w2v2.ts b/docs/research/spikes/softschema-kb/fsqlite/w2v2.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w2v2.ts	2026-11-17 03:11:09.145573807 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w2v2.ts	2026-11-17 04:49:12.802769317 +0000
+@@ -28,7 +28,7 @@
+   writeResult,
+ } from './common.ts'
+ import { buildFtsSidecar } from './fts.ts'
+-import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { GenericLoader, genericOptions } from './mapping.ts'
+ import type { DatabaseSync } from 'node:sqlite'
+ import { UV_PYTHON } from './w1.ts'
+ import { checkAgainstExpected } from './w2.ts'
+@@ -82,7 +82,7 @@
+     out.reconcile_ms = round(nowMs() - t1)
+     out.quarantined_envelopes = r.quarantined
+   } else {
+-    new DirectStore(dir, { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }).write(
++    new DirectStore(dir, genericOptions()).write(
+       applyAll(rows),
+       LOCK,
+     )
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w3.ts b/docs/research/spikes/softschema-kb/fsqlite/w3.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w3.ts	2026-11-17 03:05:15.996674572 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w3.ts	2026-11-17 04:48:09.909188914 +0000
+@@ -27,7 +27,7 @@
+   round,
+   writeResult,
+ } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { genericOptions } from './mapping.ts'
+ import { buildFtsSidecar } from './fts.ts'
+ import { KbQueries } from './queries.ts'
+ import type { Params, QueryOptions } from './queries.ts'
+@@ -70,11 +70,7 @@
+ }
+ 
+ export function genericStore(dir: string): SnapshotStore {
+-  return new SnapshotStore(dir, {
+-    schema: genericDdl(),
+-    schemaVersion: GENERIC_SCHEMA_VERSION,
+-    conflictPolicy: GENERIC_POLICY,
+-  })
++  return new SnapshotStore(dir, genericOptions())
+ }
+ 
+ /** A serving connection on one snapshot, optionally with the FTS sidecar attached. */
+@@ -174,6 +170,12 @@
+   if (opts.pathCte) {
+     args.push('--path-cte')
+   }
++  if (opts.ftsInline) {
++    args.push('--fts-inline')
++  }
++  if (opts.facetSummary) {
++    args.push('--facet-summary')
++  }
+   if (opts.ftsPath) {
+     args.push('--fts-attach', opts.ftsPath)
+   }
+@@ -213,7 +215,14 @@
+   }
+   return {
+     options: {
+-      search: opts.ftsPath ? 'fts5-trigram-sidecar (MATCH phrase)' : 'search_text substring scan',
++      search: opts.ftsInline
++        ? 'in-file fts5 trigram index built by the generation build (MATCH phrase)'
++        : opts.ftsPath
++          ? 'fts5-trigram-sidecar (MATCH phrase)'
++          : 'search_text substring scan',
++      facets: opts.facetSummary
++        ? 'in-file facet_count summary built by the generation build'
++        : 'live GROUP BY over edge',
+       path: opts.pathCte
+         ? 'recursive CTE (in-engine)'
+         : 'bidirectional BFS (application-side, shared)',
+@@ -252,6 +261,8 @@
+     // queries.json v2: one cold run, then 20 warm runs per instance.
+     warm: Number(flags.warm ?? (isV2(scale) ? 20 : 50)),
+     pathCte: flags['path-cte'] === 'true',
++    ftsInline: flags['fts-inline'] === 'true',
++    facetSummary: flags['facet-summary'] === 'true',
+   }
+   if (flags.only) {
+     opts.only = flags.only
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w4.ts b/docs/research/spikes/softschema-kb/fsqlite/w4.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w4.ts	2026-11-17 01:10:48.757898066 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w4.ts	2026-11-17 04:49:55.869378949 +0000
+@@ -17,7 +17,7 @@
+ import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+-import { DirectStore, FsqliteError, SnapshotStore } from './fsq.ts'
++import { DirectStore, FsqliteError, SnapshotStore, readStoreMarker } from './fsq.ts'
+ import {
+   CORPORA_DIR,
+   SPIKE_DIR,
+@@ -32,11 +32,14 @@
+ } from './common.ts'
+ import { NODE, UV_PYTHON, measured, sizeBreakdown } from './w1.ts'
+ import {
++  BUILDS,
++  GENERIC_DERIVED_VERSION,
+   GENERIC_POLICY,
+   GENERIC_SCHEMA_VERSION,
+   GenericLoader,
+   TABLE_VIEWS,
+   genericDdl,
++  genericOptions,
+ } from './mapping.ts'
+ import { migrateSnapshot } from './migrate.ts'
+ import { buildTyped, readKindSchemas, typedDdl } from './typed.ts'
+@@ -210,6 +213,64 @@
+   return out
+ }
+ 
++/**
++ * v2 Spike 1 (H3), W4 case 5: the view index over the field changes. Under v2 it is a
++ * derived object, so the change is a derived version bump: the next build (one reconcile
++ * with no pending envelopes) drops the old index, creates the new one, and publishes in the
++ * same store with the same store_id.
++ */
++function indexChangeDerived(caseWork: string): Record<string, unknown> {
++  const views = TABLE_VIEWS.map((v) =>
++    v.name === 'repos_by_stars' ? { ...v, filter: "payload ->> '$.primary_language.name'" } : v,
++  )
++  const dir = join(caseWork, 'store')
++  const idBefore = readStoreMarker(dir).store_id
++  const versionBefore = genericStore(dir).currentVersion()
++  const out: Record<string, unknown> = {
++    ddl_in_callback: attempt('CREATE INDEX inside SnapshotStore.write', () =>
++      genericStore(dir).write('w4', (db) => {
++        db.exec(
++          "CREATE INDEX ix_lang ON entity ((payload ->> '$.primary_language.name')) " +
++            "WHERE kind = 'repository'",
++        )
++      }),
++    ),
++  }
++  const t0 = nowMs()
++  const store = new SnapshotStore(
++    dir,
++    genericOptions({ views, derivedVersion: GENERIC_DERIVED_VERSION + 1 }),
++  ).init()
++  const tInit = nowMs()
++  const res = store.reconcile(LOCK)
++  const t1 = nowMs()
++  const build = BUILDS.at(-1)
++  const check = openReader(store.snapshotPath(store.currentVersion()))
++  const plan = (
++    check
++      .prepare(
++        `EXPLAIN QUERY PLAN SELECT id FROM entity WHERE kind = 'repository'
++         AND payload ->> '$.primary_language.name' = 'Python'
++         ORDER BY payload ->> '$.stars' DESC, id LIMIT 50`,
++      )
++      .all() as { detail: string }[]
++  ).map((r) => r.detail)
++  check.close()
++  out.same_store = {
++    route: 'derived version bump; one reconcile with no pending envelopes publishes it',
++    open_ms: round(tInit - t0),
++    publish_ms: round(t1 - tInit),
++    total_ms: round(t1 - t0),
++    version_before: versionBefore,
++    published: res.published,
++    store_id_unchanged: readStoreMarker(dir).store_id === idBefore,
++    build,
++    plan,
++    new_index_used: plan.some((d) => d.includes('ix_view_repos_by_stars')),
++  }
++  return out
++}
++
+ /** Mapping (b): typed tables from the base head, where any schema change is DDL. */
+ function typedMapping(base: string, work: string): Record<string, unknown> {
+   const baseStore = genericStore(base).init()
+@@ -263,7 +324,11 @@
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+   const generic: Record<string, unknown> = {}
++  const only = flags.cases ? new Set(flags.cases.split(',')) : null
+   for (const name of CASES) {
++    if (only && !only.has(name)) {
++      continue
++    }
+     const variant = join(corpus, 'evolve', name, 'kb')
+     if (!existsSync(variant)) {
+       generic[name] = { skipped: `no variant at ${variant}` }
+@@ -273,16 +338,19 @@
+     mkdirSync(caseWork, { recursive: true })
+     const applied = applyVariant(base, join(corpus, 'kb'), variant, caseWork, verify)
+     if (name === 'string_to_object') {
+-      applied.index_change = indexChange(caseWork, String(applied.head))
++      applied.index_change =
++        flags['side-by-side'] === 'true'
++          ? indexChange(caseWork, String(applied.head))
++          : indexChangeDerived(caseWork)
+     }
+     delete applied.head
+     generic[name] = applied
+     rmSync(caseWork, { recursive: true, force: true })
+   }
+-  const typed = typedMapping(base, work)
++  const typed = flags['skip-typed'] === 'true' ? 'not run' : typedMapping(base, work)
+   rmSync(work, { recursive: true, force: true })
+   console.log(
+-    writeResult(scale, 'w4', {
++    writeResult(scale, flags.name ?? 'w4', {
+       workflow: 'W4',
+       inputs: join(corpus, 'evolve'),
+       verified_against_rebuild: verify,
+diff -ruN a/docs/research/spikes/softschema-kb/fsqlite/w6.ts b/docs/research/spikes/softschema-kb/fsqlite/w6.ts
+--- a/docs/research/spikes/softschema-kb/fsqlite/w6.ts	2026-11-17 01:19:50.564734352 +0000
++++ b/docs/research/spikes/softschema-kb/fsqlite/w6.ts	2026-11-17 04:49:12.802922737 +0000
+@@ -13,7 +13,7 @@
+ import { join } from 'node:path'
+ import { DirectStore, SnapshotStore } from './fsq.ts'
+ import { SPIKE_DIR, WORK_DIR, isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
+-import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
++import { genericOptions } from './mapping.ts'
+ import { NODE, dirBytes } from './w1.ts'
+ import { KbQueries } from './queries.ts'
+ import { READER_PRAGMAS, genericStore, openReader, queryInstances } from './w3.ts'
+@@ -239,11 +239,8 @@
+ }
+ 
+ function recover(rows: string, dir: string, route: string): Record<string, unknown> {
+-  const opts = { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }
+-  const handle =
+-    route === 'direct'
+-      ? new DirectStore(dir, opts)
+-      : new SnapshotStore(dir, { ...opts, conflictPolicy: GENERIC_POLICY })
++  const opts = genericOptions()
++  const handle = route === 'direct' ? new DirectStore(dir, opts) : new SnapshotStore(dir, opts)
+   const leftovers = readdirSync(dir, { recursive: true })
+     .map(String)
+     .filter((f) => /\.(direct|build|work)-|publish\.lock$|\.tmp$/.test(f))

@@ -1,0 +1,181 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S1",
+  "workflow": "W4",
+  "recorded_at": "2026-11-17T04:52:36.918Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 6393,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "inputs": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S1/evolve",
+  "verified_against_rebuild": false,
+  "generic": {
+    "string_to_object": {
+      "ddl": "none",
+      "route": "parse_kb.py --diff, one SnapshotStore envelope, reconcile",
+      "diff_seconds": 5.779,
+      "diff_rows": {
+        "schema": 1,
+        "doc": 9261,
+        "entity": 9261
+      },
+      "applied_rows": {
+        "schema": 1,
+        "file": 0,
+        "line": 0,
+        "node": 0,
+        "doc": 9261,
+        "entity": 9261,
+        "edge": 0,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "capture_ms": 675.124,
+      "envelope_bytes": 19116943,
+      "reconcile_ms": 1439.697,
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "data_change_total_seconds": 7.894,
+      "index_change": {
+        "ddl_in_callback": {
+          "attempt": "CREATE INDEX inside SnapshotStore.write",
+          "outcome": "rejected (refused)",
+          "message": "application callback changed the SQLite schema"
+        },
+        "same_store": {
+          "route": "derived version bump; one reconcile with no pending envelopes publishes it",
+          "open_ms": 4.161,
+          "publish_ms": 711.217,
+          "total_ms": 715.378,
+          "version_before": 2,
+          "published": 3,
+          "store_id_unchanged": true,
+          "build": {
+            "lane": "reconcile",
+            "mode": "refresh",
+            "buildCacheKiB": 262144,
+            "envelopes": 0,
+            "changedRows": 0,
+            "drop_ms": 0,
+            "apply_ms": 0.12253200076520443,
+            "changes_ms": 0,
+            "closure_ms": 0.008,
+            "closureRemoved": 0,
+            "derive_ms": 73.043,
+            "statistics_ms": 0.353,
+            "plans_ms": 0.401,
+            "hook_ms": 73.805,
+            "gate": "tables",
+            "gate_ms": 247.007,
+            "plans": [
+              {
+                "name": "view sessions_by_start",
+                "uses": [
+                  "ix_view_sessions_by_start"
+                ],
+                "ok": true,
+                "plan": [
+                  "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+                ]
+              },
+              {
+                "name": "view repos_by_stars",
+                "uses": [
+                  "ix_view_repos_by_stars"
+                ],
+                "ok": true,
+                "plan": [
+                  "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+                ]
+              },
+              {
+                "name": "view repos_all_by_stars",
+                "uses": [
+                  "ix_view_repos_all_by_stars"
+                ],
+                "ok": true,
+                "plan": [
+                  "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+                ]
+              },
+              {
+                "name": "people_by_org join without a hint",
+                "uses": [
+                  "ix_entity_id_kind",
+                  "sqlite_autoindex_entity_1"
+                ],
+                "ok": true,
+                "plan": [
+                  "CO-ROUTINE m",
+                  "SEARCH edge USING COVERING INDEX ix_edge_in (target=? AND relation=?)",
+                  "SCAN m",
+                  "SEARCH e USING INDEX ix_entity_id_kind (id=? AND kind=?)",
+                  "USE TEMP B-TREE FOR ORDER BY"
+                ]
+              }
+            ],
+            "createdObjects": [
+              "ix_view_repos_by_stars"
+            ],
+            "droppedObjects": [
+              "ix_view_repos_by_stars"
+            ]
+          },
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ],
+          "new_index_used": true
+        }
+      }
+    }
+  },
+  "typed": "not run",
+  "requirements": {
+    "generic": {
+      "new_kind": "data only; a table view for the new kind needs an index, so a new epoch",
+      "add_field": "data only; an index on the field needs a new epoch",
+      "rename_relation": "data only (delete and insert of edge keys); query code that names it",
+      "string_to_object": "data only for payloads; the view index over it needs a new epoch"
+    },
+    "typed": {
+      "new_kind": "new table: new epoch (side-by-side copy)",
+      "add_field": "ALTER TABLE ADD COLUMN: new epoch",
+      "rename_relation": "data only while edges stay generic",
+      "string_to_object": "column type and transform: new epoch"
+    }
+  }
+}

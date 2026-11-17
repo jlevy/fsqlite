@@ -1,0 +1,1840 @@
+diff -ruN a/packages/fsqlite/src/conflictPolicy.ts b/packages/fsqlite/src/conflictPolicy.ts
+--- a/packages/fsqlite/src/conflictPolicy.ts	2026-11-09 16:21:01.339677608 +0000
++++ b/packages/fsqlite/src/conflictPolicy.ts	2026-11-17 04:45:00.059621289 +0000
+@@ -156,6 +156,7 @@
+   changeset: Uint8Array,
+   policy: NormalizedPolicy,
+   beforeCommit: () => void = () => undefined,
++  baseTables?: ReadonlySet<string>,
+ ): void {
+   for (const [table, action] of Object.entries(policy as Record<string, unknown>)) {
+     if (typeof action !== 'string' || !(ACTIONS as readonly string[]).includes(action)) {
+@@ -176,7 +177,7 @@
+     db.exec('PRAGMA foreign_keys = OFF')
+   }
+   try {
+-    applyInTransaction(db, changeset, policy, used, beforeCommit)
++    applyInTransaction(db, changeset, policy, used, beforeCommit, baseTables)
+   } finally {
+     if (enforced) {
+       db.exec('PRAGMA foreign_keys = ON')
+@@ -190,6 +191,7 @@
+   policy: NormalizedPolicy,
+   used: ReadonlySet<Action>,
+   beforeCommit: () => void,
++  baseTables?: ReadonlySet<string>,
+ ): void {
+   db.exec('BEGIN IMMEDIATE')
+   try {
+@@ -198,11 +200,18 @@
+         continue
+       }
+       const ownedTables = new Set<string>()
++      const otherTables = new Set<string>()
+       const filter = (table: string): boolean => {
+         if (FSQLITE_OWNED_TABLES.has(table)) {
+           ownedTables.add(table)
+           return false
+         }
++        // PROTOTYPE (v2 Spike 1): with derived objects, an envelope carries base tables only;
++        // derived tables, virtual-table shadow tables, and sqlite_stat1 are built in the build.
++        if (baseTables !== undefined && !baseTables.has(table)) {
++          otherTables.add(table)
++          return false
++        }
+         return actionFor(policy, table) === action
+       }
+       const strict: number[] = []
+@@ -227,6 +236,11 @@
+           [...ownedTables].sort().map((table) => `fsqlite-owned table ${table}`),
+         )
+       }
++      if (otherTables.size > 0) {
++        throw new PermanentConflictError(
++          [...otherTables].sort().map((table) => `non-base table ${table}`),
++        )
++      }
+       // `ok === false` means the apply was aborted. Surface the recorded conflict types so
+       // the caller can quarantine the envelope with an actionable reason.
+       if (!ok) {
+diff -ruN a/packages/fsqlite/src/derived.ts b/packages/fsqlite/src/derived.ts
+--- a/packages/fsqlite/src/derived.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/packages/fsqlite/src/derived.ts	2026-11-17 04:53:43.028745126 +0000
+@@ -0,0 +1,739 @@
++// derived.ts: PROTOTYPE (fsqlite v2, Spike 1). Derived objects built inside each generation.
++//
++// With `StoreOptions.derived`, the caller schema splits in two. Base tables (the `schema`
++// DDL) have primary keys, travel in changesets, and follow the conflict policy. Derived
++// objects (secondary indexes, FTS5 and other virtual tables, summary tables, and
++// `sqlite_stat1`) are computed from them by a declared, versioned hook that runs inside
++// every generation build, after the envelopes or the direct callback and before the gate.
++// Closure relations run first, removing child rows whose parent the build deleted.
++//
++// Every generation stamps `base_tables`, `derived_version`, and `derived_hash` in
++// `fsqlite_meta`. A build refuses a store stamped with a newer derived version, or with
++// the same version and a different hash, and upgrades a store stamped with an older one in
++// place (same store_id).
++
++import { createHash } from 'node:crypto'
++import { DatabaseSync } from 'node:sqlite'
++import { FsqliteError } from './errors.ts'
++import { OWNED_TABLES, foreignKeyCheck, quickCheck } from './driver.ts'
++import type {
++  BuildInfo,
++  ChangedKeys,
++  ChangedRow,
++  DerivedSpec,
++  PlanAssertion,
++  Relation,
++} from './types.ts'
++
++const now = (): number => Number(process.hrtime.bigint()) / 1e6
++const ms = (t: number): number => Math.round((now() - t) * 1000) / 1000
++const quote = (name: string): string => `"${name.replace(/"/g, '""')}"`
++const OWNED: ReadonlySet<string> = new Set(OWNED_TABLES)
++
++/** The base schema's objects and primary keys, from running its DDL in memory. */
++export interface BaseInfo {
++  tables: string[]
++  tableSet: ReadonlySet<string>
++  objects: ReadonlySet<string>
++  /** Primary-key columns per base table, in column order (the changeset's key order). */
++  pk: ReadonlyMap<string, string[]>
++  fingerprint: string
++}
++
++interface SchemaObject {
++  type: string
++  name: string
++  tbl_name: string
++  sql: string | null
++}
++
++/** The resolved derived configuration a store handle builds with. */
++export interface DerivedContext {
++  spec: DerivedSpec
++  relations: Relation[]
++  base: BaseInfo
++  hash: string
++  /** The derived objects `spec.ddl` creates over the base schema, in creation order. */
++  desired: SchemaObject[]
++  analysisLimit: number
++  rebuildAboveRatio: number
++}
++
++function listObjects(db: DatabaseSync): SchemaObject[] {
++  return db
++    .prepare(
++      "SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY rowid",
++    )
++    .all() as unknown as SchemaObject[]
++}
++
++function shadowTables(db: DatabaseSync): Set<string> {
++  return new Set(
++    (
++      db.prepare('PRAGMA main.table_list').all() as {
++        name: string
++        type: string
++      }[]
++    )
++      .filter((t) => t.type === 'shadow')
++      .map((t) => t.name),
++  )
++}
++
++/** Base table names and their primary keys, read from `db`. */
++function describeBase(db: DatabaseSync, objects: SchemaObject[]): BaseInfo {
++  const tables = objects.filter((o) => o.type === 'table' && !OWNED.has(o.name)).map((o) => o.name)
++  const pk = new Map<string, string[]>()
++  for (const t of tables) {
++    const cols = db.prepare(`PRAGMA table_info(${quote(t)})`).all() as {
++      cid: number
++      name: string
++      pk: number
++    }[]
++    pk.set(
++      t,
++      cols
++        .filter((c) => c.pk > 0)
++        .sort((a, b) => a.cid - b.cid)
++        .map((c) => c.name),
++    )
++  }
++  const names = objects.filter((o) => !OWNED.has(o.name)).map((o) => o.name)
++  return {
++    tables,
++    tableSet: new Set(tables),
++    objects: new Set(names),
++    pk,
++    fingerprint: JSON.stringify(objects.filter((o) => !OWNED.has(o.name))),
++  }
++}
++
++/** The derived objects in `db`: not base, not owned, not internal, not shadow tables. */
++export function derivedObjects(db: DatabaseSync, base: BaseInfo): SchemaObject[] {
++  const shadow = shadowTables(db)
++  return listObjects(db).filter(
++    (o) => !base.objects.has(o.name) && !OWNED.has(o.name) && !shadow.has(o.name),
++  )
++}
++
++function baseFingerprint(db: DatabaseSync, base: BaseInfo): string {
++  return JSON.stringify(listObjects(db).filter((o) => base.objects.has(o.name)))
++}
++
++export function derivedHash(spec: DerivedSpec, relations: Relation[]): string {
++  return createHash('sha256')
++    .update(
++      JSON.stringify({
++        version: spec.version,
++        ddl: spec.ddl,
++        statistics: spec.statistics ?? 'optimize',
++        analysisLimit: spec.analysisLimit ?? 0,
++        relations,
++      }),
++    )
++    .digest('hex')
++    .slice(0, 16)
++}
++
++/** Validate the options and resolve the context a handle builds with. */
++export function resolveDerived(
++  schema: string,
++  spec: DerivedSpec | undefined,
++  relations: Relation[] | undefined,
++): DerivedContext | null {
++  if (spec === undefined) {
++    if (relations !== undefined && relations.length > 0) {
++      throw new TypeError('relations require a derived specification')
++    }
++    return null
++  }
++  if (!Number.isSafeInteger(spec.version) || spec.version < 0) {
++    throw new TypeError(
++      `derived.version must be a safe integer >= 0; received ${String(spec.version)}`,
++    )
++  }
++  if (typeof spec.ddl !== 'string' || typeof spec.rebuild !== 'function') {
++    throw new TypeError('derived needs a ddl string and a rebuild function')
++  }
++  const db = new DatabaseSync(':memory:')
++  let base: BaseInfo
++  let desired: SchemaObject[]
++  try {
++    db.exec(schema)
++    base = describeBase(db, listObjects(db))
++    db.exec(spec.ddl)
++    if (baseFingerprint(db, base) !== base.fingerprint) {
++      throw new TypeError('derived.ddl must not change base tables')
++    }
++    desired = derivedObjects(db, base)
++  } finally {
++    db.close()
++  }
++  const triggers = desired.filter((o) => o.type === 'trigger').map((o) => o.name)
++  if (triggers.length > 0) {
++    throw new TypeError(`derived.ddl must not declare triggers: ${triggers.join(', ')}`)
++  }
++  const rels = relations ?? []
++  for (const r of rels) {
++    const parentPk = base.pk.get(r.parent)
++    const childPk = base.pk.get(r.child)
++    if (!parentPk || !childPk) {
++      throw new TypeError(`relation ${r.child} -> ${r.parent}: both must be base tables`)
++    }
++    const parentCols = r.parentColumns ?? parentPk
++    if (JSON.stringify(parentCols) !== JSON.stringify(parentPk)) {
++      throw new TypeError(
++        `relation ${r.child} -> ${r.parent}: parentColumns must be the parent's primary key`,
++      )
++    }
++    if (r.columns.length !== parentCols.length || (r.onMissing as string) !== 'delete') {
++      throw new TypeError(
++        `relation ${r.child} -> ${r.parent}: columns must match the parent key; onMissing must be 'delete'`,
++      )
++    }
++  }
++  return {
++    spec,
++    relations: rels,
++    base,
++    hash: derivedHash(spec, rels),
++    desired,
++    analysisLimit: spec.analysisLimit ?? 0,
++    rebuildAboveRatio: spec.rebuildAboveRatio ?? 0.5,
++  }
++}
++
++function meta(db: DatabaseSync, key: string): string | undefined {
++  return (
++    db.prepare('SELECT value FROM fsqlite_meta WHERE key = ?').get(key) as
++      { value: string } | undefined
++  )?.value
++}
++
++/**
++ * Whether a build of `db` may proceed under `ctx`: `current` when the stamp matches,
++ * `upgrade` when the store carries no stamp or an older version. Throws on a newer version
++ * or a same-version hash mismatch.
++ */
++export function assertBuildable(db: DatabaseSync, ctx: DerivedContext): 'current' | 'upgrade' {
++  const version = meta(db, 'derived_version')
++  if (version === undefined) {
++    return 'upgrade'
++  }
++  const stamped = Number(version)
++  const hash = meta(db, 'derived_hash')
++  if (stamped > ctx.spec.version) {
++    throw new FsqliteError(
++      'incompatible',
++      `store derived objects are version ${stamped}; this handle declares version ${ctx.spec.version}`,
++    )
++  }
++  if (stamped === ctx.spec.version && hash !== ctx.hash) {
++    throw new FsqliteError(
++      'incompatible',
++      `store derived_hash ${String(hash)} does not match this handle's ${ctx.hash} at derived version ${stamped}`,
++    )
++  }
++  return stamped < ctx.spec.version ? 'upgrade' : 'current'
++}
++
++/** Whether the snapshot at `db` needs a derived refresh under `ctx` (stamp absent or older). */
++export function needsRefresh(db: DatabaseSync, ctx: DerivedContext): boolean {
++  const version = meta(db, 'derived_version')
++  return version === undefined || Number(version) < ctx.spec.version
++}
++
++/** Drop every derived object; returns their names. */
++export function dropDerived(db: DatabaseSync, base: BaseInfo): string[] {
++  const objects = derivedObjects(db, base)
++  dropObjects(db, objects)
++  return objects.map((o) => o.name)
++}
++
++function dropObjects(db: DatabaseSync, objects: SchemaObject[]): void {
++  const tables = new Set(objects.filter((o) => o.type === 'table').map((o) => o.name))
++  for (const o of objects) {
++    if (o.type === 'view') {
++      db.exec(`DROP VIEW IF EXISTS ${quote(o.name)}`)
++    }
++  }
++  for (const o of objects) {
++    if (o.type === 'index' && !tables.has(o.tbl_name)) {
++      db.exec(`DROP INDEX IF EXISTS ${quote(o.name)}`)
++    }
++  }
++  for (const name of tables) {
++    db.exec(`DROP TABLE IF EXISTS ${quote(name)}`)
++  }
++}
++
++function createObjects(db: DatabaseSync, objects: SchemaObject[]): void {
++  const order = ['table', 'index', 'view']
++  for (const type of order) {
++    for (const o of objects) {
++      if (o.type === type && o.sql) {
++        db.exec(o.sql)
++      }
++    }
++  }
++}
++
++// ---------------------------------------------------------------------------------------
++// Changed keys from a changeset (SQLite session format).
++
++const OP_INSERT = 18
++const OP_UPDATE = 23
++const OP_DELETE = 9
++type KeyValue = ChangedRow['key'][number]
++export type WantRows = (table: string) => 'all' | 'deletes' | 'none'
++
++/**
++ * Add the primary keys of every row `changeset` changes to `into`, for the tables `want`
++ * selects. Returns the table names the changeset names, in order. Patchsets are refused.
++ */
++export function collectChanges(
++  changeset: Uint8Array,
++  into: ChangedKeys | null,
++  want: WantRows = () => 'all',
++): { tables: string[]; rows: number } {
++  const buf = Buffer.from(changeset.buffer, changeset.byteOffset, changeset.byteLength)
++  const n = buf.length
++  let i = 0
++  let rows = 0
++  const tables: string[] = []
++  let nCol = 0
++  let isPk: boolean[] = []
++  let mode: 'all' | 'deletes' | 'none' = 'none'
++  let list: ChangedRow[] | null = null
++  const varint = (): number => {
++    let v = 0
++    for (let k = 0; k < 9; k++) {
++      const b = buf[i++] ?? 0
++      if (k === 8) {
++        return v * 256 + b
++      }
++      v = v * 128 + (b & 0x7f)
++      if ((b & 0x80) === 0) {
++        return v
++      }
++    }
++    return v
++  }
++  const skipValue = (): void => {
++    const t = buf[i++]
++    if (t === 1 || t === 2) {
++      i += 8
++    } else if (t === 3 || t === 4) {
++      const len = varint()
++      i += len
++    }
++  }
++  const readValue = (): KeyValue => {
++    const t = buf[i++] ?? 0
++    switch (t) {
++      case 1: {
++        const v = buf.readBigInt64BE(i)
++        i += 8
++        return v >= BigInt(Number.MIN_SAFE_INTEGER) && v <= BigInt(Number.MAX_SAFE_INTEGER)
++          ? Number(v)
++          : v
++      }
++      case 2: {
++        const v = buf.readDoubleBE(i)
++        i += 8
++        return v
++      }
++      case 3:
++      case 4: {
++        const len = varint()
++        const s = buf.subarray(i, i + len)
++        i += len
++        return t === 3 ? s.toString('utf8') : new Uint8Array(s)
++      }
++      default:
++        // 5 is NULL; 0 (no value) appears only in an update's new record, never in a key.
++        return null
++    }
++  }
++  const record = (collect: boolean): KeyValue[] | null => {
++    if (!collect) {
++      for (let c = 0; c < nCol; c++) {
++        skipValue()
++      }
++      return null
++    }
++    const key: KeyValue[] = []
++    for (let c = 0; c < nCol; c++) {
++      if (isPk[c]) {
++        key.push(readValue())
++      } else {
++        skipValue()
++      }
++    }
++    return key
++  }
++  while (i < n) {
++    const tag = buf[i]
++    if (tag === 0x54) {
++      i++
++      nCol = varint()
++      isPk = []
++      for (let c = 0; c < nCol; c++) {
++        isPk.push(buf[i + c] !== 0)
++      }
++      i += nCol
++      const end = buf.indexOf(0, i)
++      const name = buf.toString('utf8', i, end)
++      i = end + 1
++      tables.push(name)
++      mode = into === null ? 'none' : want(name)
++      if (into !== null && mode !== 'none') {
++        list = into.get(name) ?? []
++        into.set(name, list)
++      } else {
++        list = null
++      }
++      continue
++    }
++    if (tag === 0x50) {
++      throw new FsqliteError('refused', 'derived builds need changesets, not patchsets')
++    }
++    const op = buf[i] ?? 0
++    i += 2
++    rows++
++    if (op === OP_DELETE) {
++      const key = record(list !== null)
++      if (key && list) {
++        list.push({ op: 'delete', key })
++      }
++    } else if (op === OP_INSERT) {
++      const key = record(list !== null && mode === 'all')
++      if (key && list) {
++        list.push({ op: 'insert', key })
++      }
++    } else if (op === OP_UPDATE) {
++      const key = record(list !== null && mode === 'all')
++      record(false)
++      if (key && list) {
++        list.push({ op: 'update', key })
++      }
++    } else {
++      throw new FsqliteError('corrupt', `unrecognized changeset operation ${op} at byte ${i - 2}`)
++    }
++  }
++  return { tables, rows }
++}
++
++/** The table names a changeset names, in order. */
++export function changesetTables(changeset: Uint8Array): string[] {
++  return collectChanges(changeset, null).tables
++}
++
++/** Refuse a changeset that names anything but base tables. */
++export function assertBaseOnly(tables: string[], base: BaseInfo, what: string): void {
++  const other = [...new Set(tables)].filter((t) => !base.tableSet.has(t))
++  if (other.length > 0) {
++    throw new FsqliteError(
++      'refused',
++      `${what} changed ${other.map((t) => `"${t}"`).join(', ')}, which ${
++        other.length === 1 ? 'is not a base table' : 'are not base tables'
++      }; derived objects and statistics are built by the generation build`,
++    )
++  }
++}
++
++// ---------------------------------------------------------------------------------------
++// The build steps.
++
++/** Delete child rows whose parent this build deleted and did not re-insert. */
++function applyRelations(db: DatabaseSync, ctx: DerivedContext, changes: ChangedKeys): number {
++  let removed = 0
++  for (const rel of ctx.relations) {
++    const deleted = (changes.get(rel.parent) ?? []).filter((r) => r.op === 'delete')
++    if (deleted.length === 0) {
++      continue
++    }
++    const parentCols = rel.parentColumns ?? ctx.base.pk.get(rel.parent) ?? []
++    const childPk = ctx.base.pk.get(rel.child) ?? []
++    const where = (cols: string[]): string => cols.map((c) => `${quote(c)} = ?`).join(' AND ')
++    const exists = db.prepare(`SELECT 1 FROM ${quote(rel.parent)} WHERE ${where(parentCols)}`)
++    const select = db.prepare(
++      `SELECT ${childPk.map(quote).join(', ')} FROM ${quote(rel.child)} WHERE ${where(rel.columns)}`,
++    )
++    const del = db.prepare(`DELETE FROM ${quote(rel.child)} WHERE ${where(rel.columns)}`)
++    const childChanges = changes.get(rel.child) ?? []
++    changes.set(rel.child, childChanges)
++    const seen = new Set<string>()
++    for (const r of deleted) {
++      const k = JSON.stringify(r.key, (_k, v: unknown) => (typeof v === 'bigint' ? String(v) : v))
++      if (seen.has(k)) {
++        continue
++      }
++      seen.add(k)
++      const key = r.key
++      if (exists.get(...key)) {
++        continue
++      }
++      const victims = select.all(...key) as Record<string, KeyValue>[]
++      if (victims.length === 0) {
++        continue
++      }
++      for (const v of victims) {
++        childChanges.push({
++          op: 'delete',
++          key: childPk.map((c) => v[c] ?? null),
++        })
++      }
++      removed += Number(del.run(...key).changes)
++    }
++  }
++  return removed
++}
++
++function runStatistics(
++  db: DatabaseSync,
++  ctx: DerivedContext,
++  full: boolean,
++  newIndexes: string[],
++): void {
++  const mode = ctx.spec.statistics ?? 'optimize'
++  if (mode === 'none') {
++    return
++  }
++  db.exec(`PRAGMA analysis_limit = ${ctx.analysisLimit}`)
++  if (full || mode === 'analyze') {
++    db.exec('ANALYZE')
++    return
++  }
++  for (const name of newIndexes) {
++    db.exec(`ANALYZE ${quote(name)}`)
++  }
++  db.exec('PRAGMA optimize = 0x10002')
++}
++
++function checkPlans(db: DatabaseSync, plans: PlanAssertion[]): BuildInfo['plans'] {
++  const out: BuildInfo['plans'] = []
++  for (const [n, p] of plans.entries()) {
++    const uses = Array.isArray(p.uses) ? p.uses : [p.uses]
++    const plan = (db.prepare(`EXPLAIN QUERY PLAN ${p.sql}`).all() as { detail: string }[]).map(
++      (r) => r.detail,
++    )
++    const ok = plan.some((d) =>
++      uses.some((u) => d.includes(`USING INDEX ${u}`) || d.includes(`USING COVERING INDEX ${u}`)),
++    )
++    const name = p.name ?? `plan ${n}`
++    out.push({ name, uses, ok, plan })
++    if (!ok) {
++      throw new FsqliteError(
++        'refused',
++        `plan assertion ${name} failed: expected ${uses.join(' or ')}; the plan is: ${plan.join('; ')}`,
++      )
++    }
++  }
++  return out
++}
++
++function stamp(db: DatabaseSync, ctx: DerivedContext): void {
++  const put = db.prepare(
++    'INSERT INTO fsqlite_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
++  )
++  put.run('base_tables', JSON.stringify(ctx.base.tables))
++  put.run('derived_version', String(ctx.spec.version))
++  put.run('derived_hash', ctx.hash)
++}
++
++export function newBuildInfo(lane: BuildInfo['lane'], cacheKiB: number | undefined): BuildInfo {
++  return {
++    lane,
++    mode: 'none',
++    buildCacheKiB: cacheKiB ?? null,
++    envelopes: 0,
++    changedRows: 0,
++    drop_ms: 0,
++    apply_ms: 0,
++    changes_ms: 0,
++    closure_ms: 0,
++    closureRemoved: 0,
++    derive_ms: 0,
++    statistics_ms: 0,
++    plans_ms: 0,
++    hook_ms: 0,
++    gate: 'none',
++    gate_ms: 0,
++    plans: [],
++    createdObjects: [],
++    droppedObjects: [],
++  }
++}
++
++export interface DeriveArgs {
++  /** `rebuild`: the derived objects were dropped before the build's writes. */
++  mode: 'rebuild' | 'update'
++  /** The store's stamp is absent or older than the handle's version. */
++  upgrade: boolean
++  /** Changed base keys, or null when they are unknown (then the hook rebuilds). */
++  changes: ChangedKeys | null
++  /** Run inside the caller's open transaction instead of opening one. */
++  inTransaction: boolean
++  checkPlans: boolean
++  info: BuildInfo
++}
++
++/**
++ * The derived step of one build: closure relations, then the derived objects (created and
++ * rebuilt, diffed to a new version, or updated for the changed keys), statistics, plan
++ * assertions, and the stamp. Returns whether the gate must check derived virtual tables.
++ */
++export function deriveInBuild(db: DatabaseSync, ctx: DerivedContext, args: DeriveArgs): boolean {
++  const info = args.info
++  const before = baseFingerprint(db, ctx.base)
++  if (!args.inTransaction) {
++    db.exec('BEGIN IMMEDIATE')
++  }
++  let fullGate = false
++  try {
++    const changes = args.changes ?? new Map<string, ChangedRow[]>()
++    info.changedRows = [...changes.values()].reduce((n, l) => n + l.length, 0)
++    // `fresh`: the derived tables were created empty in this step, so they need `rebuild`.
++    let fresh = false
++    let t = now()
++    const newIndexes: string[] = []
++    if (args.mode === 'rebuild') {
++      // The objects were dropped before the writes; create them empty, then fill them.
++      createObjects(db, ctx.desired)
++      info.createdObjects = ctx.desired.map((o) => o.name)
++      fresh = true
++    } else if (args.upgrade) {
++      const current = derivedObjects(db, ctx.base)
++      const key = (o: SchemaObject): string => `${o.type}\u0000${o.name}\u0000${o.sql ?? ''}`
++      const want = new Set(ctx.desired.map(key))
++      const have = new Set(current.map(key))
++      const drop = current.filter((o) => !want.has(key(o)))
++      const create = ctx.desired.filter((o) => !have.has(key(o)))
++      const tablesChanged = [...drop, ...create].some((o) => o.type === 'table')
++      if (tablesChanged) {
++        // Derived tables are rebuilt whole; keep only unchanged indexes on base tables.
++        const keep = new Set(
++          current
++            .filter(
++              (o) => o.type === 'index' && want.has(key(o)) && ctx.base.tableSet.has(o.tbl_name),
++            )
++            .map((o) => o.name),
++        )
++        const dropAll = current.filter((o) => !keep.has(o.name))
++        dropObjects(db, dropAll)
++        createObjects(
++          db,
++          ctx.desired.filter((o) => !keep.has(o.name)),
++        )
++        info.droppedObjects = dropAll.map((o) => o.name)
++        info.createdObjects = ctx.desired.filter((o) => !keep.has(o.name)).map((o) => o.name)
++        fresh = true
++      } else {
++        dropObjects(db, drop)
++        createObjects(db, create)
++        info.droppedObjects = drop.map((o) => o.name)
++        info.createdObjects = create.map((o) => o.name)
++        newIndexes.push(...create.filter((o) => o.type === 'index').map((o) => o.name))
++      }
++    }
++    const rebuild = fresh || args.changes === null || !ctx.spec.update
++    if (rebuild && !fresh) {
++      // Unknown changes: empty the derived tables (with their own indexes) and rebuild.
++      const onDerived = (o: SchemaObject): boolean =>
++        o.type === 'table' || (o.type === 'index' && !ctx.base.tableSet.has(o.tbl_name))
++      dropObjects(db, derivedObjects(db, ctx.base).filter(onDerived))
++      createObjects(db, ctx.desired.filter(onDerived))
++      fresh = true
++    }
++    const createMs = ms(t)
++    t = now()
++    info.closureRemoved = applyRelations(db, ctx, changes)
++    info.closure_ms = ms(t)
++    t = now()
++    if (rebuild) {
++      ctx.spec.rebuild(db)
++      fullGate = ctx.desired.some(
++        (o) => o.type === 'table' && /^CREATE VIRTUAL TABLE/i.test(o.sql ?? ''),
++      )
++    } else if (changes.size > 0) {
++      ctx.spec.update?.(db, changes)
++    }
++    info.derive_ms = Math.round((createMs + ms(t)) * 1000) / 1000
++    info.mode =
++      args.mode === 'rebuild'
++        ? 'rebuild'
++        : args.upgrade
++          ? 'refresh'
++          : rebuild
++            ? 'rebuild'
++            : 'update'
++    t = now()
++    runStatistics(db, ctx, rebuild, newIndexes)
++    info.statistics_ms = ms(t)
++    t = now()
++    if (args.checkPlans) {
++      info.plans = checkPlans(db, ctx.spec.plans ?? [])
++    }
++    info.plans_ms = ms(t)
++    stamp(db, ctx)
++    if (baseFingerprint(db, ctx.base) !== before) {
++      throw new FsqliteError('refused', 'the derived build changed a base table definition')
++    }
++    if (!args.inTransaction) {
++      db.exec('COMMIT')
++    }
++  } catch (e) {
++    if (!args.inTransaction) {
++      try {
++        db.exec('ROLLBACK')
++      } catch {
++        // Keep the original error.
++      }
++    }
++    throw e
++  }
++  info.hook_ms =
++    Math.round(
++      (info.changes_ms + info.closure_ms + info.derive_ms + info.statistics_ms + info.plans_ms) *
++        1000,
++    ) / 1000
++  return fullGate
++}
++
++/**
++ * The publication gate with derived objects: the full `quick_check` when a derived virtual
++ * table was rebuilt, otherwise `quick_check` of every ordinary table and its indexes
++ * (base, owned, derived, and shadow tables), skipping virtual tables' own checks.
++ */
++export function derivedGate(db: DatabaseSync, full: boolean, info: BuildInfo): void {
++  const t = now()
++  if (full) {
++    quickCheck(db)
++    info.gate = 'full'
++  } else {
++    const tables = (
++      db.prepare('PRAGMA main.table_list').all() as {
++        name: string
++        type: string
++      }[]
++    )
++      .filter((r) => (r.type === 'table' || r.type === 'shadow') && r.name !== 'sqlite_schema')
++      .map((r) => r.name)
++    for (const name of tables) {
++      const rows = db.prepare(`PRAGMA main.quick_check(${quote(name)})`).all() as Record<
++        string,
++        unknown
++      >[]
++      if (rows.length !== 1 || Object.values(rows[0] ?? {})[0] !== 'ok') {
++        throw new FsqliteError('corrupt', `quick_check(${name}) failed: ${JSON.stringify(rows)}`)
++      }
++    }
++    foreignKeyCheck(db)
++    info.gate = 'tables'
++  }
++  info.gate_ms = ms(t)
++}
++
++/** Timing helper for callers. */
++export { now as buildClock }
+diff -ruN a/packages/fsqlite/src/directStore.ts b/packages/fsqlite/src/directStore.ts
+--- a/packages/fsqlite/src/directStore.ts	2026-11-10 23:21:37.559092992 +0000
++++ b/packages/fsqlite/src/directStore.ts	2026-11-17 04:45:00.060306606 +0000
+@@ -22,6 +22,17 @@
+ import type { LockOptions } from './lock.ts'
+ import { requireSafeInteger, SnapshotStore, verifySnapshotForPublish } from './snapshotStore.ts'
+ import { readStoreMarker } from './storeFormat.ts'
++import {
++  assertBaseOnly,
++  assertBuildable,
++  buildClock,
++  collectChanges,
++  deriveInBuild,
++  derivedGate,
++  dropDerived,
++  newBuildInfo,
++} from './derived.ts'
++import type { ChangedKeys } from './types.ts'
+ import type {
+   StoreOptions,
+   WorkFn,
+@@ -47,6 +58,13 @@
+   lockOpts?: LockOptions
+   /** Attempts after a lost publication race; an integer of at least 1, default 8. */
+   maxRetries?: number
++  /**
++   * PROTOTYPE (v2 Spike 1): how the derived objects follow this write. `update` (default)
++   * records a session on the build and passes the changed keys to the derived hook;
++   * `rebuild` drops the derived objects before the callback and rebuilds them after it,
++   * which a bulk load wants (indexes after rows).
++   */
++  derived?: 'update' | 'rebuild'
+ }
+ 
+ const rand = (): string => randomBytes(5).toString('hex')
+@@ -131,8 +149,13 @@
+    */
+   write(
+     fn: WorkFn,
+-    { lockOpts = {}, maxRetries = DEFAULT_DIRECT_WRITE_RETRIES }: DirectWriteOptions = {},
++    {
++      lockOpts = {},
++      maxRetries = DEFAULT_DIRECT_WRITE_RETRIES,
++      derived = 'update',
++    }: DirectWriteOptions = {},
+   ): number {
++    const ctx = this.base.derivedCtx
+     requireSafeInteger('maxRetries', maxRetries, 1)
+     validateLockOptions(lockOpts)
+     const marker = readStoreMarker(this.base.dir)
+@@ -155,12 +178,53 @@
+             return abandon()
+           }
+           const db = driver.open(tmp)
++          const info = ctx === null ? null : newBuildInfo('direct', this.base.buildCacheKiB)
+           try {
++            this.base.applyBuildCache(db)
++            // PROTOTYPE (v2 Spike 1): the derived objects follow the callback in this build.
++            const upgrade = ctx !== null && assertBuildable(db, ctx) === 'upgrade'
++            const mode =
++              ctx !== null && (derived === 'rebuild' || !ctx.spec.update) ? 'rebuild' : 'update'
+             driver.protectOwnedTables(db)
+-            const boundary = driver.captureCallbackBoundary(db)
+             db.exec('BEGIN IMMEDIATE')
+-            fn(db)
++            if (ctx !== null && info !== null && mode === 'rebuild') {
++              const t = buildClock()
++              info.droppedObjects = dropDerived(db, ctx.base)
++              info.drop_ms = buildClock() - t
++            }
++            const boundary = driver.captureCallbackBoundary(db)
++            const session = ctx !== null && mode === 'update' ? db.createSession() : null
++            const tApply = buildClock()
++            try {
++              fn(db)
++            } catch (e) {
++              session?.close()
++              throw e
++            }
+             driver.assertCallbackBoundary(db, boundary)
++            let fullGate = true
++            if (ctx !== null && info !== null) {
++              info.apply_ms = buildClock() - tApply
++              let changes: ChangedKeys | null = null
++              if (session !== null) {
++                const t = buildClock()
++                const cs = session.changeset()
++                session.close()
++                changes = new Map()
++                const seen = collectChanges(cs, changes)
++                assertBaseOnly(seen.tables, ctx.base, 'the write callback')
++                info.changes_ms = buildClock() - t
++              }
++              driver.unprotectOwnedTables(db)
++              fullGate = deriveInBuild(db, ctx, {
++                mode,
++                upgrade,
++                changes,
++                inTransaction: true,
++                checkPlans: true,
++                info,
++              })
++            }
+             verifySnapshotForPublish(
+               db,
+               readStoreMarker(this.base.dir),
+@@ -168,13 +232,18 @@
+               this.base.schemaHash,
+             )
+             db.exec('COMMIT')
+-            driver.quickCheck(db)
++            if (info !== null) {
++              derivedGate(db, fullGate, info)
++            } else {
++              driver.quickCheck(db)
++            }
+           } catch (e) {
+             driver.rollbackQuietly(db)
+             db.close()
+             removeQuietly(tmp)
+             throw e
+           }
++          this.base.reportBuild(info)
+           db.close()
+           // Revalidate fencing and optimistic concurrency before publication. The fence
+           // also renews the lease the callback and checks may have run down.
+diff -ruN a/packages/fsqlite/src/driver.ts b/packages/fsqlite/src/driver.ts
+--- a/packages/fsqlite/src/driver.ts	2026-11-09 17:38:49.234541395 +0000
++++ b/packages/fsqlite/src/driver.ts	2026-11-17 04:45:00.059885796 +0000
+@@ -155,6 +155,15 @@
+   }
+ }
+ 
++/** PROTOTYPE (v2 Spike 1): drop the guards, so the derived build can stamp fsqlite_meta. */
++export function unprotectOwnedTables(db: DatabaseSync): void {
++  for (const table of OWNED_TABLES) {
++    for (const action of ['insert', 'update', 'delete']) {
++      db.exec(`DROP TRIGGER IF EXISTS temp.fsqlite_protect_${table}_${action}`)
++    }
++  }
++}
++
+ interface CallbackBoundary {
+   applicationId: number
+   userVersion: number
+diff -ruN a/packages/fsqlite/src/snapshotStore.ts b/packages/fsqlite/src/snapshotStore.ts
+--- a/packages/fsqlite/src/snapshotStore.ts	2026-11-10 23:24:32.004601572 +0000
++++ b/packages/fsqlite/src/snapshotStore.ts	2026-11-17 04:45:00.437320912 +0000
+@@ -45,6 +45,20 @@
+ import * as driver from './driver.ts'
+ import { normalize, applyWithPolicy } from './conflictPolicy.ts'
+ import {
++  assertBaseOnly,
++  assertBuildable,
++  buildClock,
++  changesetTables,
++  collectChanges,
++  deriveInBuild,
++  derivedGate,
++  dropDerived,
++  needsRefresh,
++  newBuildInfo,
++  resolveDerived,
++} from './derived.ts'
++import type { DerivedContext } from './derived.ts'
++import {
+   errorMessage,
+   FsqliteError,
+   PermanentConflictError,
+@@ -87,6 +101,8 @@
+   StoreState,
+   StoreValidationState,
+   ReadLease,
++  BuildInfo,
++  ChangedKeys,
+ } from './types.ts'
+ 
+ const rand = (): string => randomBytes(5).toString('hex')
+@@ -474,6 +490,8 @@
+   applied: string[]
+   archivable: string[]
+   quarantined: [string, string][]
++  /** PROTOTYPE: the build upgraded the derived objects, so it publishes even if empty. */
++  refreshed: boolean
+ }
+ 
+ interface TableColumn {
+@@ -613,6 +631,12 @@
+   readonly conflictPolicy: NormalizedPolicy
+   readonly toolVersion: string
+   readonly maxEnvelopeBytes: number
++  /** @internal PROTOTYPE (v2 Spike 1): the derived specification this handle builds with. */
++  readonly derivedCtx: DerivedContext | null
++  /** @internal PROTOTYPE: the build page cache in KiB, or undefined for SQLite's default. */
++  readonly buildCacheKiB: number | undefined
++  /** @internal PROTOTYPE */
++  readonly onBuild: ((info: BuildInfo) => void) | undefined
+   private clock: number
+ 
+   constructor(dir: string, opts: StoreOptions = {}) {
+@@ -637,9 +661,29 @@
+       opts.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES,
+       1,
+     )
++    this.derivedCtx = resolveDerived(this.schema, opts.derived, opts.relations)
++    this.buildCacheKiB =
++      opts.buildCacheKiB === undefined
++        ? undefined
++        : requireSafeInteger('buildCacheKiB', opts.buildCacheKiB, 1)
++    this.onBuild = opts.onBuild
+     this.clock = 0
+   }
+ 
++  /** @internal PROTOTYPE: apply the configured build page cache to a build connection. */
++  applyBuildCache(db: driver.DB): void {
++    if (this.buildCacheKiB !== undefined) {
++      db.exec(`PRAGMA cache_size = -${this.buildCacheKiB}`)
++    }
++  }
++
++  /** @internal PROTOTYPE: report one build's timings. */
++  reportBuild(info: BuildInfo | null): void {
++    if (info !== null) {
++      this.onBuild?.(info)
++    }
++  }
++
+   /**
+    * Create the store if absent, otherwise verify it is schema-compatible (idempotent).
+    * Snapshot 0 holds the empty schema. First-open is fenced under the publish lock and built
+@@ -690,6 +734,21 @@
+           db.exec(this.schema)
+           validatePrimaryKeys(db)
+           this.assertStrategySchema(db)
++          if (this.derivedCtx !== null) {
++            // PROTOTYPE: snapshot 0 is a complete generation, with empty derived objects.
++            const info = newBuildInfo('init', this.buildCacheKiB)
++            this.applyBuildCache(db)
++            const full = deriveInBuild(db, this.derivedCtx, {
++              mode: 'rebuild',
++              upgrade: true,
++              changes: null,
++              inTransaction: false,
++              checkPlans: false,
++              info,
++            })
++            derivedGate(db, full, info)
++            this.reportBuild(info)
++          }
+         } finally {
+           db.close()
+         }
+@@ -787,15 +846,17 @@
+   /** @internal */
+   protected assertPolicyTables(db: driver.DB): void {
+     const callerTables = new Set(
+-      (
+-        db
+-          .prepare(
+-            "SELECT name FROM main.sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
++      this.derivedCtx !== null
++        ? this.derivedCtx.base.tables
++        : (
++            db
++              .prepare(
++                "SELECT name FROM main.sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
++              )
++              .all() as { name: string }[]
+           )
+-          .all() as { name: string }[]
+-      )
+-        .map((row) => row.name)
+-        .filter((name) => !(driver.OWNED_TABLES as readonly string[]).includes(name)),
++            .map((row) => row.name)
++            .filter((name) => !(driver.OWNED_TABLES as readonly string[]).includes(name)),
+     )
+     const unknown = Object.keys(this.conflictPolicy).filter(
+       (table) => table !== '*' && !callerTables.has(table),
+@@ -1043,6 +1104,10 @@
+     if (!changeset) {
+       return null
+     }
++    if (this.derivedCtx !== null) {
++      // PROTOTYPE: an envelope carries base facts only; refuse it at capture.
++      assertBaseOnly(changesetTables(changeset), this.derivedCtx.base, 'the write callback')
++    }
+ 
+     const txId = `${pad(Date.now())}-${pad(this.clock++)}-${writerId}-${rand()}`
+     const txDir = join(this.txPending, `${txId}.txn`)
+@@ -1225,7 +1290,7 @@
+       const base = this.currentVersion()
+       this.verifyCompatible()
+       const pending = this.pendingTxns()
+-      if (pending.length === 0) {
++      if (pending.length === 0 && !this.derivedRefreshDue()) {
+         return { published: base, applied: 0, quarantined: 0, attempts: attempt + 1 }
+       }
+ 
+@@ -1236,7 +1301,7 @@
+       let crashed = false
+       try {
+         fold = this.fold(tmp, base, pending, marker)
+-        if (fold.applied.length === 0) {
++        if (fold.applied.length === 0 && !fold.refreshed) {
+           result = 'nothing-applied'
+         } else {
+           if (crashAt === 'after-build') {
+@@ -1297,8 +1362,40 @@
+     const applied: string[] = []
+     const archivable: string[] = []
+     const quarantined: [string, string][] = []
++    const ctx = this.derivedCtx
++    const info = ctx === null ? null : newBuildInfo('reconcile', this.buildCacheKiB)
++    let refreshed = false
+     const db = driver.openBuild(tmp)
+     try {
++      this.applyBuildCache(db)
++      // PROTOTYPE (v2 Spike 1): decide how the derived objects follow this build.
++      let mode: 'rebuild' | 'update' = 'update'
++      let upgrade = false
++      let changes: ChangedKeys | null = null
++      const parents = new Set(ctx?.relations.map((r) => r.parent) ?? [])
++      if (ctx !== null && info !== null) {
++        upgrade = assertBuildable(db, ctx) === 'upgrade'
++        let pendingBytes = 0
++        for (const txn of pending) {
++          try {
++            pendingBytes += statSync(join(this.txPending, txn, CHANGESET_FILENAME)).size
++          } catch {
++            // Admission reports an unreadable envelope.
++          }
++        }
++        const baseBytes = statSync(tmp).size
++        if (ctx.spec.update === undefined || pendingBytes > ctx.rebuildAboveRatio * baseBytes) {
++          mode = 'rebuild'
++          const t = buildClock()
++          db.exec('BEGIN IMMEDIATE')
++          info.droppedObjects = dropDerived(db, ctx.base)
++          db.exec('COMMIT')
++          info.drop_ms = buildClock() - t
++        }
++        changes = new Map()
++      }
++      const baseTables = ctx?.base.tableSet
++      const tApply = buildClock()
+       const seen = new Set(
+         (db.prepare('SELECT tx_id FROM applied_tx').all() as Record<string, unknown>[]).map((r) =>
+           String(r.tx_id),
+@@ -1317,23 +1414,72 @@
+           continue
+         }
+         try {
+-          applyWithPolicy(db, admitted.changeset, this.conflictPolicy, () => {
+-            mark.run(admitted.manifest.tx_id, nowIso())
+-          })
++          applyWithPolicy(
++            db,
++            admitted.changeset,
++            this.conflictPolicy,
++            () => {
++              mark.run(admitted.manifest.tx_id, nowIso())
++            },
++            baseTables,
++          )
+           applied.push(txn)
+           seen.add(txId)
+         } catch (e) {
+           // A genuine conflict aborted the apply (policy returned ABORT) or some other
+           // apply error. Quarantine the tx; do not poison the whole batch.
+           quarantined.push([txn, applyFailureReason(e)])
++          continue
++        }
++        if (changes !== null && info !== null) {
++          const t = buildClock()
++          collectChanges(admitted.changeset, changes, (table) =>
++            mode === 'update' ? 'all' : parents.has(table) ? 'deletes' : 'none',
++          )
++          info.changes_ms += buildClock() - t
++        }
++      }
++      let fullGate = true
++      if (ctx !== null && info !== null) {
++        info.envelopes = applied.length
++        info.apply_ms = buildClock() - tApply - info.changes_ms
++        if (applied.length > 0 || upgrade) {
++          fullGate = deriveInBuild(db, ctx, {
++            mode,
++            upgrade,
++            changes,
++            inTransaction: false,
++            checkPlans: true,
++            info,
++          })
++          refreshed = upgrade
+         }
+       }
+       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
+-      driver.quickCheck(db)
++      if (info !== null) {
++        derivedGate(db, fullGate, info)
++      } else {
++        driver.quickCheck(db)
++      }
++    } finally {
++      db.close()
++    }
++    this.reportBuild(info)
++    return { applied, archivable, quarantined, refreshed }
++  }
++
++  /** PROTOTYPE: whether the head's derived stamp is absent or older than this handle's. */
++  private derivedRefreshDue(): boolean {
++    const ctx = this.derivedCtx
++    if (ctx === null) {
++      return false
++    }
++    const db = this.openCurrent()
++    try {
++      return needsRefresh(db, ctx)
+     } finally {
+       db.close()
+     }
+-    return { applied, archivable, quarantined }
+   }
+ 
+   /**
+diff -ruN a/packages/fsqlite/src/types.ts b/packages/fsqlite/src/types.ts
+--- a/packages/fsqlite/src/types.ts	2026-11-10 23:27:18.078294299 +0000
++++ b/packages/fsqlite/src/types.ts	2026-11-17 04:53:43.040097580 +0000
+@@ -47,6 +47,111 @@
+    * reconciler. A positive safe integer; defaults to 1 GiB.
+    */
+   maxEnvelopeBytes?: number
++  /**
++   * PROTOTYPE (v2 Spike 1): derived objects every generation carries, built inside the
++   * generation build by a declared hook. With `derived` set, `schema` declares the base
++   * tables only (the changeset contract, covered by the schema hash), envelopes may name
++   * base tables only, and the derived objects are excluded from changesets.
++   */
++  derived?: DerivedSpec
++  /**
++   * PROTOTYPE (v2 Spike 1): closure rules run inside every build, before the derived hook.
++   * Each removes child rows whose parent row this build deleted. Requires `derived`.
++   */
++  relations?: Relation[]
++  /**
++   * PROTOTYPE (v2 Spike 1): page cache for generation builds (reconcile, DirectStore, init),
++   * in KiB. SQLite's default on this build is 2,000 KiB.
++   */
++  buildCacheKiB?: number
++  /** PROTOTYPE (v2 Spike 1): called once per generation build with its timings. */
++  onBuild?: (info: BuildInfo) => void
++}
++
++/** PROTOTYPE: one changed row of a base table, keyed by its primary key in column order. */
++export interface ChangedRow {
++  op: 'insert' | 'update' | 'delete'
++  key: (string | number | bigint | Uint8Array | null)[]
++}
++
++/** PROTOTYPE: the rows a build changed, per base table. */
++export type ChangedKeys = Map<string, ChangedRow[]>
++
++/** PROTOTYPE: an `EXPLAIN QUERY PLAN` assertion checked in every build. */
++export interface PlanAssertion {
++  name?: string
++  /** The statement to plan; parameters stay unbound. */
++  sql: string
++  /** The plan must name one of these indexes (`USING [COVERING] INDEX <name>`). */
++  uses: string | string[]
++}
++
++/**
++ * PROTOTYPE: the derived specification. Its `version`, `ddl`, and statistics settings are
++ * hashed and stamped in every generation; a build refuses a store stamped with a newer
++ * version, or with the same version and a different hash.
++ */
++export interface DerivedSpec {
++  version: number
++  /** Secondary indexes, virtual tables (FTS5), and summary tables. No triggers. */
++  ddl: string
++  /** Fill every derived table from the base tables; the tables are empty when it runs. */
++  rebuild: (db: DatabaseSync) => void
++  /**
++   * Bring derived tables up to date for the changed base rows. Without it, every build
++   * calls `rebuild`.
++   */
++  update?: (db: DatabaseSync, changes: ChangedKeys) => void
++  /** `optimize` (default): `PRAGMA optimize` after an update, `ANALYZE` after a rebuild. */
++  statistics?: 'optimize' | 'analyze' | 'none'
++  /**
++   * `analysis_limit` for every statistics pass; default 0, a full ANALYZE. A sampled pass
++   * (1000) misestimated a low-cardinality leading column in the spike and moved a count
++   * off its partial index.
++   */
++  analysisLimit?: number
++  plans?: PlanAssertion[]
++  /**
++   * A reconcile drops the derived objects before applying envelopes, and rebuilds them
++   * after, when the pending changeset bytes exceed this fraction of the base generation's
++   * size (a bulk load). Default 0.5.
++   */
++  rebuildAboveRatio?: number
++}
++
++/** PROTOTYPE: a closure rule, `child(columns)` referencing `parent(parentColumns)`. */
++export interface Relation {
++  child: string
++  columns: string[]
++  parent: string
++  /** Defaults to the parent's primary key columns. */
++  parentColumns?: string[]
++  onMissing: 'delete'
++}
++
++/** PROTOTYPE: what one generation build did, in milliseconds. */
++export interface BuildInfo {
++  lane: 'init' | 'reconcile' | 'direct'
++  /** `rebuild`: derived objects dropped and rebuilt; `refresh`: a new derived version. */
++  mode: 'rebuild' | 'refresh' | 'update' | 'none'
++  buildCacheKiB: number | null
++  envelopes: number
++  changedRows: number
++  drop_ms: number
++  apply_ms: number
++  changes_ms: number
++  closure_ms: number
++  closureRemoved: number
++  derive_ms: number
++  statistics_ms: number
++  plans_ms: number
++  /** The hook: closure, derive, statistics, and plans, plus parsing the changed keys. */
++  hook_ms: number
++  gate: 'full' | 'tables' | 'none'
++  gate_ms: number
++  plans: { name: string; uses: string[]; ok: boolean; plan: string[] }[]
++  createdObjects: string[]
++  droppedObjects: string[]
+ }
+ 
+ /**
+diff -ruN a/packages/fsqlite/test/derived.test.ts b/packages/fsqlite/test/derived.test.ts
+--- a/packages/fsqlite/test/derived.test.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/packages/fsqlite/test/derived.test.ts	2026-11-17 04:45:54.539660298 +0000
+@@ -0,0 +1,493 @@
++// PROTOTYPE (fsqlite v2, Spike 1): derived objects, statistics, plan assertions, and closure
++// relations built inside each generation build, through both write strategies.
++
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { execFileSync } from 'node:child_process'
++import { readdirSync, readFileSync } from 'node:fs'
++import { join } from 'node:path'
++import { DatabaseSync } from 'node:sqlite'
++import { DirectStore, FsqliteError, SnapshotStore } from '../src/index.ts'
++import { collectChanges } from '../src/derived.ts'
++import type { BuildInfo, ChangedKeys, DerivedSpec, StoreOptions } from '../src/types.ts'
++import { tmpStore } from './fixture.ts'
++
++const BASE = `
++CREATE TABLE entity (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL);
++CREATE TABLE edge (source TEXT NOT NULL, relation TEXT NOT NULL, target TEXT NOT NULL,
++  ord INTEGER NOT NULL, PRIMARY KEY (source, relation, target, ord)) WITHOUT ROWID;
++`
++const DDL = `
++CREATE INDEX ix_entity_kind_label ON entity (kind, label, id);
++CREATE INDEX ix_edge_in ON edge (target, relation, source);
++CREATE VIRTUAL TABLE search_fts USING fts5(text, id UNINDEXED, tokenize = 'trigram');
++CREATE TABLE facet_count (relation TEXT NOT NULL, target TEXT NOT NULL, n INTEGER NOT NULL,
++  PRIMARY KEY (relation, target)) WITHOUT ROWID;
++`
++
++function rebuild(db: DatabaseSync): void {
++  db.exec(`
++    INSERT INTO search_fts (text, id) SELECT lower(label), id FROM entity ORDER BY id;
++    INSERT INTO facet_count SELECT relation, target, count(DISTINCT source) FROM edge GROUP BY relation, target;
++  `)
++}
++
++/** Incremental: recompute the search rows and facet groups the changed keys touch. */
++function update(db: DatabaseSync, changes: ChangedKeys): void {
++  const ids = new Set((changes.get('entity') ?? []).map((r) => String(r.key[0])))
++  for (const id of ids) {
++    db.prepare('DELETE FROM search_fts WHERE id = ?').run(id)
++    db.prepare(
++      'INSERT INTO search_fts (text, id) SELECT lower(label), id FROM entity WHERE id = ?',
++    ).run(id)
++  }
++  const groups = new Set(
++    (changes.get('edge') ?? []).map((r) => JSON.stringify([r.key[1], r.key[2]])),
++  )
++  for (const g of groups) {
++    const [relation, target] = JSON.parse(g) as [string, string]
++    db.prepare('DELETE FROM facet_count WHERE relation = ? AND target = ?').run(relation, target)
++    db.prepare(
++      `INSERT INTO facet_count SELECT relation, target, count(DISTINCT source) FROM edge
++       WHERE relation = ? AND target = ? GROUP BY relation, target`,
++    ).run(relation, target)
++  }
++}
++
++const derived = (over: Partial<DerivedSpec> = {}): DerivedSpec => ({
++  version: 1,
++  ddl: DDL,
++  rebuild,
++  update,
++  plans: [
++    {
++      name: 'kind page',
++      sql: "SELECT id FROM entity WHERE kind = 'person' ORDER BY label, id",
++      uses: 'ix_entity_kind_label',
++    },
++  ],
++  ...over,
++})
++
++function options(over: Partial<StoreOptions> = {}, builds?: BuildInfo[]): StoreOptions {
++  return {
++    schema: BASE,
++    schemaVersion: 1,
++    conflictPolicy: { entity: 'lww', edge: 'lww' },
++    derived: derived(),
++    relations: [
++      {
++        child: 'edge',
++        columns: ['source'],
++        parent: 'entity',
++        onMissing: 'delete',
++      },
++      {
++        child: 'edge',
++        columns: ['target'],
++        parent: 'entity',
++        onMissing: 'delete',
++      },
++    ],
++    buildCacheKiB: 65536,
++    onBuild: (info) => builds?.push(info),
++    ...over,
++  }
++}
++
++const person = (db: DatabaseSync, id: string, label: string, org: string): void => {
++  db.prepare(
++    'INSERT INTO entity VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET label = excluded.label',
++  ).run(id, 'person', label)
++  db.prepare('INSERT INTO entity VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING').run(org, 'org', org)
++  db.prepare('INSERT INTO edge VALUES (?, ?, ?, 0) ON CONFLICT DO NOTHING').run(
++    id,
++    'affiliated_with',
++    org,
++  )
++}
++
++function facts(path: string) {
++  const db = new DatabaseSync(path, { readOnly: true })
++  try {
++    return {
++      fts: (
++        db
++          .prepare(`SELECT id FROM search_fts WHERE search_fts MATCH '"copilot"' ORDER BY id`)
++          .all() as { id: string }[]
++      ).map((r) => r.id),
++      facets: db
++        .prepare('SELECT target, n FROM facet_count ORDER BY target')
++        .all()
++        .map((r) => ({ ...r })),
++      stat1: (
++        db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name = 'sqlite_stat1'").get() as {
++          n: number
++        }
++      ).n,
++      meta: Object.fromEntries(
++        (
++          db
++            .prepare(
++              "SELECT key, value FROM fsqlite_meta WHERE key LIKE 'derived_%' OR key = 'base_tables'",
++            )
++            .all() as { key: string; value: string }[]
++        ).map((r) => [r.key, r.value]),
++      ),
++      dangling: (
++        db
++          .prepare(
++            `SELECT count(*) AS n FROM edge g WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
++           OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
++          )
++          .get() as { n: number }
++      ).n,
++    }
++  } finally {
++    db.close()
++  }
++}
++
++test('derived: virtual tables pass init and validate; snapshot 0 carries empty derived objects', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const builds: BuildInfo[] = []
++    const store = new SnapshotStore(dir, options({}, builds)).init()
++    assert.equal(builds[0]?.lane, 'init')
++    const f = facts(store.snapshotPath(0))
++    assert.deepEqual(f.fts, [])
++    assert.equal(f.meta.derived_version, '1')
++    assert.equal(f.meta.base_tables, '["entity","edge"]')
++    assert.equal(store.validate().state, 'sealed')
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: envelopes and a direct write publish generations with FTS5, facets, and statistics', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const builds: BuildInfo[] = []
++    const a = new SnapshotStore(dir, options({}, builds)).init()
++    const b = new SnapshotStore(dir, options({}, builds)).init()
++    a.write('agentA', (db) => {
++      person(db, 'person:cy', 'Cy Copilot', 'org:github')
++    })
++    b.write('agentB', (db) => {
++      person(db, 'person:gh', 'GitHub Copilot Fan', 'org:github')
++    })
++    assert.deepEqual(a.reconcile(), {
++      published: 1,
++      applied: 2,
++      quarantined: 0,
++      attempts: 1,
++    })
++    const r = builds.at(-1)
++    assert.ok(r)
++    assert.equal(r.lane, 'reconcile')
++    assert.equal(r.buildCacheKiB, 65536)
++    assert.ok(r.plans.length === 1 && r.plans[0]?.ok)
++    let f = facts(a.snapshotPath(1))
++    assert.deepEqual(f.fts, ['person:cy', 'person:gh'])
++    assert.deepEqual(f.facets, [{ target: 'org:github', n: 2 }])
++    assert.equal(f.stat1, 1)
++    const direct = new DirectStore(dir, options({}, builds))
++    direct.write((db) => {
++      person(db, 'person:linus', 'Linus Copilot Skeptic', 'org:github')
++    })
++    assert.equal(builds.at(-1)?.lane, 'direct')
++    assert.equal(builds.at(-1)?.mode, 'update')
++    assert.ok((builds.at(-1)?.changedRows ?? 0) >= 2, 'the session reported the changed keys')
++    f = facts(direct.snapshotPath(2))
++    assert.deepEqual(f.fts, ['person:cy', 'person:gh', 'person:linus'])
++    assert.deepEqual(f.facets, [{ target: 'org:github', n: 3 }])
++    assert.equal(a.validate().state, 'sealed')
++    // Standard tools read the generation, FTS5 included.
++    const py = execFileSync(
++      'python3',
++      [
++        '-c',
++        "import sqlite3,sys;db=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro&immutable=1',uri=True);print(db.execute(\"SELECT count(*) FROM search_fts WHERE search_fts MATCH '\\\"copilot\\\"'\").fetchone()[0])",
++        direct.snapshotPath(2),
++      ],
++      { encoding: 'utf8' },
++    )
++    assert.equal(py.trim(), '3')
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: a capture that writes a derived table or statistics is refused; one that reconcile sees is quarantined', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    assert.throws(
++      () =>
++        store.write('w', (db) =>
++          db.prepare('INSERT INTO facet_count VALUES (?, ?, ?)').run('r', 't', 9),
++        ),
++      (e: unknown) =>
++        e instanceof FsqliteError && e.code === 'refused' && e.message.includes('facet_count'),
++    )
++    store.write('w', (db) => {
++      person(db, 'person:a', 'A', 'org:x')
++    })
++    store.reconcile()
++    assert.throws(
++      () =>
++        store.write('w', (db) => {
++          db.exec('ANALYZE')
++        }),
++      (e: unknown) => e instanceof FsqliteError && e.message.includes('sqlite_stat1'),
++    )
++    // A handle without the derived rule captures it; reconcile quarantines it.
++    const plain = new SnapshotStore(dir, {
++      schema: BASE,
++      schemaVersion: 1,
++      conflictPolicy: { entity: 'lww', edge: 'lww' },
++    }).init()
++    plain.write('rogue', (db) =>
++      db.prepare('INSERT INTO facet_count VALUES (?, ?, ?)').run('r', 't', 9),
++    )
++    const res = store.reconcile()
++    assert.equal(res.quarantined, 1)
++    const q = readdirSync(join(dir, 'tx', 'quarantine'))
++    assert.match(
++      readFileSync(join(dir, 'tx', 'quarantine', q[0] ?? '', 'QUARANTINE'), 'utf8'),
++      /non-base table facet_count/,
++    )
++    const dw = new DirectStore(dir, options())
++    assert.throws(
++      () => dw.write((db) => db.prepare("DELETE FROM search_fts WHERE id = 'person:a'").run()),
++      (e: unknown) => e instanceof FsqliteError && e.code === 'refused',
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: a hook failure or a failed plan assertion publishes nothing and leaves no transient', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    new SnapshotStore(dir, options()).init()
++    let fail = false
++    const failing = new SnapshotStore(
++      dir,
++      options({
++        derived: derived({
++          update: (db, ch) => {
++            if (fail) {
++              throw new Error('hook boom')
++            }
++            update(db, ch)
++          },
++        }),
++      }),
++    )
++    failing.write('w', (db) => {
++      person(db, 'person:a', 'A', 'org:x')
++    })
++    fail = true
++    assert.throws(() => failing.reconcile(), /hook boom/)
++    assert.equal(failing.currentVersion(), 0)
++    assert.equal(failing.pendingTxns().length, 1, 'the envelope stays pending')
++    assert.deepEqual(
++      readdirSync(join(dir, 'snapshots')).filter((f) => f.startsWith('.')),
++      [],
++    )
++    const strict = new DirectStore(
++      dir,
++      options({
++        derived: derived({
++          plans: [
++            {
++              name: 'no-such-plan',
++              sql: "SELECT label FROM entity WHERE id = 'x'",
++              uses: 'ix_entity_kind_label',
++            },
++          ],
++        }),
++      }),
++    )
++    assert.throws(
++      () =>
++        strict.write((db) => {
++          person(db, 'person:b', 'B', 'org:x')
++        }),
++      (e: unknown) =>
++        e instanceof FsqliteError &&
++        e.code === 'refused' &&
++        e.message.includes('plan assertion no-such-plan'),
++    )
++    assert.equal(strict.currentVersion(), 0)
++    assert.deepEqual(
++      readdirSync(join(dir, 'snapshots')).filter((f) => f.startsWith('.')),
++      [],
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: a version bump rebuilds in place and keeps store_id; an older or divergent handle is refused', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const v1 = new SnapshotStore(dir, options()).init()
++    v1.write('w', (db) => {
++      person(db, 'person:a', 'Ada Copilot', 'org:x')
++    })
++    v1.reconcile()
++    const storeId = (): string =>
++      (JSON.parse(readFileSync(join(dir, 'fsqlite.json'), 'utf8')) as { store_id: string }).store_id
++    const id = storeId()
++    // Only an index changes: it is created, nothing else is rebuilt.
++    const builds: BuildInfo[] = []
++    const v2 = new SnapshotStore(
++      dir,
++      options(
++        {
++          derived: derived({
++            version: 2,
++            ddl: `${DDL}\nCREATE INDEX ix_entity_label ON entity (label);`,
++          }),
++        },
++        builds,
++      ),
++    ).init()
++    const res = v2.reconcile()
++    assert.equal(res.published, 2, 'a derived refresh publishes with no pending envelopes')
++    assert.deepEqual(builds.at(-1)?.createdObjects, ['ix_entity_label'])
++    assert.equal(builds.at(-1)?.mode, 'refresh')
++    assert.equal(storeId(), id)
++    assert.equal(facts(v2.snapshotPath(2)).meta.derived_version, '2')
++    // A derived table is added: the derived tables are rebuilt.
++    const v3 = new SnapshotStore(
++      dir,
++      options(
++        {
++          derived: derived({
++            version: 3,
++            ddl: `${DDL}\nCREATE TABLE kind_count (kind TEXT PRIMARY KEY NOT NULL, n INTEGER NOT NULL);`,
++            plans: [],
++          }),
++        },
++        builds,
++      ),
++    ).init()
++    v3.reconcile()
++    assert.ok(builds.at(-1)?.createdObjects.includes('facet_count'))
++    assert.deepEqual(facts(v3.snapshotPath(3)).fts, ['person:a'])
++    v1.write('w', (db) => {
++      person(db, 'person:b', 'B', 'org:x')
++    })
++    assert.throws(
++      () => v1.reconcile(),
++      (e: unknown) => e instanceof FsqliteError && e.code === 'incompatible',
++    )
++    const divergent = new DirectStore(dir, options({ derived: derived({ version: 3 }) }))
++    assert.throws(
++      () =>
++        divergent.write((db) => {
++          person(db, 'person:c', 'C', 'org:x')
++        }),
++      /derived_hash/,
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: closure removes edges whose endpoint another envelope deleted', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const builds: BuildInfo[] = []
++    const store = new SnapshotStore(dir, options({}, builds)).init()
++    store.write('seed', (db) => {
++      person(db, 'person:a', 'A', 'org:x')
++      person(db, 'person:b', 'B', 'org:y')
++    })
++    store.reconcile()
++    // Two writers from the same head: one deletes org:x, the other adds an edge to it.
++    store.write('deleter', (db) => {
++      db.exec("DELETE FROM edge WHERE target = 'org:x' OR source = 'org:x'")
++      db.exec("DELETE FROM entity WHERE id = 'org:x'")
++    })
++    store.write('adder', (db) =>
++      db.prepare('INSERT INTO edge VALUES (?, ?, ?, 0)').run('person:b', 'knows', 'org:x'),
++    )
++    const res = store.reconcile()
++    assert.equal(res.applied, 2)
++    assert.equal(builds.at(-1)?.closureRemoved, 1)
++    const f = facts(store.snapshotPath(res.published))
++    assert.equal(f.dangling, 0)
++    assert.deepEqual(
++      f.facets,
++      [{ target: 'org:y', n: 1 }],
++      'the derived update saw the closure removal',
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('derived: a bulk direct write rebuilds the derived objects after the rows; a bulk reconcile does too', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const builds: BuildInfo[] = []
++    const store = new DirectStore(dir, options({}, builds)).init()
++    store.write(
++      (db) => {
++        for (let i = 0; i < 50; i++) {
++          person(db, `person:${i}`, `P${i} copilot`, `org:${i % 3}`)
++        }
++      },
++      { derived: 'rebuild' },
++    )
++    const b = builds.at(-1)
++    assert.ok(b)
++    assert.equal(b.mode, 'rebuild')
++    assert.equal(b.gate, 'full')
++    assert.ok(b.droppedObjects.includes('search_fts'))
++    assert.equal(facts(store.snapshotPath(1)).fts.length, 50)
++  } finally {
++    cleanup()
++  }
++  const second = tmpStore()
++  try {
++    const builds: BuildInfo[] = []
++    const snap = new SnapshotStore(
++      second.dir,
++      options({ derived: derived({ rebuildAboveRatio: 0 }) }, builds),
++    ).init()
++    snap.write('bulk', (db) => {
++      person(db, 'person:z', 'Z copilot', 'org:z')
++    })
++    snap.reconcile()
++    assert.equal(builds.at(-1)?.mode, 'rebuild')
++    assert.deepEqual(facts(snap.snapshotPath(1)).fts, ['person:z'])
++  } finally {
++    second.cleanup()
++  }
++})
++
++test('derived: collectChanges reads primary keys per operation from a changeset', () => {
++  const db = new DatabaseSync(':memory:')
++  db.exec(BASE)
++  db.prepare('INSERT INTO edge VALUES (?, ?, ?, ?)').run('a', 'r', 'b', 0)
++  const s = db.createSession()
++  db.prepare('INSERT INTO entity VALUES (?, ?, ?)').run('x', 'k', 'X')
++  db.prepare('INSERT INTO edge VALUES (?, ?, ?, ?)').run('a', 'r', 'c', 7)
++  db.prepare("DELETE FROM edge WHERE target = 'b'").run()
++  db.prepare("UPDATE entity SET label = 'Y' WHERE id = 'x'").run()
++  const changes: ChangedKeys = new Map()
++  const out = collectChanges(s.changeset(), changes)
++  s.close()
++  db.close()
++  assert.deepEqual(out.tables.sort(), ['edge', 'entity'])
++  assert.deepEqual(changes.get('entity'), [{ op: 'insert', key: ['x'] }])
++  assert.deepEqual((changes.get('edge') ?? []).map((r) => [r.op, ...r.key]).sort(), [
++    ['delete', 'a', 'r', 'b', 0],
++    ['insert', 'a', 'r', 'c', 7],
++  ])
++})

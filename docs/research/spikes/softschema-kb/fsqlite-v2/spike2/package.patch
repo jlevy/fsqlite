@@ -1,0 +1,1852 @@
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/src/changeset.ts b/src/changeset.ts
+--- a/src/changeset.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/src/changeset.ts	2026-11-17 04:51:39.185303005 +0000
+@@ -0,0 +1,186 @@
++// changeset.ts: a reader for SQLite session changesets (the binary format of
++// sqlite3session_changeset), used for admission and for the missing-row policy.
++//
++// node:sqlite applies a changeset table that is missing or narrower in the target by
++// skipping it and still reporting success, and its conflict handler receives only the
++// conflict type, never the operation. Reading the table headers lets reconcile refuse an
++// envelope that names a table outside the base set or with another shape, and splitting a
++// changeset by operation lets a delete of a missing row be ignored while an update of a
++// missing row is still reported.
++//
++// Format (sqlite3session.c): a table header is 'T', a varint column count, one primary-key
++// position byte per column, and the NUL-terminated table name. Each change is an operation
++// byte (INSERT 18, UPDATE 23, DELETE 9), an indirect flag byte, and one record (INSERT:
++// new values; DELETE: old values) or two (UPDATE: old, then new). A value is a type byte:
++// 0 undefined, 1 integer and 2 real (8 bytes each), 3 text and 4 blob (a varint length,
++// then the bytes), 5 NULL. A patchset starts its tables with 'P' instead.
++
++import { FsqliteError } from './errors.ts'
++
++export const OP_INSERT = 18
++export const OP_UPDATE = 23
++export const OP_DELETE = 9
++
++const TABLE_CHANGESET = 0x54 // 'T'
++const TABLE_PATCHSET = 0x50 // 'P'
++
++/** One table of a changeset: its name, its column shape, and its change counts. */
++export interface ChangesetTable {
++  name: string
++  columns: number
++  /**
++   * One byte per column: its 1-based position in the primary key, or 0. This is the
++   * `pk` column of `PRAGMA table_info`, which changeset apply compares byte for byte.
++   */
++  primaryKey: number[]
++  inserts: number
++  updates: number
++  deletes: number
++}
++
++/** The parts of a changeset, split by operation, each with its own table headers. */
++export interface SplitChangeset {
++  inserts: Uint8Array
++  updates: Uint8Array
++  deletes: Uint8Array
++}
++
++const malformed = (detail: string): FsqliteError =>
++  new FsqliteError('corrupt', `malformed changeset: ${detail}`)
++
++class Reader {
++  i = 0
++  readonly buf: Uint8Array
++  constructor(buf: Uint8Array) {
++    this.buf = buf
++  }
++
++  byte(): number {
++    const b = this.buf[this.i++]
++    if (b === undefined) {
++      throw malformed('truncated')
++    }
++    return b
++  }
++
++  varint(): number {
++    let v = 0
++    for (let n = 0; n < 9; n++) {
++      const b = this.byte()
++      v = v * 128 + (b & 0x7f)
++      if ((b & 0x80) === 0) {
++        return v
++      }
++    }
++    throw malformed('varint longer than 9 bytes')
++  }
++
++  skipValue(): void {
++    const type = this.byte()
++    if (type === 1 || type === 2) {
++      this.i += 8
++    } else if (type === 3 || type === 4) {
++      const length = this.varint() // read before `this.i`, which varint() advances
++      this.i += length
++    } else if (type !== 0 && type !== 5) {
++      throw malformed(`unknown value type ${type}`)
++    }
++    if (this.i > this.buf.length) {
++      throw malformed('value runs past the end')
++    }
++  }
++}
++
++interface Walk {
++  onTable: (table: ChangesetTable, header: Uint8Array) => void
++  onChange: (op: number, change: Uint8Array) => void
++}
++
++function walk(buf: Uint8Array, visit: Walk): void {
++  const r = new Reader(buf)
++  let table: ChangesetTable | null = null
++  while (r.i < buf.length) {
++    const start = r.i
++    const lead = r.byte()
++    if (lead === TABLE_PATCHSET) {
++      throw malformed('a patchset, not a changeset')
++    }
++    if (lead === TABLE_CHANGESET) {
++      const columns = r.varint()
++      const primaryKey: number[] = []
++      for (let c = 0; c < columns; c++) {
++        primaryKey.push(r.byte())
++      }
++      const nameStart = r.i
++      while (r.byte() !== 0) {
++        // the name runs to its NUL terminator
++      }
++      const name = Buffer.from(buf.subarray(nameStart, r.i - 1)).toString('utf8')
++      table = { name, columns, primaryKey, inserts: 0, updates: 0, deletes: 0 }
++      visit.onTable(table, buf.subarray(start, r.i))
++      continue
++    }
++    if (table === null) {
++      throw malformed('a change before any table header')
++    }
++    r.byte() // the indirect flag
++    const records = lead === OP_UPDATE ? 2 : 1
++    if (lead !== OP_INSERT && lead !== OP_UPDATE && lead !== OP_DELETE) {
++      throw malformed(`unknown operation ${lead}`)
++    }
++    for (let n = 0; n < records; n++) {
++      for (let c = 0; c < table.columns; c++) {
++        r.skipValue()
++      }
++    }
++    if (lead === OP_INSERT) {
++      table.inserts++
++    } else if (lead === OP_UPDATE) {
++      table.updates++
++    } else {
++      table.deletes++
++    }
++    visit.onChange(lead, buf.subarray(start, r.i))
++  }
++}
++
++/** Every table a changeset names, in order, with its shape and change counts. */
++export function changesetTables(buf: Uint8Array): ChangesetTable[] {
++  const tables: ChangesetTable[] = []
++  walk(buf, { onTable: (t) => tables.push(t), onChange: () => undefined })
++  return tables
++}
++
++/**
++ * Split a changeset into three changesets, one per operation, each repeating the table
++ * header before its first change of that table. Within one changeset each row key occurs
++ * at most once, so applying the parts in any order reaches the same rows.
++ */
++export function splitChangesetByOp(buf: Uint8Array): SplitChangeset {
++  const parts: Record<number, Uint8Array[]> = {
++    [OP_INSERT]: [],
++    [OP_UPDATE]: [],
++    [OP_DELETE]: [],
++  }
++  let header: Uint8Array = new Uint8Array(0)
++  let headed = new Set<number>()
++  walk(buf, {
++    onTable: (_table, h) => {
++      header = h
++      headed = new Set()
++    },
++    onChange: (op, change) => {
++      const part = parts[op]!
++      if (!headed.has(op)) {
++        part.push(header)
++        headed.add(op)
++      }
++      part.push(change)
++    },
++  })
++  return {
++    inserts: Buffer.concat(parts[OP_INSERT]!),
++    updates: Buffer.concat(parts[OP_UPDATE]!),
++    deletes: Buffer.concat(parts[OP_DELETE]!),
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/src/conflictPolicy.ts b/src/conflictPolicy.ts
+--- a/src/conflictPolicy.ts	2026-11-09 16:21:01.339677608 +0000
++++ b/src/conflictPolicy.ts	2026-11-17 04:53:18.651591545 +0000
+@@ -26,8 +26,14 @@
+ 
+ import type { DatabaseSync } from 'node:sqlite'
+ import { constants, foreignKeyCheck, OWNED_TABLES, rollbackQuietly } from './driver.ts'
++import { splitChangesetByOp } from './changeset.ts'
+ import { FsqliteError, PermanentConflictError, StrictConflictError } from './errors.ts'
+-import type { ConflictPolicyInput, NormalizedPolicy } from './types.ts'
++import type {
++  ConflictPolicyInput,
++  MissingRowAction,
++  NormalizedMissingPolicy,
++  NormalizedPolicy,
++} from './types.ts'
+ 
+ /**
+  * `@types/node` 22 omits `SQLITE_CHANGESET_CONSTRAINT`, which node:sqlite exports on every
+@@ -97,9 +103,10 @@
+ export function normalize(policy: ConflictPolicyInput = {}): NormalizedPolicy {
+   const out = Object.create(null) as NormalizedPolicy
+   for (const [table, value] of Object.entries(policy as Record<string, unknown>)) {
+-    const action = typeof value === 'string' ? ACTION_SPELLINGS.get(value) : undefined
++    const spelled = isTablePolicy(value) ? value.conflict : value
++    const action = typeof spelled === 'string' ? ACTION_SPELLINGS.get(spelled) : undefined
+     if (action === undefined) {
+-      throw new TypeError(`unknown conflict action '${String(value)}' for table '${table}'`)
++      throw new TypeError(`unknown conflict action '${String(spelled)}' for table '${table}'`)
+     }
+     out[table] = action
+   }
+@@ -109,6 +116,61 @@
+   return Object.freeze(out)
+ }
+ 
++const isTablePolicy = (value: unknown): value is { conflict: unknown } & Record<string, unknown> =>
++  typeof value === 'object' && value !== null && !Array.isArray(value)
++
++const MISSING_ACTIONS: ReadonlySet<string> = new Set(['ignore', 'quarantine'])
++
++function missingAction(table: string, key: string, value: unknown): MissingRowAction {
++  if (value === undefined) {
++    return 'quarantine'
++  }
++  if (typeof value !== 'string' || !MISSING_ACTIONS.has(value)) {
++    throw new TypeError(`unknown ${key} action ${JSON.stringify(value)} for table '${table}'`)
++  }
++  return value as MissingRowAction
++}
++
++/**
++ * The missing-row settings of a policy (v2 design (n)): for each table, what a changeset
++ * DELETE or UPDATE of a row the build lacks means. Every table defaults to its `'*'`
++ * entry, and `'*'` to `quarantine` for both, which is `f1.0` behavior.
++ */
++export function normalizeMissing(policy: ConflictPolicyInput = {}): NormalizedMissingPolicy {
++  const out = Object.create(null) as NormalizedMissingPolicy
++  for (const [table, value] of Object.entries(policy as Record<string, unknown>)) {
++    if (isTablePolicy(value)) {
++      out[table] = Object.freeze({
++        delete: missingAction(table, 'missingDelete', value.missingDelete),
++        update: missingAction(table, 'missingUpdate', value.missingUpdate),
++      })
++    }
++  }
++  if (!Object.hasOwn(out, '*')) {
++    out['*'] = Object.freeze({ delete: 'quarantine', update: 'quarantine' })
++  }
++  return Object.freeze(out)
++}
++
++/** The missing-row settings for `table`: its own entry, else `'*'`. */
++export function missingFor(
++  missing: NormalizedMissingPolicy,
++  table: string,
++): { delete: MissingRowAction; update: MissingRowAction } {
++  return (
++    (Object.hasOwn(missing, table) ? missing[table] : undefined) ??
++    (Object.hasOwn(missing, '*') ? missing['*'] : undefined) ?? {
++      delete: 'quarantine',
++      update: 'quarantine',
++    }
++  )
++}
++
++/** Whether any table's missing-row settings ignore something, which needs a split apply. */
++const ignoresAny = (missing: NormalizedMissingPolicy | undefined): boolean =>
++  missing !== undefined &&
++  Object.values(missing).some((m) => m.delete === 'ignore' || m.update === 'ignore')
++
+ const ownAction = (policy: NormalizedPolicy, key: string): Action | undefined =>
+   Object.hasOwn(policy, key) ? policy[key] : undefined
+ 
+@@ -156,7 +218,8 @@
+   changeset: Uint8Array,
+   policy: NormalizedPolicy,
+   beforeCommit: () => void = () => undefined,
+-): void {
++  missing?: NormalizedMissingPolicy,
++): { omittedMissing: number } {
+   for (const [table, action] of Object.entries(policy as Record<string, unknown>)) {
+     if (typeof action !== 'string' || !(ACTIONS as readonly string[]).includes(action)) {
+       throw new TypeError(
+@@ -175,44 +238,110 @@
+   if (enforced) {
+     db.exec('PRAGMA foreign_keys = OFF')
+   }
++  const passes: Pass[] = ignoresAny(missing)
++    ? splitPasses(changeset, used, missing!)
++    : [...used].map((action) => ({
++        changeset,
++        action,
++        op: null,
++        ignore: false,
++      }))
++  passes.sort((a, b) => ACTIONS.indexOf(a.action) - ACTIONS.indexOf(b.action))
++  const omitted = { n: 0 }
+   try {
+-    applyInTransaction(db, changeset, policy, used, beforeCommit)
++    applyInTransaction(db, passes, policy, missing, beforeCommit, omitted)
+   } finally {
+     if (enforced) {
+       db.exec('PRAGMA foreign_keys = ON')
+     }
+   }
++  return { omittedMissing: omitted.n }
++}
++
++/**
++ * One filtered apply pass: a changeset (the whole one, or one operation's part), the
++ * action its tables route to, and for a part, whether a missing row is ignored.
++ */
++interface Pass {
++  changeset: Uint8Array
++  action: Action
++  op: 'delete' | 'update' | 'insert' | null
++  ignore: boolean
++}
++
++/**
++ * The passes of a split apply (v2 design (n), research probe A.12): the changeset is split
++ * by operation, so a pass over its deletes or its updates can answer `NOTFOUND` with OMIT
++ * for exactly the tables whose missing-row setting is `ignore`.
++ */
++function splitPasses(
++  changeset: Uint8Array,
++  used: ReadonlySet<Action>,
++  missing: NormalizedMissingPolicy,
++): Pass[] {
++  const parts = splitChangesetByOp(changeset)
++  const passes: Pass[] = []
++  for (const action of used) {
++    for (const [op, part] of [
++      ['delete', parts.deletes],
++      ['update', parts.updates],
++      ['insert', parts.inserts],
++    ] as const) {
++      if (part.length === 0) {
++        continue
++      }
++      if (op === 'insert') {
++        passes.push({ changeset: part, action, op, ignore: false })
++        continue
++      }
++      const settings = new Set(Object.values(missing).map((m) => m[op]))
++      for (const ignore of [true, false]) {
++        if (settings.has(ignore ? 'ignore' : 'quarantine')) {
++          passes.push({ changeset: part, action, op, ignore })
++        }
++      }
++    }
++  }
++  return passes
+ }
+ 
+ function applyInTransaction(
+   db: DatabaseSync,
+-  changeset: Uint8Array,
++  passes: Pass[],
+   policy: NormalizedPolicy,
+-  used: ReadonlySet<Action>,
++  missing: NormalizedMissingPolicy | undefined,
+   beforeCommit: () => void,
++  omitted: { n: number },
+ ): void {
+   db.exec('BEGIN IMMEDIATE')
+   try {
+-    for (const action of ACTIONS) {
+-      if (!used.has(action)) {
+-        continue
+-      }
++    for (const { changeset, action, op, ignore } of passes) {
+       const ownedTables = new Set<string>()
+       const filter = (table: string): boolean => {
+         if (FSQLITE_OWNED_TABLES.has(table)) {
+           ownedTables.add(table)
+           return false
+         }
+-        return actionFor(policy, table) === action
++        if (actionFor(policy, table) !== action) {
++          return false
++        }
++        if (op === null || op === 'insert' || missing === undefined) {
++          return true
++        }
++        return (missingFor(missing, table)[op] === 'ignore') === ignore
+       }
+       const strict: number[] = []
+       const permanent: number[] = []
++      const onConflict = (type: number): number => {
++        if (ignore && type === CHANGESET_NOTFOUND) {
++          omitted.n++
++          return CHANGESET_OMIT
++        }
++        return conflictResult(action, type, strict, permanent)
++      }
+       let ok: boolean
+       try {
+-        ok = db.applyChangeset(changeset, {
+-          filter,
+-          onConflict: (type) => conflictResult(action, type, strict, permanent),
+-        })
++        ok = db.applyChangeset(changeset, { filter, onConflict })
+       } catch (error) {
+         if (permanent.length > 0) {
+           throw new PermanentConflictError(permanent.map(conflictName), { cause: error })
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/src/driver.ts b/src/driver.ts
+--- a/src/driver.ts	2026-11-09 17:38:49.234541395 +0000
++++ b/src/driver.ts	2026-11-17 04:52:25.914864459 +0000
+@@ -155,6 +155,50 @@
+   }
+ }
+ 
++/** A switch for {@link guardOwnedTables}: armed while application code runs in a build. */
++export interface OwnedTableGuard {
++  arm: () => void
++  disarm: () => void
++}
++
++/**
++ * Guard fsqlite-owned tables on a build connection while a reducer runs (v2 design (k)).
++ * Unlike {@link protectOwnedTables}, the TEMP triggers fire only while the guard is armed,
++ * so fsqlite's own ledger insert after the reducer still works. The switch is a TEMP table
++ * row, so a rollback of the envelope's transaction also disarms it.
++ */
++export function guardOwnedTables(db: DatabaseSync): OwnedTableGuard {
++  db.exec(
++    'CREATE TEMP TABLE fsqlite_guard (armed INTEGER NOT NULL); INSERT INTO fsqlite_guard VALUES (0);',
++  )
++  for (const table of OWNED_TABLES) {
++    for (const action of ['INSERT', 'UPDATE', 'DELETE']) {
++      db.exec(`
++        CREATE TEMP TRIGGER fsqlite_guard_${table}_${action.toLowerCase()}
++        BEFORE ${action} ON main.${table}
++        WHEN (SELECT armed FROM temp.fsqlite_guard) = 1
++        BEGIN
++          SELECT RAISE(ABORT, 'fsqlite-owned table ${table} is read-only');
++        END;
++      `)
++    }
++  }
++  const set = db.prepare('UPDATE temp.fsqlite_guard SET armed = ?')
++  return { arm: () => void set.run(1), disarm: () => void set.run(0) }
++}
++
++/**
++ * Open a sparse-seed working database (v2 design (l)): an in-memory database that will
++ * hold the caller schema only, so a capture copies nothing. Foreign keys are not enforced
++ * here, because the parents of hydrated rows are usually absent; reconcile's
++ * `foreign_key_check` enforces them against the full build instead.
++ */
++export function openSparseWorkingCopy(): DatabaseSync {
++  const db = connect(':memory:')
++  db.exec('PRAGMA foreign_keys = OFF;')
++  return db
++}
++
+ interface CallbackBoundary {
+   applicationId: number
+   userVersion: number
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/src/snapshotStore.ts b/src/snapshotStore.ts
+--- a/src/snapshotStore.ts	2026-11-10 23:24:32.004601572 +0000
++++ b/src/snapshotStore.ts	2026-11-17 04:52:42.700885366 +0000
+@@ -23,6 +23,7 @@
+ 
+ import {
+   closeSync,
++  fsyncSync,
+   mkdirSync,
+   copyFileSync,
+   linkSync,
+@@ -38,12 +39,15 @@
+   rmSync,
+   statSync,
+   utimesSync,
++  writeSync,
+ } from 'node:fs'
+ import { basename, dirname, join, resolve } from 'node:path'
+ import { randomBytes, createHash } from 'node:crypto'
+ import { hostname } from 'node:os'
++import type { SQLInputValue, StatementSync } from 'node:sqlite'
+ import * as driver from './driver.ts'
+-import { normalize, applyWithPolicy } from './conflictPolicy.ts'
++import { normalize, normalizeMissing, applyWithPolicy } from './conflictPolicy.ts'
++import { changesetTables } from './changeset.ts'
+ import {
+   errorMessage,
+   FsqliteError,
+@@ -70,6 +74,13 @@
+ import type { StoreMarker } from './storeFormat.ts'
+ import type { LockLease, LockOptions } from './lock.ts'
+ import type {
++  AppendOptions,
++  ClosureHook,
++  NormalizedMissingPolicy,
++  PublisherOptions,
++  PublisherRound,
++  Reducer,
++  WriteOptions,
+   StoreOptions,
+   NormalizedPolicy,
+   WorkFn,
+@@ -92,7 +103,26 @@
+ const rand = (): string => randomBytes(5).toString('hex')
+ const sha256 = (buf: Uint8Array | string): string => createHash('sha256').update(buf).digest('hex')
+ const pad = (n: number): string => String(n).padStart(12, '0')
+-const txIdOf = (txn: string): string => txn.replace(/\.txn$/, '')
++/** A SQLite URI that opens a published snapshot read-only and immutable, for ATTACH. */
++const readOnlyImmutableUri = (path: string): string =>
++  `file:${encodeURI(resolve(path)).replace(/\?/g, '%3f').replace(/#/g, '%23')}?mode=ro&immutable=1`
++const txIdOf = (txn: string): string => txn.replace(/\.(?:txn|env)$/, '')
++/** A single-file operation envelope (v2 design (k)): a header line, then the payload. */
++const OP_ENVELOPE_SUFFIX = '.env'
++const isOpEnvelope = (txn: string): boolean => txn.endsWith(OP_ENVELOPE_SUFFIX)
++/** The longest header line an operation envelope may have. */
++const MAX_OP_HEADER_BYTES = 64 * 1024
++const SAFE_REDUCER_NAME = /^[A-Za-z0-9._-]{1,64}$/
++const monotonicMs = (): number => Number(process.hrtime.bigint()) / 1e6
++const sleepCell = new Int32Array(new SharedArrayBuffer(4))
++/** Block this thread for `ms`; the store API is synchronous. */
++const sleepSync = (ms: number): void => {
++  if (ms > 0) {
++    Atomics.wait(sleepCell, 0, 0, ms)
++  }
++}
++/** The epoch ms a transaction id starts with. */
++const txTimestamp = (txn: string): number => Number(txn.slice(0, 12))
+ const nowIso = (): string => new Date().toISOString()
+ 
+ const CHANGESET_FILENAME = 'changeset.bin'
+@@ -448,6 +478,23 @@
+   reconcileCrashAtForTest = crashAt
+ }
+ 
++/** The header line of an operation envelope. */
++interface OpHeader {
++  kind: 'op'
++  tx_id: string
++  format_version: string
++  store_id: string
++  writer_id: string
++  reducer: string
++  reducer_version: string
++  schema_version: number
++  schema_hash: string
++  created_at: string
++  payload_bytes: number
++  payload_sha256: string
++  tool_version: string
++}
++
+ interface Manifest {
+   tx_id: string
+   format_version: string
+@@ -474,6 +521,8 @@
+   applied: string[]
+   archivable: string[]
+   quarantined: [string, string][]
++  omittedMissing: number
++  closure: Record<string, unknown> | null
+ }
+ 
+ interface TableColumn {
+@@ -613,6 +662,13 @@
+   readonly conflictPolicy: NormalizedPolicy
+   readonly toolVersion: string
+   readonly maxEnvelopeBytes: number
++  /** The frozen missing-row settings this handle reconciles with (v2 design (n)). */
++  readonly missingRowPolicy: NormalizedMissingPolicy
++  /** Reducers for operation envelopes, by name (v2 design (k)). */
++  readonly reducers: Readonly<Record<string, Reducer>>
++  readonly closure: ClosureHook | null
++  /** @internal Milliseconds per step of the last reconcile build. */
++  lastTimings: Record<string, number> = {}
+   private clock: number
+ 
+   constructor(dir: string, opts: StoreOptions = {}) {
+@@ -631,6 +687,14 @@
+     // mismatch is incompatible in f1.0; neither token performs migration.
+     this.schemaHash = sha256(this.schema).slice(0, 16)
+     this.conflictPolicy = normalize(opts.conflictPolicy ?? {})
++    this.missingRowPolicy = normalizeMissing(opts.conflictPolicy ?? {})
++    for (const name of Object.keys(opts.reducers ?? {})) {
++      if (!SAFE_REDUCER_NAME.test(name)) {
++        throw new TypeError(`invalid reducer name ${JSON.stringify(name)}`)
++      }
++    }
++    this.reducers = Object.freeze({ ...(opts.reducers ?? {}) })
++    this.closure = opts.closure ?? null
+     this.toolVersion = opts.toolVersion ?? DEFAULT_TOOL_VERSION
+     this.maxEnvelopeBytes = requireSafeInteger(
+       'maxEnvelopeBytes',
+@@ -1013,7 +1077,7 @@
+    * rows and constraints its changeset is based on. The O(snapshot size) cost is an
+    * explicit part of the alpha operating envelope.
+    */
+-  write(writerId: string, fn: WorkFn): string | null {
++  write(writerId: string, fn: WorkFn, opts: WriteOptions = {}): string | null {
+     if (!SAFE_WRITER_ID.test(writerId)) {
+       throw new TypeError(
+         `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
+@@ -1022,6 +1086,9 @@
+     this.verifyCompatible()
+     driver.requireWriterCapabilities() // loud failure here beats a silent empty changeset
+     const marker = readStoreMarker(this.dir)
++    if (opts.seed === 'sparse') {
++      return this.writeSparse(writerId, fn, opts, marker)
++    }
+     const work = join(this.txPending, `.work-${writerId}-${rand()}.sqlite`)
+     // SAFE: the source snapshot is immutable.
+     const base = this.withCurrentSnapshot((path) => {
+@@ -1040,10 +1107,81 @@
+       db.close()
+       rmSync(work, { force: true })
+     }
+-    if (!changeset) {
+-      return null
++    return changeset ? this.commitChangeset(writerId, base, changeset, marker) : null
++  }
++
++  /**
++   * Sparse-seed capture (v2 design (l)): the working database is in memory and holds the
++   * caller schema only; the head is attached read-only and immutable as `head`. `hydrate`
++   * copies the rows the callback will update or delete before the session starts, so the
++   * changeset records their old values exactly as a full copy would. A row the callback
++   * did not hydrate is invisible to it: an UPDATE of it changes nothing, and an INSERT of
++   * its key reaches reconcile as an INSERT, where the conflict policy decides.
++   */
++  private writeSparse(
++    writerId: string,
++    fn: WorkFn,
++    opts: WriteOptions,
++    marker: StoreMarker,
++  ): string | null {
++    const { version: base, result: db } = this.withCurrentSnapshot((path) => {
++      const work = driver.openSparseWorkingCopy()
++      try {
++        work.exec(`PRAGMA user_version = ${this.schemaVersion};`)
++        work.exec(LEDGER_DDL)
++        work.exec(META_DDL)
++        work.exec(this.schema)
++        work.prepare('ATTACH ? AS head').run(readOnlyImmutableUri(path))
++        return work
++      } catch (error) {
++        work.close()
++        throw error
++      }
++    })
++    let changeset: Uint8Array | null
++    try {
++      if (opts.hydrate) {
++        const statements = new Map<string, StatementSync>()
++        const copy = (table: string, where: string, ...params: SQLInputValue[]): number => {
++          const key = `${table}\u0000${where}`
++          let stmt = statements.get(key)
++          if (stmt === undefined) {
++            const quoted = `"${table.replace(/"/g, '""')}"`
++            stmt = db.prepare(
++              `INSERT OR IGNORE INTO main.${quoted} SELECT * FROM head.${quoted} WHERE ${where}`,
++            )
++            statements.set(key, stmt)
++          }
++          return Number(stmt.run(...params).changes)
++        }
++        db.exec('BEGIN')
++        try {
++          opts.hydrate(db, copy)
++          db.exec('COMMIT')
++        } catch (error) {
++          driver.rollbackQuietly(db)
++          throw error
++        }
++      }
++      driver.protectOwnedTables(db)
++      const boundary = driver.captureCallbackBoundary(db)
++      changeset = driver.recordChangeset(db, (callbackDb) => {
++        fn(callbackDb)
++        driver.assertCallbackBoundary(callbackDb, boundary)
++      })
++    } finally {
++      db.close()
+     }
++    return changeset ? this.commitChangeset(writerId, base, changeset, marker) : null
++  }
+ 
++  /** Commit a captured changeset as a pending envelope directory; returns its tx id. */
++  private commitChangeset(
++    writerId: string,
++    base: number,
++    changeset: Uint8Array,
++    marker: StoreMarker,
++  ): string {
+     const txId = `${pad(Date.now())}-${pad(this.clock++)}-${writerId}-${rand()}`
+     const txDir = join(this.txPending, `${txId}.txn`)
+     mkdirSync(txDir, { recursive: true })
+@@ -1067,6 +1205,72 @@
+   }
+ 
+   /**
++   * Append an operation envelope (v2 design (k)): application bytes that the reducer named
++   * `reducer` folds into the next build, in envelope-id order, in the same transaction as
++   * the envelope's ledger row. Capture is one file write: a header line and the payload,
++   * written to a temporary name and committed by a no-replace hard link, so a reader of
++   * the pending tail never sees a partial envelope. No SQLite session and no head copy is
++   * involved, so any language can produce one. Returns the tx id.
++   *
++   * Without `durable` the envelope survives a process crash but not a power loss before
++   * the next publish (spec section 10); with it, the file and directory are fsynced.
++   */
++  append(writerId: string, reducer: string, payload: Uint8Array, opts: AppendOptions = {}): string {
++    if (!SAFE_WRITER_ID.test(writerId)) {
++      throw new TypeError(
++        `invalid writerId ${JSON.stringify(writerId)}: must match ${String(SAFE_WRITER_ID)}`,
++      )
++    }
++    if (!SAFE_REDUCER_NAME.test(reducer)) {
++      throw new TypeError(`invalid reducer name ${JSON.stringify(reducer)}`)
++    }
++    const version = opts.version ?? this.reducers[reducer]?.version
++    if (version === undefined) {
++      throw new TypeError(
++        `append: reducer ${JSON.stringify(reducer)} is not registered on this handle; pass its version`,
++      )
++    }
++    const marker = readStoreMarker(this.dir)
++    const txId = `${pad(Date.now())}-${pad(this.clock++)}-${writerId}-${rand()}`
++    const header: OpHeader = {
++      kind: 'op',
++      tx_id: txId,
++      format_version: marker.format_version,
++      store_id: marker.store_id,
++      writer_id: writerId,
++      reducer,
++      reducer_version: version,
++      schema_version: this.schemaVersion,
++      schema_hash: this.schemaHash,
++      created_at: nowIso(),
++      payload_bytes: payload.length,
++      payload_sha256: sha256(payload),
++      tool_version: this.toolVersion,
++    }
++    const dest = join(this.txPending, `${txId}${OP_ENVELOPE_SUFFIX}`)
++    const tmp = join(this.txPending, `.${txId}${OP_ENVELOPE_SUFFIX}.${rand()}.tmp`)
++    try {
++      const fd = openSync(tmp, 'wx')
++      try {
++        writeSync(fd, `${JSON.stringify(header)}\n`)
++        writeSync(fd, payload)
++        if (opts.durable) {
++          fsyncSync(fd)
++        }
++      } finally {
++        closeSync(fd)
++      }
++      linkSync(tmp, dest) // commit without replacing
++    } finally {
++      removeQuietly(tmp)
++    }
++    if (opts.durable) {
++      fsyncDir(this.txPending)
++    }
++    return txId
++  }
++
++  /**
+    * Per-transaction OPTIMISTIC RETRY (granular OCC): runs `fn` against a fresh seed
+    * from the current snapshot, reconciles, and, if `fn`'s changes conflicted with a
+    * concurrently-published row under a 'strict' table, re-seeds and re-runs `fn`, up
+@@ -1196,7 +1400,11 @@
+       return []
+     }
+     return readdirSync(this.txPending)
+-      .filter((d) => d.endsWith('.txn') && existsSync(join(this.txPending, d, 'COMMITTED')))
++      .filter(
++        (d) =>
++          (isOpEnvelope(d) && !d.startsWith('.')) ||
++          (d.endsWith('.txn') && existsSync(join(this.txPending, d, 'COMMITTED'))),
++      )
+       .sort()
+   }
+ 
+@@ -1263,6 +1471,11 @@
+           applied: 0,
+           quarantined: settled.quarantined,
+           attempts: attempt + 1,
++          appliedTxIds: [],
++          quarantineReasons: fold.quarantined,
++          omittedMissing: 0,
++          closure: null,
++          timings: this.lastTimings,
+         }
+       }
+       const next = base + 1
+@@ -1271,32 +1484,111 @@
+       } // published; tx not yet archived
+ 
+       let settled: { applied: number; quarantined: number }
++      const tSettle = monotonicMs()
+       try {
+         settled = this.settle(fold.applied, fold.archivable, fold.quarantined)
+       } catch (error) {
+         throw new PostPublishError(next, error)
+       }
++      this.lastTimings.settle_ms = monotonicMs() - tSettle
+       return {
+         published: next,
+         applied: settled.applied,
+         quarantined: settled.quarantined,
+         attempts: attempt + 1,
++        appliedTxIds: fold.applied.map(txIdOf),
++        quarantineReasons: fold.quarantined,
++        omittedMissing: fold.omittedMissing,
++        closure: fold.closure,
++        timings: this.lastTimings,
+       }
+     }
+     throw new PublishContentionError('reconcile', maxRetries)
+   }
+ 
+   /**
++   * The coalescing publisher (v2 design (d)): loop until `until()` is true and nothing is
++   * pending, folding every pending envelope into one build per round. A round starts no
++   * sooner than `minIntervalMs`, and no sooner than `intervalFactor` times the previous
++   * build's duration, after the previous publish, unless the oldest pending envelope is
++   * `maxDelayMs` old or the pending envelopes hold `maxPendingBytes`. Maintenance such as
++   * gc runs in `afterPublish`, on whatever schedule it chooses. Blocks the calling thread.
++   */
++  runPublisher(opts: PublisherOptions): { rounds: PublisherRound[] } {
++    const minIntervalMs = opts.minIntervalMs ?? 0
++    const intervalFactor = opts.intervalFactor ?? 0
++    const maxDelayMs = opts.maxDelayMs ?? Number.POSITIVE_INFINITY
++    const maxPendingBytes = opts.maxPendingBytes ?? Number.POSITIVE_INFINITY
++    const pollMs = opts.pollMs ?? 5
++    const rounds: PublisherRound[] = []
++    let lastEnd = Date.now()
++    let lastBuildMs = 0
++    for (;;) {
++      const pending = this.pendingTxns()
++      if (pending.length === 0) {
++        if (opts.until()) {
++          break
++        }
++        sleepSync(pollMs)
++        continue
++      }
++      const now = Date.now()
++      const due = lastEnd + Math.max(minIntervalMs, intervalFactor * lastBuildMs)
++      if (now < due && now - txTimestamp(pending[0] ?? '') < maxDelayMs) {
++        const bytes = Number.isFinite(maxPendingBytes)
++          ? pending.reduce((n, txn) => {
++              try {
++                return n + statSync(join(this.txPending, txn)).size
++              } catch {
++                return n
++              }
++            }, 0)
++          : 0
++        if (bytes < maxPendingBytes) {
++          sleepSync(Math.min(pollMs, due - now))
++          continue
++        }
++      }
++      const startedAt = Date.now()
++      const result = this.reconcile(opts.lockOpts ? { lockOpts: opts.lockOpts } : {})
++      const publishedAt = Date.now()
++      const round: PublisherRound = {
++        startedAt,
++        publishedAt,
++        buildMs: publishedAt - startedAt,
++        waitedMs: startedAt - lastEnd,
++        result,
++      }
++      rounds.push(round)
++      opts.afterPublish?.(round)
++      lastEnd = Date.now()
++      lastBuildMs = round.buildMs
++    }
++    return { rounds }
++  }
++
++  /**
+    * F2-F4: copy the base to the `tmp` build, fold the committed `pending` envelopes into it
+    * in order, and run the pre-publication gates. Each envelope is applied, found archivable
+    * (already in the base lineage), or quarantined with a reason; one bad envelope never
+    * aborts the batch. A gate failure throws, and the caller discards the build.
+    */
+   private fold(tmp: string, base: number, pending: string[], marker: StoreMarker): FoldResult {
++    const timings: Record<string, number> = {}
++    this.lastTimings = timings
++    let t = monotonicMs()
++    const lap = (key: string): void => {
++      const now = monotonicMs()
++      timings[key] = (timings[key] ?? 0) + now - t
++      t = now
++    }
+     copyFileSync(this.snapshotPath(base), tmp)
++    lap('copy_ms')
+     const applied: string[] = []
+     const archivable: string[] = []
+     const quarantined: [string, string][] = []
++    let omittedMissing = 0
++    let closure: Record<string, unknown> | null = null
+     const db = driver.openBuild(tmp)
+     try {
+       const seen = new Set(
+@@ -1305,21 +1597,70 @@
+         ),
+       )
+       const mark = db.prepare('INSERT INTO applied_tx (tx_id, applied_at) VALUES (?, ?)')
++      // Operation envelopes: reducers run under a guard on the owned tables, and share
++      // per-build state that any rollback clears (v2 design (k)).
++      const guard = pending.some(isOpEnvelope) ? driver.guardOwnedTables(db) : null
++      const boundary = guard ? driver.captureCallbackBoundary(db) : null
++      const buildState = new Map<string, unknown>()
++      const reducersUsed = new Map<string, string>()
++      const shapes = new Map<string, { columns: number; primaryKey: number[] } | null>()
++      lap('open_ms')
+       for (const txn of pending) {
+         const txId = txIdOf(txn)
+         if (seen.has(txId)) {
+           archivable.push(txn)
+           continue
+         } // already in this lineage
++        if (isOpEnvelope(txn)) {
++          const op = this.admitOperation(txn, marker)
++          if (typeof op === 'string') {
++            quarantined.push([txn, op])
++            continue
++          }
++          const reducer = this.reducers[op.header.reducer]!
++          db.exec('BEGIN IMMEDIATE')
++          try {
++            guard!.arm()
++            reducer.apply(db, op.payload, {
++              txId,
++              writerId: op.header.writer_id,
++              build: buildState,
++            })
++            guard!.disarm()
++            driver.assertCallbackBoundary(db, boundary!)
++            mark.run(txId, nowIso())
++            db.exec('COMMIT')
++            applied.push(txn)
++            seen.add(txId)
++            reducersUsed.set(op.header.reducer, op.header.reducer_version)
++          } catch (e) {
++            driver.rollbackQuietly(db)
++            buildState.clear()
++            quarantined.push([txn, `reducer-failed: ${errorMessage(e)}`])
++          }
++          continue
++        }
+         const admitted = this.admitEnvelope(txn, marker)
+         if (typeof admitted === 'string') {
+           quarantined.push([txn, admitted])
+           continue
+         }
++        const refused = this.admitChangesetTables(db, admitted.changeset, shapes)
++        if (refused !== null) {
++          quarantined.push([txn, refused])
++          continue
++        }
+         try {
+-          applyWithPolicy(db, admitted.changeset, this.conflictPolicy, () => {
+-            mark.run(admitted.manifest.tx_id, nowIso())
+-          })
++          const outcome = applyWithPolicy(
++            db,
++            admitted.changeset,
++            this.conflictPolicy,
++            () => {
++              mark.run(admitted.manifest.tx_id, nowIso())
++            },
++            this.missingRowPolicy,
++          )
++          omittedMissing += outcome.omittedMissing
+           applied.push(txn)
+           seen.add(txId)
+         } catch (e) {
+@@ -1328,12 +1669,157 @@
+           quarantined.push([txn, applyFailureReason(e)])
+         }
+       }
++      lap('apply_ms')
++      if (applied.length > 0 && (this.closure !== null || reducersUsed.size > 0)) {
++        db.exec('BEGIN IMMEDIATE')
++        try {
++          if (this.closure !== null) {
++            closure = this.closure(db, { envelopes: applied.length }) ?? {}
++          }
++          const stamp = db.prepare(
++            `INSERT INTO fsqlite_meta (key, value) VALUES (?, ?)
++             ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
++          )
++          for (const [name, version] of reducersUsed) {
++            stamp.run(`reducer.${name}`, version)
++          }
++          db.exec('COMMIT')
++        } catch (e) {
++          driver.rollbackQuietly(db)
++          throw e
++        }
++        lap('closure_ms')
++      }
+       verifySnapshotForPublish(db, marker, this.schemaVersion, this.schemaHash)
+       driver.quickCheck(db)
++      lap('gate_ms')
+     } finally {
+       db.close()
+     }
+-    return { applied, archivable, quarantined }
++    return { applied, archivable, quarantined, omittedMissing, closure }
++  }
++
++  /**
++   * Admission for an operation envelope (v2 design (k)): read its header and payload and
++   * check them against the store and this handle's reducers. Returns the header and
++   * payload, or the quarantine reason.
++   */
++  private admitOperation(
++    txn: string,
++    marker: StoreMarker,
++  ): { header: OpHeader; payload: Uint8Array } | string {
++    const path = join(this.txPending, txn)
++    let bytes: Buffer
++    try {
++      if (statSync(path).size > this.maxEnvelopeBytes + MAX_OP_HEADER_BYTES) {
++        return `envelope-too-large: ${statSync(path).size} > ${this.maxEnvelopeBytes}`
++      }
++      bytes = readFileSync(path)
++    } catch {
++      return 'unreadable-envelope'
++    }
++    const newline = bytes.indexOf(10)
++    if (newline < 0 || newline > MAX_OP_HEADER_BYTES) {
++      return 'malformed-header'
++    }
++    let parsed: unknown
++    try {
++      parsed = JSON.parse(bytes.toString('utf8', 0, newline))
++    } catch {
++      return 'malformed-header'
++    }
++    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
++      return 'malformed-header'
++    }
++    const header = parsed as Partial<OpHeader> as OpHeader
++    const payload = bytes.subarray(newline + 1)
++    if ((header.kind as string) !== 'op') {
++      return 'unknown-envelope-kind'
++    }
++    if (payload.length !== header.payload_bytes || sha256(payload) !== header.payload_sha256) {
++      return 'digest-mismatch'
++    }
++    if (header.format_version !== marker.format_version) {
++      return 'format-version-mismatch'
++    }
++    if (header.tx_id !== txIdOf(txn)) {
++      return 'tx-id-mismatch'
++    }
++    if (header.store_id !== marker.store_id) {
++      return 'store-id-mismatch'
++    }
++    if (header.schema_version !== this.schemaVersion) {
++      return 'schema-version-mismatch'
++    }
++    if (header.schema_hash !== this.schemaHash) {
++      return 'schema-hash-mismatch'
++    }
++    const reducer = Object.hasOwn(this.reducers, header.reducer)
++      ? this.reducers[header.reducer]
++      : undefined
++    if (reducer === undefined) {
++      return `unknown-reducer: ${header.reducer}`
++    }
++    if (reducer.version !== header.reducer_version) {
++      return `reducer-version-mismatch: envelope ${header.reducer_version}, reconciler ${reducer.version}`
++    }
++    return { header, payload }
++  }
++
++  /**
++   * Changeset admission (v2 design (n)): every table a changeset names must be a caller
++   * table of the build with the same column count and primary key, because SQLite's apply
++   * skips a missing or differently shaped table and still reports success. Owned tables
++   * are left to the apply, which quarantines them as permanent conflicts. Returns the
++   * quarantine reason, or null.
++   */
++  private admitChangesetTables(
++    db: driver.DB,
++    changeset: Uint8Array,
++    shapes: Map<string, { columns: number; primaryKey: number[] } | null>,
++  ): string | null {
++    let tables
++    try {
++      tables = changesetTables(changeset)
++    } catch (error) {
++      return `admission: ${errorMessage(error)}`
++    }
++    for (const table of tables) {
++      if ((driver.OWNED_TABLES as readonly string[]).includes(table.name)) {
++        continue
++      }
++      if (!shapes.has(table.name)) {
++        const exists = db
++          .prepare(
++            "SELECT 1 FROM main.sqlite_schema WHERE type = 'table' AND name = ? AND name NOT LIKE 'sqlite_%'",
++          )
++          .get(table.name)
++        const cols = exists
++          ? (db.prepare(`PRAGMA main.table_info("${table.name.replace(/"/g, '""')}")`).all() as {
++              pk: number
++            }[])
++          : []
++        shapes.set(
++          table.name,
++          exists ? { columns: cols.length, primaryKey: cols.map((c) => c.pk) } : null,
++        )
++      }
++      const shape = shapes.get(table.name)
++      if (!shape) {
++        return `admission: table ${JSON.stringify(table.name)} is not a caller table of this store`
++      }
++      if (
++        shape.columns !== table.columns ||
++        shape.primaryKey.join(',') !== table.primaryKey.join(',')
++      ) {
++        return (
++          `admission: table ${JSON.stringify(table.name)} has ${table.columns} columns and ` +
++          `primary key [${table.primaryKey.join(',')}] in the changeset, against ` +
++          `${shape.columns} and [${shape.primaryKey.join(',')}] in the store`
++        )
++      }
++    }
++    return null
+   }
+ 
+   /**
+@@ -1403,7 +1889,25 @@
+     crashAt: CrashAt,
+   ): CommitOutcome {
+     const next = base + 1
++    const tSync = monotonicMs()
+     fsyncPath(tmp) // complete slow durability work before acquiring the publication lease
++    const tCommit = monotonicMs()
++    this.lastTimings.fsync_ms = tCommit - tSync
++    try {
++      return this.commitBuild(tmp, base, next, lockOpts, crashAt)
++    } finally {
++      this.lastTimings.commit_ms = monotonicMs() - tCommit
++      this.lastTimings.published_at_epoch_ms = Date.now()
++    }
++  }
++
++  private commitBuild(
++    tmp: string,
++    base: number,
++    next: number,
++    lockOpts: LockOptions,
++    crashAt: CrashAt,
++  ): CommitOutcome {
+     return withLock(
+       this.publishLock,
+       (_token, lease): CommitOutcome => {
+@@ -1794,7 +2298,9 @@
+ 
+   private archivedTransactions(): string[] {
+     return existsSync(this.txApplied)
+-      ? readdirSync(this.txApplied).filter((entry) => entry.endsWith('.txn'))
++      ? readdirSync(this.txApplied).filter(
++          (entry) => entry.endsWith('.txn') || (isOpEnvelope(entry) && !entry.startsWith('.')),
++        )
+       : []
+   }
+ 
+@@ -2232,6 +2738,18 @@
+   }
+ 
+   private quarantine(pairs: [string, string][]): void {
++    // A single-file envelope keeps its reason beside it, as `<txn>.QUARANTINE`.
++    const files = pairs.filter(([txn]) => isOpEnvelope(txn))
++    this.move(
++      files.map(([txn]) => txn),
++      this.txQuarantine,
++    )
++    for (const [txn, reason] of files) {
++      if (existsSync(join(this.txQuarantine, txn))) {
++        writeFileSync(join(this.txQuarantine, `${txn}.QUARANTINE`), reason)
++      }
++    }
++    pairs = pairs.filter(([txn]) => !isOpEnvelope(txn))
+     for (const [txn, reason] of pairs) {
+       const txDir = join(this.txPending, txn)
+       try {
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/src/types.ts b/src/types.ts
+--- a/src/types.ts	2026-11-10 23:27:18.078294299 +0000
++++ b/src/types.ts	2026-11-17 04:52:25.925320580 +0000
+@@ -1,6 +1,6 @@
+ // Public types for fsqlite.
+ 
+-import type { DatabaseSync } from 'node:sqlite'
++import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
+ import type { LockOptions } from './lock.ts'
+ 
+ /** A unit of work run against a writable connection. */
+@@ -15,12 +15,91 @@
+  */
+ export type ConflictAction = 'replace' | 'omit' | 'strict' | 'lww' | 'union'
+ 
+-/** Caller-supplied policy: table name to action, with `'*'` the default. */
+-export type ConflictPolicyInput = Record<string, ConflictAction>
++/**
++ * What a changeset operation on a row that is missing from the build means (v2 design
++ * (n)): `ignore` drops that one operation, `quarantine` (the default) refuses the whole
++ * envelope as `permanent-conflict: NOTFOUND`, as `f1.0` always did.
++ */
++export type MissingRowAction = 'ignore' | 'quarantine'
++
++/** One table's complete policy: the conflict action and the missing-row settings. */
++export interface TablePolicy {
++  conflict: ConflictAction
++  /** A DELETE of a row the build lacks. `ignore` makes deletes idempotent. */
++  missingDelete?: MissingRowAction
++  /** An UPDATE of a row the build lacks. */
++  missingUpdate?: MissingRowAction
++}
++
++/** Caller-supplied policy: table name to action or table policy, with `'*'` the default. */
++export type ConflictPolicyInput = Record<string, ConflictAction | TablePolicy>
+ 
+ /** Normalized policy: only the three actions node:sqlite honors, `'*'` always set. */
+ export type NormalizedPolicy = Record<string, 'replace' | 'omit' | 'strict'>
+ 
++/** Normalized missing-row settings per table, `'*'` always set. */
++export type NormalizedMissingPolicy = Record<
++  string,
++  { delete: MissingRowAction; update: MissingRowAction }
++>
++
++/**
++ * A reducer folds one operation envelope's payload into the build (v2 design (k)). It runs
++ * inside the envelope's transaction, with its ledger row, in envelope-id order. A reducer
++ * that throws rolls its envelope back and quarantines it.
++ */
++export interface Reducer {
++  /** Stamped on every envelope and in every build that applies one; a mismatch is refused. */
++  version: string
++  apply: (db: DatabaseSync, payload: Uint8Array, ctx: ReducerContext) => void
++}
++
++/** What a reducer knows about the envelope it applies. */
++export interface ReducerContext {
++  txId: string
++  writerId: string
++  /**
++   * State shared by the envelopes of one build, such as prepared statements or caches of
++   * base facts. It is cleared whenever an envelope rolls back, so it never holds state from
++   * a transaction that did not commit.
++   */
++  build: Map<string, unknown>
++}
++
++/** Options for `append()`. */
++export interface AppendOptions {
++  /** fsync the envelope and its directory before returning, so it survives power loss. */
++  durable?: boolean | null
++  /** The reducer version to stamp; defaults to the handle's registered reducer. */
++  version?: string
++}
++
++/** Copies matching rows of `table` from the attached head into the sparse working copy. */
++export type HydrateCopy = (table: string, where: string, ...params: SQLInputValue[]) => number
++
++/** Options for `write()`. */
++export interface WriteOptions {
++  /**
++   * `full` (the default) copies the head, so the callback observes every row and
++   * constraint. `sparse` (v2 design (l)) gives the callback a working database that holds
++   * the schema only, with the head attached read-only as `head`; `hydrate` copies the rows
++   * the callback will update or delete before the session starts.
++   */
++  seed?: 'full' | 'sparse'
++  hydrate?: (db: DatabaseSync, copy: HydrateCopy) => void
++}
++
++/**
++ * A closure step that runs inside every build after the envelopes are folded and before
++ * the gate, in its own transaction. It derives what depends on more than one envelope,
++ * such as removing edges whose endpoint a later envelope deleted. Throwing publishes
++ * nothing. Its result is reported by `reconcile()`.
++ */
++export type ClosureHook = (
++  db: DatabaseSync,
++  info: { envelopes: number },
++) => Record<string, unknown> | undefined
++
+ /** Caller-supplied configuration for a store: the schema and the per-table merge policy. */
+ export interface StoreOptions {
+   /** Caller DDL applied to snapshot 0. Every table must have a NON-NULL primary key. */
+@@ -47,6 +126,10 @@
+    * reconciler. A positive safe integer; defaults to 1 GiB.
+    */
+   maxEnvelopeBytes?: number
++  /** Reducers for operation envelopes, by name. Every reconciler must register the same ones. */
++  reducers?: Record<string, Reducer>
++  /** A closure step run inside every build; see {@link ClosureHook}. */
++  closure?: ClosureHook
+ }
+ 
+ /**
+@@ -82,6 +165,47 @@
+   applied: number
+   quarantined: number
+   attempts: number
++  /** The transaction ids this call published, in apply order. */
++  appliedTxIds?: string[]
++  /** The envelopes this call quarantined, with their reasons. */
++  quarantineReasons?: [string, string][]
++  /** Changeset operations on missing rows that the missing-row policy ignored. */
++  omittedMissing?: number
++  /** What the closure step reported, when one ran. */
++  closure?: Record<string, unknown> | null
++  /** Milliseconds per step of the last build attempt. */
++  timings?: Record<string, number>
++}
++
++/** Options for `runPublisher()`, the coalescing publisher loop (v2 design (d)). */
++export interface PublisherOptions {
++  /** Stop once this returns true and nothing is pending. */
++  until: () => boolean
++  /** Start a build no sooner than this many ms after the previous publish. Default 0. */
++  minIntervalMs?: number
++  /** Start a build no sooner than this multiple of the previous build's duration. Default 0. */
++  intervalFactor?: number
++  /** Build at once, whatever the interval, when the oldest pending envelope is this old. */
++  maxDelayMs?: number
++  /** Build at once, whatever the interval, when pending envelopes hold this many bytes. */
++  maxPendingBytes?: number
++  /** Idle poll interval in ms. Default 5. */
++  pollMs?: number
++  /** Runs after each publish, outside the build, for example gc on its own schedule. */
++  afterPublish?: (round: PublisherRound) => void
++  /** Publish-lock options for each reconcile. */
++  lockOpts?: LockOptions
++}
++
++/** One publish of the coalescing publisher. */
++export interface PublisherRound {
++  /** Epoch ms when the build started and when its reconcile returned. */
++  startedAt: number
++  publishedAt: number
++  buildMs: number
++  /** Idle ms between the previous publish and this build's start. */
++  waitedMs: number
++  result: ReconcileResult
+ }
+ 
+ /**
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/test/v2-spike2.test.ts b/test/v2-spike2.test.ts
+--- a/test/v2-spike2.test.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/test/v2-spike2.test.ts	2026-11-17 04:53:18.655283312 +0000
+@@ -0,0 +1,479 @@
++// v2 design, Spike 2: operation envelopes with a serial reducer (k), sparse-seed changeset
++// capture (l), the missing-row policy and changeset admission (n), and the coalescing
++// publisher (d).
++
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { createHash } from 'node:crypto'
++import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
++import { join } from 'node:path'
++import type { DatabaseSync } from 'node:sqlite'
++import { SnapshotStore } from '../src/index.ts'
++import type { Reducer, StoreOptions } from '../src/index.ts'
++import { changesetTables, splitChangesetByOp } from '../src/changeset.ts'
++import { normalizeMissing } from '../src/conflictPolicy.ts'
++import { tmpStore } from './fixture.ts'
++
++const SCHEMA = `
++  CREATE TABLE node (id TEXT PRIMARY KEY NOT NULL, label TEXT NOT NULL);
++  CREATE TABLE edge (
++    source TEXT NOT NULL,
++    target TEXT NOT NULL,
++    props TEXT,
++    PRIMARY KEY (source, target)
++  ) WITHOUT ROWID;
++  CREATE INDEX ix_edge_target ON edge (target);
++`
++
++/** A reducer whose payload is JSON lines of `["node", id, label]` or `["edge", s, t]`. */
++const rows: Reducer = {
++  version: '1',
++  apply(db, payload) {
++    for (const line of Buffer.from(payload).toString('utf8').split('\n')) {
++      if (line === '') {
++        continue
++      }
++      const [kind, a, b] = JSON.parse(line) as [string, string, string]
++      if (kind === 'node') {
++        db.prepare(
++          'INSERT INTO node VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET label = excluded.label',
++        ).run(a, b)
++      } else if (kind === 'edge') {
++        db.prepare('INSERT OR REPLACE INTO edge VALUES (?, ?, NULL)').run(a, b)
++      } else if (kind === 'unnode') {
++        db.prepare('DELETE FROM node WHERE id = ?').run(a)
++      } else if (kind === 'throw') {
++        throw new Error('reducer refused the payload')
++      } else if (kind === 'ledger') {
++        db.prepare('DELETE FROM applied_tx').run()
++      }
++    }
++  },
++}
++
++const lines = (...items: unknown[][]): Uint8Array =>
++  Buffer.from(items.map((i) => JSON.stringify(i)).join('\n'))
++
++const options = (extra: Partial<StoreOptions> = {}): StoreOptions => ({
++  schema: SCHEMA,
++  schemaVersion: 1,
++  conflictPolicy: { '*': 'lww' },
++  reducers: { rows },
++  ...extra,
++})
++
++const all = (store: SnapshotStore, sql: string): unknown[] =>
++  store.read((db) =>
++    db
++      .prepare(sql)
++      .all()
++      .map((r) => ({ ...r })),
++  )
++
++test('append commits a single-file envelope that reconcile folds through its reducer once', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    const a = store.append('w1', 'rows', lines(['node', 'a', 'A'], ['edge', 'a', 'b']))
++    const b = store.append('w2', 'rows', lines(['node', 'b', 'B']), {
++      durable: true,
++    })
++    assert.deepEqual(store.pendingTxns(), [`${a}.env`, `${b}.env`])
++    const first = store.reconcile()
++    assert.equal(first.applied, 2)
++    assert.deepEqual(first.appliedTxIds, [a, b])
++    assert.deepEqual(all(store, 'SELECT id, label FROM node ORDER BY id'), [
++      { id: 'a', label: 'A' },
++      { id: 'b', label: 'B' },
++    ])
++    assert.equal(
++      store.read(
++        (db) =>
++          (
++            db.prepare("SELECT value FROM fsqlite_meta WHERE key = 'reducer.rows'").get() as {
++              value: string
++            }
++          ).value,
++      ),
++      '1',
++    )
++    // Exactly once: an envelope copied back into pending is found in the ledger.
++    writeFileSync(
++      join(store.txPending, `${a}.env`),
++      readFileSync(join(store.txApplied, `${a}.env`)),
++    )
++    const again = store.reconcile()
++    assert.equal(again.applied, 0)
++    assert.equal(store.pendingTxns().length, 0)
++    assert.equal(store.validate().state, 'sealed')
++  } finally {
++    cleanup()
++  }
++})
++
++test('a reducer that throws, or that writes an owned table, quarantines only its envelope', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    store.append('w', 'rows', lines(['node', 'a', 'A']))
++    const bad = store.append('w', 'rows', lines(['node', 'x', 'X'], ['throw']))
++    const owned = store.append('w', 'rows', lines(['ledger']))
++    store.append('w', 'rows', lines(['node', 'c', 'C']))
++    const result = store.reconcile()
++    assert.equal(result.applied, 2)
++    assert.equal(result.quarantined, 2)
++    assert.deepEqual(all(store, 'SELECT id FROM node ORDER BY id'), [{ id: 'a' }, { id: 'c' }])
++    const reasons = Object.fromEntries(result.quarantineReasons ?? [])
++    assert.match(String(reasons[`${bad}.env`]), /^reducer-failed: reducer refused the payload/)
++    assert.match(String(reasons[`${owned}.env`]), /fsqlite-owned table applied_tx is read-only/)
++    assert.ok(existsSync(join(store.txQuarantine, `${bad}.env`)))
++    assert.match(
++      readFileSync(join(store.txQuarantine, `${bad}.env.QUARANTINE`), 'utf8'),
++      /reducer-failed/,
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('reducer state is shared within one build and cleared when an envelope rolls back', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const seen: number[] = []
++    const counting: Reducer = {
++      version: '1',
++      apply(db, payload, ctx) {
++        const n = ((ctx.build.get('n') as number | undefined) ?? 0) + 1
++        ctx.build.set('n', n)
++        seen.push(n)
++        rows.apply(db, payload, ctx)
++      },
++    }
++    const store = new SnapshotStore(dir, options({ reducers: { rows: counting } })).init()
++    store.append('w', 'rows', lines(['node', 'a', 'A']))
++    store.append('w', 'rows', lines(['throw']))
++    store.append('w', 'rows', lines(['node', 'b', 'B']))
++    store.reconcile()
++    assert.deepEqual(seen, [1, 2, 1])
++  } finally {
++    cleanup()
++  }
++})
++
++test('an unknown reducer or a reducer version mismatch is refused at admission', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const writer = new SnapshotStore(dir, options()).init()
++    const old = writer.append('w', 'rows', lines(['node', 'a', 'A']), {
++      version: '0',
++    })
++    const unknown = writer.append('w', 'other', lines(['node', 'b', 'B']), {
++      version: '1',
++    })
++    const result = writer.reconcile()
++    const reasons = Object.fromEntries(result.quarantineReasons ?? [])
++    assert.match(
++      String(reasons[`${old}.env`]),
++      /^reducer-version-mismatch: envelope 0, reconciler 1/,
++    )
++    assert.match(String(reasons[`${unknown}.env`]), /^unknown-reducer: other/)
++    assert.throws(() => writer.append('w', 'nope', lines()), /not registered/)
++  } finally {
++    cleanup()
++  }
++})
++
++test('a tampered operation envelope is quarantined as a digest mismatch', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    const tx = store.append('w', 'rows', lines(['node', 'a', 'A']))
++    const path = join(store.txPending, `${tx}.env`)
++    writeFileSync(path, readFileSync(path, 'utf8').replace('"A"', '"Z"'))
++    const result = store.reconcile()
++    assert.equal(result.quarantined, 1)
++    assert.equal(result.quarantineReasons?.[0]?.[1], 'digest-mismatch')
++  } finally {
++    cleanup()
++  }
++})
++
++test('the closure hook runs inside the build after the envelopes, and a failure publishes nothing', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    let fail = false
++    const closure = (db: DatabaseSync): Record<string, unknown> => {
++      if (fail) {
++        throw new Error('closure failed')
++      }
++      const removed = db
++        .prepare('DELETE FROM edge WHERE NOT EXISTS (SELECT 1 FROM node WHERE id = edge.target)')
++        .run().changes
++      return { removed: Number(removed) }
++    }
++    const store = new SnapshotStore(dir, options({ closure })).init()
++    store.append('w', 'rows', lines(['node', 'a', 'A'], ['node', 'b', 'B'], ['edge', 'a', 'b']))
++    store.append('w', 'rows', lines(['unnode', 'b']))
++    const result = store.reconcile()
++    assert.deepEqual(result.closure, { removed: 1 })
++    assert.deepEqual(all(store, 'SELECT * FROM edge'), [])
++    fail = true
++    store.append('w', 'rows', lines(['node', 'c', 'C']))
++    assert.throws(() => store.reconcile(), /closure failed/)
++    assert.equal(store.currentVersion(), 1)
++    assert.equal(store.pendingTxns().length, 1)
++  } finally {
++    cleanup()
++  }
++})
++
++const NODES = (db: DatabaseSync): void => {
++  db.exec("INSERT INTO node VALUES ('a', 'A'), ('b', 'B'), ('c', 'C')")
++  db.exec("INSERT INTO edge VALUES ('a', 'b', NULL), ('a', 'c', NULL), ('b', 'c', NULL)")
++}
++
++test('sparse capture records the same changeset as a full copy for hydrated rows', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    store.write('seed', NODES)
++    store.reconcile()
++    const work = (db: DatabaseSync): void => {
++      db.exec("UPDATE node SET label = 'A2' WHERE id = 'a'")
++      db.exec("DELETE FROM edge WHERE source = 'a'")
++      db.exec("INSERT INTO edge VALUES ('c', 'a', '{}')")
++    }
++    const full = store.write('full', work)
++    const sparse = store.write('sparse', work, {
++      seed: 'sparse',
++      hydrate: (_db, copy) => {
++        assert.equal(copy('node', 'id = ?', 'a'), 1)
++        assert.equal(copy('edge', 'source = ?', 'a'), 2)
++      },
++    })
++    const changeset = (tx: string | null): string =>
++      readFileSync(join(store.txPending, `${tx ?? ''}.txn`, 'changeset.bin')).toString('hex')
++    assert.equal(changeset(sparse), changeset(full))
++    // The callback reads unhydrated rows through the attached head.
++    const seen = store.write(
++      'reader',
++      (db) => {
++        const n = (
++          db.prepare('SELECT count(*) AS n FROM head.edge').get() as {
++            n: number
++          }
++        ).n
++        db.prepare("INSERT INTO node VALUES ('count', ?)").run(String(n))
++      },
++      { seed: 'sparse' },
++    )
++    assert.ok(seen)
++    assert.equal(readdirSync(store.txPending).filter((f) => f.startsWith('.work-')).length, 0)
++  } finally {
++    cleanup()
++  }
++})
++
++test('two writers delete the same row: quarantined by default, idempotent with missingDelete ignore', () => {
++  for (const missingDelete of ['quarantine', 'ignore'] as const) {
++    const { dir, cleanup } = tmpStore()
++    try {
++      const store = new SnapshotStore(
++        dir,
++        options({
++          conflictPolicy: {
++            '*': 'lww',
++            edge: { conflict: 'lww', missingDelete },
++          },
++        }),
++      ).init()
++      store.write('seed', NODES)
++      store.reconcile()
++      store.write('one', (db) => {
++        db.exec("DELETE FROM edge WHERE source = 'a'")
++      })
++      store.write('two', (db) => {
++        db.exec("DELETE FROM edge WHERE source = 'a' AND target = 'b'")
++        db.exec("UPDATE node SET label = 'C2' WHERE id = 'c'")
++      })
++      const result = store.reconcile()
++      if (missingDelete === 'quarantine') {
++        assert.equal(result.quarantined, 1)
++        assert.match(String(result.quarantineReasons?.[0]?.[1]), /permanent-conflict: NOTFOUND/)
++      } else {
++        assert.equal(result.quarantined, 0)
++        assert.equal(result.omittedMissing, 1)
++        assert.deepEqual(all(store, "SELECT label FROM node WHERE id = 'c'"), [{ label: 'C2' }])
++      }
++      assert.deepEqual(all(store, 'SELECT source, target FROM edge'), [
++        { source: 'b', target: 'c' },
++      ])
++    } finally {
++      cleanup()
++    }
++  }
++})
++
++test('missingDelete ignore still reports an update of a missing row unless missingUpdate ignores it', () => {
++  for (const missingUpdate of ['quarantine', 'ignore'] as const) {
++    const { dir, cleanup } = tmpStore()
++    try {
++      const store = new SnapshotStore(
++        dir,
++        options({
++          conflictPolicy: {
++            '*': { conflict: 'lww', missingDelete: 'ignore', missingUpdate },
++          },
++        }),
++      ).init()
++      store.write('seed', NODES)
++      store.reconcile()
++      store.write('deleter', (db) => {
++        db.exec("DELETE FROM node WHERE id = 'b'")
++      })
++      store.write('updater', (db) => {
++        db.exec("UPDATE node SET label = 'B2' WHERE id = 'b'")
++      })
++      const result = store.reconcile()
++      assert.equal(result.quarantined, missingUpdate === 'quarantine' ? 1 : 0)
++      assert.deepEqual(all(store, "SELECT * FROM node WHERE id = 'b'"), [])
++    } finally {
++      cleanup()
++    }
++  }
++})
++
++test('a delete racing an update is a DATA conflict that the conflict action decides', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(
++      dir,
++      options({
++        conflictPolicy: { '*': { conflict: 'union', missingDelete: 'ignore' } },
++      }),
++    ).init()
++    store.write('seed', NODES)
++    store.reconcile()
++    store.write('updater', (db) => {
++      db.exec("UPDATE node SET label = 'B2' WHERE id = 'b'")
++    })
++    store.write('deleter', (db) => {
++      db.exec("DELETE FROM node WHERE id = 'b'")
++    })
++    assert.equal(store.reconcile().quarantined, 0)
++    // union keeps the first writer's row: the delete of a changed row is omitted.
++    assert.deepEqual(all(store, "SELECT label FROM node WHERE id = 'b'"), [{ label: 'B2' }])
++  } finally {
++    cleanup()
++  }
++})
++
++test('normalizeMissing defaults to quarantine and rejects unknown settings', () => {
++  assert.deepEqual(
++    { ...normalizeMissing({ t: 'lww' })['*'] },
++    { delete: 'quarantine', update: 'quarantine' },
++  )
++  assert.deepEqual(
++    {
++      ...normalizeMissing({ t: { conflict: 'lww', missingDelete: 'ignore' } }).t,
++    },
++    { delete: 'ignore', update: 'quarantine' },
++  )
++  assert.throws(
++    () =>
++      normalizeMissing({
++        t: { conflict: 'lww', missingDelete: 'drop' as 'ignore' },
++      }),
++    /unknown missingDelete action "drop"/,
++  )
++})
++
++test('changeset admission refuses a table the store lacks or shapes differently', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    // Forge an envelope captured against another schema: same hashes, other tables.
++    const tx = store.write('w', (db) => {
++      db.exec("INSERT INTO node VALUES ('a', 'A')")
++    })
++    const cs = join(store.txPending, `${tx ?? ''}.txn`, 'changeset.bin')
++    const forged = Buffer.from(
++      readFileSync(cs).toString('latin1').replace('node\u0000', 'nodx\u0000'),
++      'latin1',
++    )
++    writeFileSync(cs, forged)
++    const manifestPath = join(store.txPending, `${tx ?? ''}.txn`, 'manifest.json')
++    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
++    manifest.changeset_sha256 = createHash('sha256').update(forged).digest('hex')
++    writeFileSync(manifestPath, JSON.stringify(manifest))
++    const result = store.reconcile()
++    assert.equal(result.quarantined, 1)
++    assert.match(
++      String(result.quarantineReasons?.[0]?.[1]),
++      /^admission: table "nodx" is not a caller table/,
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('the changeset reader lists tables and splits by operation', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    store.write('seed', NODES)
++    store.reconcile()
++    const tx = store.write('w', (db) => {
++      db.exec("INSERT INTO node VALUES ('d', 'D')")
++      db.exec("UPDATE node SET label = 'A2' WHERE id = 'a'")
++      db.exec("DELETE FROM edge WHERE source = 'a'")
++    })
++    const cs = readFileSync(join(store.txPending, `${tx ?? ''}.txn`, 'changeset.bin'))
++    const tables = changesetTables(cs).map((t) => [
++      t.name,
++      t.columns,
++      t.primaryKey,
++      t.inserts,
++      t.updates,
++      t.deletes,
++    ])
++    assert.deepEqual(tables.sort(), [
++      ['edge', 3, [1, 2, 0], 0, 0, 2],
++      ['node', 2, [1, 0], 1, 1, 0],
++    ])
++    const parts = splitChangesetByOp(cs)
++    assert.equal(
++      parts.inserts.length + parts.updates.length + parts.deletes.length > cs.length,
++      true,
++    )
++    assert.deepEqual(
++      changesetTables(parts.deletes).map((t) => [t.name, t.deletes]),
++      [['edge', 2]],
++    )
++  } finally {
++    cleanup()
++  }
++})
++
++test('the publisher coalesces pending envelopes and stops when told to', () => {
++  const { dir, cleanup } = tmpStore()
++  try {
++    const store = new SnapshotStore(dir, options()).init()
++    for (let i = 0; i < 25; i++) {
++      store.append('w', 'rows', lines(['node', `n${i}`, String(i)]))
++    }
++    let after = 0
++    const report = store.runPublisher({
++      until: () => true,
++      afterPublish: () => {
++        after++
++      },
++    })
++    assert.equal(report.rounds.length, 1)
++    assert.equal(report.rounds[0]?.result.applied, 25)
++    assert.equal(after, 1)
++    assert.equal(all(store, 'SELECT id FROM node').length, 25)
++  } finally {
++    cleanup()
++  }
++})

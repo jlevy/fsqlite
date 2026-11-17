@@ -1,0 +1,360 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S2-r2",
+  "workflow": "w1-h4-v2-256m-r1",
+  "recorded_at": "2026-11-17T05:21:48.365Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 13417,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "kb_bytes": 1152109067,
+  "parse": {
+    "reused": true,
+    "seconds": null,
+    "parser": "parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order",
+    "validation": "not run"
+  },
+  "intermediate_bytes": 1372272643,
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 59.33,
+    "max_rss_mib": 1045.6,
+    "exit": 0,
+    "report": {
+      "arm": "SnapshotStore",
+      "route": "init(), 104 envelopes of 20000 rows, one reconcile",
+      "batch": 20000,
+      "captures": 104,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 210401,
+        "node": 238957,
+        "doc": 224802,
+        "entity": 238957,
+        "edge": 1155758,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 93,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "build": {
+        "lane": "reconcile",
+        "mode": "rebuild",
+        "buildCacheKiB": 262144,
+        "envelopes": 93,
+        "changedRows": 0,
+        "drop_ms": 0.9153370000422001,
+        "apply_ms": 9552.589431002736,
+        "changes_ms": 185.32944199815392,
+        "closure_ms": 0.165,
+        "closureRemoved": 0,
+        "derive_ms": 11499.317,
+        "statistics_ms": 981.771,
+        "plans_ms": 0.686,
+        "hook_ms": 12667.268,
+        "gate": "full",
+        "gate_ms": 3009.626,
+        "plans": [
+          {
+            "name": "view sessions_by_start",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_all_by_stars",
+            "uses": [
+              "ix_view_repos_all_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+            ]
+          },
+          {
+            "name": "view sessions_by_start total",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars total",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "people_by_org join without a hint",
+            "uses": [
+              "ix_entity_id_kind",
+              "sqlite_autoindex_entity_1"
+            ],
+            "ok": true,
+            "plan": [
+              "CO-ROUTINE m",
+              "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+              "SCAN m",
+              "SEARCH e USING INDEX ix_entity_id_kind (id=? AND kind=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ],
+        "createdObjects": [
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_facet_top"
+        ],
+        "droppedObjects": [
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "ix_facet_top"
+        ]
+      },
+      "phases": {
+        "init_ddl_ms": 196.109,
+        "decode_ms": 2387.252,
+        "transform_ms": 1453.896,
+        "ingest_ms": 10146.887,
+        "capture_overhead_ms": 10831.058,
+        "capture_note": "per envelope: copy the head, session changeset, envelope files",
+        "reconcile_ms": 26252.248,
+        "reconcile_note": "copy head, apply changesets, quick_check, fsync, publish",
+        "quick_check_warm_ms": 2578.381,
+        "ingest_through_durable_ms": 54144.205
+      },
+      "total_ms": 56531.456,
+      "count_problems": [],
+      "validation": "softschema validation not run",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+        "v2_spike1": {
+          "control_without_derived": false,
+          "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+          "build_cache_kib": 262144,
+          "analysis_limit": 0,
+          "rebuild_above_ratio": 0.5
+        }
+      },
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/fsqlite-spike/S2-r2/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 2108096512,
+      "max_rss_mib": 1045.6
+    },
+    "arm": "SnapshotStore",
+    "ingest_through_durable_seconds": 56.943,
+    "total_with_parse_seconds": null,
+    "store_bytes_before_gc": 3319555624,
+    "gc": {
+      "retain": 0,
+      "ms": 5856.259,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true
+    },
+    "store_bytes": 3319399976,
+    "snapshot_bytes": 2108096512,
+    "fts_sidecar": "none: the FTS5 index is a derived object inside the generation"
+  }
+}

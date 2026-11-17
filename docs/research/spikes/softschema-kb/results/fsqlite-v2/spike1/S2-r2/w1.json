@@ -1,0 +1,420 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S2-r2",
+  "workflow": "w1",
+  "recorded_at": "2026-11-17T05:17:35.779Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 10130,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "kb_bytes": 1152109067,
+  "parse": {
+    "label": "parse",
+    "seconds": 113.782,
+    "max_rss_mib": 562.6,
+    "exit": 0,
+    "report": {
+      "seconds": 113.422,
+      "jobs": 4,
+      "counts": {
+        "schema": 18,
+        "line": 210401,
+        "node": 238957,
+        "file": 3,
+        "doc": 224802,
+        "entity": 238957,
+        "edge": 1155758
+      },
+      "validation": {
+        "cpu_seconds_summed_over_workers": 47.484,
+        "checked": 224802,
+        "invalid": 0,
+        "invalid_samples": [],
+        "validator": "parse_kb.py schema_errors (stdlib subset of JSON Schema; formats unchecked)"
+      }
+    },
+    "parser": "parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order",
+    "validation": "stdlib schema check in the parse workers (report.validation)"
+  },
+  "intermediate_bytes": 1372272643,
+  "direct": {
+    "label": "load-direct",
+    "seconds": 33.728,
+    "max_rss_mib": 612.8,
+    "exit": 0,
+    "report": {
+      "arm": "DirectStore",
+      "route": "init() with the base DDL, then one DirectStore.write({ derived: \"rebuild\" }) streaming every row",
+      "version": 1,
+      "build": {
+        "lane": "direct",
+        "mode": "rebuild",
+        "buildCacheKiB": 262144,
+        "envelopes": 0,
+        "changedRows": 0,
+        "drop_ms": 0.7131719999015331,
+        "apply_ms": 15050.600186999887,
+        "changes_ms": 0,
+        "closure_ms": 0.147,
+        "closureRemoved": 0,
+        "derive_ms": 10947.983,
+        "statistics_ms": 1009.334,
+        "plans_ms": 0.535,
+        "hook_ms": 11957.999,
+        "gate": "full",
+        "gate_ms": 3753.084,
+        "plans": [
+          {
+            "name": "view sessions_by_start",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_all_by_stars",
+            "uses": [
+              "ix_view_repos_all_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+            ]
+          },
+          {
+            "name": "view sessions_by_start total",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars total",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "people_by_org join without a hint",
+            "uses": [
+              "ix_entity_id_kind",
+              "sqlite_autoindex_entity_1"
+            ],
+            "ok": true,
+            "plan": [
+              "CO-ROUTINE m",
+              "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+              "SCAN m",
+              "SEARCH e USING INDEX ix_entity_id_kind (id=? AND kind=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ],
+        "createdObjects": [
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_facet_top"
+        ],
+        "droppedObjects": [
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "ix_facet_top"
+        ]
+      },
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 210401,
+        "node": 238957,
+        "doc": 224802,
+        "entity": 238957,
+        "edge": 1155758,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "phases": {
+        "init_ddl_ms": 56.552,
+        "decode_ms": 2712.497,
+        "transform_ms": 1508.518,
+        "ingest_ms": 7295.72,
+        "verify_counts_ms": 603.146,
+        "publish_ms": 16220.74,
+        "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+        "derived_hook_ms": 11957.999,
+        "gate_ms": 3753.084,
+        "publish_without_hook_and_gate_ms": 509.657,
+        "quick_check_warm_ms": 2190.209,
+        "ingest_through_durable_ms": 28614.83
+      },
+      "total_ms": 31327.327,
+      "validation": "softschema validation not run (as in paraverse default load)",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+        "v2_spike1": {
+          "control_without_derived": false,
+          "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+          "build_cache_kib": 262144,
+          "analysis_limit": 0,
+          "rebuild_above_ratio": 0.5
+        }
+      },
+      "snapshot": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/research-c/spike1/kbscratch/fsqlite-spike/S2-r2/store-direct/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 2071281664,
+      "max_rss_mib": 612.8
+    },
+    "arm": "DirectStore",
+    "ingest_through_durable_seconds": 31.016,
+    "total_with_parse_seconds": 147.51,
+    "store_bytes_before_gc": 2071437448,
+    "gc": {
+      "retain": 0,
+      "ms": 5401.709,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true
+    },
+    "store_bytes": 2071281800,
+    "snapshot_bytes": 2071281664,
+    "breakdown": {
+      "entity": 729538560,
+      "kb_line": 405618688,
+      "doc": 183566336,
+      "edge": 167604224,
+      "ix_edge_origin": 120299520,
+      "search_fts_data": 90652672,
+      "ix_edge_rel": 85942272,
+      "ix_edge_in": 85921792,
+      "search_text": 62136320,
+      "facet_count": 20652032,
+      "ix_facet_top": 20598784,
+      "ix_entity_kind_label": 16969728,
+      "sqlite_autoindex_search_doc_1": 14422016,
+      "search_doc": 12775424,
+      "sqlite_autoindex_doc_1": 11640832,
+      "ix_entity_id_kind": 11444224,
+      "ix_entity_path": 10887168,
+      "sqlite_autoindex_entity_1": 10055680,
+      "search_fts_docsize": 4075520,
+      "ix_view_repos_by_stars": 2748416,
+      "ix_view_repos_all_by_stars": 2387968,
+      "ix_view_sessions_by_start": 1028096,
+      "kind_schema": 131072,
+      "search_fts_idx": 86016,
+      "kb_file": 40960,
+      "sqlite_schema": 12288,
+      "sqlite_stat1": 4096,
+      "sqlite_autoindex_quarantine_1": 4096,
+      "sqlite_autoindex_kind_schema_1": 4096,
+      "sqlite_autoindex_kb_file_1": 4096,
+      "sqlite_autoindex_fsqlite_meta_1": 4096,
+      "sqlite_autoindex_applied_tx_1": 4096,
+      "search_fts_config": 4096,
+      "quarantine": 4096,
+      "fsqlite_meta": 4096,
+      "applied_tx": 4096
+    },
+    "fts_sidecar": "none: the FTS5 index is a derived object inside the generation",
+    "derived_bytes": {
+      "search_fts_and_search_doc": 122015744,
+      "facet_count": 41250816,
+      "secondary_indexes": 337629184,
+      "sqlite_stat1": 4096
+    }
+  }
+}
