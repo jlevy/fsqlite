@@ -85,6 +85,24 @@ class Server:
             "used_memory_rss": mem.get("used_memory_rss"),
         }
 
+    def config(self) -> dict[str, Any]:
+        """The settings C17 asks for: FalkorDB's GRAPH.CONFIG, Redis save rules, limits."""
+        conn = self.db.connection
+        graph_config = {}
+        try:
+            for name, value in conn.execute_command("GRAPH.CONFIG", "GET", "*"):
+                graph_config[name] = value
+        except Exception as e:  # noqa: BLE001
+            graph_config = {"error": str(e)}
+        redis_config = {}
+        for key in ("save", "appendonly", "maxmemory", "maxmemory-policy", "io-threads"):
+            redis_config.update(conn.config_get(key))
+        return {
+            "graph_config": graph_config,
+            "redis_config": redis_config,
+            "client_socket_timeout": conn.connection_pool.connection_kwargs.get("socket_timeout"),
+        }
+
     def save(self) -> float:
         started = time.perf_counter()
         self.db.connection.execute_command("SAVE")
@@ -124,8 +142,40 @@ def edge_attrs(props: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in out.items() if v is not None}
 
 
+class QueryTimeout(Exception):
+    """A statement ran past STATEMENT_TIMEOUT_MS; recorded as a result, not a failure."""
+
+
+# Per-statement timeout for W3 (FalkorDB's own TIMEOUT, in ms); 0 means none.
+STATEMENT_TIMEOUT_MS = int(os.environ.get("FDB_STATEMENT_TIMEOUT_MS", "30000"))
+
+# When a list is installed here, every statement a query runs is recorded once, so its
+# plan can be stored with the results (C7).
+RECORDER: list[tuple[str, dict[str, Any]]] | None = None
+
+
 def _rows(graph: Any, cypher: str, params: dict[str, Any] | None = None) -> list[list[Any]]:
-    return graph.ro_query(cypher, params or {}).result_set
+    params = params or {}
+    if RECORDER is not None and all(c != cypher for c, _ in RECORDER):
+        RECORDER.append((cypher, params))
+    try:
+        return graph.ro_query(cypher, params, timeout=STATEMENT_TIMEOUT_MS or None).result_set
+    except Exception as e:
+        if "timed out" in str(e).lower():
+            raise QueryTimeout(str(e)) from e
+        raise
+
+
+def explain(graph: Any, statements: list[tuple[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+    out = []
+    for cypher, params in statements:
+        try:
+            plan = graph.explain(cypher, params)
+            lines = [str(x) for x in plan.plan] if hasattr(plan, "plan") else str(plan).splitlines()
+        except Exception as e:  # noqa: BLE001
+            lines = [f"EXPLAIN failed: {e}"]
+        out.append({"cypher": " ".join(cypher.split()), "plan": lines})
+    return out
 
 
 ## W3 queries
@@ -233,12 +283,68 @@ def q_search_fulltext(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
     return {"hits": len(rows), "top": [r[0] for r in rows[:5]]}
 
 
+_EXPAND = """
+UNWIND $ids AS fid
+MATCH (u:Entity {id: fid})-[]-(v:Entity)
+RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)
+"""
+
+
 def q_path(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
     """
-    Iterative deepening over paraverse's connecting_paths pattern: the first length with
-    any hub-free path is the shortest. FalkorDB has no undirected shortestPath(), and it
-    cannot filter hubs inside one. Anchoring both endpoints with WITH gives an
-    "Expand Into" plan, about 2x faster than paraverse's comma form.
+    Shortest hub-free undirected path by bidirectional breadth-first search in the
+    application, one Cypher neighbor query per frontier: the same algorithm as the
+    fsqlite arm (fsqlite/queries.ts `path`), so the two engines run one algorithm (C5).
+    """
+    a, b, max_hops = p["a"], p["b"], p["max_hops"]
+    if a == b:
+        return {"hops": 0, "path": [a]}
+
+    def side(root: str) -> dict[str, Any]:
+        return {"root": root, "dist": {root: 0}, "parent": {}, "frontier": [root], "depth": 0}
+
+    A, B = side(a), side(b)
+    hub = {a: False, b: False}
+    while A["frontier"] and B["frontier"] and A["depth"] + B["depth"] < max_hops:
+        s, o = (A, B) if len(A["frontier"]) <= len(B["frontier"]) else (B, A)
+        expandable = [u for u in s["frontier"] if u == s["root"] or not hub.get(u)]
+        nxt: list[str] = []
+        best: tuple[str, int] | None = None
+        for u, v, is_hub in _rows(graph, _EXPAND, {"ids": expandable}) if expandable else []:
+            hub.setdefault(v, bool(is_hub))
+            if v in s["dist"]:
+                continue
+            s["dist"][v] = s["depth"] + 1
+            s["parent"][v] = u
+            nxt.append(v)
+            other = o["dist"].get(v)
+            if other is not None and (v in (a, b) or not hub[v]):
+                total = s["depth"] + 1 + other
+                if best is None or total < best[1]:
+                    best = (v, total)
+        s["frontier"] = nxt
+        s["depth"] += 1
+        if best:
+            if best[1] > max_hops:
+                break
+
+            def chain(x: dict[str, Any], start: str) -> list[str]:
+                out = [start]
+                while out[-1] in x["parent"]:
+                    out.append(x["parent"][out[-1]])
+                return out
+
+            return {"hops": best[1], "path": chain(A, best[0])[::-1] + chain(B, best[0])[1:]}
+    return {"hops": None, "path": []}
+
+
+def q_path_engine(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
+    """
+    In-engine form, uncompared: iterative deepening over paraverse's connecting_paths
+    pattern; the first length with any hub-free path is the shortest. FalkorDB has no
+    undirected shortestPath(), and it cannot filter hubs inside one. Anchoring both
+    endpoints with WITH gives an "Expand Into" plan, about 2x faster than paraverse's
+    comma form.
     """
     for hops in range(1, p["max_hops"] + 1):
         rows = _rows(
@@ -256,6 +362,27 @@ def q_path(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
         if rows:
             return {"hops": hops, "path": rows[0][0]}
     return {"hops": None, "path": []}
+
+
+def q_path_sppaths(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
+    """
+    FalkorDB's algo.SPpaths, uncompared: it cannot exclude hubs, so its shortest path
+    may run through an event, day or facet and be shorter than the canonical one.
+    """
+    rows = _rows(
+        graph,
+        """
+        MATCH (a:Entity {id: $a}) WITH a
+        MATCH (b:Entity {id: $b}) WITH a, b
+        CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1})
+        YIELD path
+        RETURN [x IN nodes(path) | x.id]
+        """,
+        {"a": p["a"], "b": p["b"], "max": p["max_hops"]},
+    )
+    if not rows:
+        return {"hops": None, "path": []}
+    return {"hops": len(rows[0][0]) - 1, "path": rows[0][0]}
 
 
 def q_facet(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
