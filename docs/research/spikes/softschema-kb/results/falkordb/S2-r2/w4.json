@@ -1,0 +1,193 @@
+{
+  "workflow": "W4",
+  "backend": "falkordb",
+  "scale": "S2-r2",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 11857644
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 11857644
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S2-r2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 238957,
+    "edges": 1155758,
+    "record_files": 224802,
+    "bytes": 1152109067
+  },
+  "cases": [
+    {
+      "case": "new_kind",
+      "needs": "Code change and full rebuild. paraverse's mapping.LABELS is a fixed table, so an unknown kind fails the load with MappingError; schemas.PREFIX_KINDS and mapping.TYPED_REF also list prefixes, so references to the new kind would not be recognized as typed refs. In place, FalkorDB itself accepts new labels with no DDL.",
+      "unmodified_paraverse": {
+        "loads": false,
+        "error": "MappingError: no label for kind `award` (award:community-2023-000000)"
+      },
+      "code_changed_lines": {
+        "rebuild": 2,
+        "detail": "mapping.LABELS and schemas.PREFIX_KINDS entries (mapping.TYPED_REF also lists prefixes, for references to awards)",
+        "in_place_cypher_statements": 5
+      },
+      "full_rebuild": {
+        "code_change": true,
+        "read_kb_s": 142.003,
+        "load_graph_s": 86.458,
+        "total_s": 228.462
+      },
+      "in_place": {
+        "changed": 530,
+        "steps_s": {
+          "parse_and_map_s": 0.354,
+          "write_nodes_s": 0.019,
+          "write_edges_and_stats_s": 6.976,
+          "schema_node_s": 0.194
+        },
+        "total_s": 7.542,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 200,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "python_repositories_before": 7590,
+        "python_repositories_after": 7590
+      }
+    },
+    {
+      "case": "add_field",
+      "needs": "Full rebuild only (no code change): top-level scalars become properties generically. In place: rewrite the changed nodes' properties and doc, and the kind's Schema node so the browser shows the column.",
+      "unmodified_paraverse": {
+        "loads": true,
+        "note": "the full rebuild below runs unmodified paraverse"
+      },
+      "code_changed_lines": {
+        "rebuild": 0,
+        "detail": "none: top-level scalars map generically",
+        "in_place_cypher_statements": 2
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 149.988,
+        "load_graph_s": 81.655,
+        "total_s": 231.644
+      },
+      "in_place": {
+        "changed": 7285,
+        "steps_s": {
+          "parse_and_map_s": 9.033,
+          "write_nodes_s": 2.198,
+          "schema_node_s": 0.234
+        },
+        "total_s": 11.467,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 200,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "python_repositories_before": 7590,
+        "python_repositories_after": 7590
+      }
+    },
+    {
+      "case": "rename_relation",
+      "needs": "Full rebuild only. In place: FalkorDB cannot rename a relationship type, so each edge is re-created under the new type and the old one deleted, then GraphMeta's relationship statistics recomputed.",
+      "unmodified_paraverse": {
+        "loads": true,
+        "note": "the full rebuild below runs unmodified paraverse"
+      },
+      "code_changed_lines": {
+        "rebuild": 0,
+        "detail": "none for loading; any query naming PRESENTS (paraverse queries.py has 2) must change",
+        "in_place_cypher_statements": 2
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 177.952,
+        "load_graph_s": 73.716,
+        "total_s": 251.668
+      },
+      "in_place": {
+        "changed": 36340.0,
+        "steps_s": {
+          "retype_edges_s": 0.239,
+          "rel_stats_s": 6.632
+        },
+        "total_s": 6.871,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 0,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "python_repositories_before": 7590,
+        "python_repositories_after": 7590
+      }
+    },
+    {
+      "case": "string_to_object",
+      "needs": "Full rebuild, plus a code change for any query that filtered on the field: an object is not a FalkorDB property, so the property disappears and only `doc` keeps the value. In place: rewrite the changed nodes and the Schema node.",
+      "unmodified_paraverse": {
+        "loads": true,
+        "note": "the full rebuild below runs unmodified paraverse"
+      },
+      "code_changed_lines": {
+        "rebuild": 0,
+        "detail": "loads unchanged, but any filter on the field silently matches nothing until mapping.py promotes the nested value (about 4 lines)",
+        "in_place_cypher_statements": 2
+      },
+      "full_rebuild": {
+        "code_change": false,
+        "read_kb_s": 95.002,
+        "load_graph_s": 78.774,
+        "total_s": 173.776
+      },
+      "in_place": {
+        "changed": 47334,
+        "steps_s": {
+          "parse_and_map_s": 16.487,
+          "write_nodes_s": 4.029,
+          "schema_node_s": 0.144
+        },
+        "total_s": 20.66,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "sampled_nodes": 200,
+        "sampled_props_match_rebuild": true
+      },
+      "query_impact": {
+        "python_repositories_before": 7590,
+        "python_repositories_after": 0
+      }
+    }
+  ]
+}
