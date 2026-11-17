@@ -40,14 +40,24 @@ function writer(
 ) {
   const nodes: NodeRow[] = []
   const units: KbRow[][] = []
+  let prev = ''
   forEachRowSync(rowsPath, (row) => {
     if (row.t === 'node') {
       nodes.push(row)
-    } else if (row.t === 'doc' || units.length === 0) {
+      return
+    }
+    // A v2 unit starts at its op (or invalid) row; a v1 unit at its doc row.
+    const starts =
+      row.t === 'op' ||
+      row.t === 'invalid' ||
+      (row.t === 'doc' && prev !== 'op') ||
+      units.length === 0
+    if (starts) {
       units.push([row])
     } else {
       units[units.length - 1]?.push(row)
     }
+    prev = row.t
   })
   const perEnvelope = Math.max(1, Math.ceil(units.length / envelopes))
   const snapshot = genericStore(dir)
@@ -167,14 +177,24 @@ function reader(dir: string, scale: string, outPath: string, stopFile: string) {
 export function readUnits(rowsPath: string): { nodes: NodeRow[]; units: KbRow[][] } {
   const nodes: NodeRow[] = []
   const units: KbRow[][] = []
+  let prev = ''
   forEachRowSync(rowsPath, (row) => {
     if (row.t === 'node') {
       nodes.push(row)
-    } else if (row.t === 'doc' || units.length === 0) {
+      return
+    }
+    // A v2 unit starts at its op (or invalid) row; a v1 unit at its doc row.
+    const starts =
+      row.t === 'op' ||
+      row.t === 'invalid' ||
+      (row.t === 'doc' && prev !== 'op') ||
+      units.length === 0
+    if (starts) {
       units.push([row])
     } else {
       units[units.length - 1]?.push(row)
     }
+    prev = row.t
   })
   return { nodes, units }
 }

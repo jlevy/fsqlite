@@ -74,7 +74,54 @@ def w2_table() -> None:
             print(f"| {s} | {b['pct']}% | {b['changes']:,} | {r['total_visible_s']} ({r['durable_s'] + b['kb_materialize']['seconds']:.1f}) | {i['db_visible_s']} ({i['durable_s']}) | {ok} |")
 
 
+R2 = ("S1-r2", "S2-r2")
+
+
+def r2_tables() -> None:
+    import statistics
+
+    print("| Scale | W1 servable s | durable s | durable s, saves off | Loader peak GB | Server peak GB (with fork) | RDB MB |")
+    print("| --- | --- | --- | --- | --- | --- | --- |")
+    for s in R2:
+        d, n = _load(s, "w1.json"), _load(s, "w1-save-disabled.json")
+        if not d:
+            continue
+        t, m = d["timings"], d["memory"]
+        print(f"| {s} | {t['servable_s']} | {t['durable_s']} | {n['timings']['durable_s'] if n else ''} | {gb(m['loader_peak_rss'])} | {gb(m['server_peak_rss'])} ({gb(m['server_peak_rss_with_children'])}) | {d['size']['rdb_bytes'] / 1e6:.0f} |")
+    print()
+    docs = {s: _load(s, "w3.json") for s in R2}
+    scales = [s for s in R2 if docs[s]]
+    print("| W3 v2 | " + " | ".join(f"{s} median p50 ms (max)" for s in scales) + " |")
+    print("| --- |" + " --- |" * len(scales))
+    cats = ("table", "record", "search", "path", "facet", "neighborhood")
+    for cat in cats:
+        cells = []
+        for s in scales:
+            xs = [q["timings"]["p50_ms"] for q in docs[s]["queries"] if q["category"] == cat and not q["name"].endswith("hub") and q["timings"]["p50_ms"] is not None]
+            cells.append(f"{statistics.median(xs):.2f} ({max(xs):.1f})")
+        print(f"| {cat} (20 sets) | " + " | ".join(cells) + " |")
+    for name in ("v2.table.deep_largest_kind", "v2.record.hub", "v2.neighborhood.hub", "v2.path.hub", "v2.facet.hub"):
+        cells = []
+        for s in scales:
+            q = next(q for q in docs[s]["queries"] if q["name"] == name)
+            cells.append(f"{q['timings']['p50_ms']}")
+        print(f"| {name} | " + " | ".join(cells) + " |")
+    print()
+    print("| Scale | Batch | Changes | paraverse as built visible s (durable) | incremental visible s (durable) | equal to rebuild | equal to oracle |")
+    print("| --- | --- | --- | --- | --- | --- | --- |")
+    for s in R2:
+        d = _load(s, "w2.json")
+        if not d or d.get("round") != 2:
+            continue
+        for b in d["batches"]:
+            r, i = b.get("paraverse_as_built"), b["incremental_prototype"]
+            rb = f"{r['total_visible_s']} ({r['durable_s'] + r['kb_build_s']:.1f})" if r else ""
+            print(f"| {s} | {b['batch']} | {b['changes']:,} | {rb} | {i['visible_s']} ({i['durable_s']}) | {i.get('counts_match_rebuild', '')} {i.get('w3_match_rebuild', '')} | {i.get('w3_matches_oracle', '')} |")
+
+
 if __name__ == "__main__":
+    r2_tables()
+    print()
     print("## W1\n")
     w1_table()
     print("\n## W3 (warm p50)\n")

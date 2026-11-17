@@ -40,6 +40,9 @@ function main(): void {
   const out: Record<string, unknown> = {}
   for (const q of queryInstances(scale).filter((i) => i.category === 'table')) {
     const p = q.params
+    if (p.offset === 'last') {
+      continue // the audit covers fixed offsets; the last page shares their plans
+    }
     if (p.table === 'people_by_org') {
       const page = 'ORDER BY e.label, e.id LIMIT ? OFFSET ?'
       const args: SQLInputValue[] = [String(p.org), Number(p.limit), Number(p.offset)]
@@ -75,12 +78,16 @@ function main(): void {
     if (!v) {
       continue
     }
-    const value = v.name === 'sessions_by_start' ? 'false' : String(p.language)
+    const filter = v.filter ? ` AND ${v.filter} = ?` : ''
     const sql = (hint: string): string =>
       `SELECT id, label, ${v.value} AS value FROM entity ${hint}
-       WHERE kind = '${v.kind}' AND ${v.filter} = ?
+       WHERE kind = '${v.kind}'${filter}
        ORDER BY ${v.sort}${v.descending ? ' DESC' : ''}, id LIMIT ? OFFSET ?`
-    const params: SQLInputValue[] = [value, Number(p.limit), Number(p.offset)]
+    const params: SQLInputValue[] = [
+      ...(v.filter ? [v.name === 'sessions_by_start' ? 'false' : String(p.language)] : []),
+      Number(p.limit),
+      Number(p.offset),
+    ]
     const planner = probe(db, sql(''), params)
     const forced = probe(db, sql(`INDEXED BY ix_view_${v.name}`), params)
     out[q.name] = {

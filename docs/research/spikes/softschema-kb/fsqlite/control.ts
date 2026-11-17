@@ -25,7 +25,7 @@ import {
 import type { KbRow } from './common.ts'
 import { BULK_PRAGMAS, countProblems } from './load.ts'
 import { GenericLoader, genericDdl } from './mapping.ts'
-import { runOnSnapshot } from './w3.ts'
+import { isV2, runOnSnapshot } from './w3.ts'
 
 function statements(ddl: string): { tables: string[]; indexes: string[] } {
   const all = ddl
@@ -124,7 +124,9 @@ function main(): void {
     }),
   )
   if (flags['skip-w3'] !== 'true') {
-    const report = runOnSnapshot(file, scale, { warm: Number(flags.warm ?? 50) })
+    const report = runOnSnapshot(file, scale, {
+      warm: Number(flags.warm ?? (isV2(scale) ? 20 : 50)),
+    })
     console.log(
       writeResult(scale, 'w3-plain-sqlite', {
         workflow: 'W3',

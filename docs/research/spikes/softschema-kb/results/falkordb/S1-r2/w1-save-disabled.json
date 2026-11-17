@@ -1,0 +1,145 @@
+{
+  "workflow": "W1",
+  "backend": "falkordb",
+  "arm": "paraverse as built",
+  "scale": "S1-r2",
+  "save_mode": "disabled",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/kb",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 18950784
+      },
+      {
+        "path": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fdb-data/S1-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 18950784
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2",
+    "falkordb_module": "4.18.3",
+    "redis_server": "8.6.2"
+  },
+  "server_config": {
+    "graph_config": {
+      "TIMEOUT": 0,
+      "TIMEOUT_DEFAULT": 0,
+      "TIMEOUT_MAX": 0,
+      "CACHE_SIZE": 25,
+      "ASYNC_DELETE": true,
+      "OMP_THREAD_COUNT": 4,
+      "THREAD_COUNT": 4,
+      "RESULTSET_SIZE": -1,
+      "VKEY_MAX_ENTITY_COUNT": 100000,
+      "MAX_QUEUED_QUERIES": 4294967295,
+      "QUERY_MEM_CAPACITY": 0,
+      "DELTA_MAX_PENDING_CHANGES": 10000,
+      "NODE_CREATION_BUFFER": 16384,
+      "CMD_INFO": true,
+      "MAX_INFO_QUERIES": 1000,
+      "EFFECTS_THRESHOLD": 300,
+      "BOLT_PORT": 65535,
+      "DELAY_INDEXING": false,
+      "IMPORT_FOLDER": "/var/lib/FalkorDB/import/",
+      "TEMP_FOLDER": "/tmp",
+      "JS_HEAP_SIZE": 268435456,
+      "JS_STACK_SIZE": 1048576
+    },
+    "redis_config": {
+      "save": "",
+      "appendonly": "no",
+      "maxmemory": "0",
+      "maxmemory-policy": "noeviction",
+      "io-threads": "1"
+    },
+    "client_socket_timeout": null
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/kb",
+    "seed": 20261117,
+    "replicas": 9,
+    "nodes": 46927,
+    "edges": 226281,
+    "record_files": 44057,
+    "bytes": 225144535
+  },
+  "parser": {
+    "name": "PyYAML CSafeLoader via paraverse kb.read_artifact",
+    "processes": 1,
+    "jobs": 1
+  },
+  "aborted": false,
+  "phases": {
+    "discover_s": 4.666,
+    "parse_s": 14.667,
+    "validate_s": 0.033,
+    "read_other_s": 0.0,
+    "transform_s": 2.744,
+    "ingest_s": 7.559,
+    "index_s": 0.28,
+    "verify_s": 1.394,
+    "schemas_s": 0.27,
+    "constraint_s": 1.454,
+    "meta_s": 1.345,
+    "swap_s": 0.0,
+    "durable_save_s": 0.528
+  },
+  "phase_notes": {
+    "validate_s": "paraverse's envelope and contract checks only; softschema validation is not part of paraverse's default load (see softschema_validation)",
+    "read_other_s": "load_kb's payload_for pass and bookkeeping (a residual, clamped at 0)",
+    "parse_s": "includes reading the files, so it depends on whether the corpus is in the OS page cache; caches are not dropped on this shared VM",
+    "ingest_s": "load_graph minus every other timed phase: the UNWIND/CREATE batches for nodes and edges"
+  },
+  "softschema_validation": null,
+  "timings": {
+    "server_start_s": 0.128,
+    "read_kb_s": 19.103,
+    "load_graph_s": 15.046,
+    "servable_s": 34.149,
+    "durable_s": 34.871,
+    "ingest_through_durable_s": 15.767,
+    "wall_s": 35.009
+  },
+  "memory": {
+    "loader_peak_rss": 1074364416,
+    "loader_peak_rss_sampled": 1074925568,
+    "server_peak_rss": 377884672,
+    "server_peak_rss_with_children": 377884672,
+    "server_used_memory": 278347232,
+    "server_used_memory_peak": 282056192,
+    "server_used_memory_rss": 377520128,
+    "machine_available_lowest": 14356430848
+  },
+  "size": {
+    "rdb_bytes": 55197050,
+    "data_dir_files": [
+      "paraverse-graph.rdb",
+      "paraverse-graph.rdb.settings"
+    ]
+  },
+  "load_report": {
+    "node_total": 46927,
+    "edge_total": 226281,
+    "engine": "4.18.3"
+  },
+  "notes": [
+    "load_kb parses every artifact into memory before load_graph writes; both run in this process.",
+    "servable_s is files to a renamed, queryable live graph; durable_s adds the explicit SAVE.",
+    "The client is paraverse's open_db with socket_timeout=None: with redis-py 8.1.0's default 5 s timeout, paraverse's own load fails at S2 in loader._count_edges (see fdb.open_embedded)."
+  ]
+}

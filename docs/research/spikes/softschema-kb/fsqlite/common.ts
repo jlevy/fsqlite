@@ -79,8 +79,29 @@ export interface EdgeRow {
   source: string
   relation: string
   target: string
-  ord: number
+  /** Null in a v2 batch: the importer takes the next free ordinal for the triple. */
+  ord: number | null
   props: string | null
+}
+/** A softschema-kb-delta/v2 operation; the rows it writes follow it. */
+export type OpRow =
+  | { t: 'op'; op: 'upsert'; path: string; node_ids: string[] }
+  | { t: 'op'; op: 'delete'; path: string; node_ids: string[] }
+  | {
+      t: 'op'
+      op: 'merge'
+      absorbed: string
+      survivor: string
+      absorbed_path: string
+      survivor_path: string
+    }
+/** A v2 record that failed its schema: quarantined instead of applied. */
+export interface InvalidRow {
+  t: 'invalid'
+  op: string
+  path: string
+  id: string | null
+  errors: string[]
 }
 /** Removals a KB diff emits before its additions. */
 export type RemovalRow =
@@ -89,7 +110,16 @@ export type RemovalRow =
   | { t: 'undoc'; path: string }
   | { t: 'unline'; path: string; from: number }
 export type KbRow =
-  SchemaRow | FileRow | LineRow | NodeRow | DocRow | EntityRow | EdgeRow | RemovalRow
+  | SchemaRow
+  | FileRow
+  | LineRow
+  | NodeRow
+  | DocRow
+  | EntityRow
+  | EdgeRow
+  | RemovalRow
+  | OpRow
+  | InvalidRow
 
 /**
  * Call `fn` for each line of a UTF-8 file without loading it whole. Synchronous, so it can

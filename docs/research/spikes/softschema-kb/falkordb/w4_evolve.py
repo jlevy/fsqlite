@@ -36,6 +36,15 @@ from w2_update import _norm, fresh_server, graph_counts, publish_change, w3_resu
 
 CASES = ("new_kind", "add_field", "rename_relation", "string_to_object")
 
+# Lines of paraverse code or configuration each case needs changed for a full rebuild to
+# serve it correctly, and what the in-place migration adds.
+CODE_LINES = {
+    "new_kind": {"rebuild": 2, "detail": "mapping.LABELS and schemas.PREFIX_KINDS entries (mapping.TYPED_REF also lists prefixes, for references to awards)", "in_place_cypher_statements": 5},
+    "add_field": {"rebuild": 0, "detail": "none: top-level scalars map generically", "in_place_cypher_statements": 2},
+    "rename_relation": {"rebuild": 0, "detail": "none for loading; any query naming PRESENTS (paraverse queries.py has 2) must change", "in_place_cypher_statements": 2},
+    "string_to_object": {"rebuild": 0, "detail": "loads unchanged, but any filter on the field silently matches nothing until mapping.py promotes the nested value (about 4 lines)", "in_place_cypher_statements": 2},
+}
+
 NEEDS = {
     "new_kind": (
         "Code change and full rebuild. paraverse's mapping.LABELS is a fixed table, so an "
@@ -188,14 +197,19 @@ def run_case(scale: str, corpus: Path, base_rdb: Path, work: Path, case: str) ->
     base, variant = corpus / "kb", corpus / "evolve" / case / "kb"
     result: dict[str, Any] = {"case": case, "needs": NEEDS[case]}
 
-    # 1. Unmodified paraverse.
-    server = fresh_server(base_rdb, work / "asis")
-    try:
-        load_graph(server.db, load_kb(variant), GRAPH)
-        result["unmodified_paraverse"] = {"loads": True}
-    except Exception as e:  # noqa: BLE001
-        result["unmodified_paraverse"] = {"loads": False, "error": f"{type(e).__name__}: {e}"[:300]}
-    server.shutdown(save=False)
+    # 1. Unmodified paraverse. Only new_kind needs a code change, so for the other cases
+    # the full rebuild below is itself the unmodified run.
+    if case == "new_kind":
+        server = fresh_server(base_rdb, work / "asis")
+        try:
+            load_graph(server.db, load_kb(variant), GRAPH)
+            result["unmodified_paraverse"] = {"loads": True}
+        except Exception as e:  # noqa: BLE001
+            result["unmodified_paraverse"] = {"loads": False, "error": f"{type(e).__name__}: {e}"[:300]}
+        server.shutdown(save=False)
+    else:
+        result["unmodified_paraverse"] = {"loads": True, "note": "the full rebuild below runs unmodified paraverse"}
+    result["code_changed_lines"] = CODE_LINES[case]
 
     # 2. Full rebuild with the needed code change.
     _patch_award(case == "new_kind")

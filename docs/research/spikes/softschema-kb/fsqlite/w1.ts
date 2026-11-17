@@ -96,13 +96,17 @@ function main(): void {
   const kb = kbDirFor(scale)
   const rows = join(work, 'rows.jsonl')
 
-  const parse = measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows])
+  const validate = flags.validate === 'true' ? ['--validate'] : []
+  const parse = measured('parse', [...UV_PYTHON, join(HERE, 'parse_kb.py'), kb, rows, ...validate])
   const result: Record<string, unknown> = {
     kb_bytes: dirBytes(kb),
     parse: {
       ...parse,
       parser: 'parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order',
-      validation: 'softschema validation not run',
+      validation:
+        validate.length > 0
+          ? 'stdlib schema check in the parse workers (report.validation)'
+          : 'not run',
     },
     intermediate_bytes: statSync(rows).size,
   }

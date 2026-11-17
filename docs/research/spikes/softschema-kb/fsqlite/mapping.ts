@@ -24,6 +24,7 @@ import type {
   KbRow,
   LineRow,
   NodeRow,
+  OpRow,
   SchemaRow,
 } from './common.ts'
 
@@ -35,7 +36,8 @@ import type {
 export interface TableView {
   name: string
   kind: string
-  filter: string
+  /** An equality filter expression, or null for a view over every record of the kind. */
+  filter: string | null
   sort: string
   descending: boolean
   value: string
@@ -58,6 +60,14 @@ export const TABLE_VIEWS: readonly TableView[] = [
     descending: true,
     value: "payload ->> '$.stars'",
   },
+  {
+    name: 'repos_all_by_stars',
+    kind: 'repository',
+    filter: null,
+    sort: "payload ->> '$.stars'",
+    descending: true,
+    value: "payload ->> '$.stars'",
+  },
 ]
 
 /** Kinds a path or neighborhood never passes through (queries.json `hubs`). */
@@ -67,7 +77,7 @@ function viewIndexDdl(views: readonly TableView[]): string {
   return views
     .map(
       (v) =>
-        `CREATE INDEX ix_view_${v.name} ON entity ((${v.filter}), (${v.sort})` +
+        `CREATE INDEX ix_view_${v.name} ON entity (${v.filter ? `(${v.filter}), ` : ''}(${v.sort})` +
         `${v.descending ? ' DESC' : ''}, id) WHERE kind = '${v.kind}';`,
     )
     .join('\n')
@@ -129,6 +139,13 @@ CREATE TABLE edge (
 ) WITHOUT ROWID;
 CREATE INDEX ix_edge_in ON edge (target, relation, source);
 CREATE INDEX ix_edge_rel ON edge (relation, target, source);
+CREATE INDEX ix_edge_origin ON edge ((props ->> '$.origin'));
+CREATE TABLE quarantine (
+  path TEXT PRIMARY KEY NOT NULL,
+  id TEXT,
+  reason TEXT NOT NULL,
+  op TEXT NOT NULL
+);
 `.trim()
 }
 
@@ -143,6 +160,7 @@ export const GENERIC_POLICY = {
   kb_line: 'lww',
   kind_schema: 'lww',
   search_text: 'lww',
+  quarantine: 'lww',
 } as const
 
 // Typed references, as paraverse's mapping recognizes them.
@@ -403,6 +421,8 @@ export class GenericLoader {
     edge: 0,
     update: 0,
     removed: 0,
+    op: 0,
+    quarantined: 0,
   }
   private readonly names = new Map<string, string>()
   private readonly schema: StatementSync
@@ -417,6 +437,10 @@ export class GenericLoader {
   private readonly nameOf: StatementSync
   private readonly stored: StatementSync
   private readonly removals: Record<string, StatementSync[]>
+  private readonly v2: Record<string, StatementSync>
+  /** v2 merges and deletes seen so far in this batch, applied to later upsert edges. */
+  private readonly retarget = new Map<string, string>()
+  private readonly deleted = new Set<string>()
 
   private readonly fresh: boolean
   /** Time spent deriving labels, promoted fields and search text (the transform phase). */
@@ -472,6 +496,101 @@ export class GenericLoader {
       undoc: [db.prepare('DELETE FROM doc WHERE path = ?')],
       unline: [db.prepare('DELETE FROM kb_line WHERE path = ? AND n >= ?')],
     }
+    this.v2 = {
+      dropOrigin: db.prepare("DELETE FROM edge WHERE props ->> '$.origin' = ?"),
+      dropSource: db.prepare('DELETE FROM edge WHERE source = ?'),
+      dropTarget: db.prepare('DELETE FROM edge WHERE target = ?'),
+      dropEntity: db.prepare('DELETE FROM entity WHERE id = ?'),
+      dropSearch: db.prepare('DELETE FROM search_text WHERE id = ?'),
+      dropDoc: db.prepare('DELETE FROM doc WHERE path = ?'),
+      nextOrd: db.prepare(
+        'SELECT coalesce(max(ord) + 1, 0) AS n FROM edge WHERE source = ? AND relation = ? AND target = ?',
+      ),
+      incident: db.prepare(
+        `SELECT source, relation, target, ord, props FROM edge WHERE source = ?1
+         UNION ALL
+         SELECT source, relation, target, ord, props FROM edge WHERE target = ?1 AND source <> ?1`,
+      ),
+      dropEdge: db.prepare(
+        'DELETE FROM edge WHERE source = ? AND relation = ? AND target = ? AND ord = ?',
+      ),
+      reorigin: db.prepare(
+        `UPDATE edge SET props = json_set(props, '$.origin', ?2)
+         WHERE props ->> '$.origin' = ?1`,
+      ),
+      quarantine: db.prepare(
+        `INSERT INTO quarantine (path, id, reason, op) VALUES (?, ?, ?, ?)
+         ON CONFLICT (path) DO UPDATE SET id = excluded.id, reason = excluded.reason, op = excluded.op`,
+      ),
+    }
+  }
+
+  /** Follow this batch's merges, so a later edge names the survivor. */
+  private final(id: string): string {
+    let x = id
+    for (let seen = 0; this.retarget.has(x) && seen < 64; seen++) {
+      x = this.retarget.get(x) ?? x
+    }
+    return x
+  }
+
+  private insertEdge(source: string, relation: string, target: string, props: string | null): void {
+    const ord = (this.v2.nextOrd!.get(source, relation, target) as { n: number }).n
+    this.edge.run(source, relation, target, ord, props)
+  }
+
+  /**
+   * softschema-kb-delta/v2 semantics (corpus/delta2.py): an upsert drops the edges whose
+   * origin is the record, then its rows follow; a delete removes the record, its nodes,
+   * its edges by origin and every edge incident to its nodes; a merge moves every edge
+   * endpoint from the absorbed node to the survivor, rewrites the origin, and removes the
+   * absorbed node and record.
+   */
+  private applyOp(row: OpRow): void {
+    const q = this.v2
+    if (row.op === 'upsert') {
+      q.dropOrigin!.run(row.path)
+    } else if (row.op === 'delete') {
+      q.dropOrigin!.run(row.path)
+      for (const id of row.node_ids) {
+        q.dropSource!.run(id)
+        q.dropTarget!.run(id)
+        q.dropEntity!.run(id)
+        q.dropSearch!.run(id)
+        this.deleted.add(id)
+      }
+      q.dropDoc!.run(row.path)
+    } else {
+      type Edge = {
+        source: string
+        relation: string
+        target: string
+        ord: number
+        props: string | null
+      }
+      const moved = q.incident!.all(row.absorbed) as Edge[]
+      for (const e of moved) {
+        q.dropEdge!.run(e.source, e.relation, e.target, e.ord)
+      }
+      for (const e of moved) {
+        let props = e.props
+        if (props !== null) {
+          const attrs = JSON.parse(props) as JsonObject
+          if (attrs.origin === row.absorbed_path) {
+            attrs.origin = row.survivor_path
+            props = JSON.stringify(attrs)
+          }
+        }
+        const swap = (id: string): string => (id === row.absorbed ? row.survivor : id)
+        this.insertEdge(swap(e.source), e.relation, swap(e.target), props)
+      }
+      q.reorigin!.run(row.absorbed_path, row.survivor_path)
+      q.dropEntity!.run(row.absorbed)
+      q.dropSearch!.run(row.absorbed)
+      q.dropDoc!.run(row.absorbed_path)
+      this.retarget.set(row.absorbed, row.survivor)
+    }
+    this.counts.op++
   }
 
   /** A referenced entity's export name: from this load when seen, else from the database. */
@@ -502,6 +621,12 @@ export class GenericLoader {
         return this.remove(row.t, [row.path])
       case 'unline':
         return this.remove(row.t, [row.path, row.from])
+      case 'op':
+        return this.applyOp(row)
+      case 'invalid':
+        this.v2.quarantine!.run(row.path, row.id, JSON.stringify(row.errors), row.op)
+        this.counts.quarantined++
+        return
     }
   }
 
@@ -566,6 +691,17 @@ export class GenericLoader {
   }
 
   addEdge(row: EdgeRow): void {
+    if (row.ord === null) {
+      // A v2 edge: follow earlier merges, drop it if an endpoint was deleted, and take the
+      // next free ordinal, since other origins may hold parallel edges of the same triple.
+      const source = this.final(row.source)
+      const target = this.final(row.target)
+      if (!this.deleted.has(source) && !this.deleted.has(target)) {
+        this.insertEdge(source, row.relation, target, row.props)
+        this.counts.edge++
+      }
+      return
+    }
     this.edge.run(row.source, row.relation, row.target, row.ord, row.props)
     this.counts.edge++
   }

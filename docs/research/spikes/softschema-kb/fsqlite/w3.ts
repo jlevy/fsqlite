@@ -38,6 +38,7 @@ export interface QueryInstance {
   name: string
   category: string
   params: Params
+  hub?: boolean
 }
 
 export interface W3Options extends QueryOptions {
@@ -47,13 +48,24 @@ export interface W3Options extends QueryOptions {
   timeoutMs?: number
 }
 
+/** Whether a scale uses the round-2 query set (S1-r2, and after-batch states like S1-r2-p05). */
+export const isV2 = (scale: string): boolean => scale.includes('-r2')
+
+/**
+ * The query instances for a scale. Round-2 scales read `queries_v2`, keyed by the corpus
+ * scale (`S1-r2-p05` uses the `S1-r2` parameters), as harness/oracle.py does.
+ */
 export function queryInstances(scale: string): QueryInstance[] {
+  type Entry = { name: string; category: string; params: Record<string, Params>; hub?: boolean }
   const catalog = JSON.parse(readFileSync(join(SPIKE_DIR, 'harness', 'queries.json'), 'utf8')) as {
-    queries: { name: string; category: string; params: Record<string, Params> }[]
+    queries: Entry[]
+    queries_v2?: Entry[]
   }
-  return catalog.queries.flatMap((q) => {
-    const params = q.params[scale]
-    return params ? [{ name: q.name, category: q.category, params }] : []
+  const v2 = isV2(scale)
+  const key = v2 ? `${scale.split('-r2')[0]}-r2` : scale
+  return (v2 ? (catalog.queries_v2 ?? []) : catalog.queries).flatMap((q) => {
+    const params = q.params[key]
+    return params ? [{ name: q.name, category: q.category, params, hub: q.hub === true }] : []
   })
 }
 
@@ -131,6 +143,7 @@ export function measureQuery(
     name: q.name,
     category: q.category,
     params: q.params,
+    hub: q.hub ?? false,
     result,
     timings: {
       cold_ms: round(coldMs, 4),
@@ -236,7 +249,8 @@ function main(): void {
   const { flags, args } = parseArgs(process.argv.slice(2))
   const scale = flags.scale ?? 'S0'
   const opts: W3Options = {
-    warm: Number(flags.warm ?? 50),
+    // queries.json v2: one cold run, then 20 warm runs per instance.
+    warm: Number(flags.warm ?? (isV2(scale) ? 20 : 50)),
     pathCte: flags['path-cte'] === 'true',
   }
   if (flags.only) {

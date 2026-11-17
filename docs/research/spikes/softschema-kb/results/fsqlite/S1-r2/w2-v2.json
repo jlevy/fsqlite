@@ -1,0 +1,694 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1-r2",
+  "workflow": "W2 v2 batches, one writer in line order (both arms)",
+  "recorded_at": "2026-11-17T03:17:00.233Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 13454,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/kb",
+    "corpus": {
+      "scale": "S1-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 9,
+      "source": "/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 46927,
+      "edges": 226281,
+      "record_files": 44057,
+      "record_bytes": 135246904,
+      "files": 44081,
+      "bytes": 225144535,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 1249,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r8",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 408
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r8",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 31
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r8",
+          "p99": 29
+        },
+        "organization": {
+          "max": 3712,
+          "max_node": "org:github",
+          "p99": 10
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r8",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r8",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r8",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r8",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r8",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r8",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r8",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r8",
+          "p99": 3
+        },
+        "software": {
+          "max": 4781,
+          "max_node": "software:github-copilot",
+          "p99": 4781
+        },
+        "term": {
+          "max": 1666,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 613
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r8",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r8",
+          "p99": 6
+        },
+        "_all": {
+          "max": 4781,
+          "p99": 75
+        }
+      },
+      "workers": 4,
+      "seconds": 14.9
+    },
+    "node_total": 46927,
+    "edge_total": 226281
+  },
+  "base_store": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/fsqlite-spike/S1-r2/store-direct",
+  "deltas": "/tmp/claude-0/-home-user/bac81f03-965b-51f3-b055-bed7bf70e318/scratchpad/kb-corpora/S1-r2/deltas",
+  "gc": "gc({ retain: 0 }) after each publish",
+  "results": {
+    "p01": {
+      "parse": {
+        "wall_ms": 368.568,
+        "seconds": 0.262,
+        "counts": {
+          "node": 455,
+          "op": 469,
+          "doc": 455,
+          "entity": 455,
+          "edge": 2663
+        },
+        "validation_seconds": 0.074,
+        "validated": 455,
+        "ops": 469,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 352.5,
+          "reconcile_ms": 590.04,
+          "visible_ms": 942.594,
+          "fts_rebuild_ms": 745.189,
+          "gc_retain0_ms": 649.393,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 352.5,
+              "envelope_bytes": 2076490,
+              "reconcile_ms": 590.04,
+              "quarantined_envelopes": 0,
+              "visible_ms": 942.594,
+              "fts_rebuild_ms": 745.189,
+              "gc_retain0_ms": 649.393,
+              "state": "{\"entities\":47288,\"edges\":228150,\"quarantine\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 732.33,
+          "fts_rebuild_ms": 702.67,
+          "gc_retain0_ms": 656.08,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 732.33,
+              "fts_rebuild_ms": 702.67,
+              "gc_retain0_ms": 656.08
+            }
+          ]
+        }
+      }
+    },
+    "p05": {
+      "parse": {
+        "wall_ms": 1331.854,
+        "seconds": 1.23,
+        "counts": {
+          "node": 2276,
+          "op": 2346,
+          "doc": 2276,
+          "entity": 2276,
+          "edge": 13538
+        },
+        "validation_seconds": 0.316,
+        "validated": 2276,
+        "ops": 2346,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 848.187,
+          "reconcile_ms": 815.458,
+          "visible_ms": 1663.684,
+          "fts_rebuild_ms": 783.098,
+          "gc_retain0_ms": 785.175,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 848.187,
+              "envelope_bytes": 10187290,
+              "reconcile_ms": 815.458,
+              "quarantined_envelopes": 0,
+              "visible_ms": 1663.684,
+              "fts_rebuild_ms": 783.098,
+              "gc_retain0_ms": 785.175,
+              "state": "{\"entities\":48734,\"edges\":235470,\"quarantine\":[]}",
+              "w3_check_against_reference": "{\"expected\":\"/home/user/fsqlite/docs/research/spikes/softschema-kb/harness/expected/S1-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 1375.512,
+          "fts_rebuild_ms": 699.976,
+          "gc_retain0_ms": 680.134,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 1375.512,
+              "fts_rebuild_ms": 699.976,
+              "gc_retain0_ms": 680.134
+            }
+          ]
+        }
+      }
+    },
+    "p20": {
+      "parse": {
+        "wall_ms": 5017.04,
+        "seconds": 4.915,
+        "counts": {
+          "node": 9103,
+          "op": 9385,
+          "doc": 9103,
+          "entity": 9103,
+          "edge": 54562
+        },
+        "validation_seconds": 1.215,
+        "validated": 9103,
+        "ops": 9385,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 1,
+          "capture_ms": 3300.979,
+          "reconcile_ms": 2050.287,
+          "visible_ms": 5351.314,
+          "fts_rebuild_ms": 801.568,
+          "gc_retain0_ms": 857.598,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 3300.979,
+              "envelope_bytes": 40495324,
+              "reconcile_ms": 2050.287,
+              "quarantined_envelopes": 0,
+              "visible_ms": 5351.314,
+              "fts_rebuild_ms": 801.568,
+              "gc_retain0_ms": 857.598,
+              "state": "{\"entities\":54153,\"edges\":264200,\"quarantine\":[]}"
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 1,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 3110.751,
+          "fts_rebuild_ms": 800.191,
+          "gc_retain0_ms": 850.63,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3110.751,
+              "fts_rebuild_ms": 800.191,
+              "gc_retain0_ms": 850.63
+            }
+          ]
+        }
+      }
+    },
+    "t0001": {
+      "parse": {
+        "wall_ms": 122.776,
+        "seconds": 0.003,
+        "counts": {
+          "node": 1,
+          "op": 1,
+          "doc": 1,
+          "entity": 1,
+          "edge": 14
+        },
+        "validation_seconds": 0.002,
+        "validated": 1,
+        "ops": 1,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 262.881,
+          "reconcile_ms": 555.669,
+          "visible_ms": 818.592,
+          "fts_rebuild_ms": 687.674,
+          "gc_retain0_ms": 676.903,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 259.566,
+              "envelope_bytes": 6644,
+              "reconcile_ms": 494.427,
+              "quarantined_envelopes": 0,
+              "visible_ms": 754.031,
+              "fts_rebuild_ms": 679.341,
+              "gc_retain0_ms": 647.706,
+              "state": "{\"entities\":46928,\"edges\":226295,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 284.362,
+              "envelope_bytes": 6644,
+              "reconcile_ms": 613.168,
+              "quarantined_envelopes": 0,
+              "visible_ms": 897.572,
+              "fts_rebuild_ms": 687.674,
+              "gc_retain0_ms": 676.903
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 262.881,
+              "envelope_bytes": 6644,
+              "reconcile_ms": 555.669,
+              "quarantined_envelopes": 0,
+              "visible_ms": 818.592,
+              "fts_rebuild_ms": 710.553,
+              "gc_retain0_ms": 738.271
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 583.955,
+          "fts_rebuild_ms": 705.95,
+          "gc_retain0_ms": 718.789,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 622.132,
+              "fts_rebuild_ms": 705.95,
+              "gc_retain0_ms": 734.826
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 583.955,
+              "fts_rebuild_ms": 751.034,
+              "gc_retain0_ms": 718.789
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 570.871,
+              "fts_rebuild_ms": 692.319,
+              "gc_retain0_ms": 643.204
+            }
+          ]
+        }
+      }
+    },
+    "t0010": {
+      "parse": {
+        "wall_ms": 108.917,
+        "seconds": 0.009,
+        "counts": {
+          "node": 10,
+          "op": 10,
+          "doc": 10,
+          "entity": 10,
+          "edge": 76
+        },
+        "validation_seconds": 0.005,
+        "validated": 10,
+        "ops": 10,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 285.946,
+          "reconcile_ms": 567.9,
+          "visible_ms": 853.892,
+          "fts_rebuild_ms": 737.172,
+          "gc_retain0_ms": 737.64,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 246.162,
+              "envelope_bytes": 35883,
+              "reconcile_ms": 420.292,
+              "quarantined_envelopes": 0,
+              "visible_ms": 666.497,
+              "fts_rebuild_ms": 709.426,
+              "gc_retain0_ms": 737.64,
+              "state": "{\"entities\":46935,\"edges\":226325,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 322.329,
+              "envelope_bytes": 35883,
+              "reconcile_ms": 635.839,
+              "quarantined_envelopes": 0,
+              "visible_ms": 958.207,
+              "fts_rebuild_ms": 737.172,
+              "gc_retain0_ms": 741.3
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 285.946,
+              "envelope_bytes": 35883,
+              "reconcile_ms": 567.9,
+              "quarantined_envelopes": 0,
+              "visible_ms": 853.892,
+              "fts_rebuild_ms": 776.426,
+              "gc_retain0_ms": 733.981
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 654.138,
+          "fts_rebuild_ms": 716.405,
+          "gc_retain0_ms": 740.081,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 629.061,
+              "fts_rebuild_ms": 716.405,
+              "gc_retain0_ms": 835.655
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 654.138,
+              "fts_rebuild_ms": 705.819,
+              "gc_retain0_ms": 740.081
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 670.594,
+              "fts_rebuild_ms": 725.258,
+              "gc_retain0_ms": 635.266
+            }
+          ]
+        }
+      }
+    },
+    "t0100": {
+      "parse": {
+        "wall_ms": 257.584,
+        "seconds": 0.078,
+        "counts": {
+          "node": 97,
+          "op": 100,
+          "doc": 97,
+          "entity": 97,
+          "edge": 517
+        },
+        "validation_seconds": 0.028,
+        "validated": 97,
+        "ops": 100,
+        "quarantined": []
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 258.527,
+          "reconcile_ms": 492.454,
+          "visible_ms": 776.733,
+          "fts_rebuild_ms": 721.942,
+          "gc_retain0_ms": 639.78,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 249.986,
+              "envelope_bytes": 444184,
+              "reconcile_ms": 492.454,
+              "quarantined_envelopes": 0,
+              "visible_ms": 742.473,
+              "fts_rebuild_ms": 722.062,
+              "gc_retain0_ms": 639.78,
+              "state": "{\"entities\":47004,\"edges\":226658,\"quarantine\":[]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 258.527,
+              "envelope_bytes": 444184,
+              "reconcile_ms": 575.669,
+              "quarantined_envelopes": 0,
+              "visible_ms": 834.227,
+              "fts_rebuild_ms": 721.942,
+              "gc_retain0_ms": 711.71
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 294.621,
+              "envelope_bytes": 444184,
+              "reconcile_ms": 482.081,
+              "quarantined_envelopes": 0,
+              "visible_ms": 776.733,
+              "fts_rebuild_ms": 679.128,
+              "gc_retain0_ms": 639.708
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 598.475,
+          "fts_rebuild_ms": 671.744,
+          "gc_retain0_ms": 648.723,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 592.153,
+              "fts_rebuild_ms": 671.744,
+              "gc_retain0_ms": 651.086
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 598.475,
+              "fts_rebuild_ms": 672.422,
+              "gc_retain0_ms": 648.723
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 600.345,
+              "fts_rebuild_ms": 670.364,
+              "gc_retain0_ms": 647.889
+            }
+          ]
+        }
+      }
+    },
+    "t0010-invalid": {
+      "parse": {
+        "wall_ms": 133.918,
+        "seconds": 0.015,
+        "counts": {
+          "node": 10,
+          "op": 9,
+          "doc": 9,
+          "entity": 9,
+          "edge": 65,
+          "invalid": 1
+        },
+        "validation_seconds": 0.01,
+        "validated": 10,
+        "ops": 10,
+        "quarantined": [
+          {
+            "path": "profiles/arthur-maltson-r8.yaml",
+            "id": "profile:arthur-maltson-r8",
+            "errors": [
+              "$: unexpected property unexpected_field (additionalProperties: false)"
+            ]
+          }
+        ]
+      },
+      "arms": {
+        "SnapshotStore": {
+          "reps": 3,
+          "capture_ms": 248.257,
+          "reconcile_ms": 512.625,
+          "visible_ms": 762.05,
+          "fts_rebuild_ms": 669.31,
+          "gc_retain0_ms": 650.867,
+          "runs": [
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 248.257,
+              "envelope_bytes": 34277,
+              "reconcile_ms": 513.766,
+              "quarantined_envelopes": 0,
+              "visible_ms": 762.05,
+              "fts_rebuild_ms": 668.849,
+              "gc_retain0_ms": 650.867,
+              "state": "{\"entities\":46935,\"edges\":226336,\"quarantine\":[{\"path\":\"profiles/arthur-maltson-r8.yaml\",\"id\":\"profile:arthur-maltson-r8\",\"reason\":\"[\\\"$: unexpected property unexpected_field (additionalProperties: false)\\\"]\",\"op\":\"upsert\"}]}"
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 251.539,
+              "envelope_bytes": 34277,
+              "reconcile_ms": 512.625,
+              "quarantined_envelopes": 0,
+              "visible_ms": 764.193,
+              "fts_rebuild_ms": 675.246,
+              "gc_retain0_ms": 653.391
+            },
+            {
+              "arm": "SnapshotStore",
+              "capture_ms": 217.344,
+              "envelope_bytes": 34277,
+              "reconcile_ms": 487.418,
+              "quarantined_envelopes": 0,
+              "visible_ms": 704.791,
+              "fts_rebuild_ms": 669.31,
+              "gc_retain0_ms": 648.308
+            }
+          ]
+        },
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 551.293,
+          "fts_rebuild_ms": 683.517,
+          "gc_retain0_ms": 708.817,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 495.902,
+              "fts_rebuild_ms": 674.083,
+              "gc_retain0_ms": 652.675
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 551.293,
+              "fts_rebuild_ms": 683.517,
+              "gc_retain0_ms": 717.923
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 620.809,
+              "fts_rebuild_ms": 736.231,
+              "gc_retain0_ms": 708.817
+            }
+          ]
+        }
+      },
+      "without_validation": {
+        "invalid_record_loaded": true,
+        "quarantine_rows": 0
+      }
+    }
+  }
+}

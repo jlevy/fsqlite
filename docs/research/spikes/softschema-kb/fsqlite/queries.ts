@@ -131,7 +131,12 @@ export class KbQueries {
 
   table(p: Params): unknown {
     const limit = Number(p.limit)
-    const offset = Number(p.offset)
+    // `offset: "last"` (queries.json v2) is the last full or partial page of the total.
+    const last = p.offset === 'last'
+    const pageOf = (total: number): number =>
+      last ? Math.max(0, Math.floor((total - 1) / limit) * limit) : Number(p.offset)
+    const page = (total: number, rows: unknown[], offset: number) =>
+      last ? { total, offset, rows } : { total, rows }
     if (p.table === 'people_by_org') {
       // Drive from the organization's in-edges (CROSS JOIN fixes the join order), so the
       // cost follows the member count rather than the number of people in the KB. The
@@ -142,25 +147,34 @@ export class KbQueries {
         CROSS JOIN entity e ON e.id = m.source
         WHERE +e.kind = 'person'`
       const org = String(p.org)
-      const total = this.stmt(`SELECT count(*) AS n ${members}`).get(org) as { n: number }
+      const total = (this.stmt(`SELECT count(*) AS n ${members}`).get(org) as { n: number }).n
+      const offset = pageOf(total)
       const rows = this.stmt(
         `SELECT e.id, e.label AS name, e.label AS value ${members}
          ORDER BY e.label, e.id LIMIT ? OFFSET ?`,
       ).all(org, limit, offset)
-      return { total: total.n, rows }
+      return page(total, rows, offset)
     }
     const view = TABLE_VIEWS.find((v) => v.name === p.table)
     if (!view) {
       throw new Error(`unknown table ${String(p.table)}`)
     }
-    const filterValue = view.name === 'sessions_by_start' ? 'false' : String(p.language)
-    const where = `FROM entity WHERE kind = '${view.kind}' AND ${view.filter} = ?`
-    const total = this.stmt(`SELECT count(*) AS n ${where}`).get(filterValue) as { n: number }
+    const args: string[] = []
+    let where = `FROM entity WHERE kind = '${view.kind}'`
+    if (view.filter) {
+      where += ` AND ${view.filter} = ?`
+      args.push(view.name === 'sessions_by_start' ? 'false' : String(p.language))
+    }
+    const total = (this.stmt(`SELECT count(*) AS n ${where}`).get(...args) as { n: number }).n
+    const offset = pageOf(total)
+    // INDEXED BY pins the view's partial expression index: without it, SQLite 3.53 serves
+    // an unfiltered view (repos_all_by_stars) from the (kind, label) index and sorts.
+    const pinned = where.replace('FROM entity', `FROM entity INDEXED BY ix_view_${view.name}`)
     const rows = this.stmt(
-      `SELECT id, label AS name, ${view.value} AS value ${where}
+      `SELECT id, label AS name, ${view.value} AS value ${pinned}
        ORDER BY ${view.sort}${view.descending ? ' DESC' : ''}, id LIMIT ? OFFSET ?`,
-    ).all(filterValue, limit, offset)
-    return { total: total.n, rows }
+    ).all(...args, limit, offset)
+    return page(total, rows, offset)
   }
 
   record(id: string): unknown {

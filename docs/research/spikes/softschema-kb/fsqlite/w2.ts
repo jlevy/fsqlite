@@ -8,7 +8,7 @@
 // independently from the base KB. Times are wall-clock milliseconds from the moment the
 // writers start. The result goes to results/fsqlite/<scale>/w2.json (or w2-direct.json).
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
@@ -19,13 +19,18 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import {
+  RESULTS_DIR,
   SPIKE_DIR,
   WORK_DIR,
   cloneStore,
+  forEachLineSync,
   forEachRowSync,
   isMain,
+  kbDirFor,
   nowMs,
   parseArgs,
   percentile,
@@ -34,7 +39,9 @@ import {
 } from './common.ts'
 import type { KbRow, NodeRow } from './common.ts'
 import { buildFtsSidecar } from './fts.ts'
-import { genericStore } from './w3.ts'
+import { GenericLoader } from './mapping.ts'
+import { readUnits } from './w2_worker.ts'
+import { genericStore, isV2, runOnSnapshot } from './w3.ts'
 
 const HERE = join(SPIKE_DIR, 'fsqlite')
 const NODE = [process.execPath, '--disable-warning=ExperimentalWarning']
@@ -147,6 +154,45 @@ function stats(values: number[]): Record<string, number> {
   }
 }
 
+/** v2 batches: one unit per operation (its op row and the rows it writes), dealt round-robin. */
+function partitionOps(
+  deltaRows: string,
+  outDir: string,
+  writers: number,
+): { units: number; files: string[] } {
+  const nodes: string[] = []
+  const units: string[][] = []
+  forEachLineSync(deltaRows, (line) => {
+    const t = (JSON.parse(line) as KbRow).t
+    if (t === 'node') {
+      nodes.push(line)
+    } else if (t === 'op' || t === 'invalid' || units.length === 0) {
+      units.push([line])
+    } else {
+      units[units.length - 1]?.push(line)
+    }
+  })
+  const files: string[] = []
+  for (let w = 0; w < writers; w++) {
+    const lines = [...nodes]
+    for (let u = w; u < units.length; u += writers) {
+      lines.push(...(units[u] ?? []))
+    }
+    const file = join(outDir, `writer-${w}.jsonl`)
+    writeFileSync(file, `${lines.join('\n')}\n`)
+    files.push(file)
+  }
+  return { units: units.length, files }
+}
+
+export interface BatchOptions {
+  /** A v2 batch: parse with --delta2 against this base KB, and split by operation. */
+  v2BaseKb?: string
+  /** After publishing, run W3 v2 on the head and compare it with this expected file. */
+  expected?: string
+  checkOut?: string
+}
+
 async function batch(
   base: string,
   scale: string,
@@ -155,19 +201,23 @@ async function batch(
   writers: number,
   envelopes: number,
   strategy: string,
+  opts: BatchOptions = {},
 ): Promise<Record<string, unknown>> {
   const name = deltaDir.split('/').pop() ?? 'delta'
   const dir = join(work, name)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
   const rows = join(dir, 'delta.jsonl')
-  const parse = await run([...UV_PYTHON, join(HERE, 'parse_kb.py'), deltaDir, rows, '--delta'], {
+  const mode = opts.v2BaseKb ? ['--delta2', opts.v2BaseKb] : ['--delta']
+  const parse = await run([...UV_PYTHON, join(HERE, 'parse_kb.py'), deltaDir, rows, ...mode], {
     quiet: true,
   })
   if (parse.code !== 0) {
     throw new Error(`parse of ${deltaDir} failed`)
   }
-  const { units, files } = partition(rows, dir, writers)
+  const { units, files } = opts.v2BaseKb
+    ? partitionOps(rows, dir, writers)
+    : partition(rows, dir, writers)
   const store = join(dir, 'store')
   cloneStore(base, store)
   const handle = genericStore(store).init()
@@ -204,7 +254,7 @@ async function batch(
   const reports = outs.map(
     (o) =>
       JSON.parse(o.stdout) as {
-        captures: { ms: number }[]
+        captures: { ms: number; tx?: string | null }[]
         total_ms: number
         envelopes: number
         max_rss_mib: number
@@ -214,8 +264,26 @@ async function batch(
   if (strategy !== 'direct') {
     const t = nowMs()
     const result = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
-    reconcile = { ...result, ms: round(nowMs() - t) }
+    // Each quarantined envelope keeps its reason in tx/quarantine/<tx>.txn/QUARANTINE (f1.0).
+    const qdir = join(store, 'tx', 'quarantine')
+    const reasons = existsSync(qdir)
+      ? readdirSync(qdir).map((txn) => ({
+          txn,
+          reason: readFileSync(join(qdir, txn, 'QUARANTINE'), 'utf8').trim(),
+        }))
+      : []
+    reconcile = { ...result, ms: round(nowMs() - t), quarantine_reasons: reasons }
+    if (reasons.length > 0) {
+      // Recovery: a NOTFOUND quarantine is permanent, so re-capture each quarantined
+      // envelope's operations on the new head, where its deletes find nothing left to
+      // delete, and reconcile again.
+      const t2 = nowMs()
+      const retried = retryQuarantined(store, files, reports, reasons, envelopes)
+      const again = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+      reconcile.retry = { envelopes: retried, ...again, ms: round(nowMs() - t2) }
+    }
   }
+  const complete = Date.now()
   const published = Date.now()
   const head = handle.currentVersion()
   // Indexed search follows each publish: rebuild the FTS5 sidecar for the new head.
@@ -235,6 +303,32 @@ async function batch(
     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
   )
   const headCopy = copyCost(handle.snapshotPath(head))
+  // v2: does the concurrently applied state answer W3 like the reference post-batch KB,
+  // and does it hold the same rows as one writer applying the batch in line order?
+  let check: Record<string, unknown> | null = null
+  if (opts.expected && opts.checkOut && existsSync(opts.expected)) {
+    check = checkAgainstExpected(handle.snapshotPath(head), scale, opts.expected, opts.checkOut)
+  }
+  let sameAsLineOrder: Record<string, unknown> | null = null
+  if (opts.v2BaseKb) {
+    const ref = join(dir, 'line-order')
+    cloneStore(base, ref)
+    const refStore = genericStore(ref).init()
+    refStore.write('lineorder', (db) => {
+      const loader = new GenericLoader(db)
+      forEachRowSync(rows, (row) => loader.add(row))
+    })
+    refStore.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+    const a = semanticDigest(handle.snapshotPath(head))
+    const b = semanticDigest(refStore.snapshotPath(refStore.currentVersion()))
+    sameAsLineOrder = {
+      equal: Object.keys(a).every((k) => a[k] === b[k]),
+      differing_tables: Object.keys(a).filter((k) => a[k] !== b[k]),
+      concurrent: a,
+      line_order: b,
+    }
+    rmSync(ref, { recursive: true, force: true })
+  }
   // Every updated record must now differ from the base.
   const updatedIds =
     (
@@ -267,12 +361,16 @@ async function batch(
     batch: name,
     strategy,
     arm: strategy === 'direct' ? 'DirectStore' : 'SnapshotStore',
-    delta: {
-      changes: manifest.changes,
-      new: manifest.new,
-      updated: manifest.updated,
-      new_edges: manifest.new_edges,
-    },
+    delta: opts.v2BaseKb
+      ? { changes: manifest.changes, counts: manifest.counts, edges: manifest.edges_in_upserts }
+      : {
+          changes: manifest.changes,
+          new: manifest.new,
+          updated: manifest.updated,
+          new_edges: manifest.new_edges,
+        },
+    w3_check_against_reference: check,
+    same_rows_as_one_writer_in_line_order: sameAsLineOrder,
     units,
     parse_ms: parse.ms,
     writers: writers,
@@ -302,6 +400,7 @@ async function batch(
     fts_sidecar_rebuild: sidecar,
     indexed_search_visible_after_ms: searchVisible - started,
     published_after_ms: published - started,
+    complete_after_ms: complete - started,
     versions_published: head - baseVersion,
     entities: { before: before.n, after: after.n, added: after.n - before.n },
     updated_records_changed: `${changed}/${updatedIds.length}`,
@@ -324,6 +423,96 @@ async function batch(
   return result
 }
 
+/**
+ * Re-capture the operations of every quarantined envelope from its writer's file, in one
+ * envelope: separate retries would start from the same head and could conflict again.
+ */
+function retryQuarantined(
+  store: string,
+  files: string[],
+  reports: { captures: { tx?: string | null }[] }[],
+  reasons: { txn: string }[],
+  envelopes: number,
+): number {
+  const slices: { nodes: KbRow[]; units: KbRow[][] }[] = []
+  for (const { txn } of reasons) {
+    const tx = txn.replace(/\.txn$/, '')
+    reports.forEach((rep, w) => {
+      const index = rep.captures.findIndex((c) => c.tx === tx)
+      if (index >= 0) {
+        const { nodes, units } = readUnits(files[w] ?? '')
+        const per = Math.max(1, Math.ceil(units.length / envelopes))
+        slices.push({ nodes, units: units.slice(index * per, (index + 1) * per) })
+      }
+    })
+  }
+  genericStore(store).write('retry', (db) => {
+    const loader = new GenericLoader(db)
+    for (const { nodes, units } of slices) {
+      for (const node of nodes) {
+        loader.add(node)
+      }
+      for (const row of units.flat()) {
+        loader.add(row)
+      }
+    }
+  })
+  return slices.length
+}
+
+/**
+ * Row digests that ignore edge ordinals, which concurrent writers allocate differently:
+ * entities, documents, search text and quarantine by key, and edges as a sorted multiset.
+ */
+export function semanticDigest(snapshot: string): Record<string, string> {
+  const db = new DatabaseSync(snapshot, { readOnly: true })
+  try {
+    const digest = (sql: string): string => {
+      const hash = createHash('sha256')
+      let n = 0
+      for (const row of db.prepare(sql).iterate()) {
+        hash.update(JSON.stringify(Object.values(row)))
+        n++
+      }
+      return `${n}:${hash.digest('hex').slice(0, 16)}`
+    }
+    return {
+      entity: digest('SELECT * FROM entity ORDER BY id'),
+      edge: digest(
+        'SELECT source, relation, target, props FROM edge ORDER BY source, relation, target, props',
+      ),
+      doc: digest('SELECT * FROM doc ORDER BY path'),
+      search_text: digest('SELECT * FROM search_text ORDER BY id, rank'),
+      quarantine: digest('SELECT * FROM quarantine ORDER BY path'),
+    }
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Run every W3 v2 query once on a snapshot (labelled `<scale>-p05` style by the caller),
+ * write it in the harness form, and compare it with the oracle's expected file.
+ */
+export function checkAgainstExpected(
+  snapshot: string,
+  scale: string,
+  expected: string,
+  out: string,
+): Record<string, unknown> {
+  const report = runOnSnapshot(snapshot, scale, { warm: 0 })
+  writeFileSync(out, `${JSON.stringify({ workflow: 'W3', scale, ...report }, null, 2)}\n`)
+  const r = spawnSync('python3', [join(SPIKE_DIR, 'harness', 'compare.py'), expected, out], {
+    encoding: 'utf8',
+  })
+  const lines = r.stdout.trim().split('\n')
+  return {
+    expected,
+    result: lines.at(-1) ?? '',
+    differing: lines.filter((l) => l.startsWith('DIFF') || l.startsWith('MISSING')).slice(0, 10),
+  }
+}
+
 async function main(): Promise<void> {
   const { flags, args } = parseArgs(process.argv.slice(2))
   const [base] = args
@@ -340,7 +529,16 @@ async function main(): Promise<void> {
   for (const name of readdirSync(deltas)
     .filter((d) => /^p\d+$/.test(d))
     .sort()) {
-    const b = await batch(base, scale, join(deltas, name), work, writers, envelopes, strategy)
+    // Round-2 scales use the v2 batch format; p05 is checked against the oracle's state.
+    const v2 = isV2(scale)
+    const opts: BatchOptions = v2
+      ? {
+          v2BaseKb: kbDirFor(scale),
+          expected: join(SPIKE_DIR, 'harness', 'expected', `${scale}-${name}`, 'w3.json'),
+          checkOut: join(RESULTS_DIR, scale, `w3-after-${name}-${writers}writers.json`),
+        }
+      : {}
+    const b = await batch(base, scale, join(deltas, name), work, writers, envelopes, strategy, opts)
     console.error(
       JSON.stringify({
         batch: b.batch,

@@ -27,7 +27,7 @@ SCRATCH = Path(
 CORPORA = Path(os.environ.get("KB_CORPORA", SCRATCH / "kb-corpora"))
 DATA = Path(os.environ.get("FALKORDB_DATA", SCRATCH / "fdb-data"))
 
-STEPS = ("oracle", "w1", "w1nosave", "w3", "compare", "w2", "w4", "w5", "w6")
+STEPS = ("oracle", "w1", "w1nosave", "w3", "compare", "w2", "w2v2", "w4", "w5", "w6")
 
 
 def sh(args: list[str], **kwargs) -> int:
@@ -59,12 +59,14 @@ def main() -> None:
                 rc = sh([py, str(SPIKE / "harness" / "compare.py"), str(expected), str(out / "w3.json"), "--kb", str(kb)], stdout=fh)
             print((out / "compare-oracle.txt").read_text().splitlines()[-1])
         else:
-            rc = sh([py, str(HERE / f"{step}_{_NAMES[step]}.py"), "--scale", s, "--corpus", str(CORPORA / s), "--data", str(data), "--out", str(out / f"{step}.json")])
+            script = "w2_v2.py" if step == "w2v2" else f"{step}_{_NAMES[step]}.py"
+            name = "w2.json" if step == "w2v2" else f"{step}.json"
+            rc = sh([py, str(HERE / script), "--scale", s, "--corpus", str(CORPORA / s), "--data", str(data), "--out", str(out / name)])
         if rc != 0:
             sys.exit(f"step {step} failed with exit code {rc}")
 
 
-_NAMES = {"w2": "update", "w4": "evolve", "w5": "export", "w6": "ops"}
+_NAMES = {"w2": "update", "w2v2": "v2", "w4": "evolve", "w5": "export", "w6": "ops"}
 
 if __name__ == "__main__":
     main()
