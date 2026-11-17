@@ -188,7 +188,14 @@ export function checkMarkdownLinks() {
  * @param {number} nodeTests
  */
 export function checkDocClaims(nodeTests) {
-  const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
+  // Research spikes document patched prototype copies of the package, whose test counts
+  // differ from the package's by design, so their count claims are not checked here.
+  const markdown = filesBelow(
+    repoDir,
+    (path) =>
+      extname(path) === '.md' &&
+      !relative(repoDir, path).split(sep).join('/').startsWith('docs/research/spikes/'),
+  )
   const claimPatterns = [
     {
       label: 'node:test',
