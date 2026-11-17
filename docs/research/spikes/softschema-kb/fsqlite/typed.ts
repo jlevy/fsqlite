@@ -175,7 +175,14 @@ export function buildTyped(
         for (const g of src
           .prepare('SELECT source, relation, target, ord, props FROM edge')
           .iterate()) {
-          edge.run(g.source, g.relation, g.target, g.ord, g.props)
+          const row = g as Record<string, SQLInputValue>
+          edge.run(
+            row.source ?? null,
+            row.relation ?? null,
+            row.target ?? null,
+            row.ord ?? null,
+            row.props ?? null,
+          )
         }
       },
       { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } },

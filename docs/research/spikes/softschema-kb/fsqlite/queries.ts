@@ -141,11 +141,12 @@ export class KbQueries {
         FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m
         CROSS JOIN entity e ON e.id = m.source
         WHERE +e.kind = 'person'`
-      const total = this.stmt(`SELECT count(*) AS n ${members}`).get(p.org) as { n: number }
+      const org = String(p.org)
+      const total = this.stmt(`SELECT count(*) AS n ${members}`).get(org) as { n: number }
       const rows = this.stmt(
         `SELECT e.id, e.label AS name, e.label AS value ${members}
          ORDER BY e.label, e.id LIMIT ? OFFSET ?`,
-      ).all(p.org, limit, offset)
+      ).all(org, limit, offset)
       return { total: total.n, rows }
     }
     const view = TABLE_VIEWS.find((v) => v.name === p.table)

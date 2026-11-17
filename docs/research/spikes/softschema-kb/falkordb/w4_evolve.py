@@ -23,9 +23,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-import paraverse_graph.mapping as mapping
-import paraverse_graph.schemas as schemas
-from fdb import PACKAGES, GRAPH, Server, corpus_info, write_json
+from fdb import GRAPH, PACKAGES, Server, corpus_info, write_json  # sets sys.path first
+
+import paraverse_graph.mapping as mapping  # noqa: E402
+import paraverse_graph.schemas as schemas  # noqa: E402
 from machine import machine, package_versions
 from paraverse_graph.kb import KbNode, load_kb, read_artifact
 from paraverse_graph.loader import _relationship_stats, load_graph

@@ -207,7 +207,15 @@ def compare_chunk(src: str, out: str, rels: list[str]) -> list[dict[str, Any]]:
             results.append({"path": rel, "bytes_equal": True, "parsed_equal": True})
             continue
         ta, tb = a.decode("utf-8"), b.decode("utf-8")
-        parsed_equal = parse_doc(ta, rel) == parse_doc(tb, rel)
+        pa, pb = parse_doc(ta, rel), parse_doc(tb, rel)
+        parsed_equal = pa == pb
+        # The store returns rows in key order; a source export in another order holds the
+        # same rows. Compare .jsonl files as multisets as well.
+        same_rows = parsed_equal or (
+            rel.endswith(".jsonl")
+            and sorted(json.dumps(r, sort_keys=True) for r in pa)
+            == sorted(json.dumps(r, sort_keys=True) for r in pb)
+        )
         la, lb = ta.split("\n"), tb.split("\n")
         changed = sum(1 for x, y in zip(la, lb) if x != y) + abs(len(la) - len(lb))
         results.append(
@@ -215,6 +223,7 @@ def compare_chunk(src: str, out: str, rels: list[str]) -> list[dict[str, Any]]:
                 "path": rel,
                 "bytes_equal": False,
                 "parsed_equal": parsed_equal,
+                "same_rows_any_order": same_rows,
                 "byte_delta": len(b) - len(a),
                 "lines_changed": changed,
             }
@@ -251,6 +260,12 @@ def compare(src: Path, out: Path, jobs: int) -> dict[str, Any]:
         "bytes_equal": sum(r["bytes_equal"] for r in rows),
         "parsed_equal": sum(r["parsed_equal"] for r in rows),
         "parsed_different": [r["path"] for r in rows if not r["parsed_equal"]][:20],
+        "order_only_differences": [
+            r["path"] for r in rows if not r["parsed_equal"] and r.get("same_rows_any_order")
+        ],
+        "content_differences": [
+            r["path"] for r in rows if not r["parsed_equal"] and not r.get("same_rows_any_order")
+        ],
         "byte_differences": sorted(differing, key=lambda r: r["path"])[:20],
         "byte_different_count": len(differing),
         "by_area": by_area,
