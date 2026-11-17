@@ -203,9 +203,15 @@ def q_table(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
         match, where = "MATCH (n:Repository)", " WHERE n.primary_language = $f0"
         args = {"f0": p["language"]}
         order, value = "n.stars IS NULL, n.stars DESC, n.id", "n.stars"
+    elif table == "repos_all_by_stars":
+        match, where, args = "MATCH (n:Repository)", "", {}
+        order, value = "n.stars IS NULL, n.stars DESC, n.id", "n.stars"
     else:
         raise ValueError(table)
     total = _rows(graph, f"{match}{where} RETURN count(DISTINCT n)", args)[0][0]
+    offset = p["offset"]
+    if offset == "last":  # v2 convention: the last page, reported with its offset
+        offset = max(0, (total - 1) // p["limit"] * p["limit"])
     page = _rows(
         graph,
         f"""
@@ -215,9 +221,12 @@ def q_table(graph: Any, p: dict[str, Any]) -> dict[str, Any]:
         SKIP $offset LIMIT $limit
         RETURN n.id AS id, n.display_name AS name, {value} AS value
         """,
-        {**args, "offset": p["offset"], "limit": p["limit"]},
+        {**args, "offset": offset, "limit": p["limit"]},
     )
-    return {"total": total, "rows": [{"id": i, "name": n, "value": v} for i, n, v in page]}
+    rows = [{"id": i, "name": n, "value": v} for i, n, v in page]
+    if p["offset"] == "last":
+        return {"total": total, "offset": offset, "rows": rows}
+    return {"total": total, "rows": rows}
 
 
 def _edge_key(item: dict[str, Any]) -> tuple[str, str]:

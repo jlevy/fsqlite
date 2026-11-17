@@ -41,6 +41,8 @@ from fdb import (
 from machine import machine, package_versions, time_query
 from oracle import instances
 
+SPPATHS_V2 = {"v2.path.00", "v2.path.05", "v2.path.10", "v2.path.15", "v2.path.hub"}
+
 EXTRAS = (
     ("search", "fulltext", q_search_fulltext),
     ("path", "in_engine", q_path_engine),
@@ -94,6 +96,9 @@ def run(data: Path, kb_root: Path, scale: str, warm: int) -> dict:
     for inst in instances(scale):
         for category, form, fn in EXTRAS:
             if inst["category"] != category:
+                continue
+            # Round 2 has 21 path instances; algo.SPpaths (seconds per call) runs on a sample.
+            if form == "sppaths" and "-r2" in scale and inst["name"] not in SPPATHS_V2:
                 continue
             result, timings, plans = measure(graph, fn, inst["params"], warm, adaptive=True)
             entry = {"name": f"{inst['name']}.{form}", "form": form, "compared": False, "params": inst["params"], "result": result, "timings": timings, "plans": plans}

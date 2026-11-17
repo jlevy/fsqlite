@@ -52,7 +52,8 @@ def main() -> None:
         elif step == "w1nosave":
             rc = sh([py, str(HERE / "w1_load.py"), "--kb", str(kb), "--data", str(data), "--scale", s, "--save-mode", "disabled", "--out", str(out / "w1-save-disabled.json")])
         elif step == "w3":
-            rc = sh([py, str(HERE / "w3_queries.py"), "--data", str(data), "--kb", str(kb), "--scale", s, "--out", str(out / "w3.json")])
+            warm = ["--warm", "20"] if "-r2" in s else []  # queries.json v2.warm_iterations
+            rc = sh([py, str(HERE / "w3_queries.py"), "--data", str(data), "--kb", str(kb), "--scale", s, "--out", str(out / "w3.json"), *warm])
         elif step == "compare":
             with (out / "compare-oracle.txt").open("w") as fh:
                 rc = sh([py, str(SPIKE / "harness" / "compare.py"), str(expected), str(out / "w3.json"), "--kb", str(kb)], stdout=fh)
