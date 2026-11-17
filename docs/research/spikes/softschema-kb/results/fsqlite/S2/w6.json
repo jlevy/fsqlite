@@ -1,0 +1,107 @@
+{
+  "backend": "fsqlite",
+  "scale": "S2",
+  "workflow": "W6",
+  "recorded_at": "2026-11-17T01:51:23.347Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14310,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "artifacts": {
+    "files": 3,
+    "bytes": 1800749192,
+    "groups": {
+      "current": {
+        "files": 1,
+        "bytes": 1
+      },
+      "fsqlite.json": {
+        "files": 1,
+        "bytes": 135
+      },
+      "snapshots": {
+        "files": 1,
+        "bytes": 1800749056
+      }
+    }
+  },
+  "validate": {
+    "state": "sealed",
+    "current": 1,
+    "pending": 0,
+    "issues": [],
+    "ms": 3442.576
+  },
+  "standard_tools": {
+    "python_sqlite3": {
+      "sqlite": "3.53.1",
+      "tables": [
+        "applied_tx",
+        "doc",
+        "edge",
+        "entity",
+        "fsqlite_meta",
+        "kb_file",
+        "kb_line",
+        "kind_schema",
+        "search_text"
+      ],
+      "entities": 248722,
+      "quick_check": "ok",
+      "application_id": 1179865420,
+      "sample": [
+        [
+          "repo:1password/arboard",
+          975
+        ]
+      ]
+    },
+    "sqlite3_cli": "not installed on this VM",
+    "fsqlite_cli_stats": {
+      "exit": 0,
+      "out": "fsqlite stats: <scratch>/fsqlite-spike/S2/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 439636\n  file_bytes: 1800749056\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=0 doc=228852 edge=1164398 entity=248722 fsqlite_meta=4 kb_file=3 kb_line=219986 kind_schema=18 search_text=345276"
+    }
+  },
+  "startup_and_memory_at_rest": {
+    "process_wall_ms": 1435.501,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "import_ms": 71.418,
+    "open_ms": 5.906,
+    "first_query_ms": 0.988,
+    "rss_after_import_mib": 87.051,
+    "rss_after_first_query_mib": 90.07,
+    "rss_after_w3_mib": 161.246,
+    "rss_idle_after_w3_mib": 161.371
+  },
+  "read_overhead": {
+    "store_read_record_p50_ms": 0.6145,
+    "held_connection_record_p50_ms": 0.083
+  }
+}

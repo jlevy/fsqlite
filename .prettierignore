@@ -3,3 +3,6 @@
 **/node_modules/
 **/.tbd/
 pnpm-lock.yaml
+# Benchmark output from the research spikes (generated JSON, quoted dataset text)
+docs/research/spikes/*/harness/expected/
+docs/research/spikes/*/results/

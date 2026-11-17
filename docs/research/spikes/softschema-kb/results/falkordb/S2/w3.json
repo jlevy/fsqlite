@@ -1,0 +1,3697 @@
+{
+  "workflow": "W3",
+  "backend": "falkordb",
+  "arm": "paraverse as built (graph from paraverse load_graph)",
+  "scale": "S2",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S2/kb",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 12068096
+      },
+      {
+        "path": "<scratch>/fdb-data/S2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 12068096
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2",
+    "redis_version": "8.6.2",
+    "falkordb_version": "4.18.3"
+  },
+  "server_config": {
+    "graph_config": {
+      "TIMEOUT": 0,
+      "TIMEOUT_DEFAULT": 0,
+      "TIMEOUT_MAX": 0,
+      "CACHE_SIZE": 25,
+      "ASYNC_DELETE": true,
+      "OMP_THREAD_COUNT": 4,
+      "THREAD_COUNT": 4,
+      "RESULTSET_SIZE": -1,
+      "VKEY_MAX_ENTITY_COUNT": 100000,
+      "MAX_QUEUED_QUERIES": 4294967295,
+      "QUERY_MEM_CAPACITY": 0,
+      "DELTA_MAX_PENDING_CHANGES": 10000,
+      "NODE_CREATION_BUFFER": 16384,
+      "CMD_INFO": true,
+      "MAX_INFO_QUERIES": 1000,
+      "EFFECTS_THRESHOLD": 300,
+      "BOLT_PORT": 65535,
+      "DELAY_INDEXING": false,
+      "IMPORT_FOLDER": "/var/lib/FalkorDB/import/",
+      "TEMP_FOLDER": "/tmp",
+      "JS_HEAP_SIZE": 268435456,
+      "JS_STACK_SIZE": 1048576
+    },
+    "redis_config": {
+      "save": "900 1 300 100 60 200 15 1000",
+      "appendonly": "no",
+      "maxmemory": "0",
+      "maxmemory-policy": "noeviction",
+      "io-threads": "1"
+    },
+    "client_socket_timeout": null
+  },
+  "statement_timeout_ms": 30000,
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 248722,
+    "edges": 1164398,
+    "record_files": 228850,
+    "bytes": 1135690973
+  },
+  "server": {
+    "start_to_first_query_s": 19.908,
+    "used_memory": 1325359592
+  },
+  "warm_iterations": 50,
+  "queries": [
+    {
+      "name": "table.sessions_by_start.p1",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": 0,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "091cbdbca93d0135ffeb69d6126da54265511997ee6ff03880a0b6a8afbf9c42",
+        "json_bytes": 6634
+      },
+      "timings": {
+        "cold_ms": 115.552,
+        "warm_ms": [
+          93.197,
+          131.246,
+          60.388,
+          40.624,
+          39.513,
+          36.945,
+          54.076,
+          56.922,
+          40.895,
+          42.175,
+          44.827,
+          45.891,
+          50.658,
+          50.421,
+          28.595,
+          44.517,
+          29.795,
+          32.808,
+          27.352,
+          30.425,
+          23.854,
+          23.839,
+          51.735,
+          74.44,
+          45.779,
+          40.896,
+          43.123,
+          28.132,
+          25.737,
+          36.103,
+          41.974,
+          38.38,
+          26.107,
+          28.427,
+          35.72,
+          24.394,
+          26.899,
+          24.38,
+          22.52,
+          21.316,
+          57.357,
+          34.589,
+          43.801,
+          37.937,
+          28.975,
+          27.898,
+          25.858,
+          24.221,
+          46.218,
+          32.631
+        ],
+        "p50_ms": 37.441,
+        "p95_ms": 68.117,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Session) WHERE n.sponsored = $f0 RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Filter",
+            "            Node By Label Scan | (n:Session)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Session) WHERE n.sponsored = $f0 WITH DISTINCT n ORDER BY n.start_epoch IS NULL, n.start_epoch ASC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.start_epoch AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Node By Label Scan | (n:Session)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table.sessions_by_start.p3",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": 100,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "db8f548c88dc58b34b0bcefaf8b67db2ccb0368439c3996a3ff64475729a5d6a",
+        "json_bytes": 7527
+      },
+      "timings": {
+        "cold_ms": 63.191,
+        "warm_ms": [
+          45.428,
+          63.883,
+          93.084,
+          55.85,
+          45.975,
+          35.813,
+          40.046,
+          28.162,
+          46.413,
+          43.591,
+          33.705,
+          33.54,
+          30.8,
+          25.032,
+          25.585,
+          25.572,
+          33.795,
+          26.326,
+          23.092,
+          23.598,
+          28.571,
+          23.885,
+          22.218,
+          21.73,
+          22.432,
+          24.905,
+          35.166,
+          27.011,
+          29.028,
+          54.522,
+          61.583,
+          63.15,
+          46.955,
+          36.406,
+          34.798,
+          39.69,
+          36.045,
+          35.003,
+          38.681,
+          35.349,
+          43.597,
+          58.171,
+          41.254,
+          32.727,
+          42.24,
+          27.801,
+          28.222,
+          48.096,
+          25.771,
+          30.757
+        ],
+        "p50_ms": 34.9,
+        "p95_ms": 62.445,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Session) WHERE n.sponsored = $f0 RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Filter",
+            "            Node By Label Scan | (n:Session)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Session) WHERE n.sponsored = $f0 WITH DISTINCT n ORDER BY n.start_epoch IS NULL, n.start_epoch ASC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.start_epoch AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Node By Label Scan | (n:Session)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table.people_by_org.p1",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:github-r23",
+        "offset": 0,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "e169e0c51d344e633f9c06d31a4c63d1aa0169c56c909d0826aef907bf2e5b21",
+        "json_bytes": 4183
+      },
+      "timings": {
+        "cold_ms": 1.885,
+        "warm_ms": [
+          1.1,
+          1.068,
+          0.962,
+          1.051,
+          1.045,
+          0.927,
+          1.056,
+          1.093,
+          1.078,
+          0.941,
+          3.262,
+          1.193,
+          1.057,
+          1.094,
+          1.459,
+          0.984,
+          0.992,
+          0.968,
+          0.974,
+          0.945,
+          1.467,
+          1.065,
+          1.224,
+          1.471,
+          1.347,
+          1.272,
+          1.39,
+          1.084,
+          8.316,
+          1.06,
+          1.022,
+          0.984,
+          1.038,
+          2.14,
+          1.358,
+          2.587,
+          12.441,
+          1.185,
+          1.024,
+          1.064,
+          1.056,
+          1.021,
+          0.98,
+          1.076,
+          1.01,
+          0.986,
+          6.534,
+          1.168,
+          0.992,
+          1.126
+        ],
+        "p50_ms": 1.067,
+        "p95_ms": 5.062,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Person)-[:AFFILIATED_WITH]->(:Entity {id: $rel_id}) RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Conditional Traverse | (@anon_0)->(n:Person)",
+            "            Node By Index Scan | (@anon_0:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Person)-[:AFFILIATED_WITH]->(:Entity {id: $rel_id}) WITH DISTINCT n ORDER BY n.display_name IS NULL, n.display_name ASC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.display_name AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Conditional Traverse | (@anon_0)->(n:Person)",
+            "                                Node By Index Scan | (@anon_0:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table.people_by_org.p3",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:github-r23",
+        "offset": 100,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "93e343fd8c079b65d00191c1c670059545aafe5da5ef1db3b9ebd989daadf687",
+        "json_bytes": 4075
+      },
+      "timings": {
+        "cold_ms": 1.059,
+        "warm_ms": [
+          1.025,
+          1.21,
+          1.076,
+          1.072,
+          1.098,
+          1.056,
+          1.131,
+          1.04,
+          1.058,
+          1.053,
+          1.053,
+          1.036,
+          1.204,
+          1.099,
+          1.119,
+          1.686,
+          1.711,
+          6.562,
+          3.814,
+          4.242,
+          1.209,
+          1.272,
+          1.239,
+          1.213,
+          3.23,
+          1.158,
+          1.076,
+          1.078,
+          1.105,
+          1.153,
+          2.158,
+          1.114,
+          1.02,
+          1.141,
+          8.616,
+          1.133,
+          1.07,
+          1.285,
+          1.188,
+          1.066,
+          1.135,
+          1.094,
+          1.039,
+          1.113,
+          1.506,
+          1.037,
+          2.984,
+          2.308,
+          10.047,
+          2.441
+        ],
+        "p50_ms": 1.134,
+        "p95_ms": 5.518,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Person)-[:AFFILIATED_WITH]->(:Entity {id: $rel_id}) RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Conditional Traverse | (@anon_0)->(n:Person)",
+            "            Node By Index Scan | (@anon_0:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Person)-[:AFFILIATED_WITH]->(:Entity {id: $rel_id}) WITH DISTINCT n ORDER BY n.display_name IS NULL, n.display_name ASC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.display_name AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Conditional Traverse | (@anon_0)->(n:Person)",
+            "                                Node By Index Scan | (@anon_0:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table.repos_by_stars.p1",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Python",
+        "offset": 0,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "e38b09e23b820279704a9129477d8fc8216196c7e9a4560b97c3c32a20ff3489",
+        "json_bytes": 4205
+      },
+      "timings": {
+        "cold_ms": 103.328,
+        "warm_ms": [
+          115.809,
+          63.673,
+          83.023,
+          83.157,
+          98.453,
+          77.102,
+          76.615,
+          66.765,
+          62.91,
+          63.14,
+          89.669,
+          75.215,
+          59.426,
+          56.3,
+          57.414,
+          72.17,
+          69.159,
+          79.242,
+          83.731,
+          57.615,
+          107.989,
+          112.927,
+          93.946,
+          75.222,
+          67.994,
+          54.811,
+          56.906,
+          54.732,
+          110.883,
+          137.471,
+          130.114,
+          79.598,
+          83.295,
+          90.705,
+          73.742,
+          75.111,
+          74.298,
+          79.565,
+          71.354,
+          80.995,
+          73.289,
+          83.3,
+          72.954,
+          108.803,
+          71.421,
+          96.582,
+          70.479,
+          67.871,
+          99.309,
+          68.308
+        ],
+        "p50_ms": 75.218,
+        "p95_ms": 114.512,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Repository) WHERE n.primary_language = $f0 RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Filter",
+            "            Node By Label Scan | (n:Repository)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Repository) WHERE n.primary_language = $f0 WITH DISTINCT n ORDER BY n.stars IS NULL, n.stars DESC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.stars AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Node By Label Scan | (n:Repository)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table.repos_by_stars.p3",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Python",
+        "offset": 100,
+        "limit": 50
+      },
+      "result": {
+        "sha256": "8a566f712b59b6b861405b4589eb201f4b65f1708fb11f814874cfd98a58e5e3",
+        "json_bytes": 3686
+      },
+      "timings": {
+        "cold_ms": 89.542,
+        "warm_ms": [
+          131.679,
+          68.955,
+          170.96,
+          90.392,
+          68.186,
+          66.304,
+          67.792,
+          71.353,
+          59.791,
+          78.756,
+          64.661,
+          73.098,
+          54.786,
+          119.542,
+          87.15,
+          87.233,
+          57.201,
+          57.75,
+          82.596,
+          81.202,
+          71.097,
+          61.323,
+          63.788,
+          68.19,
+          123.767,
+          57.908,
+          127.7,
+          76.998,
+          81.622,
+          83.236,
+          87.808,
+          77.419,
+          70.756,
+          147.473,
+          86.306,
+          119.658,
+          93.93,
+          103.894,
+          110.597,
+          192.044,
+          103.513,
+          81.066,
+          95.714,
+          68.296,
+          200.988,
+          84.211,
+          135.378,
+          88.372,
+          89.429,
+          232.875
+        ],
+        "p50_ms": 82.916,
+        "p95_ms": 182.556,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Repository) WHERE n.primary_language = $f0 RETURN count(DISTINCT n)",
+          "plan": [
+            "Results",
+            "    Aggregate",
+            "        Filter",
+            "            Node By Label Scan | (n:Repository)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Repository) WHERE n.primary_language = $f0 WITH DISTINCT n ORDER BY n.stars IS NULL, n.stars DESC, n.id SKIP $offset LIMIT $limit RETURN n.id AS id, n.display_name AS name, n.stars AS value",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Limit",
+            "            Skip",
+            "                Sort",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Node By Label Scan | (n:Repository)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "record.person",
+      "category": "record",
+      "params": {
+        "id": "person:dylan-ratcliffe-r23"
+      },
+      "result": {
+        "sha256": "d4d83b63999c7b7a881c616e74a7dcf86cca1bc09438ad14c6ef1a62182d4f39",
+        "json_bytes": 5186
+      },
+      "timings": {
+        "cold_ms": 5.604,
+        "warm_ms": [
+          1.512,
+          1.35,
+          1.276,
+          1.482,
+          1.359,
+          1.236,
+          1.353,
+          1.48,
+          1.319,
+          1.299,
+          1.558,
+          1.235,
+          1.218,
+          1.2,
+          1.15,
+          1.14,
+          1.136,
+          1.222,
+          1.199,
+          1.168,
+          1.241,
+          1.159,
+          1.172,
+          1.159,
+          1.176,
+          1.2,
+          1.162,
+          1.196,
+          1.176,
+          1.177,
+          1.217,
+          1.186,
+          1.149,
+          1.212,
+          1.253,
+          1.182,
+          1.161,
+          1.171,
+          1.125,
+          1.156,
+          1.168,
+          1.163,
+          1.161,
+          1.186,
+          1.288,
+          1.398,
+          1.21,
+          1.16,
+          1.202,
+          1.141
+        ],
+        "p50_ms": 1.197,
+        "p95_ms": 1.481,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) RETURN n.entity_kind, n.display_name, n.kb_path, n.doc",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})-[r]->(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})<-[r]-(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "record.session",
+      "category": "record",
+      "params": {
+        "id": "session:2024/dev1826d-r23"
+      },
+      "result": {
+        "sha256": "e417fe17e9249688764fbd2f11929a581981faacda1025badc8c54cb4770bc9b",
+        "json_bytes": 4799
+      },
+      "timings": {
+        "cold_ms": 1.138,
+        "warm_ms": [
+          1.095,
+          1.043,
+          1.064,
+          1.012,
+          1.003,
+          1.026,
+          1.052,
+          1.077,
+          1.016,
+          1.053,
+          1.016,
+          1.018,
+          1.005,
+          1.025,
+          1.022,
+          1.056,
+          1.03,
+          1.056,
+          3.965,
+          1.293,
+          1.123,
+          1.081,
+          1.194,
+          1.029,
+          1.052,
+          1.082,
+          1.024,
+          0.998,
+          1.019,
+          1.137,
+          1.025,
+          1.038,
+          1.023,
+          1.032,
+          1.036,
+          0.991,
+          1.041,
+          3.13,
+          1.202,
+          1.143,
+          1.079,
+          1.141,
+          1.144,
+          1.121,
+          1.096,
+          1.162,
+          1.152,
+          1.084,
+          1.1,
+          1.162
+        ],
+        "p50_ms": 1.054,
+        "p95_ms": 1.252,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) RETURN n.entity_kind, n.display_name, n.kb_path, n.doc",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})-[r]->(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})<-[r]-(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "record.organization",
+      "category": "record",
+      "params": {
+        "id": "org:netlify-r23"
+      },
+      "result": {
+        "sha256": "157e5229843b2b105e49e5ab8189530e0bb292ab339f5b2e32c8424e6fa246c1",
+        "json_bytes": 6545
+      },
+      "timings": {
+        "cold_ms": 0.979,
+        "warm_ms": [
+          0.924,
+          0.881,
+          0.867,
+          0.848,
+          0.835,
+          0.904,
+          0.898,
+          0.835,
+          0.889,
+          0.957,
+          0.912,
+          0.876,
+          0.875,
+          0.852,
+          0.923,
+          0.901,
+          0.878,
+          0.878,
+          0.91,
+          0.865,
+          0.855,
+          0.841,
+          0.804,
+          0.91,
+          0.914,
+          0.848,
+          0.907,
+          0.947,
+          0.89,
+          0.841,
+          0.846,
+          0.836,
+          0.873,
+          0.907,
+          0.912,
+          1.044,
+          0.962,
+          0.982,
+          0.919,
+          0.882,
+          0.839,
+          0.885,
+          0.844,
+          0.842,
+          0.88,
+          1.045,
+          0.923,
+          0.92,
+          0.875,
+          0.87
+        ],
+        "p50_ms": 0.881,
+        "p95_ms": 0.973,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) RETURN n.entity_kind, n.display_name, n.kb_path, n.doc",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})-[r]->(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})<-[r]-(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "record.repository",
+      "category": "record",
+      "params": {
+        "id": "repo:github/docs-r23"
+      },
+      "result": {
+        "sha256": "cef4292d2db2fb4a08112c698d88b20b2f2d30116636c39f43f40e1791a2a889",
+        "json_bytes": 3246
+      },
+      "timings": {
+        "cold_ms": 1.381,
+        "warm_ms": [
+          1.512,
+          1.325,
+          1.444,
+          1.395,
+          1.34,
+          1.343,
+          1.438,
+          1.389,
+          1.289,
+          1.397,
+          2.315,
+          2.032,
+          1.372,
+          1.368,
+          1.485,
+          1.295,
+          1.305,
+          1.386,
+          1.292,
+          1.339,
+          2.434,
+          1.323,
+          1.321,
+          1.279,
+          6.166,
+          5.248,
+          1.466,
+          1.552,
+          1.544,
+          1.245,
+          1.281,
+          1.265,
+          1.217,
+          1.266,
+          1.177,
+          1.212,
+          1.205,
+          1.239,
+          1.229,
+          1.154,
+          1.279,
+          1.159,
+          1.27,
+          1.307,
+          1.306,
+          1.234,
+          1.266,
+          1.244,
+          1.29,
+          1.274
+        ],
+        "p50_ms": 1.306,
+        "p95_ms": 2.381,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) RETURN n.entity_kind, n.display_name, n.kb_path, n.doc",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})-[r]->(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id})<-[r]-(m:Entity) RETURN type(r), m.id, m.entity_kind, properties(r)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (n)-[r]->(m:Entity)",
+            "            Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.copilot",
+      "category": "search",
+      "params": {
+        "term": "copilot",
+        "limit": 20
+      },
+      "result": {
+        "sha256": "b48e90664b15266ec40d4f44f1e0f00f5b018ed30c0294d114db8deeb1cfeb0e",
+        "json_bytes": 1778
+      },
+      "timings": {
+        "cold_ms": 462.824,
+        "warm_ms": [
+          564.518,
+          530.837,
+          536.687,
+          496.39,
+          466.42,
+          718.791,
+          687.322,
+          490.908,
+          470.261,
+          636.075,
+          425.58,
+          410.988,
+          439.526,
+          600.375,
+          638.474,
+          693.453,
+          511.926,
+          563.133,
+          537.868,
+          390.88,
+          425.121,
+          436.861,
+          487.709,
+          410.023,
+          574.39,
+          571.656,
+          539.921,
+          481.542,
+          587.215,
+          493.223,
+          421.021,
+          526.0,
+          412.249,
+          436.397,
+          398.067,
+          417.253,
+          397.517,
+          392.635,
+          383.369,
+          393.865,
+          387.189,
+          396.075,
+          389.102,
+          434.389,
+          391.7,
+          386.575,
+          382.297,
+          395.286,
+          406.47,
+          398.018
+        ],
+        "p50_ms": 438.193,
+        "p95_ms": 665.341,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity) WITH n, CASE WHEN toLower(n.display_name) CONTAINS $q THEN 0 WHEN toLower(n.title) CONTAINS $q THEN 1 WHEN toLower(n.bio) CONTAINS $q THEN 2 END AS rank WHERE rank IS NOT NULL WITH n, rank ORDER BY rank, n.id WITH collect([n.id, n.entity_kind, n.display_name, rank]) AS hits RETURN size(hits), hits[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Project",
+            "                    Filter",
+            "                        Project",
+            "                            Node By Label Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.kubernetes",
+      "category": "search",
+      "params": {
+        "term": "kubernetes",
+        "limit": 20
+      },
+      "result": {
+        "sha256": "e2527b7853f1dfa229db65557452d4a799d1f50ec32b976eefe1123453a6b329",
+        "json_bytes": 2017
+      },
+      "timings": {
+        "cold_ms": 410.038,
+        "warm_ms": [
+          388.363,
+          402.734,
+          385.444,
+          387.432,
+          386.139,
+          405.217,
+          392.875,
+          385.707,
+          392.147,
+          388.126,
+          390.905,
+          383.603,
+          384.313,
+          385.117,
+          426.201,
+          431.653,
+          437.938,
+          425.122,
+          448.776,
+          417.609,
+          437.318,
+          383.345,
+          371.967,
+          388.872,
+          384.657,
+          453.688,
+          375.217,
+          397.533,
+          395.593,
+          385.235,
+          384.794,
+          393.999,
+          392.45,
+          433.782,
+          384.242,
+          388.295,
+          396.17,
+          386.709,
+          411.077,
+          369.453,
+          382.799,
+          370.683,
+          369.978,
+          368.669,
+          455.375,
+          368.163,
+          370.183,
+          385.941,
+          398.63,
+          368.917
+        ],
+        "p50_ms": 388.21,
+        "p95_ms": 443.899,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity) WITH n, CASE WHEN toLower(n.display_name) CONTAINS $q THEN 0 WHEN toLower(n.title) CONTAINS $q THEN 1 WHEN toLower(n.bio) CONTAINS $q THEN 2 END AS rank WHERE rank IS NOT NULL WITH n, rank ORDER BY rank, n.id WITH collect([n.id, n.entity_kind, n.display_name, rank]) AS hits RETURN size(hits), hits[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Project",
+            "                    Filter",
+            "                        Project",
+            "                            Node By Label Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.supply_chain",
+      "category": "search",
+      "params": {
+        "term": "supply chain",
+        "limit": 20
+      },
+      "result": {
+        "sha256": "40421423a73929d23cee80a30059cdc229fb25ab07c0ab3d1d9b464d16b2573c",
+        "json_bytes": 2377
+      },
+      "timings": {
+        "cold_ms": 369.356,
+        "warm_ms": [
+          370.238,
+          372.756,
+          369.784,
+          369.911,
+          369.327,
+          371.591,
+          366.558,
+          366.815,
+          367.568,
+          370.971,
+          367.181,
+          367.587,
+          371.111,
+          370.574,
+          367.734,
+          368.519,
+          393.356,
+          420.456,
+          373.803,
+          380.684,
+          453.371,
+          370.889,
+          368.997,
+          367.23,
+          368.595,
+          370.432,
+          374.457,
+          369.187,
+          369.079,
+          373.634,
+          368.313,
+          370.378,
+          369.257,
+          372.456,
+          369.506,
+          369.311,
+          368.969,
+          371.72,
+          368.47,
+          368.92,
+          369.998,
+          372.514,
+          368.613,
+          367.885,
+          368.555,
+          372.779,
+          367.969,
+          369.762,
+          368.597,
+          373.251
+        ],
+        "p50_ms": 369.634,
+        "p95_ms": 387.654,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity) WITH n, CASE WHEN toLower(n.display_name) CONTAINS $q THEN 0 WHEN toLower(n.title) CONTAINS $q THEN 1 WHEN toLower(n.bio) CONTAINS $q THEN 2 END AS rank WHERE rank IS NOT NULL WITH n, rank ORDER BY rank, n.id WITH collect([n.id, n.entity_kind, n.display_name, rank]) AS hits RETURN size(hits), hits[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Project",
+            "                    Filter",
+            "                        Project",
+            "                            Node By Label Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.accessibility",
+      "category": "search",
+      "params": {
+        "term": "accessibility",
+        "limit": 20
+      },
+      "result": {
+        "sha256": "b20dcd9aed742b5c86f761283ccd3ba6b9d7df0f29c52a20162fd7a027cf38e2",
+        "json_bytes": 2797
+      },
+      "timings": {
+        "cold_ms": 370.602,
+        "warm_ms": [
+          371.664,
+          370.705,
+          369.887,
+          370.559,
+          371.322,
+          370.881,
+          368.25,
+          371.357,
+          373.694,
+          374.942,
+          370.846,
+          370.023,
+          372.496,
+          369.192,
+          367.821,
+          369.15,
+          371.937,
+          367.087,
+          367.899,
+          369.54,
+          370.564,
+          369.0,
+          368.452,
+          372.894,
+          415.085,
+          380.509,
+          373.289,
+          368.572,
+          373.922,
+          369.493,
+          369.337,
+          370.37,
+          371.726,
+          437.647,
+          370.055,
+          370.95,
+          373.627,
+          369.83,
+          370.314,
+          371.547,
+          374.785,
+          369.56,
+          501.884,
+          402.198,
+          395.905,
+          401.714,
+          401.168,
+          391.102,
+          400.654,
+          391.67
+        ],
+        "p50_ms": 371.136,
+        "p95_ms": 409.286,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity) WITH n, CASE WHEN toLower(n.display_name) CONTAINS $q THEN 0 WHEN toLower(n.title) CONTAINS $q THEN 1 WHEN toLower(n.bio) CONTAINS $q THEN 2 END AS rank WHERE rank IS NOT NULL WITH n, rank ORDER BY rank, n.id WITH collect([n.id, n.entity_kind, n.display_name, rank]) AS hits RETURN size(hits), hits[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Project",
+            "                    Filter",
+            "                        Project",
+            "                            Node By Label Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_person_2",
+      "category": "path",
+      "params": {
+        "a": "person:dylan-ratcliffe-r23",
+        "b": "person:pamela-fox-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:dylan-ratcliffe-r23",
+          "software:github-copilot-r23",
+          "person:pamela-fox-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.028,
+        "warm_ms": [
+          1.159,
+          1.43,
+          1.229,
+          1.132,
+          1.058,
+          1.051,
+          1.138,
+          1.08,
+          1.104,
+          1.183,
+          1.055,
+          1.037,
+          2.7,
+          2.829,
+          1.581,
+          1.326,
+          1.421,
+          1.257,
+          1.189,
+          2.66,
+          1.241,
+          1.242,
+          1.297,
+          1.137,
+          1.108,
+          1.157,
+          1.063,
+          1.108,
+          1.147,
+          1.019,
+          1.133,
+          0.979,
+          1.496,
+          2.071,
+          1.408,
+          1.047,
+          1.188,
+          1.092,
+          1.446,
+          4.241,
+          7.677,
+          1.224,
+          1.471,
+          1.187,
+          1.634,
+          1.145,
+          1.293,
+          1.098,
+          1.209,
+          1.023
+        ],
+        "p50_ms": 1.187,
+        "p95_ms": 2.771,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "UNWIND $ids AS fid MATCH (u:Entity {id: fid})-[]-(v:Entity) RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (u)->(v:Entity)",
+            "            Node By Index Scan | (u:Entity)",
+            "                Unwind"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_org_3",
+      "category": "path",
+      "params": {
+        "a": "person:pamela-fox-r23",
+        "b": "org:netlify-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:pamela-fox-r23",
+          "term:topic-2024/ai-r23",
+          "person:matt-biilmann-r23",
+          "org:netlify-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 5.566,
+        "warm_ms": [
+          1.882,
+          2.265,
+          2.285,
+          1.854,
+          2.297,
+          1.838,
+          1.784,
+          1.778,
+          1.83,
+          1.809,
+          3.53,
+          1.764,
+          1.782,
+          1.794,
+          1.695,
+          1.699,
+          1.748,
+          1.832,
+          1.815,
+          4.108,
+          2.898,
+          2.773,
+          3.919,
+          2.526,
+          8.875,
+          2.64,
+          2.472,
+          2.429,
+          1.972,
+          1.895,
+          1.929,
+          1.875,
+          1.839,
+          1.854,
+          2.81,
+          2.086,
+          1.867,
+          1.86,
+          1.828,
+          1.84,
+          1.819,
+          1.772,
+          2.418,
+          1.917,
+          1.826,
+          1.804,
+          1.82,
+          1.835,
+          1.766,
+          1.864
+        ],
+        "p50_ms": 1.857,
+        "p95_ms": 3.744,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "UNWIND $ids AS fid MATCH (u:Entity {id: fid})-[]-(v:Entity) RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (u)->(v:Entity)",
+            "            Node By Index Scan | (u:Entity)",
+            "                Unwind"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_repo_3",
+      "category": "path",
+      "params": {
+        "a": "person:aaron-reich-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:aaron-reich-r23",
+          "software:codespaces-r23",
+          "person:janice-r23",
+          "repo:github/docs-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 10.918,
+        "warm_ms": [
+          11.449,
+          9.54,
+          9.853,
+          9.713,
+          9.26,
+          10.306,
+          10.112,
+          9.243,
+          9.327,
+          10.573,
+          9.227,
+          9.409,
+          9.302,
+          9.67,
+          9.362,
+          9.235,
+          9.206,
+          9.193,
+          9.109,
+          9.47,
+          11.055,
+          8.916,
+          8.91,
+          11.175,
+          8.795,
+          16.942,
+          9.146,
+          12.997,
+          11.295,
+          16.323,
+          10.379,
+          26.062,
+          9.418,
+          10.849,
+          9.463,
+          9.341,
+          9.096,
+          9.345,
+          9.113,
+          9.071,
+          9.151,
+          9.753,
+          9.596,
+          9.411,
+          10.733,
+          9.758,
+          8.931,
+          8.999,
+          8.826,
+          8.833
+        ],
+        "p50_ms": 9.41,
+        "p95_ms": 14.826,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "UNWIND $ids AS fid MATCH (u:Entity {id: fid})-[]-(v:Entity) RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (u)->(v:Entity)",
+            "            Node By Index Scan | (u:Entity)",
+            "                Unwind"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_person_4",
+      "category": "path",
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "person:dylan-ratcliffe-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 4,
+        "path": [
+          "person:francis-storr-r23",
+          "term:topic-2023/continuous-integration-continuous-deployment-ci-cd-r23",
+          "person:andrew-hoog-r23",
+          "software:github-copilot-r23",
+          "person:dylan-ratcliffe-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 11.319,
+        "warm_ms": [
+          11.348,
+          11.296,
+          11.262,
+          11.206,
+          11.158,
+          11.808,
+          11.149,
+          11.054,
+          12.948,
+          11.05,
+          11.107,
+          11.039,
+          10.999,
+          11.772,
+          11.039,
+          11.118,
+          11.059,
+          25.025,
+          11.406,
+          12.636,
+          12.261,
+          13.659,
+          15.726,
+          13.003,
+          12.231,
+          16.213,
+          13.473,
+          16.843,
+          16.915,
+          13.768,
+          12.451,
+          14.585,
+          12.304,
+          13.412,
+          15.309,
+          11.938,
+          12.024,
+          10.872,
+          13.387,
+          11.187,
+          14.201,
+          10.948,
+          14.132,
+          11.741,
+          11.556,
+          10.912,
+          14.333,
+          12.699,
+          12.841,
+          13.256
+        ],
+        "p50_ms": 12.128,
+        "p95_ms": 16.56,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "UNWIND $ids AS fid MATCH (u:Entity {id: fid})-[]-(v:Entity) RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (u)->(v:Entity)",
+            "            Node By Index Scan | (u:Entity)",
+            "                Unwind"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.unreachable",
+      "category": "path",
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 8.698,
+        "warm_ms": [
+          10.46,
+          7.733,
+          10.04,
+          8.754,
+          7.77,
+          9.244,
+          7.702,
+          7.931,
+          12.345,
+          10.358,
+          8.637,
+          8.339,
+          7.82,
+          7.845,
+          14.623,
+          8.04,
+          7.909,
+          9.956,
+          7.715,
+          7.785,
+          7.766,
+          7.612,
+          7.724,
+          11.522,
+          8.029,
+          7.833,
+          7.983,
+          8.007,
+          7.897,
+          8.049,
+          8.265,
+          7.933,
+          13.387,
+          8.706,
+          8.594,
+          7.65,
+          8.988,
+          9.254,
+          12.02,
+          8.108,
+          12.219,
+          7.839,
+          12.126,
+          8.058,
+          7.691,
+          11.807,
+          7.818,
+          7.752,
+          8.633,
+          11.297
+        ],
+        "p50_ms": 8.053,
+        "p95_ms": 12.288,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "UNWIND $ids AS fid MATCH (u:Entity {id: fid})-[]-(v:Entity) RETURN u.id, v.id, (v:Event OR v:Day OR v:Facet)",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Conditional Traverse | (u)->(v:Entity)",
+            "            Node By Index Scan | (u:Entity)",
+            "                Unwind"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "facet.sessions_per_topic",
+      "category": "facet",
+      "params": {
+        "relation": "about_topic",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "result": {
+        "sha256": "b838fd6542fececf5336474c76a998cf70748494b93fec6b9172d45b41ee164b",
+        "json_bytes": 3651
+      },
+      "timings": {
+        "cold_ms": 77.757,
+        "warm_ms": [
+          67.199,
+          66.073,
+          64.551,
+          68.209,
+          73.492,
+          63.727,
+          63.636,
+          64.921,
+          65.376,
+          64.638,
+          65.137,
+          63.853,
+          65.165,
+          63.714,
+          89.853,
+          93.384,
+          67.426,
+          64.113,
+          67.378,
+          82.8,
+          82.907,
+          95.277,
+          68.725,
+          67.758,
+          63.354,
+          62.602,
+          62.923,
+          66.357,
+          64.475,
+          91.334,
+          73.232,
+          62.927,
+          63.767,
+          73.476,
+          63.507,
+          63.07,
+          63.182,
+          73.638,
+          84.339,
+          85.823,
+          65.366,
+          64.672,
+          64.203,
+          64.005,
+          65.542,
+          64.323,
+          63.596,
+          63.924,
+          63.963,
+          63.978
+        ],
+        "p50_ms": 65.029,
+        "p95_ms": 90.667,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (s:Session)-[:ABOUT_TOPIC]->(t:Entity) WITH t, count(DISTINCT s) AS c ORDER BY c DESC, t.id WITH collect([t.id, t.display_name, c]) AS g RETURN size(g), g[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Aggregate",
+            "                    Conditional Traverse | (s)->(t:Entity)",
+            "                        Node By Label Scan | (s:Session)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "facet.people_per_org",
+      "category": "facet",
+      "params": {
+        "relation": "affiliated_with",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "result": {
+        "sha256": "42a6c0fdabefb4dcd42fa4b977a1d4124fdbd13f130d2c2381550e2ea6684788",
+        "json_bytes": 2626
+      },
+      "timings": {
+        "cold_ms": 63.389,
+        "warm_ms": [
+          62.257,
+          61.462,
+          59.608,
+          62.545,
+          61.446,
+          63.442,
+          64.494,
+          65.198,
+          62.184,
+          61.786,
+          59.561,
+          61.622,
+          59.607,
+          61.159,
+          60.829,
+          62.012,
+          65.184,
+          61.627,
+          60.48,
+          61.798,
+          60.901,
+          61.237,
+          59.259,
+          60.918,
+          59.744,
+          68.297,
+          61.1,
+          72.146,
+          59.838,
+          58.371,
+          59.269,
+          59.595,
+          59.601,
+          59.145,
+          59.802,
+          59.746,
+          60.087,
+          58.141,
+          60.189,
+          58.996,
+          59.326,
+          59.454,
+          59.963,
+          60.332,
+          59.706,
+          58.806,
+          60.622,
+          60.568,
+          61.856,
+          58.685
+        ],
+        "p50_ms": 60.524,
+        "p95_ms": 65.192,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (s:Person)-[:AFFILIATED_WITH]->(t:Entity) WITH t, count(DISTINCT s) AS c ORDER BY c DESC, t.id WITH collect([t.id, t.display_name, c]) AS g RETURN size(g), g[0..$limit]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        Aggregate",
+            "            Sort",
+            "                Aggregate",
+            "                    Conditional Traverse | (s)->(t:Entity)",
+            "                        Node By Label Scan | (s:Person)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "neighborhood.person",
+      "category": "neighborhood",
+      "params": {
+        "id": "person:francis-storr-r23",
+        "limit": 200
+      },
+      "result": {
+        "sha256": "8e644b5216aa68da044e561e0e25f62bdd6239be9c96f9a85d14fd48c31ce8dd",
+        "json_bytes": 12107
+      },
+      "timings": {
+        "cold_ms": 2.453,
+        "warm_ms": [
+          1.572,
+          1.571,
+          1.539,
+          1.449,
+          1.433,
+          1.429,
+          1.441,
+          1.447,
+          1.536,
+          1.429,
+          1.432,
+          1.435,
+          1.424,
+          1.686,
+          1.592,
+          1.54,
+          1.516,
+          1.41,
+          1.47,
+          1.386,
+          1.361,
+          1.358,
+          1.352,
+          1.332,
+          1.349,
+          3.473,
+          1.682,
+          1.534,
+          1.5,
+          1.378,
+          1.444,
+          1.361,
+          1.385,
+          1.347,
+          1.333,
+          1.355,
+          1.336,
+          1.317,
+          1.341,
+          1.322,
+          1.328,
+          1.349,
+          1.343,
+          1.321,
+          1.344,
+          1.342,
+          1.329,
+          1.341,
+          1.344,
+          1.326
+        ],
+        "p50_ms": 1.385,
+        "p95_ms": 1.642,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) RETURN DISTINCT m.id, m.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Conditional Traverse | (n)->(m:Entity)",
+            "                Project",
+            "                    Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) WHERE NOT (m:Event OR m:Day OR m:Facet) WITH DISTINCT n, m MATCH (m)-[]-(o:Entity) WHERE o <> n RETURN DISTINCT o.id, o.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Filter",
+            "                Conditional Traverse | (m)->(o:Entity)",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Conditional Traverse | (n)->(m:Entity)",
+            "                                    Project",
+            "                                        Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "neighborhood.session",
+      "category": "neighborhood",
+      "params": {
+        "id": "session:2024/dev1826d-r23",
+        "limit": 200
+      },
+      "result": {
+        "sha256": "b1910ec2ece948dfb0b1cbbaca5421a653e69a0d60111156915653791e6ce7b3",
+        "json_bytes": 12122
+      },
+      "timings": {
+        "cold_ms": 2.062,
+        "warm_ms": [
+          1.968,
+          1.989,
+          1.938,
+          1.939,
+          1.958,
+          1.92,
+          1.924,
+          1.937,
+          1.966,
+          1.924,
+          1.949,
+          1.92,
+          1.953,
+          1.923,
+          1.933,
+          1.92,
+          1.937,
+          1.901,
+          1.924,
+          1.925,
+          1.915,
+          1.93,
+          1.927,
+          1.93,
+          1.898,
+          1.915,
+          1.95,
+          1.904,
+          1.923,
+          1.901,
+          1.919,
+          1.884,
+          1.938,
+          1.943,
+          1.951,
+          1.952,
+          1.908,
+          1.926,
+          1.928,
+          1.933,
+          1.939,
+          1.931,
+          1.887,
+          1.915,
+          1.941,
+          2.284,
+          2.057,
+          2.081,
+          2.001,
+          1.982
+        ],
+        "p50_ms": 1.931,
+        "p95_ms": 2.032,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) RETURN DISTINCT m.id, m.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Conditional Traverse | (n)->(m:Entity)",
+            "                Project",
+            "                    Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) WHERE NOT (m:Event OR m:Day OR m:Facet) WITH DISTINCT n, m MATCH (m)-[]-(o:Entity) WHERE o <> n RETURN DISTINCT o.id, o.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Filter",
+            "                Conditional Traverse | (m)->(o:Entity)",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Conditional Traverse | (n)->(m:Entity)",
+            "                                    Project",
+            "                                        Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "neighborhood.organization",
+      "category": "neighborhood",
+      "params": {
+        "id": "org:netlify-r23",
+        "limit": 200
+      },
+      "result": {
+        "sha256": "b7c3eb53dc01d5f086ddddbb13888a586ed8548b2a932067b6d9cb64e43bbd26",
+        "json_bytes": 4519
+      },
+      "timings": {
+        "cold_ms": 0.817,
+        "warm_ms": [
+          0.765,
+          0.718,
+          0.723,
+          0.728,
+          0.735,
+          0.698,
+          0.757,
+          0.722,
+          0.714,
+          0.699,
+          0.716,
+          0.745,
+          0.696,
+          0.72,
+          0.732,
+          0.964,
+          0.867,
+          0.753,
+          0.753,
+          0.73,
+          0.753,
+          0.709,
+          0.776,
+          0.739,
+          0.729,
+          0.699,
+          0.737,
+          0.751,
+          0.734,
+          0.712,
+          0.716,
+          0.73,
+          0.699,
+          0.759,
+          0.72,
+          0.724,
+          0.706,
+          0.732,
+          0.722,
+          0.708,
+          0.71,
+          0.716,
+          0.727,
+          0.699,
+          0.76,
+          0.723,
+          0.693,
+          0.718,
+          0.728,
+          0.75
+        ],
+        "p50_ms": 0.726,
+        "p95_ms": 0.771,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) RETURN DISTINCT m.id, m.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Conditional Traverse | (n)->(m:Entity)",
+            "                Project",
+            "                    Node By Index Scan | (n:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (n:Entity {id: $id}) WITH n MATCH (n)-[]-(m:Entity) WHERE NOT (m:Event OR m:Day OR m:Facet) WITH DISTINCT n, m MATCH (m)-[]-(o:Entity) WHERE o <> n RETURN DISTINCT o.id, o.entity_kind",
+          "plan": [
+            "Results",
+            "    Distinct",
+            "        Project",
+            "            Filter",
+            "                Conditional Traverse | (m)->(o:Entity)",
+            "                    Distinct",
+            "                        Project",
+            "                            Filter",
+            "                                Conditional Traverse | (n)->(m:Entity)",
+            "                                    Project",
+            "                                        Node By Index Scan | (n:Entity)"
+          ]
+        }
+      ]
+    }
+  ],
+  "extras": [
+    {
+      "name": "search.copilot.fulltext",
+      "form": "fulltext",
+      "compared": false,
+      "params": {
+        "term": "copilot",
+        "limit": 20
+      },
+      "result": {
+        "hits": 25,
+        "top": [
+          "gh:evanboyle-r19",
+          "gh:evanboyle-r20",
+          "gh:evanboyle-r18",
+          "gh:evanboyle-r13",
+          "gh:evanboyle-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 12.189,
+        "warm_ms": [
+          9.45,
+          7.488,
+          7.385,
+          6.833,
+          6.755,
+          6.808,
+          7.233,
+          6.907,
+          6.644,
+          6.557,
+          6.618,
+          6.575,
+          6.528,
+          6.643,
+          6.59,
+          6.604,
+          6.551,
+          6.493,
+          6.577,
+          6.56,
+          6.572,
+          6.492,
+          6.904,
+          6.568,
+          6.538,
+          6.523,
+          6.926,
+          6.493,
+          6.55,
+          6.539,
+          6.864,
+          6.504,
+          6.508,
+          6.507,
+          6.899,
+          6.499,
+          6.545,
+          6.467,
+          6.967,
+          6.497,
+          6.698,
+          6.461,
+          6.861,
+          6.486,
+          6.553,
+          6.447,
+          7.126,
+          6.553,
+          6.599,
+          6.489
+        ],
+        "p50_ms": 6.57,
+        "p95_ms": 7.317,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score RETURN node.id, node.entity_kind, node.display_name, score ORDER BY score DESC LIMIT $limit",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Sort",
+            "            Project",
+            "                ProcedureCall"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.kubernetes.fulltext",
+      "form": "fulltext",
+      "compared": false,
+      "params": {
+        "term": "kubernetes",
+        "limit": 20
+      },
+      "result": {
+        "hits": 25,
+        "top": [
+          "repo:kubernetes/kubernetes-r3",
+          "repo:ggriffiths/kubernetes-r4",
+          "repo:kubernetes-csi/external-provisioner-r3",
+          "repo:guptaachin/hello-world-to-kubernetes-r2",
+          "repo:kubernetes-csi/external-provisioner-r4"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.552,
+        "warm_ms": [
+          1.635,
+          1.524,
+          1.473,
+          1.413,
+          1.388,
+          1.401,
+          1.351,
+          1.332,
+          1.328,
+          1.37,
+          1.324,
+          1.323,
+          1.342,
+          1.346,
+          1.324,
+          1.334,
+          1.311,
+          1.334,
+          1.345,
+          1.353,
+          1.333,
+          1.364,
+          1.344,
+          1.325,
+          1.342,
+          1.34,
+          1.309,
+          1.364,
+          1.34,
+          1.337,
+          1.341,
+          1.324,
+          1.316,
+          1.352,
+          1.322,
+          1.319,
+          1.335,
+          1.344,
+          1.32,
+          1.368,
+          1.319,
+          1.335,
+          1.33,
+          1.328,
+          1.307,
+          1.348,
+          1.328,
+          1.315,
+          1.332,
+          1.359
+        ],
+        "p50_ms": 1.336,
+        "p95_ms": 1.446,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score RETURN node.id, node.entity_kind, node.display_name, score ORDER BY score DESC LIMIT $limit",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Sort",
+            "            Project",
+            "                ProcedureCall"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.supply_chain.fulltext",
+      "form": "fulltext",
+      "compared": false,
+      "params": {
+        "term": "supply chain",
+        "limit": 20
+      },
+      "result": {
+        "hits": 25,
+        "top": [
+          "profile:david-a-wheeler-r19",
+          "profile:david-a-wheeler-r20",
+          "profile:david-a-wheeler-r18",
+          "profile:david-a-wheeler-r11",
+          "profile:david-a-wheeler-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.57,
+        "warm_ms": [
+          2.262,
+          2.147,
+          2.08,
+          2.089,
+          2.101,
+          2.077,
+          2.029,
+          2.063,
+          2.095,
+          2.063,
+          2.039,
+          2.048,
+          2.097,
+          2.045,
+          2.072,
+          2.02,
+          2.094,
+          2.049,
+          2.041,
+          2.073,
+          2.117,
+          2.061,
+          2.071,
+          2.037,
+          2.092,
+          2.031,
+          2.062,
+          2.042,
+          2.095,
+          2.044,
+          2.046,
+          2.038,
+          2.116,
+          2.049,
+          2.042,
+          2.038,
+          2.081,
+          2.058,
+          2.069,
+          2.016,
+          2.087,
+          2.07,
+          2.029,
+          2.037,
+          2.086,
+          2.084,
+          2.016,
+          2.083,
+          2.059,
+          2.064
+        ],
+        "p50_ms": 2.063,
+        "p95_ms": 2.117,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score RETURN node.id, node.entity_kind, node.display_name, score ORDER BY score DESC LIMIT $limit",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Sort",
+            "            Project",
+            "                ProcedureCall"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search.accessibility.fulltext",
+      "form": "fulltext",
+      "compared": false,
+      "params": {
+        "term": "accessibility",
+        "limit": 20
+      },
+      "result": {
+        "hits": 25,
+        "top": [
+          "acct:bluesky/ericwbailey.website-r19",
+          "acct:bluesky/ericwbailey.website-r20",
+          "acct:bluesky/ericwbailey.website-r18",
+          "acct:bluesky/ericwbailey.website-r11",
+          "acct:bluesky/ericwbailey.website-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.251,
+        "warm_ms": [
+          2.025,
+          1.756,
+          1.778,
+          1.736,
+          1.709,
+          1.69,
+          1.662,
+          1.667,
+          1.653,
+          1.743,
+          1.667,
+          1.679,
+          1.684,
+          1.637,
+          1.708,
+          1.664,
+          1.657,
+          1.702,
+          1.664,
+          1.665,
+          1.654,
+          1.779,
+          1.847,
+          1.789,
+          1.784,
+          1.743,
+          1.952,
+          1.951,
+          1.759,
+          1.68,
+          1.926,
+          1.79,
+          1.776,
+          1.787,
+          1.655,
+          1.688,
+          1.72,
+          1.676,
+          1.647,
+          1.682,
+          1.758,
+          1.689,
+          1.751,
+          1.645,
+          1.642,
+          1.592,
+          1.612,
+          1.697,
+          1.67,
+          1.65
+        ],
+        "p50_ms": 1.69,
+        "p95_ms": 1.94,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "CALL db.idx.fulltext.queryNodes('Entity', $q) YIELD node, score RETURN node.id, node.entity_kind, node.display_name, score ORDER BY score DESC LIMIT $limit",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Sort",
+            "            Project",
+            "                ProcedureCall"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_person_2.in_engine",
+      "form": "in_engine",
+      "compared": false,
+      "params": {
+        "a": "person:dylan-ratcliffe-r23",
+        "b": "person:pamela-fox-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:dylan-ratcliffe-r23",
+          "software:vs-code-r23",
+          "person:pamela-fox-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 1.387,
+        "warm_ms": [
+          0.601,
+          0.614,
+          0.556,
+          0.528,
+          0.448,
+          0.462,
+          0.437,
+          0.462,
+          0.417,
+          0.474,
+          0.416,
+          0.428,
+          0.408,
+          0.417,
+          0.442,
+          0.426,
+          0.444,
+          0.412,
+          0.421,
+          0.436,
+          0.405,
+          0.434,
+          0.404,
+          0.436,
+          0.406,
+          0.428,
+          0.416,
+          0.409,
+          0.436,
+          0.42,
+          0.432,
+          0.407,
+          0.405,
+          0.439,
+          0.428,
+          0.431,
+          0.408,
+          0.442,
+          0.419,
+          0.416,
+          0.431,
+          0.41,
+          0.427,
+          0.648,
+          0.566,
+          0.489,
+          0.494,
+          0.422,
+          0.437,
+          0.418
+        ],
+        "p50_ms": 0.429,
+        "p95_ms": 0.585,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*1..1]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Expand Into | (a)-[@anon_0]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*2..2]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*2..2]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_person_2.sppaths",
+      "form": "sppaths",
+      "compared": false,
+      "params": {
+        "a": "person:dylan-ratcliffe-r23",
+        "b": "person:pamela-fox-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:dylan-ratcliffe-r23",
+          "software:vs-code-r23",
+          "person:pamela-fox-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 36.527,
+        "warm_ms": [
+          35.346,
+          35.194,
+          35.377,
+          35.414,
+          35.231,
+          35.354,
+          35.284,
+          35.199,
+          35.295,
+          35.268,
+          35.167,
+          35.413,
+          35.108,
+          35.06,
+          35.045,
+          35.075,
+          35.124,
+          35.125,
+          35.121,
+          35.076,
+          35.223,
+          35.189,
+          35.254,
+          35.119,
+          35.034,
+          35.231,
+          35.25,
+          35.384,
+          35.616,
+          35.502,
+          37.206,
+          35.606,
+          35.422,
+          35.728,
+          35.703,
+          35.706,
+          35.903,
+          35.978,
+          35.565,
+          35.531,
+          35.561,
+          35.561,
+          35.706,
+          35.556,
+          35.573,
+          35.931,
+          35.495,
+          35.576,
+          35.568,
+          35.642
+        ],
+        "p50_ms": 35.38,
+        "p95_ms": 35.918,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1}) YIELD path RETURN [x IN nodes(path) | x.id]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        ProcedureCall",
+            "            Project",
+            "                Node By Index Scan | (b:Entity)",
+            "                    Project",
+            "                        Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_org_3.in_engine",
+      "form": "in_engine",
+      "compared": false,
+      "params": {
+        "a": "person:pamela-fox-r23",
+        "b": "org:netlify-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:pamela-fox-r23",
+          "software:vs-code-r23",
+          "person:nick-taylor-r23",
+          "org:netlify-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.276,
+        "warm_ms": [
+          2.434,
+          2.59,
+          2.519,
+          2.579,
+          2.467,
+          2.376,
+          2.351,
+          2.311,
+          2.332,
+          2.356,
+          2.297,
+          2.367,
+          2.295,
+          2.352,
+          2.358,
+          2.344,
+          2.335,
+          2.313,
+          2.371,
+          2.288,
+          2.338,
+          2.327,
+          2.552,
+          2.384,
+          2.292,
+          2.334,
+          2.361,
+          2.304,
+          2.325,
+          2.327,
+          2.318,
+          2.291,
+          2.346,
+          2.311,
+          2.305,
+          2.351,
+          2.279,
+          2.314,
+          2.36,
+          2.297,
+          2.315,
+          2.353,
+          2.581,
+          2.553,
+          2.393,
+          2.473,
+          2.373,
+          2.366,
+          2.396,
+          2.385
+        ],
+        "p50_ms": 2.351,
+        "p95_ms": 2.567,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*1..1]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Expand Into | (a)-[@anon_0]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*2..2]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*2..2]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*3..3]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*3..3]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_org_3.sppaths",
+      "form": "sppaths",
+      "compared": false,
+      "params": {
+        "a": "person:pamela-fox-r23",
+        "b": "org:netlify-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:pamela-fox-r23",
+          "software:vs-code-r23",
+          "person:nick-taylor-r23",
+          "org:netlify-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2166.554,
+        "warm_ms": [
+          2186.945,
+          2168.319,
+          2164.882,
+          2235.391,
+          2261.974
+        ],
+        "p50_ms": 2186.945,
+        "p95_ms": 2256.658,
+        "warm_iterations": 5
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1}) YIELD path RETURN [x IN nodes(path) | x.id]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        ProcedureCall",
+            "            Project",
+            "                Node By Index Scan | (b:Entity)",
+            "                    Project",
+            "                        Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_repo_3.in_engine",
+      "form": "in_engine",
+      "compared": false,
+      "params": {
+        "a": "person:aaron-reich-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:aaron-reich-r23",
+          "software:github-enterprise-cloud-r23",
+          "person:sameen-karim-r23",
+          "repo:github/docs-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.315,
+        "warm_ms": [
+          1.512,
+          1.591,
+          1.854,
+          1.759,
+          1.623,
+          1.506,
+          1.614,
+          1.584,
+          1.553,
+          1.553,
+          1.622,
+          2.048,
+          1.54,
+          1.67,
+          1.555,
+          1.445,
+          1.519,
+          1.624,
+          1.528,
+          1.423,
+          1.491,
+          1.656,
+          1.512,
+          1.404,
+          1.53,
+          1.632,
+          1.654,
+          1.434,
+          1.497,
+          1.638,
+          1.526,
+          1.372,
+          1.463,
+          1.626,
+          1.544,
+          1.389,
+          1.603,
+          1.661,
+          1.524,
+          1.374,
+          1.449,
+          1.628,
+          1.588,
+          1.456,
+          1.46,
+          1.681,
+          1.499,
+          1.437,
+          1.512,
+          1.614
+        ],
+        "p50_ms": 1.542,
+        "p95_ms": 1.724,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*1..1]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Expand Into | (a)-[@anon_0]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*2..2]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*2..2]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*3..3]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*3..3]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_repo_3.sppaths",
+      "form": "sppaths",
+      "compared": false,
+      "params": {
+        "a": "person:aaron-reich-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:aaron-reich-r23",
+          "software:github-enterprise-cloud-r23",
+          "person:sameen-karim-r23",
+          "repo:github/docs-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 966.491,
+        "warm_ms": [
+          1051.035,
+          1001.624,
+          1062.281,
+          975.156,
+          1019.701,
+          1025.604,
+          1020.534,
+          1010.944,
+          1060.204,
+          1119.552,
+          969.535,
+          1043.332,
+          1019.76,
+          962.315,
+          1038.086,
+          957.65,
+          966.544,
+          1011.648,
+          973.704,
+          969.784,
+          990.956,
+          961.682,
+          956.297,
+          961.939,
+          954.208,
+          962.535,
+          953.494,
+          964.057,
+          956.055,
+          968.046,
+          956.651,
+          1229.505,
+          983.874,
+          965.563,
+          954.219,
+          1092.505,
+          963.307,
+          964.324,
+          964.043,
+          979.336,
+          1068.991,
+          1036.755,
+          1008.925,
+          1032.751,
+          987.71,
+          968.429,
+          963.559,
+          1091.533,
+          1009.337,
+          995.551
+        ],
+        "p50_ms": 981.605,
+        "p95_ms": 1092.068,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1}) YIELD path RETURN [x IN nodes(path) | x.id]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        ProcedureCall",
+            "            Project",
+            "                Node By Index Scan | (b:Entity)",
+            "                    Project",
+            "                        Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_person_4.in_engine",
+      "form": "in_engine",
+      "compared": false,
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "person:dylan-ratcliffe-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 4,
+        "path": [
+          "person:francis-storr-r23",
+          "term:topic-2023/software-engineering-r23",
+          "person:shivani-banerjee-r23",
+          "software:vs-code-r23",
+          "person:dylan-ratcliffe-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 133.922,
+        "warm_ms": [
+          168.7,
+          138.999,
+          134.734,
+          234.163,
+          149.37,
+          204.906,
+          161.935,
+          165.495,
+          156.048,
+          133.237,
+          133.417,
+          153.967,
+          131.901,
+          131.01,
+          129.625,
+          133.436,
+          135.466,
+          134.143,
+          129.9,
+          130.837,
+          137.249,
+          129.332,
+          138.839,
+          131.848,
+          131.042,
+          128.571,
+          128.664,
+          168.18,
+          154.454,
+          141.623,
+          146.927,
+          134.383,
+          138.018,
+          162.133,
+          142.183,
+          137.854,
+          138.752,
+          148.168,
+          142.578,
+          138.053,
+          131.083,
+          129.807,
+          130.7,
+          138.827,
+          153.108,
+          130.82,
+          129.338,
+          180.436,
+          133.638,
+          135.545
+        ],
+        "p50_ms": 137.551,
+        "p95_ms": 175.155,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*1..1]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Expand Into | (a)-[@anon_0]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*2..2]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*2..2]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*3..3]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*3..3]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*4..4]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*4..4]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.person_person_4.sppaths",
+      "form": "sppaths",
+      "compared": false,
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "person:dylan-ratcliffe-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 4,
+        "path": [
+          "person:francis-storr-r23",
+          "event:github-universe-2023-r23",
+          "session:2023/sec2751w-r23",
+          "software:github-copilot-r23",
+          "person:dylan-ratcliffe-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 350.46,
+        "warm_ms": [
+          361.542,
+          324.942,
+          347.998,
+          312.337,
+          363.786,
+          353.594,
+          368.75,
+          313.699,
+          306.114,
+          308.137,
+          313.629,
+          312.046,
+          312.97,
+          319.562,
+          308.366,
+          338.559,
+          309.315,
+          366.2,
+          338.233,
+          320.857,
+          322.273,
+          324.372,
+          374.349,
+          316.936,
+          337.859,
+          312.49,
+          314.549,
+          311.63,
+          333.308,
+          335.259,
+          314.467,
+          347.546,
+          337.531,
+          368.967,
+          357.423,
+          367.027,
+          331.209,
+          310.234,
+          313.743,
+          314.645,
+          337.367,
+          341.318,
+          323.937,
+          325.902,
+          370.839,
+          337.552,
+          325.918,
+          365.179,
+          318.932,
+          376.446
+        ],
+        "p50_ms": 325.91,
+        "p95_ms": 369.996,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1}) YIELD path RETURN [x IN nodes(path) | x.id]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        ProcedureCall",
+            "            Project",
+            "                Node By Index Scan | (b:Entity)",
+            "                    Project",
+            "                        Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.unreachable.in_engine",
+      "form": "in_engine",
+      "compared": false,
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 385.564,
+        "warm_ms": [
+          411.524,
+          396.439,
+          474.892,
+          332.931,
+          363.863,
+          358.974,
+          340.426,
+          323.863,
+          327.51,
+          338.752,
+          344.083,
+          333.024,
+          322.651,
+          311.858,
+          311.558,
+          318.143,
+          316.368,
+          321.937,
+          316.06,
+          342.085,
+          315.324,
+          306.645,
+          310.814,
+          311.406,
+          310.443,
+          310.687,
+          348.975,
+          307.068,
+          306.93,
+          314.878,
+          306.686,
+          316.449,
+          319.01,
+          308.673,
+          308.659,
+          314.495,
+          389.141,
+          306.227,
+          315.566,
+          308.036,
+          311.143,
+          312.377,
+          312.698,
+          314.433,
+          316.746,
+          316.89,
+          326.882,
+          335.85,
+          354.143,
+          338.488
+        ],
+        "p50_ms": 316.597,
+        "p95_ms": 393.155,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*1..1]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Expand Into | (a)-[@anon_0]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*2..2]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*2..2]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*3..3]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*3..3]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        },
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b MATCH path = (a)-[*4..4]-(b) WHERE none(x IN nodes(path) WHERE x:Event OR x:Day OR x:Facet) RETURN [x IN nodes(path) | x.id] LIMIT 1",
+          "plan": [
+            "Results",
+            "    Limit",
+            "        Project",
+            "            Filter",
+            "                Conditional Variable Length Traverse (Expand Into) | (a)-[@anon_0*4..4]->(b)",
+            "                    Project",
+            "                        Node By Index Scan | (b:Entity)",
+            "                            Project",
+            "                                Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": true
+    },
+    {
+      "name": "path.unreachable.sppaths",
+      "form": "sppaths",
+      "compared": false,
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:francis-storr-r23",
+          "event:github-universe-2023-r23",
+          "person:greg-ose-r23",
+          "repo:github/docs-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 319.96,
+        "warm_ms": [
+          308.697,
+          309.318,
+          309.953,
+          316.08,
+          330.181,
+          296.979,
+          345.56,
+          293.432,
+          292.85,
+          298.257,
+          290.791,
+          291.328,
+          291.967,
+          292.437,
+          295.26,
+          291.034,
+          290.705,
+          305.632,
+          291.291,
+          291.397,
+          290.409,
+          293.053,
+          303.993,
+          322.802,
+          336.24,
+          296.284,
+          301.833,
+          295.265,
+          294.688,
+          295.428,
+          307.138,
+          295.51,
+          292.653,
+          296.998,
+          343.7,
+          299.043,
+          294.609,
+          328.103,
+          310.483,
+          302.073,
+          438.209,
+          345.907,
+          322.931,
+          304.096,
+          344.584,
+          347.742,
+          297.984,
+          343.093,
+          424.727,
+          424.365
+        ],
+        "p50_ms": 300.438,
+        "p95_ms": 389.885,
+        "warm_iterations": 50
+      },
+      "plans": [
+        {
+          "cypher": "MATCH (a:Entity {id: $a}) WITH a MATCH (b:Entity {id: $b}) WITH a, b CALL algo.SPpaths({sourceNode: a, targetNode: b, relDirection: 'both', maxLen: $max, pathCount: 1}) YIELD path RETURN [x IN nodes(path) | x.id]",
+          "plan": [
+            "Results",
+            "    Project",
+            "        ProcedureCall",
+            "            Project",
+            "                Node By Index Scan | (b:Entity)",
+            "                    Project",
+            "                        Node By Index Scan | (a:Entity)"
+          ]
+        }
+      ],
+      "hops_equal_canonical": false
+    }
+  ],
+  "oracle_check": {
+    "expected": "harness/expected/S2/w3.json",
+    "expected_sha256": "1e1b981d3fe7b610880cb34c71d9ee30685ab1d1e23c4e415e56270ad6ed7833",
+    "paths_checked_against": "$KB_CORPORA/S2/kb",
+    "outcome": "MATCH: 24 ok, 0 differ",
+    "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"
+  }
+}

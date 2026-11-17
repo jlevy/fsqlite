@@ -1,0 +1,450 @@
+{
+  "workflow": "W2",
+  "round": 2,
+  "backend": "falkordb",
+  "scale": "S2-r2",
+  "arms": {
+    "paraverse_as_built": "delta2.apply_batch (the KB build), then paraverse load_kb + load_graph and RENAME",
+    "incremental_prototype": "ops.jsonl applied in Cypher with paraverse's mapping functions; not part of paraverse"
+  },
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 5021884
+      },
+      {
+        "path": "<scratch>/fdb-data/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 5021884
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2-r2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 238957,
+    "edges": 1155758,
+    "record_files": 224802,
+    "bytes": 1152109067
+  },
+  "batches": [
+    {
+      "batch": "p01",
+      "changes": 2390,
+      "counts": {
+        "delete": 48,
+        "merge": 24,
+        "new": 1912,
+        "update_refs": 203,
+        "update_value": 203
+      },
+      "paraverse_as_built": {
+        "read_kb_s": 101.938,
+        "load_graph_s": 82.566,
+        "visible_s": 184.504,
+        "durable_s": 187.92,
+        "loader_peak_rss": 5260480512,
+        "server_peak_rss_with_children": 6239043584,
+        "kb_build_s": 13.607,
+        "total_visible_s": 198.111,
+        "counts_match_post_batch_stats": true
+      },
+      "post_batch": {
+        "ops": 2390,
+        "nodes": 240797,
+        "edges": 1165554,
+        "seconds": 13.59
+      },
+      "incremental_prototype": {
+        "ops": 2390,
+        "parse_and_map_s": 0.954,
+        "steps_s": {
+          "drop_origin_edges_s": 0.256,
+          "upsert_nodes_s": 0.697,
+          "create_edges_s": 0.423,
+          "delete_s": 0.168,
+          "merge_s": 0.313
+        },
+        "visible_s": 2.816,
+        "durable_s": 5.5,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "batch": "p05",
+      "changes": 11948,
+      "counts": {
+        "delete": 239,
+        "merge": 119,
+        "new": 9558,
+        "update_refs": 1016,
+        "update_value": 1016
+      },
+      "paraverse_as_built": {
+        "read_kb_s": 110.968,
+        "load_graph_s": 87.204,
+        "visible_s": 198.172,
+        "durable_s": 201.251,
+        "loader_peak_rss": 5425774592,
+        "server_peak_rss_with_children": 6312693760,
+        "kb_build_s": 18.689,
+        "total_visible_s": 216.861,
+        "counts_match_post_batch_stats": true
+      },
+      "post_batch": {
+        "ops": 11948,
+        "nodes": 248157,
+        "edges": 1204889,
+        "seconds": 18.65
+      },
+      "incremental_prototype": {
+        "ops": 11948,
+        "parse_and_map_s": 6.456,
+        "steps_s": {
+          "drop_origin_edges_s": 0.599,
+          "upsert_nodes_s": 2.828,
+          "create_edges_s": 1.462,
+          "delete_s": 0.197,
+          "merge_s": 0.543
+        },
+        "visible_s": 12.087,
+        "durable_s": 15.317,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": [],
+        "w3_matches_oracle": true,
+        "oracle_differences": []
+      }
+    },
+    {
+      "batch": "p20",
+      "changes": 47791,
+      "counts": {
+        "delete": 956,
+        "merge": 478,
+        "new": 38233,
+        "update_refs": 4062,
+        "update_value": 4062
+      },
+      "paraverse_as_built": {
+        "read_kb_s": 186.35,
+        "load_graph_s": 101.61,
+        "visible_s": 287.96,
+        "durable_s": 292.103,
+        "loader_peak_rss": 6054178816,
+        "server_peak_rss_with_children": 6264762368,
+        "kb_build_s": 25.156,
+        "total_visible_s": 313.116,
+        "counts_match_post_batch_stats": true
+      },
+      "post_batch": {
+        "ops": 47791,
+        "nodes": 275756,
+        "edges": 1349094,
+        "seconds": 25.05
+      },
+      "incremental_prototype": {
+        "ops": 47791,
+        "parse_and_map_s": 31.045,
+        "steps_s": {
+          "drop_origin_edges_s": 2.385,
+          "upsert_nodes_s": 19.336,
+          "create_edges_s": 7.327,
+          "delete_s": 0.341,
+          "merge_s": 1.844
+        },
+        "visible_s": 62.279,
+        "durable_s": 65.764,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "batch": "t0001",
+      "changes": 1,
+      "counts": {
+        "new": 1
+      },
+      "paraverse_as_built": {
+        "read_kb_s": 128.233,
+        "load_graph_s": 83.409,
+        "visible_s": 211.641,
+        "durable_s": 215.432,
+        "loader_peak_rss": 5425168384,
+        "server_peak_rss_with_children": 5461495808,
+        "kb_build_s": 14.713,
+        "total_visible_s": 226.354,
+        "counts_match_post_batch_stats": true
+      },
+      "post_batch": {
+        "ops": 1,
+        "nodes": 238958,
+        "edges": 1155846,
+        "seconds": 14.7
+      },
+      "incremental_prototype": {
+        "ops": 1,
+        "parse_and_map_s": 0.001,
+        "steps_s": {
+          "drop_origin_edges_s": 0.192,
+          "upsert_nodes_s": 0.135,
+          "create_edges_s": 0.137,
+          "delete_s": 0.158,
+          "merge_s": 0.128
+        },
+        "visible_s": 0.753,
+        "durable_s": 4.097,
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "batch": "t0010",
+      "changes": 10,
+      "counts": {
+        "new": 8,
+        "update_refs": 1,
+        "update_value": 1
+      },
+      "incremental_prototype": {
+        "ops": 10,
+        "parse_and_map_s": 0.007,
+        "steps_s": {
+          "drop_origin_edges_s": 0.13,
+          "upsert_nodes_s": 0.134,
+          "create_edges_s": 0.136,
+          "delete_s": 0.13,
+          "merge_s": 0.13
+        },
+        "visible_s": 0.667,
+        "durable_s": 3.214
+      }
+    },
+    {
+      "batch": "t0100",
+      "changes": 100,
+      "counts": {
+        "delete": 2,
+        "merge": 1,
+        "new": 80,
+        "update_refs": 8,
+        "update_value": 9
+      },
+      "incremental_prototype": {
+        "ops": 100,
+        "parse_and_map_s": 0.048,
+        "steps_s": {
+          "drop_origin_edges_s": 0.13,
+          "upsert_nodes_s": 0.146,
+          "create_edges_s": 0.14,
+          "delete_s": 0.125,
+          "merge_s": 0.124
+        },
+        "visible_s": 0.714,
+        "durable_s": 3.386
+      }
+    }
+  ],
+  "sustained": {
+    "ops": 100,
+    "records_per_s": 1.03,
+    "visibility_ms_p50": 937.804,
+    "visibility_ms_p95": 1341.518,
+    "note": "each op is mapped, written and published (GraphMeta load_id) before the next; no SAVE per op"
+  },
+  "invalid_record": {
+    "invalid_record": {
+      "path": "accounts/bluesky/sammorrowdrums.bsky.social-r39.yaml",
+      "id": "acct:bluesky/sammorrowdrums.bsky.social-r39",
+      "reason": "social_account has unexpected_field; the schema has additionalProperties: false"
+    },
+    "paraverse_default_load": {
+      "outcome": "loads the batch, invalid record included"
+    },
+    "paraverse_load_validate": {
+      "outcome": "rejects the whole load (load --validate loads nothing if any artifact fails)",
+      "problems": [
+        "accounts/bluesky/sammorrowdrums.bsky.social-r39.yaml: property 'unexpected_field' is not allowed"
+      ],
+      "validate_changed_records_s": 0.406,
+      "note": "load --validate re-validates every artifact, about 8.9 ms each on this VM (44 s for S0's 4,977)"
+    },
+    "incremental_with_validation": {
+      "outcome": "quarantines the record, applies the rest",
+      "quarantined": [
+        {
+          "path": "accounts/bluesky/sammorrowdrums.bsky.social-r39.yaml",
+          "errors": [
+            "property 'unexpected_field' is not allowed"
+          ]
+        }
+      ],
+      "validate_s": 0.074,
+      "applied": {
+        "ops": 9,
+        "parse_and_map_s": 0.102,
+        "steps_s": {
+          "drop_origin_edges_s": 0.202,
+          "upsert_nodes_s": 0.167,
+          "create_edges_s": 0.172,
+          "delete_s": 0.168,
+          "merge_s": 0.158
+        },
+        "visible_s": 0.97,
+        "durable_s": 3.934
+      },
+      "invalid_id_present_after": true,
+      "note": "present after only if the record already existed (an update): the old version stays"
+    }
+  },
+  "concurrency": {
+    "disjoint": {
+      "writers": 4,
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "writer_reports": [
+        {
+          "part": 0,
+          "seconds": 21.373,
+          "errors": []
+        },
+        {
+          "part": 1,
+          "seconds": 20.923,
+          "errors": []
+        },
+        {
+          "part": 2,
+          "seconds": 20.685,
+          "errors": []
+        },
+        {
+          "part": 3,
+          "seconds": 21.869,
+          "errors": []
+        }
+      ],
+      "wall_s": 38.148,
+      "then": "deletes and merges applied by one process after the writers",
+      "final_counts_match_sequential": true,
+      "final_w3_match_sequential": true,
+      "reader_idle": {
+        "by_category": {
+          "facet": {
+            "n": 21,
+            "p50_ms": 40.707,
+            "p95_ms": 178.87
+          },
+          "neighborhood": {
+            "n": 21,
+            "p50_ms": 1.285,
+            "p95_ms": 154.578
+          },
+          "path": {
+            "n": 21,
+            "p50_ms": 1.599,
+            "p95_ms": 300.451
+          },
+          "record": {
+            "n": 21,
+            "p50_ms": 0.92,
+            "p95_ms": 3.384
+          },
+          "search": {
+            "n": 20,
+            "p50_ms": 402.231,
+            "p95_ms": 462.674
+          },
+          "table": {
+            "n": 20,
+            "p50_ms": 29.31,
+            "p95_ms": 60.612
+          }
+        },
+        "errors": 0,
+        "error_samples": [],
+        "seconds": 12.3
+      },
+      "reader_during_writers": {
+        "by_category": {
+          "facet": {
+            "n": 63,
+            "p50_ms": 101.211,
+            "p95_ms": 290.686
+          },
+          "neighborhood": {
+            "n": 63,
+            "p50_ms": 2.744,
+            "p95_ms": 339.958
+          },
+          "path": {
+            "n": 63,
+            "p50_ms": 4.07,
+            "p95_ms": 477.402
+          },
+          "record": {
+            "n": 63,
+            "p50_ms": 1.163,
+            "p95_ms": 22.969
+          },
+          "search": {
+            "n": 60,
+            "p50_ms": 443.017,
+            "p95_ms": 688.557
+          },
+          "table": {
+            "n": 60,
+            "p50_ms": 41.524,
+            "p95_ms": 309.902
+          }
+        },
+        "errors": 0,
+        "error_samples": [],
+        "seconds": 52.16
+      }
+    },
+    "conflicting": {
+      "record": "acct:linkedin/in/damianbrady-r33",
+      "rounds": 20,
+      "final_value_by_writer": {
+        "A": 9,
+        "B": 11
+      },
+      "errors": 0,
+      "both_values_recoverable": false,
+      "note": "each write replaces the property; FalkorDB keeps no version history, so the losing value survives only if a snapshot happened to capture it"
+    }
+  },
+  "notes": [
+    "visible_s: until a new reader sees the change; durable_s adds an explicit SAVE (waiting out any BGSAVE).",
+    "W3 after p05 for the incremental arm is in w3-after-p05.json and is compared with harness/expected/<scale>-p05.",
+    "Search documents (_search) are not stored by paraverse, so batches' search rows are not applied in FalkorDB.",
+    "FalkorDB 4.18.3 engine issue: at S2-r2 p05 (11,948 ops), the incremental write phases run back to back corrupted Repository nodes; every later read touching them failed with 'Attempted to access undefined attribute', with or without saves. Reading every label once between write phases (w2_v2.SYNC_READ) avoids it; a read through the Entity label alone does not. The run uses that workaround. Not seen at S1-r2, whose run predates the workaround."
+  ]
+}

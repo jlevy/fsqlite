@@ -1,0 +1,701 @@
+{
+ "arm": "fsqlite-v2-spike1",
+ "arm_label": "fsqlite v2 Spike 1 (derive at build)",
+ "scale": "S2-r2",
+ "workflow": "w1-direct",
+ "description": "Spike 1 W1 through DirectStore.write({derived:'rebuild'}): rows, then derived objects (indexes, FTS5, facets, ANALYZE) and the gate",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14960,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike1/package.patch; spike code plus spike1/spike.patch"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "build.apply_ms": {
+   "median": 12264.2308,
+   "min": 12025.3027,
+   "max": 12837.1963,
+   "n": 3
+  },
+  "build.derive_ms": {
+   "median": 10626.935,
+   "min": 9657.465,
+   "max": 10906.08,
+   "n": 3
+  },
+  "build.gate_ms": {
+   "median": 2876.667,
+   "min": 2536.568,
+   "max": 2948.215,
+   "n": 3
+  },
+  "build.hook_ms": {
+   "median": 11492.193,
+   "min": 10416.349,
+   "max": 11806.531,
+   "n": 3
+  },
+  "build.statistics_ms": {
+   "median": 864.418,
+   "min": 758.088,
+   "max": 899.601,
+   "n": 3
+  },
+  "derived_bytes.facet_count": {
+   "median": 41250816,
+   "min": 41250816,
+   "max": 41250816,
+   "n": 3
+  },
+  "derived_bytes.search_fts_and_search_doc": {
+   "median": 122015744,
+   "min": 122015744,
+   "max": 122015744,
+   "n": 3
+  },
+  "derived_bytes.secondary_indexes": {
+   "median": 337629184,
+   "min": 337629184,
+   "max": 337629184,
+   "n": 3
+  },
+  "derived_bytes.sqlite_stat1": {
+   "median": 4096,
+   "min": 4096,
+   "max": 4096,
+   "n": 3
+  },
+  "gc_retain0_ms": {
+   "median": 5321.517,
+   "min": 5269.576,
+   "max": 5475.403,
+   "n": 3
+  },
+  "import_process_wall_s": {
+   "median": 30.662,
+   "min": 30.566,
+   "max": 33.496,
+   "n": 3
+  },
+  "ingest_through_durable_in_process_s": {
+   "median": 25.808,
+   "min": 24.506,
+   "max": 26.939,
+   "n": 3
+  },
+  "ingest_through_durable_s": {
+   "median": 28.43,
+   "min": 28.325,
+   "max": 31.195,
+   "n": 3
+  },
+  "peak_rss_mib": {
+   "median": 611,
+   "min": 604.6,
+   "max": 620.6,
+   "n": 3
+  },
+  "phase.decode_ms": {
+   "median": 2240.598,
+   "min": 2231.788,
+   "max": 2300.534,
+   "n": 3
+  },
+  "phase.derived_hook_ms": {
+   "median": 11492.193,
+   "min": 10416.349,
+   "max": 11806.531,
+   "n": 3
+  },
+  "phase.gate_ms": {
+   "median": 2876.667,
+   "min": 2536.568,
+   "max": 2948.215,
+   "n": 3
+  },
+  "phase.ingest_ms": {
+   "median": 5982.186,
+   "min": 5878.988,
+   "max": 6258.155,
+   "n": 3
+  },
+  "phase.publish_ms": {
+   "median": 15968.779,
+   "min": 14438.464,
+   "max": 16355.874,
+   "n": 3
+  },
+  "phase.quick_check_warm_ms": {
+   "median": 2485.271,
+   "min": 2097.058,
+   "max": 2501.823,
+   "n": 3
+  },
+  "phase.transform_ms": {
+   "median": 1288.059,
+   "min": 1280.138,
+   "max": 1340.281,
+   "n": 3
+  },
+  "phase.verify_counts_ms": {
+   "median": 654.127,
+   "min": 561.192,
+   "max": 659.725,
+   "n": 3
+  },
+  "snapshot_bytes": {
+   "median": 2071281664,
+   "min": 2071281664,
+   "max": 2071281664,
+   "n": 3
+  },
+  "store_bytes_after_gc": {
+   "median": 2071281800,
+   "min": 2071281800,
+   "max": 2071281800,
+   "n": 3
+  },
+  "store_over_head": {
+   "median": 1.0,
+   "min": 1.0,
+   "max": 1.0,
+   "n": 3
+  }
+ },
+ "earlier_contended": {
+  "source": "results/fsqlite-v2/spike1/S2-r2/w1.json",
+  "values": {
+   "ingest_through_durable_s": 31.016,
+   "peak_rss_mib": 612.8,
+   "snapshot_bytes": 2071281664
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:38:06Z",
+   "wall_s": 39.009,
+   "load_before": [
+    0.99,
+    1.24,
+    1.17
+   ],
+   "load_after": [
+    1.0,
+    1.21,
+    1.16
+   ],
+   "load1_max_during": 1.0,
+   "foreign_cpu_max": 0.032,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 14.41,
+   "disk_free_gb_min": 12.33,
+   "load_samples": [
+    {
+     "t": 1794904696.5,
+     "load1": 0.99,
+     "own_cpu": 1.043,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794904706.5,
+     "load1": 1.0,
+     "own_cpu": 0.993,
+     "foreign_cpu": 0.032
+    },
+    {
+     "t": 1794904716.6,
+     "load1": 1.0,
+     "own_cpu": 0.876,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794904725.6,
+     "load1": 1.0,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.024
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 28.43,
+    "import_process_wall_s": 30.662,
+    "peak_rss_mib": 620.6,
+    "snapshot_bytes": 2071281664,
+    "store_bytes_after_gc": 2071281800,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 5269.576,
+    "ingest_through_durable_in_process_s": 25.808,
+    "phase.decode_ms": 2231.788,
+    "phase.transform_ms": 1288.059,
+    "phase.ingest_ms": 5878.988,
+    "phase.verify_counts_ms": 561.192,
+    "phase.publish_ms": 15968.779,
+    "phase.derived_hook_ms": 11492.193,
+    "phase.gate_ms": 2948.215,
+    "phase.quick_check_warm_ms": 2485.271,
+    "derived_bytes.search_fts_and_search_doc": 122015744,
+    "derived_bytes.facet_count": 41250816,
+    "derived_bytes.secondary_indexes": 337629184,
+    "derived_bytes.sqlite_stat1": 4096,
+    "build.apply_ms": 12025.302736002952,
+    "build.derive_ms": 10626.935,
+    "build.statistics_ms": 864.418,
+    "build.hook_ms": 11492.193,
+    "build.gate_ms": 2948.215
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14960,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "init_ddl_ms": 46.362,
+     "decode_ms": 2231.788,
+     "transform_ms": 1288.059,
+     "ingest_ms": 5878.988,
+     "verify_counts_ms": 561.192,
+     "publish_ms": 15968.779,
+     "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+     "derived_hook_ms": 11492.193,
+     "gate_ms": 2948.215,
+     "publish_without_hook_and_gate_ms": 1528.371,
+     "quick_check_warm_ms": 2485.271,
+     "ingest_through_durable_ms": 25808.197
+    },
+    "gc": {
+     "retain": 0,
+     "ms": 5269.576,
+     "removed": 1,
+     "kept": 1,
+     "leased": [],
+     "integrityChecked": true
+    },
+    "config": {
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+     "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+     "lock_options": {
+      "staleMs": 600000,
+      "timeoutMs": 600001
+     },
+     "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+     "v2_spike1": {
+      "control_without_derived": false,
+      "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+      "build_cache_kib": 262144,
+      "analysis_limit": 0,
+      "rebuild_above_ratio": 0.5
+     }
+    },
+    "counts": {
+     "schema": 18,
+     "file": 3,
+     "line": 210401,
+     "node": 238957,
+     "doc": 224802,
+     "entity": 238957,
+     "edge": 1155758,
+     "update": 0,
+     "removed": 0,
+     "op": 0,
+     "quarantined": 0
+    },
+    "store_over_head_reported": null
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:10:19Z",
+   "wall_s": 39.01,
+   "load_before": [
+    0.91,
+    1.62,
+    1.52
+   ],
+   "load_after": [
+    0.96,
+    1.54,
+    1.5
+   ],
+   "load1_max_during": 0.96,
+   "foreign_cpu_max": 0.02,
+   "waited_for_quiet_s": 10.0,
+   "disk_free_gb_before": 13.04,
+   "disk_free_gb_min": 13.03,
+   "load_samples": [
+    {
+     "t": 1794899429.6,
+     "load1": 0.93,
+     "own_cpu": 0.914,
+     "foreign_cpu": 0.02
+    },
+    {
+     "t": 1794899439.6,
+     "load1": 0.94,
+     "own_cpu": 0.998,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794899449.6,
+     "load1": 0.95,
+     "own_cpu": 0.881,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794899458.6,
+     "load1": 0.96,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.02
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 28.325,
+    "import_process_wall_s": 30.566,
+    "peak_rss_mib": 611,
+    "snapshot_bytes": 2071281664,
+    "store_bytes_after_gc": 2071281800,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 5321.517,
+    "ingest_through_durable_in_process_s": 24.506,
+    "phase.decode_ms": 2240.598,
+    "phase.transform_ms": 1280.138,
+    "phase.ingest_ms": 5982.186,
+    "phase.verify_counts_ms": 659.725,
+    "phase.publish_ms": 14438.464,
+    "phase.derived_hook_ms": 10416.349,
+    "phase.gate_ms": 2536.568,
+    "phase.quick_check_warm_ms": 2097.058,
+    "derived_bytes.search_fts_and_search_doc": 122015744,
+    "derived_bytes.facet_count": 41250816,
+    "derived_bytes.secondary_indexes": 337629184,
+    "derived_bytes.sqlite_stat1": 4096,
+    "build.apply_ms": 12264.230758000165,
+    "build.derive_ms": 9657.465,
+    "build.statistics_ms": 758.088,
+    "build.hook_ms": 10416.349,
+    "build.gate_ms": 2536.568
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15000,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "init_ddl_ms": 44.53,
+     "decode_ms": 2240.598,
+     "transform_ms": 1280.138,
+     "ingest_ms": 5982.186,
+     "verify_counts_ms": 659.725,
+     "publish_ms": 14438.464,
+     "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+     "derived_hook_ms": 10416.349,
+     "gate_ms": 2536.568,
+     "publish_without_hook_and_gate_ms": 1485.547,
+     "quick_check_warm_ms": 2097.058,
+     "ingest_through_durable_ms": 24506.05
+    },
+    "gc": {
+     "retain": 0,
+     "ms": 5321.517,
+     "removed": 1,
+     "kept": 1,
+     "leased": [],
+     "integrityChecked": true
+    },
+    "config": {
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+     "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+     "lock_options": {
+      "staleMs": 600000,
+      "timeoutMs": 600001
+     },
+     "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+     "v2_spike1": {
+      "control_without_derived": false,
+      "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+      "build_cache_kib": 262144,
+      "analysis_limit": 0,
+      "rebuild_above_ratio": 0.5
+     }
+    },
+    "counts": {
+     "schema": 18,
+     "file": 3,
+     "line": 210401,
+     "node": 238957,
+     "doc": 224802,
+     "entity": 238957,
+     "edge": 1155758,
+     "update": 0,
+     "removed": 0,
+     "op": 0,
+     "quarantined": 0
+    },
+    "store_over_head_reported": null
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:10:58Z",
+   "wall_s": 42.011,
+   "load_before": [
+    0.96,
+    1.54,
+    1.5
+   ],
+   "load_after": [
+    0.98,
+    1.47,
+    1.47
+   ],
+   "load1_max_during": 0.98,
+   "foreign_cpu_max": 0.08,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 13.04,
+   "disk_free_gb_min": 13.03,
+   "load_samples": [
+    {
+     "t": 1794899468.6,
+     "load1": 0.96,
+     "own_cpu": 0.916,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794899478.6,
+     "load1": 0.97,
+     "own_cpu": 1.008,
+     "foreign_cpu": 0.014
+    },
+    {
+     "t": 1794899488.6,
+     "load1": 0.97,
+     "own_cpu": 0.867,
+     "foreign_cpu": 0.023
+    },
+    {
+     "t": 1794899498.6,
+     "load1": 0.98,
+     "own_cpu": 0.496,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794899500.6,
+     "load1": 0.98,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.08
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 31.195,
+    "import_process_wall_s": 33.496,
+    "peak_rss_mib": 604.6,
+    "snapshot_bytes": 2071281664,
+    "store_bytes_after_gc": 2071281800,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 5475.403,
+    "ingest_through_durable_in_process_s": 26.939,
+    "phase.decode_ms": 2300.534,
+    "phase.transform_ms": 1340.281,
+    "phase.ingest_ms": 6258.155,
+    "phase.verify_counts_ms": 654.127,
+    "phase.publish_ms": 16355.874,
+    "phase.derived_hook_ms": 11806.531,
+    "phase.gate_ms": 2876.667,
+    "phase.quick_check_warm_ms": 2501.823,
+    "derived_bytes.search_fts_and_search_doc": 122015744,
+    "derived_bytes.facet_count": 41250816,
+    "derived_bytes.secondary_indexes": 337629184,
+    "derived_bytes.sqlite_stat1": 4096,
+    "build.apply_ms": 12837.196327000856,
+    "build.derive_ms": 10906.08,
+    "build.statistics_ms": 899.601,
+    "build.hook_ms": 11806.531,
+    "build.gate_ms": 2876.667
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15014,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "init_ddl_ms": 47.401,
+     "decode_ms": 2300.534,
+     "transform_ms": 1340.281,
+     "ingest_ms": 6258.155,
+     "verify_counts_ms": 654.127,
+     "publish_ms": 16355.874,
+     "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+     "derived_hook_ms": 11806.531,
+     "gate_ms": 2876.667,
+     "publish_without_hook_and_gate_ms": 1672.676,
+     "quick_check_warm_ms": 2501.823,
+     "ingest_through_durable_ms": 26939.362
+    },
+    "gc": {
+     "retain": 0,
+     "ms": 5475.403,
+     "removed": 1,
+     "kept": 1,
+     "leased": [],
+     "integrityChecked": true
+    },
+    "config": {
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+     "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+     "lock_options": {
+      "staleMs": 600000,
+      "timeoutMs": 600001
+     },
+     "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+     "v2_spike1": {
+      "control_without_derived": false,
+      "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+      "build_cache_kib": 262144,
+      "analysis_limit": 0,
+      "rebuild_above_ratio": 0.5
+     }
+    },
+    "counts": {
+     "schema": 18,
+     "file": 3,
+     "line": 210401,
+     "node": 238957,
+     "doc": 224802,
+     "entity": 238957,
+     "edge": 1155758,
+     "update": 0,
+     "removed": 0,
+     "op": 0,
+     "quarantined": 0
+    },
+    "store_over_head_reported": null
+   }
+  }
+ ],
+ "superseded_runs": [
+  {
+   "rep": 1,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T07:09:30Z",
+   "wall_s": 39.011,
+   "load_before": [
+    0.94,
+    1.73,
+    1.55
+   ],
+   "load_after": [
+    1.08,
+    1.67,
+    1.54
+   ],
+   "load1_max_during": 1.1,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 40.0,
+   "disk_free_gb_before": 15.11,
+   "disk_free_gb_min": 13.03,
+   "load_samples": [
+    {
+     "t": 1794899380.5,
+     "load1": 1.03,
+     "own_cpu": 1.047,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794899390.5,
+     "load1": 1.02,
+     "own_cpu": 0.995,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794899400.5,
+     "load1": 1.1,
+     "own_cpu": 0.852,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794899409.5,
+     "load1": 1.08,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.009
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 28.36,
+    "import_process_wall_s": 30.66,
+    "peak_rss_mib": 614.2,
+    "snapshot_bytes": 2071281664,
+    "store_bytes_after_gc": 2071281800,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 5047.149,
+    "ingest_through_durable_in_process_s": 25.854,
+    "phase.decode_ms": 2299.844,
+    "phase.transform_ms": 1344.787,
+    "phase.ingest_ms": 6185.279,
+    "phase.verify_counts_ms": 636.787,
+    "phase.publish_ms": 15424.995,
+    "phase.derived_hook_ms": 11127.699,
+    "phase.gate_ms": 2511.72,
+    "phase.quick_check_warm_ms": 2354.056,
+    "derived_bytes.search_fts_and_search_doc": 122015744,
+    "derived_bytes.facet_count": 41250816,
+    "derived_bytes.secondary_indexes": 337629184,
+    "derived_bytes.sqlite_stat1": 4096,
+    "build.apply_ms": 12680.439068999141,
+    "build.derive_ms": 10348.302,
+    "build.statistics_ms": 778.694,
+    "build.hook_ms": 11127.699,
+    "build.gate_ms": 2511.72
+   }
+  }
+ ]
+}

@@ -1,0 +1,1599 @@
+diff -ruN '--exclude=__pycache__' a/common.ts b/common.ts
+--- a/common.ts	2026-11-17 03:07:40.146461225 +0000
++++ b/common.ts	2026-11-17 04:45:14.637228055 +0000
+@@ -18,7 +18,9 @@
+ 
+ export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+ export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
+-export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
++// KB_RESULTS_ARM names a variant's results directory, for example `fsqlite-v2/spike2`.
++export const RESULTS_ARM = process.env.KB_RESULTS_ARM ?? 'fsqlite'
++export const RESULTS_DIR = join(SPIKE_DIR, 'results', RESULTS_ARM)
+ /** The private scratch directory, required so that no store lands in a shared default. */
+ export const SCRATCH = requiredScratch()
+ export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
+@@ -240,6 +242,7 @@
+   const path = join(dir, `${workflow}.json`)
+   const doc = {
+     backend: 'fsqlite',
++    ...(RESULTS_ARM === 'fsqlite' ? {} : { variant: RESULTS_ARM }),
+     scale,
+     workflow,
+     recorded_at: new Date().toISOString(),
+diff -ruN '--exclude=__pycache__' a/fsq.ts b/fsq.ts
+--- a/fsq.ts	2026-11-17 00:35:06.213994286 +0000
++++ b/fsq.ts	2026-11-17 04:45:14.627091387 +0000
+@@ -1,2 +1,3 @@
+ // The spike uses fsqlite only through its public API, imported from the package source.
+-export * from '../../../../../packages/fsqlite/src/index.ts'
++// Scratch copy for the fsqlite v2 Spike 2: the harness against research-c/spike2/pkg.
++export * from '../../pkg/src/index.ts'
+diff -ruN '--exclude=__pycache__' a/mapping.ts b/mapping.ts
+--- a/mapping.ts	2026-11-17 03:08:11.802428951 +0000
++++ b/mapping.ts	2026-11-17 04:45:38.274092483 +0000
+@@ -14,6 +14,11 @@
+ // Every table has a non-null primary key, and the schema declares no triggers, virtual
+ // tables, foreign keys, or ON CONFLICT clauses, so SnapshotStore and DirectStore both
+ // accept it and concurrent envelopes never quarantine on ordering.
++//
++// fsqlite v2 Spike 2 (design section 3.6): deletes and merges are facts too. A v2 delete
++// writes a `kb_tombstone` row per node and a merge a `kb_redirect` row, both keyed by the
++// affected id, so a later envelope, in this build or a later one, can resolve an edge
++// endpoint through them instead of relying on one loader's memory of the batch.
+ 
+ import type { DatabaseSync, StatementSync } from 'node:sqlite'
+ import type {
+@@ -146,6 +151,16 @@
+   reason TEXT NOT NULL,
+   op TEXT NOT NULL
+ );
++CREATE TABLE kb_tombstone (
++  id TEXT PRIMARY KEY NOT NULL,
++  path TEXT NOT NULL
++) WITHOUT ROWID;
++CREATE TABLE kb_redirect (
++  absorbed TEXT PRIMARY KEY NOT NULL,
++  survivor TEXT NOT NULL,
++  absorbed_path TEXT NOT NULL,
++  survivor_path TEXT NOT NULL
++) WITHOUT ROWID;
+ `.trim()
+ }
+ 
+@@ -161,6 +176,8 @@
+   kind_schema: 'lww',
+   search_text: 'lww',
+   quarantine: 'lww',
++  kb_tombstone: 'lww',
++  kb_redirect: 'lww',
+ } as const
+ 
+ // Typed references, as paraverse's mapping recognizes them.
+@@ -446,7 +463,13 @@
+   /** Time spent deriving labels, promoted fields and search text (the transform phase). */
+   transformMs = 0
+ 
+-  constructor(db: DatabaseSync, fresh = false) {
++  /**
++   * `facts`: start from the tombstones and redirects already stored, so an upsert applied
++   * after a delete or merge of a node it references resolves that endpoint the way a
++   * line-order load of the whole batch does (Spike 2, H3). Without it the loader knows only
++   * the deletes and merges it has applied itself.
++   */
++  constructor(db: DatabaseSync, fresh = false, opts: { facts?: boolean } = {}) {
+     this.fresh = fresh
+     this.schema = db.prepare(
+       `INSERT INTO kind_schema (kind, file, schema, fields) VALUES (?, ?, ?, ?)
+@@ -522,6 +545,29 @@
+         `INSERT INTO quarantine (path, id, reason, op) VALUES (?, ?, ?, ?)
+          ON CONFLICT (path) DO UPDATE SET id = excluded.id, reason = excluded.reason, op = excluded.op`,
+       ),
++      tombstone: db.prepare(
++        `INSERT INTO kb_tombstone (id, path) VALUES (?, ?)
++         ON CONFLICT (id) DO UPDATE SET path = excluded.path`,
++      ),
++      untombstone: db.prepare('DELETE FROM kb_tombstone WHERE id = ?'),
++      redirect: db.prepare(
++        `INSERT INTO kb_redirect (absorbed, survivor, absorbed_path, survivor_path)
++         VALUES (?, ?, ?, ?)
++         ON CONFLICT (absorbed) DO UPDATE SET survivor = excluded.survivor,
++           absorbed_path = excluded.absorbed_path, survivor_path = excluded.survivor_path`,
++      ),
++      unredirect: db.prepare('DELETE FROM kb_redirect WHERE absorbed = ?'),
++    }
++    if (opts.facts) {
++      for (const r of db.prepare('SELECT id FROM kb_tombstone').all() as { id: string }[]) {
++        this.deleted.add(r.id)
++      }
++      for (const r of db.prepare('SELECT absorbed, survivor FROM kb_redirect').all() as {
++        absorbed: string
++        survivor: string
++      }[]) {
++        this.retarget.set(r.absorbed, r.survivor)
++      }
+     }
+   }
+ 
+@@ -550,6 +596,15 @@
+     const q = this.v2
+     if (row.op === 'upsert') {
+       q.dropOrigin!.run(row.path)
++      // An upsert of an id clears its tombstone and redirect, in envelope order.
++      for (const id of row.node_ids) {
++        if (this.deleted.delete(id)) {
++          q.untombstone!.run(id)
++        }
++        if (this.retarget.delete(id)) {
++          q.unredirect!.run(id)
++        }
++      }
+     } else if (row.op === 'delete') {
+       q.dropOrigin!.run(row.path)
+       for (const id of row.node_ids) {
+@@ -557,6 +612,7 @@
+         q.dropTarget!.run(id)
+         q.dropEntity!.run(id)
+         q.dropSearch!.run(id)
++        q.tombstone!.run(id, row.path)
+         this.deleted.add(id)
+       }
+       q.dropDoc!.run(row.path)
+@@ -588,6 +644,7 @@
+       q.dropEntity!.run(row.absorbed)
+       q.dropSearch!.run(row.absorbed)
+       q.dropDoc!.run(row.absorbed_path)
++      q.redirect!.run(row.absorbed, row.survivor, row.absorbed_path, row.survivor_path)
+       this.retarget.set(row.absorbed, row.survivor)
+     }
+     this.counts.op++
+diff -ruN '--exclude=__pycache__' a/run_spike2.sh b/run_spike2.sh
+--- a/run_spike2.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike2.sh	2026-11-17 04:53:51.117297080 +0000
+@@ -0,0 +1,59 @@
++#!/usr/bin/env bash
++# fsqlite v2 Spike 2: cheap capture and serial apply, at one scale.
++#
++# Usage: fsqlite/run_spike2.sh S1-r2|S2-r2 [reps]   # four writers on v2 batches (H2, H3, H4)
++#        fsqlite/run_spike2.sh S1|S2 [reps]         # trickle capture and sustained (H1, H5)
++#
++# The base store must exist at $KB_SCRATCH/fsqlite-spike/<scale>/store-direct (w1.ts
++# --routes direct). Results go to results/$KB_RESULTS_ARM/<scale>/.
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike2.sh <scale> [reps]}
++REPS=${2:-3}
++HERE=$(cd "$(dirname "$0")" && pwd)
++: "${KB_SCRATCH:?set KB_SCRATCH to the scratch directory that holds kb-corpora/}"
++export KB_RESULTS_ARM=${KB_RESULTS_ARM:-fsqlite-v2/spike2}
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++BASE=$WORK/store-direct
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++w2() { # variant strategy missing closure [extra flags]
++  local variant=$1 strategy=$2 missing=$3 closure=$4
++  shift 4
++  KB_V2_MISSING=$missing KB_V2_CLOSURE=$closure "${NODE[@]}" w2.ts "$BASE" --scale "$SCALE" \
++    --deltas "$DELTAS" --strategy "$strategy" --variant "$variant" "$@"
++}
++
++case "$SCALE" in
++*-r2)
++  # H2, H3: operation envelopes, the serial reducer with base facts, closure in the build.
++  w2 ops ops none 1 --reps "$REPS"
++  # Ablation: a reducer without base facts, without and with the closure.
++  w2 ops-naive ops-naive none 0
++  w2 ops-naive-closure ops-naive none 1
++  # H4: changeset envelopes with idempotent deletes and no closure, then with the closure.
++  w2 sparse-missingdelete sparse delete 0
++  w2 sparse-missingdelete-closure sparse delete 1
++  if [ "${FULL_CAPTURE:-0}" = 1 ]; then
++    w2 full-missingdelete snapshot delete 0
++  fi
++  # One writer in line order: DirectStore (the H2 reference) and one operation envelope.
++  KB_V2_MISSING=none KB_V2_CLOSURE=1 "${NODE[@]}" w2v2.ts "$BASE" --scale "$SCALE" \
++    --arms DirectStore,Append --batches p01,p05,p20 --batch-reps "$REPS" --name w2-v2-one-writer
++  ;;
++*)
++  # H1 and H5: one-record to 100-record captures through each capture path, then the
++  # sustained trickle through the coalescing publisher.
++  KB_V2_MISSING=none KB_V2_CLOSURE=0 "${NODE[@]}" trickle.ts "$BASE" --scale "$SCALE" \
++    --delta "$DELTAS/p20" --reps "$REPS" --arms SnapshotStore,Sparse,Ops --skip-sustained \
++    --name w2-trickle-capture
++  for strategy in ops sparse; do
++    KB_V2_MISSING=none KB_V2_CLOSURE=0 "${NODE[@]}" trickle.ts "$BASE" --scale "$SCALE" \
++      --delta "$DELTAS/p20" --skip-batches --strategy "$strategy" \
++      --rate "${TRICKLE_RATE:-200}" --seconds "${TRICKLE_SECONDS:-30}" \
++      --name "w2-trickle-sustained-$strategy"
++  done
++  ;;
++esac
+diff -ruN '--exclude=__pycache__' a/summary_spike2.py b/summary_spike2.py
+--- a/summary_spike2.py	1970-01-01 00:00:00.000000000 +0000
++++ b/summary_spike2.py	2026-11-17 05:32:27.477707994 +0000
+@@ -0,0 +1,139 @@
++"""Headline tables for fsqlite v2 Spike 2, from results/fsqlite-v2/spike2/<scale>/.
++
++Usage: python3 fsqlite/summary_spike2.py [S1-r2 S2-r2 S1 S2]
++
++Baselines come from results/fsqlite/<scale>/ (round 1 and round 2 of the spike), or from
++$KB_BASELINE_RESULTS/<scale>/.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import statistics
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parent.parent / "results"
++V2 = ROOT / "fsqlite-v2" / "spike2"
++# The round-1 and round-2 baselines; KB_BASELINE_RESULTS points elsewhere for a scratch copy.
++BASE = Path(os.environ.get("KB_BASELINE_RESULTS", ROOT / "fsqlite"))
++
++
++def load(path: Path) -> dict | None:
++    return json.loads(path.read_text()) if path.exists() else None
++
++
++def med(values: list[float]) -> float | None:
++    values = [v for v in values if v is not None]
++    return round(statistics.median(values), 1) if values else None
++
++
++def by_batch(doc: dict | None) -> dict[str, list[dict]]:
++    out: dict[str, list[dict]] = {}
++    for b in (doc or {}).get("batches", []):
++        out.setdefault(b["batch"], []).append(b)
++    return out
++
++
++def one_writer(scale: str) -> dict[str, dict[str, float | None]]:
++    """Median one-writer visible ms per batch: this run's DirectStore and Append, and round 2's."""
++    mine = load(V2 / scale / "w2-v2-one-writer.json") or {"results": {}}
++    base = load(BASE / scale / "w2-v2.json") or {"results": {}}
++    out = {}
++    # w2v2.ts reports the lower of two runs as its median, so take the median of the runs.
++    def runs_median(arm: dict | None, key: str) -> float | None:
++        return med([r.get(key) for r in (arm or {}).get("runs", [])])
++
++    for name in ("p01", "p05", "p20"):
++        arms = mine["results"].get(name, {}).get("arms", {})
++        out[name] = {
++            "direct": runs_median(arms.get("DirectStore"), "visible_ms"),
++            "direct_n": (arms.get("DirectStore") or {}).get("reps"),
++            "append": runs_median(arms.get("Append"), "visible_ms"),
++            "append_reconcile": runs_median(arms.get("Append"), "reconcile_ms"),
++            "round2_direct": base["results"].get(name, {}).get("arms", {}).get("DirectStore", {}).get("visible_ms"),
++            "same_rows": mine["results"].get(name, {}).get("same_rows_across_arms"),
++        }
++    return out
++
++
++def four_writers(scale: str) -> None:
++    ref = one_writer(scale)
++    base = by_batch(load(BASE / scale / "w2.json"))
++    print(f"\n## {scale}: four writers (H2, H3, H4)\n")
++    print("| Variant | Batch | Runs | Visible ms (median) | Ratio to this run's 1-writer DirectStore | Ratio to round 2's | Capture p50 ms | Reconcile ms | Quarantined | Missing omitted | Closure removed/moved | Dangling after publish | Rows equal line order | W3 after p05 |")
++    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
++    for name, runs in base.items():
++        b = runs[0]
++        r = b["reconcile"] or {}
++        direct = ref[name]["round2_direct"]
++        print(
++            f"| round 2 (f1.0, repair) | {name} | 1 | {b['visible_after_ms']} | n/a | "
++            f"{round(b['visible_after_ms'] / direct, 2) if direct else 'n/a'} | {b['capture_ms']['p50_ms']} | "
++            f"{r.get('ms')} | {r.get('quarantined')} | n/a | n/a | {(r.get('closure') or {}).get('dangling_edges_before')} (before repair) | "
++            f"{(b.get('same_rows_as_one_writer_in_line_order') or {}).get('equal')} | {(b.get('w3_check_against_reference') or {}).get('result', '')} |"
++        )
++    for variant in ("ops", "ops-naive", "ops-naive-closure", "sparse-missingdelete", "sparse-missingdelete-closure", "full-missingdelete"):
++        doc = load(V2 / scale / f"w2-{variant}.json")
++        for name, runs in by_batch(doc).items():
++            vis = med([x["visible_after_ms"] for x in runs])
++            direct = ref[name]["direct"]
++            r2 = ref[name]["round2_direct"]
++            recon = [x["reconcile"] for x in runs]
++            closure = [rc.get("closure") or {} for rc in recon]
++            checks = sorted({(x.get("w3_check_against_reference") or {}).get("result", "") for x in runs} - {""})
++            print(
++                f"| {variant} | {name} | {len(runs)} | {vis} | {round(vis / direct, 2) if direct and vis else 'n/a'} | "
++                f"{round(vis / r2, 2) if r2 and vis else 'n/a'} | {med([x['capture_ms']['p50_ms'] for x in runs])} | "
++                f"{med([rc['ms'] for rc in recon])} | {sorted({rc['quarantined'] for rc in recon})} | "
++                f"{sorted({rc.get('omittedMissing', 0) for rc in recon})} | "
++                f"{sorted({(c.get('removed'), c.get('moved')) for c in closure if c}) or '-'} | "
++                f"{sorted({x['dangling_edges_after_publish'] for x in runs})} | "
++                f"{sorted({(x['same_rows_as_one_writer_in_line_order'] or {}).get('equal') for x in runs})} | {'; '.join(checks)} |"
++            )
++    print("\nOne writer in line order (this run):\n")
++    print("| Batch | DirectStore visible ms (runs) | One operation envelope visible ms (reconcile ms) | Same rows | Round 2 DirectStore ms |")
++    print("| --- | --- | --- | --- | --- |")
++    for name, v in ref.items():
++        print(f"| {name} | {v['direct']} ({v['direct_n']}) | {v['append']} ({v['append_reconcile']}) | {v['same_rows']} | {v['round2_direct']} |")
++
++
++def trickle(scale: str) -> None:
++    cap = load(V2 / scale / "w2-trickle-capture.json")
++    base = load(BASE / scale / "w2-trickle.json")
++    print(f"\n## {scale}: trickle (H1, H5)\n")
++    if cap:
++        print("| Arm | Records | Runs | Capture p50 ms | Reconcile ms | Visible ms | Round 1 full-copy capture ms |")
++        print("| --- | --- | --- | --- | --- | --- | --- |")
++        for key, v in cap["batches"].items():
++            size = v["records"]
++            b = (base or {}).get("batches", {}).get(f"SnapshotStore.{size}", {})
++            print(f"| {v['arm']} | {size} | {v['reps']} | {v['capture_ms']} | {v['reconcile_ms']} | {v['visible_ms_median']} | {b.get('capture_ms')} |")
++    for strategy in ("ops", "sparse"):
++        s = (load(V2 / scale / f"w2-trickle-sustained-{strategy}.json") or {}).get("sustained")
++        if not s:
++            continue
++        print(
++            f"\nSustained, {strategy}: offered {s['offered_records_per_s']}/s, captured {s['records_captured']} "
++            f"({s['capture_records_per_s']}/s, capture p50 {s['capture_ms']['p50']} ms), published "
++            f"{s['records_published']} ({s['published_records_per_s']}/s) in {s['publishes']} publishes; "
++            f"cycle median {s['publish_cycle_ms']['median']} ms (build {s['build_ms_median']}, gc {s['gc_retain0_ms_median']}); "
++            f"visibility p50 {s['visibility_delay_ms']['p50']} ms, p95 {s['visibility_delay_ms']['p95']} ms, "
++            f"{s['visibility_delay_in_cycles']['p50']} and {s['visibility_delay_in_cycles']['p95']} cycles."
++        )
++    if base:
++        print(f"\nRound 1 sustained: {json.dumps(base['sustained'])}")
++
++
++def main() -> None:
++    scales = sys.argv[1:] or ["S1-r2", "S2-r2", "S1", "S2"]
++    for scale in scales:
++        if scale.endswith("-r2"):
++            four_writers(scale)
++        else:
++            trickle(scale)
++
++
++if __name__ == "__main__":
++    main()
+diff -ruN '--exclude=__pycache__' a/trickle.ts b/trickle.ts
+--- a/trickle.ts	2026-11-17 01:18:03.429878546 +0000
++++ b/trickle.ts	2026-11-17 05:30:53.973197254 +0000
+@@ -3,7 +3,15 @@
+ // copy-per-generation floor dominates.
+ //
+ // Usage: node trickle.ts <base-store> --scale S0 --delta <delta-dir> [--seconds 20]
+-//        [--reps 3] [--work <dir>]
++//        [--reps 3] [--work <dir>] [--arms SnapshotStore,Sparse,Ops,DirectStore] [--fts]
++//        [--strategy ops|sparse|snapshot] [--rate 200] [--factor 0] [--name w2-trickle]
++//        [--skip-batches] [--skip-sustained]
++//
++// Spike 2 (fsqlite v2): the `Sparse` arm captures sparse-seed changesets and the `Ops` arm
++// appends operation envelopes for the serial reducer. The sustained run offers `--rate`
++// records per second (0: as fast as capture allows) with `--strategy`, and the coalescing
++// publisher (`runPublisher`) folds everything pending into each build, then runs gc.
++// The FTS5 sidecar rebuild after each publish runs only with `--fts`.
+ //
+ // Records come from a W2 delta batch (new and updated records with their edges). Every
+ // publish is followed by gc({ retain: 0 }), the minimum the run needs, since readers hold
+@@ -29,7 +37,8 @@
+ import { buildFtsSidecar } from './fts.ts'
+ import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
+ import { NODE, UV_PYTHON } from './w1.ts'
+-import { readUnits } from './w2_worker.ts'
++import { appendRows, readUnits } from './w2_worker.ts'
++import { hydrateRows, referencedNodes } from './v2.ts'
+ import { genericStore } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+@@ -56,8 +65,16 @@
+   }
+ }
+ 
+-function batches(base: string, rows: string, work: string, reps: number, sidecar: string) {
++function batches(
++  base: string,
++  rows: string,
++  work: string,
++  reps: number,
++  sidecar: string | null,
++  arms: string[],
++) {
+   const { nodes, units } = readUnits(rows)
++  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+   const dir = join(work, 'store')
+   cloneStore(base, dir)
+   const snap = genericStore(dir).init()
+@@ -73,7 +90,7 @@
+   }
+   const out: Record<string, unknown> = {}
+   for (const size of [1, 10, 100]) {
+-    for (const arm of ['SnapshotStore', 'DirectStore'] as const) {
++    for (const arm of arms) {
+       const runs: Record<string, number>[] = []
+       for (let r = 0; r < reps; r++) {
+         const batch = take(size)
+@@ -83,24 +100,40 @@
+         const t0 = nowMs()
+         let captureMs = 0
+         let reconcileMs = 0
+-        if (arm === 'SnapshotStore') {
+-          snap.write('trickle', applyUnits(nodes, batch))
++        let bytes = 0
++        if (arm === 'DirectStore') {
++          direct.write(applyUnits(nodes, batch), LOCK)
++        } else {
++          if (arm === 'Ops') {
++            bytes = appendRows(snap, 'trickle', 'ops', batch.flat(), nodeMap).bytes
++          } else if (arm === 'Sparse') {
++            // Only the node rows these records reference, as the Ops arm sends.
++            const rows = batch.flat()
++            snap.write('trickle', applyUnits(referencedNodes(rows, nodeMap), batch), {
++              seed: 'sparse',
++              hydrate: hydrateRows(rows),
++            })
++          } else {
++            snap.write('trickle', applyUnits(nodes, batch))
++          }
+           captureMs = nowMs() - t0
+-          snap.reconcile(LOCK)
++          const result = snap.reconcile(LOCK)
+           reconcileMs = nowMs() - t0 - captureMs
+-        } else {
+-          direct.write(applyUnits(nodes, batch), LOCK)
++          if (result.applied !== 1) {
++            throw new Error(`${arm} ${size}: reconcile applied ${result.applied}, expected 1`)
++          }
+         }
+         const visible = nowMs() - t0
+         const head = snap.snapshotPath(snap.currentVersion())
+-        const fts = buildFtsSidecar(head, sidecar)
++        const fts = sidecar ? buildFtsSidecar(head, sidecar) : null
+         const tGc = nowMs()
+         snap.gc({ retain: 0 })
+         runs.push({
+-          capture_ms: round(captureMs),
++          capture_ms: round(captureMs, 4),
+           reconcile_ms: round(reconcileMs),
+           visible_ms: round(visible),
+-          fts_rebuild_ms: fts.build_ms ?? 0,
++          envelope_bytes: bytes,
++          fts_rebuild_ms: fts?.build_ms ?? Number.NaN,
+           gc_ms: round(nowMs() - tGc),
+         })
+       }
+@@ -109,21 +142,30 @@
+         arm,
+         records: size,
+         reps: runs.length,
+-        capture_ms: arm === 'SnapshotStore' ? stat('capture_ms') : null,
+-        reconcile_ms: arm === 'SnapshotStore' ? stat('reconcile_ms') : null,
++        capture_ms: arm === 'DirectStore' ? null : stat('capture_ms'),
++        reconcile_ms: arm === 'DirectStore' ? null : stat('reconcile_ms'),
+         visible_ms_median: stat('visible_ms'),
+         records_per_s: round((size * 1000) / stat('visible_ms'), 2),
+-        fts_rebuild_ms_median: stat('fts_rebuild_ms'),
++        fts_rebuild_ms_median: sidecar ? stat('fts_rebuild_ms') : null,
+         gc_retain0_ms_median: stat('gc_ms'),
+         runs,
+       }
++      console.error(JSON.stringify({ arm, size, capture_ms: stat('capture_ms') }))
+     }
+   }
+   rmSync(dir, { recursive: true, force: true })
+   return out
+ }
+ 
+-async function sustained(base: string, rows: string, work: string, seconds: number) {
++async function sustained(
++  base: string,
++  rows: string,
++  work: string,
++  seconds: number,
++  strategy: string,
++  rate: number,
++  factor: number,
++) {
+   const dir = join(work, 'sustained')
+   cloneStore(base, dir)
+   genericStore(dir).init()
+@@ -139,7 +181,7 @@
+       child.on('error', reject)
+       child.on('exit', () => resolve(out))
+     })
+-  const reconciler = collect(['reconciler', dir, stop, '0'])
++  const publisherOut = collect(['publisher', dir, stop, '0', String(factor)])
+   const started = Date.now()
+   const writerOut = await collect([
+     'trickle-writer',
+@@ -147,17 +189,29 @@
+     rows,
+     'trickle',
+     String(started + seconds * 1000),
++    strategy,
++    String(rate),
+   ])
+   writeFileSync(stop, '')
+-  const recOut = await reconciler
+-  const w = JSON.parse(writerOut) as { captures: { tx: string; start: number; end: number }[] }
+-  const r = JSON.parse(recOut) as {
+-    rounds: { pending: string[]; published: number; reconcile_ms: number; gc_ms: number }[]
++  const pubOut = await publisherOut
++  const w = JSON.parse(writerOut) as {
++    captures: { tx: string; start: number; end: number; ms: number }[]
+   }
++  type Round = {
++    startedAt: number
++    publishedAt: number
++    buildMs: number
++    waitedMs: number
++    result: { appliedTxIds?: string[]; applied: number; timings?: Record<string, number> }
++    gc?: { ms: number }
++  }
++  const r = JSON.parse(pubOut) as { rounds: Round[] }
++  // A record is visible when the pointer swap of the build that applied it completed.
+   const publishedAt = new Map<string, number>()
+   for (const round_ of r.rounds) {
+-    for (const tx of round_.pending) {
+-      publishedAt.set(tx, round_.published)
++    const at = round_.result.timings?.published_at_epoch_ms ?? round_.publishedAt
++    for (const tx of round_.result.appliedTxIds ?? []) {
++      publishedAt.set(tx, at)
+     }
+   }
+   const delays = w.captures
+@@ -165,23 +219,75 @@
+     .filter((d) => !Number.isNaN(d))
+     .sort((a, b) => a - b)
+   const window = (w.captures.at(-1)?.end ?? started) - started
++  // Publish cycles: the interval between consecutive pointer swaps, while records arrive.
++  const swaps = r.rounds.map((x) => x.result.timings?.published_at_epoch_ms ?? x.publishedAt)
++  const cycles = swaps.slice(1).map((t, i) => t - (swaps[i] ?? t))
++  const cycleMedian = median(cycles)
++  const lastPublish = swaps.at(-1) ?? started
++  const firstCapture = w.captures[0]?.start ?? started
+   rmSync(dir, { recursive: true, force: true })
+   return {
+     seconds,
+     writers: 1,
++    strategy,
++    offered_records_per_s: rate || 'unlimited',
++    interval_factor: factor,
+     records_captured: w.captures.length,
+     capture_records_per_s: round((w.captures.length * 1000) / window, 2),
+-    capture_ms_median: median(w.captures.map((c) => c.end - c.start)),
+-    reconciles: r.rounds.length,
+-    records_per_reconcile_median: median(r.rounds.map((x) => x.pending.length)),
+-    reconcile_ms_median: median(r.rounds.map((x) => x.reconcile_ms)),
+-    gc_retain0_ms_median: median(r.rounds.map((x) => x.gc_ms)),
++    capture_ms: {
++      p50: round(
++        percentile(
++          [...w.captures.map((c) => c.ms)].sort((a, b) => a - b),
++          50,
++        ),
++        4,
++      ),
++      p95: round(
++        percentile(
++          [...w.captures.map((c) => c.ms)].sort((a, b) => a - b),
++          95,
++        ),
++        4,
++      ),
++    },
++    records_published: publishedAt.size,
++    published_records_per_s: round(
++      (publishedAt.size * 1000) / Math.max(1, lastPublish - firstCapture),
++      2,
++    ),
++    publishes: r.rounds.length,
++    records_per_publish_median: median(r.rounds.map((x) => x.result.applied)),
++    build_ms_median: median(r.rounds.map((x) => x.buildMs)),
++    apply_ms_median: median(r.rounds.map((x) => x.result.timings?.apply_ms ?? Number.NaN)),
++    gc_retain0_ms_median: median(r.rounds.map((x) => x.gc?.ms ?? Number.NaN)),
++    publish_cycle_ms: {
++      median: cycleMedian,
++      p95: round(
++        percentile(
++          [...cycles].sort((a, b) => a - b),
++          95,
++        ),
++      ),
++    },
+     visibility_delay_ms: {
+       p50: round(percentile(delays, 50)),
+       p95: round(percentile(delays, 95)),
+       max: round(delays.at(-1) ?? Number.NaN),
+     },
+-    note: 'one writer process capturing one-record envelopes; one reconciler looping reconcile then gc',
++    visibility_delay_in_cycles: {
++      p50: round(percentile(delays, 50) / cycleMedian, 2),
++      p95: round(percentile(delays, 95) / cycleMedian, 2),
++    },
++    rounds: r.rounds.map((x) => ({
++      applied: x.result.applied,
++      build_ms: x.buildMs,
++      waited_ms: x.waitedMs,
++      gc_ms: x.gc?.ms ?? null,
++      timings: x.result.timings,
++    })),
++    note:
++      'one writer process capturing one-record envelopes at the offered rate; one publisher ' +
++      'process (runPublisher) folding everything pending per build, then gc({ retain: 0 })',
+   }
+ }
+ 
+@@ -206,15 +312,38 @@
+   if (parse.status !== 0) {
+     throw new Error(`parse failed: ${parse.stderr.toString().slice(-500)}`)
+   }
++  const arms = (flags.arms ?? 'SnapshotStore,Sparse,Ops').split(',')
+   const result = {
+-    workflow: 'W2 trickle (C18)',
++    workflow: 'W2 trickle (C18), fsqlite v2 Spike 2',
+     delta: flags.delta,
+     gc: 'gc({ retain: 0 }) after every publish',
+-    batches: batches(base, rows, work, Number(flags.reps ?? 3), join(work, 'search-fts.sqlite')),
+-    sustained: await sustained(base, rows, work, Number(flags.seconds ?? 20)),
++    fts_sidecar: flags.fts === 'true' ? 'rebuilt after every batch publish' : 'not rebuilt',
++    batches:
++      flags['skip-batches'] === 'true'
++        ? null
++        : batches(
++            base,
++            rows,
++            work,
++            Number(flags.reps ?? 3),
++            flags.fts === 'true' ? join(work, 'search-fts.sqlite') : null,
++            arms,
++          ),
++    sustained:
++      flags['skip-sustained'] === 'true'
++        ? null
++        : await sustained(
++            base,
++            rows,
++            work,
++            Number(flags.seconds ?? 20),
++            flags.strategy ?? 'ops',
++            Number(flags.rate ?? 200),
++            Number(flags.factor ?? 0),
++          ),
+   }
+   rmSync(work, { recursive: true, force: true })
+-  console.log(writeResult(scale, 'w2-trickle', result))
++  console.log(writeResult(scale, flags.name ?? 'w2-trickle', result))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN '--exclude=__pycache__' a/v2.ts b/v2.ts
+--- a/v2.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/v2.ts	2026-11-17 05:34:27.517187664 +0000
+@@ -0,0 +1,252 @@
++// fsqlite v2 Spike 2: the knowledge-base side of operation envelopes (design (k)), sparse
++// capture (l), the missing-row policy (n), and closure in the build (section 3.6).
++//
++// - `kb-delta` v2 is the serial reducer: an operation envelope's payload is intermediate
++//   JSONL rows (the delta-v2 `op` rows and the rows each writes, plus the node rows they
++//   reference), and the reducer feeds them to one GenericLoader per build, started from the
++//   stored tombstones and redirects, so envelope order resolves endpoints like line order.
++// - `kb-delta-naive` v1 is the ablation: a fresh loader per envelope that knows only its
++//   own envelope's deletes and merges, which is what a reducer without base facts sees.
++// - `kbClosure` runs inside every build after the envelopes: it removes edges incident to
++//   tombstoned ids and moves edges of absorbed ids to their survivors, so the published
++//   graph has no edge to a deleted or absorbed node whatever order the envelopes arrived
++//   in. This is the minimal closure Spike 2 needs; Spike 1 builds the general one.
++// - `hydrateRows` is the sparse-capture hydration plan for the same rows.
++//
++// The store configuration comes from the environment, so every process of a run (writers,
++// reader, reconciler) opens the store the same way:
++//   KB_V2_MISSING   none | delete | delete,update  (missingDelete / missingUpdate: ignore)
++//   KB_V2_CLOSURE   1 to run kbClosure in every build
++
++import type { DatabaseSync } from 'node:sqlite'
++import type { ConflictPolicyInput, HydrateCopy, Reducer, StoreOptions } from './fsq.ts'
++import type { KbRow, NodeRow } from './common.ts'
++import { GENERIC_POLICY, GenericLoader, TYPED_REF } from './mapping.ts'
++
++export const KB_REDUCER = 'kb-delta'
++export const KB_REDUCER_NAIVE = 'kb-delta-naive'
++
++function rowsOf(payload: Uint8Array): KbRow[] {
++  const text = Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).toString('utf8')
++  const rows: KbRow[] = []
++  for (const line of text.split('\n')) {
++    if (line !== '') {
++      rows.push(JSON.parse(line) as KbRow)
++    }
++  }
++  return rows
++}
++
++/** The serial reducer: one loader per build, seeded with the stored base facts. */
++export const kbReducer: Reducer = {
++  version: '2',
++  apply(db, payload, ctx) {
++    let loader = ctx.build.get('kb-loader') as GenericLoader | undefined
++    if (!loader) {
++      loader = new GenericLoader(db, false, { facts: true })
++      ctx.build.set('kb-loader', loader)
++    }
++    for (const row of rowsOf(payload)) {
++      loader.add(row)
++    }
++  },
++}
++
++/** The ablation: a fresh loader per envelope, with no memory of other envelopes. */
++export const kbReducerNaive: Reducer = {
++  version: '1',
++  apply(db, payload) {
++    const loader = new GenericLoader(db)
++    for (const row of rowsOf(payload)) {
++      loader.add(row)
++    }
++  },
++}
++
++// Edges incident to a tombstoned or absorbed id. The IN forms keep the planner on the edge
++// indexes: without statistics, a join from the fact table scans every edge instead.
++const GONE = '(SELECT id FROM kb_tombstone UNION ALL SELECT absorbed FROM kb_redirect)'
++const DANGLING_FACTS = `
++  SELECT (SELECT count(*) FROM edge WHERE source IN ${GONE})
++       + (SELECT count(*) FROM edge WHERE target IN ${GONE} AND source NOT IN ${GONE})
++    AS n`
++
++/**
++ * Closure in the build: remove edges incident to tombstoned ids, then replay every stored
++ * redirect as a merge, which moves the edges still incident to an absorbed id to its
++ * survivor and rewrites their origin. Both are idempotent and driven by the base facts.
++ */
++export function kbClosure(db: DatabaseSync): Record<string, unknown> {
++  const t0 = performance.now()
++  const before = (db.prepare(DANGLING_FACTS).get() as { n: number }).n
++  let removed = 0
++  let moved = 0
++  if (before > 0) {
++    removed += Number(
++      db.prepare('DELETE FROM edge WHERE source IN (SELECT id FROM kb_tombstone)').run().changes,
++    )
++    removed += Number(
++      db.prepare('DELETE FROM edge WHERE target IN (SELECT id FROM kb_tombstone)').run().changes,
++    )
++    const redirects = db
++      .prepare(
++        `SELECT absorbed, survivor, absorbed_path, survivor_path FROM kb_redirect r
++         WHERE EXISTS (SELECT 1 FROM edge g WHERE g.source = r.absorbed)
++            OR EXISTS (SELECT 1 FROM edge g WHERE g.target = r.absorbed)`,
++      )
++      .all() as {
++      absorbed: string
++      survivor: string
++      absorbed_path: string
++      survivor_path: string
++    }[]
++    if (redirects.length > 0) {
++      const loader = new GenericLoader(db, false, { facts: true })
++      for (const r of redirects) {
++        const n = (
++          db
++            .prepare('SELECT count(*) AS n FROM edge WHERE source = ?1 OR target = ?1')
++            .get(r.absorbed) as { n: number }
++        ).n
++        moved += n
++        loader.add({ t: 'op', op: 'merge', ...r })
++      }
++    }
++  }
++  const after = (db.prepare(DANGLING_FACTS).get() as { n: number }).n
++  return {
++    edges_on_deleted_or_absorbed_before: before,
++    removed,
++    moved,
++    edges_on_deleted_or_absorbed_after: after,
++    ms: Math.round((performance.now() - t0) * 1000) / 1000,
++  }
++}
++
++/** The store options a run's environment selects: reducers, missing-row policy, closure. */
++export function v2StoreOptions(): Partial<StoreOptions> {
++  const missing = (process.env.KB_V2_MISSING ?? 'none').split(',')
++  const table = {
++    conflict: 'lww' as const,
++    ...(missing.includes('delete') ? { missingDelete: 'ignore' as const } : {}),
++    ...(missing.includes('update') ? { missingUpdate: 'ignore' as const } : {}),
++  }
++  const policy: ConflictPolicyInput = missing.some((m) => m === 'delete' || m === 'update')
++    ? Object.fromEntries(Object.keys(GENERIC_POLICY).map((t) => [t, table]))
++    : { ...GENERIC_POLICY }
++  return {
++    conflictPolicy: policy,
++    reducers: { [KB_REDUCER]: kbReducer, [KB_REDUCER_NAIVE]: kbReducerNaive },
++    ...(process.env.KB_V2_CLOSURE === '1' ? { closure: kbClosure } : {}),
++  }
++}
++
++/** Every typed reference a JSON payload text names, for display-name hydration. */
++function refsIn(text: string): string[] {
++  const out: string[] = []
++  for (const m of text.matchAll(/"([a-z]+:[a-z0-9][a-z0-9._/@+-]*)"/g)) {
++    if (m[1] && TYPED_REF.test(m[1])) {
++      out.push(m[1])
++    }
++  }
++  return out
++}
++
++/**
++ * The node rows a set of rows needs for display names: every batch node named by an edge
++ * endpoint or by a typed reference in a payload. Over-inclusion is harmless.
++ */
++export function referencedNodes(rows: KbRow[], nodes: Map<string, NodeRow>): NodeRow[] {
++  const ids = new Set<string>()
++  for (const row of rows) {
++    if (row.t === 'entity') {
++      ids.add(row.id)
++      for (const ref of refsIn(row.payload)) {
++        ids.add(ref)
++      }
++    } else if (row.t === 'edge') {
++      ids.add(row.source)
++      ids.add(row.target)
++    }
++  }
++  return [...ids].flatMap((id) => {
++    const node = nodes.get(id)
++    return node ? [node] : []
++  })
++}
++
++/**
++ * The sparse-capture hydration plan for intermediate rows: every head row the loader will
++ * read, update, or delete for them (design (l): the API hydrates through a helper rather
++ * than relying on the callback).
++ */
++export function hydrateRows(rows: KbRow[]): (db: DatabaseSync, copy: HydrateCopy) => void {
++  return (_db, copy) => {
++    copy('kb_tombstone', '1')
++    copy('kb_redirect', '1')
++    const entity = (id: string): void => {
++      copy('entity', 'id = ?', id)
++      copy('search_text', 'id = ?', id)
++    }
++    const incident = (id: string): void => {
++      copy('edge', 'source = ?', id)
++      copy('edge', 'target = ?', id)
++    }
++    const byOrigin = (path: string): void => {
++      copy('edge', "props ->> '$.origin' = ?", path)
++    }
++    for (const row of rows) {
++      switch (row.t) {
++        case 'op':
++          if (row.op === 'merge') {
++            entity(row.absorbed)
++            incident(row.absorbed)
++            incident(row.survivor)
++            byOrigin(row.absorbed_path)
++            copy('doc', 'path = ?', row.absorbed_path)
++          } else {
++            for (const id of row.node_ids) {
++              entity(id)
++              if (row.op === 'delete') {
++                incident(id)
++              }
++            }
++            byOrigin(row.path)
++            copy('doc', 'path = ?', row.path)
++          }
++          break
++        case 'entity':
++          entity(row.id)
++          for (const ref of refsIn(row.payload)) {
++            copy('entity', 'id = ?', ref)
++          }
++          break
++        case 'doc':
++          copy('doc', 'path = ?', row.path)
++          break
++        case 'edge':
++          if (row.ord === null) {
++            copy(
++              'edge',
++              'source = ? AND relation = ? AND target = ?',
++              row.source,
++              row.relation,
++              row.target,
++            )
++          } else {
++            copy(
++              'edge',
++              'source = ? AND relation = ? AND target = ? AND ord = ?',
++              row.source,
++              row.relation,
++              row.target,
++              row.ord,
++            )
++          }
++          break
++        default:
++          break
++      }
++    }
++  }
++}
+diff -ruN '--exclude=__pycache__' a/w2.ts b/w2.ts
+--- a/w2.ts	2026-11-17 03:47:21.114002383 +0000
++++ b/w2.ts	2026-11-17 05:07:58.330397592 +0000
+@@ -2,7 +2,14 @@
+ // 4 concurrent writer processes while a reader runs the W3 queries, then reconcile.
+ //
+ // Usage: node w2.ts <base-store> --scale S0 --deltas <dir with p01 p05 p20>
+-//        [--writers 4] [--envelopes 5] [--strategy snapshot|direct] [--work <dir>]
++//        [--writers 4] [--envelopes 5] [--strategy snapshot|direct|sparse|ops|ops-naive]
++//        [--work <dir>] [--variant <name>] [--batches p01,p05] [--reps 1] [--repair]
++//
++// Spike 2 (fsqlite v2): `sparse` captures sparse-seed changesets, `ops` and `ops-naive`
++// append operation envelopes for the serial reducer or its ablation. The store options
++// (missing-row policy, closure) come from KB_V2_MISSING and KB_V2_CLOSURE (see v2.ts).
++// `--repair` keeps round 2's recovery steps (re-capture of quarantined envelopes and a
++// closure envelope); without it the run reports the state after the single reconcile.
+ //
+ // Each batch starts from a fresh copy of the base store, since the batches are drawn
+ // independently from the base KB. Times are wall-clock milliseconds from the moment the
+@@ -20,7 +27,7 @@
+   writeFileSync,
+ } from 'node:fs'
+ import { createHash } from 'node:crypto'
+-import { join } from 'node:path'
++import { dirname, join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
+   RESULTS_DIR,
+@@ -42,6 +49,8 @@
+ import { GenericLoader } from './mapping.ts'
+ import { readUnits } from './w2_worker.ts'
+ import { genericStore, isV2, runOnSnapshot } from './w3.ts'
++import { DirectStore } from './fsq.ts'
++import { GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+ const NODE = [process.execPath, '--disable-warning=ExperimentalWarning']
+@@ -78,7 +87,7 @@
+ }
+ 
+ /** Median time to copy a file, the floor of every capture and reconcile build. */
+-export function copyCost(path: string, runs = 3): Record<string, number> {
++export function copyCost(path: string, runs = 1): Record<string, number> {
+   const tmp = `${path}.copy-probe`
+   const times: number[] = []
+   for (let i = 0; i < runs; i++) {
+@@ -186,6 +195,8 @@
+ }
+ 
+ export interface BatchOptions {
++  /** Keep round 2's recovery steps: retry quarantined envelopes, then a closure envelope. */
++  repair?: boolean
+   /** A v2 batch: parse with --delta2 against this base KB, and split by operation. */
+   v2BaseKb?: string
+   /** After publishing, run W3 v2 on the head and compare it with this expected file. */
+@@ -222,7 +233,9 @@
+   cloneStore(base, store)
+   const handle = genericStore(store).init()
+   const baseVersion = handle.currentVersion()
+-  const baseCopy = copyCost(handle.snapshotPath(baseVersion))
++  // KB_COPY_PROBE=0 skips the head-copy probes, which need one more head of free disk.
++  const probe = process.env.KB_COPY_PROBE !== '0'
++  const baseCopy = probe ? copyCost(handle.snapshotPath(baseVersion)) : null
+   const before = handle.read(
+     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+   )
+@@ -254,7 +267,7 @@
+   const reports = outs.map(
+     (o) =>
+       JSON.parse(o.stdout) as {
+-        captures: { ms: number; tx?: string | null }[]
++        captures: { ms: number; tx?: string | null; bytes?: number }[]
+         total_ms: number
+         envelopes: number
+         max_rss_mib: number
+@@ -264,16 +277,10 @@
+   if (strategy !== 'direct') {
+     const t = nowMs()
+     const result = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+-    // Each quarantined envelope keeps its reason in tx/quarantine/<tx>.txn/QUARANTINE (f1.0).
+-    const qdir = join(store, 'tx', 'quarantine')
+-    const reasons = existsSync(qdir)
+-      ? readdirSync(qdir).map((txn) => ({
+-          txn,
+-          reason: readFileSync(join(qdir, txn, 'QUARANTINE'), 'utf8').trim(),
+-        }))
+-      : []
+-    reconcile = { ...result, ms: round(nowMs() - t), quarantine_reasons: reasons }
+-    if (reasons.length > 0) {
++    const reasons = (result.quarantineReasons ?? []).map(([txn, reason]) => ({ txn, reason }))
++    const { appliedTxIds: _ids, quarantineReasons: _reasons, ...summary } = result
++    reconcile = { ...summary, ms: round(nowMs() - t), quarantine_reasons: reasons }
++    if (reasons.length > 0 && opts.repair) {
+       // Recovery: a NOTFOUND quarantine is permanent, so re-capture each quarantined
+       // envelope's operations on the new head, where its deletes find nothing left to
+       // delete, and reconcile again.
+@@ -282,7 +289,7 @@
+       const again = handle.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+       reconcile.retry = { envelopes: retried, ...again, ms: round(nowMs() - t2) }
+     }
+-    if (opts.v2BaseKb) {
++    if (opts.v2BaseKb && opts.repair) {
+       // Closure: writers captured their deletes and merges from the old head, so another
+       // writer's new edges can still name a deleted or absorbed node. Replaying every
+       // delete and merge of the batch in one envelope on the final head is idempotent and
+@@ -323,6 +330,22 @@
+   const complete = Date.now()
+   const published = Date.now()
+   const head = handle.currentVersion()
++  // Edges whose endpoint is no entity, by a full referential scan of the published head
++  // (outside the timed path): what the closure must leave at zero.
++  const danglingAfterPublish = opts.v2BaseKb
++    ? handle.read(
++        (db) =>
++          (
++            db
++              .prepare(
++                `SELECT count(*) AS n FROM edge g
++                 WHERE NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.source)
++                    OR NOT EXISTS (SELECT 1 FROM entity e WHERE e.id = g.target)`,
++              )
++              .get() as { n: number }
++          ).n,
++      )
++    : null
+   // Indexed search follows each publish: rebuild the FTS5 sidecar for the new head.
+   const sidecar = buildFtsSidecar(handle.snapshotPath(head), join(dir, 'search-fts.sqlite'))
+   const searchVisible = Date.now()
+@@ -339,7 +362,7 @@
+   const after = handle.read(
+     (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+   )
+-  const headCopy = copyCost(handle.snapshotPath(head))
++  const headCopy = probe ? copyCost(handle.snapshotPath(head)) : null
+   // v2: does the concurrently applied state answer W3 like the reference post-batch KB,
+   // and does it hold the same rows as one writer applying the batch in line order?
+   let check: Record<string, unknown> | null = null
+@@ -348,23 +371,39 @@
+   }
+   let sameAsLineOrder: Record<string, unknown> | null = null
+   if (opts.v2BaseKb) {
+-    const ref = join(dir, 'line-order')
+-    cloneStore(base, ref)
+-    const refStore = genericStore(ref).init()
+-    refStore.write('lineorder', (db) => {
+-      const loader = new GenericLoader(db)
+-      forEachRowSync(rows, (row) => loader.add(row))
+-    })
+-    refStore.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
++    // The line-order digest depends only on the base and the batch, so it is computed once
++    // per scale and batch and reused by every variant (one head less of disk at S2-r2).
++    const cache = join(WORK_DIR, scale, `line-order-${name}.json`)
++    let b: Record<string, string>
++    if (existsSync(cache)) {
++      b = JSON.parse(readFileSync(cache, 'utf8')) as Record<string, string>
++    } else {
++      const ref = join(dir, 'line-order')
++      cloneStore(base, ref)
++      // One writer in line order: the whole batch through one loader in one DirectStore
++      // write, which round 2 checked against the oracle.
++      const refStore = new DirectStore(ref, {
++        schema: genericDdl(),
++        schemaVersion: GENERIC_SCHEMA_VERSION,
++      }).init()
++      refStore.write(
++        (db) => {
++          const loader = new GenericLoader(db)
++          forEachRowSync(rows, (row) => loader.add(row))
++        },
++        { lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } },
++      )
++      b = semanticDigest(refStore.snapshotPath(refStore.currentVersion()))
++      rmSync(ref, { recursive: true, force: true })
++      writeFileSync(cache, JSON.stringify(b))
++    }
+     const a = semanticDigest(handle.snapshotPath(head))
+-    const b = semanticDigest(refStore.snapshotPath(refStore.currentVersion()))
+     sameAsLineOrder = {
+       equal: Object.keys(a).every((k) => a[k] === b[k]),
+       differing_tables: Object.keys(a).filter((k) => a[k] !== b[k]),
+       concurrent: a,
+       line_order: b,
+     }
+-    rmSync(ref, { recursive: true, force: true })
+   }
+   // Every updated record must now differ from the base.
+   const updatedIds =
+@@ -394,10 +433,18 @@
+   const during = r.samples.filter(([at]) => at >= started && at <= published).map(([, ms]) => ms)
+   const quiet = r.samples.filter(([at]) => at < started).map(([, ms]) => ms)
+   const captureMs = reports.flatMap((rep) => rep.captures.map((c) => c.ms))
++  const envelopeBytes = reports.flatMap((rep) => rep.captures.map((c) => c.bytes ?? 0))
+   const result = {
+     batch: name,
+     strategy,
+-    arm: strategy === 'direct' ? 'DirectStore' : 'SnapshotStore',
++    arm:
++      strategy === 'direct'
++        ? 'DirectStore'
++        : strategy.startsWith('ops')
++          ? 'SnapshotStore, operation envelopes'
++          : strategy === 'sparse'
++            ? 'SnapshotStore, sparse capture'
++            : 'SnapshotStore',
+     delta: opts.v2BaseKb
+       ? { changes: manifest.changes, counts: manifest.counts, edges: manifest.edges_in_upserts }
+       : {
+@@ -413,6 +460,13 @@
+     writers: writers,
+     envelopes: reports.reduce((n, rep) => n + rep.envelopes, 0),
+     capture_ms: stats(captureMs),
++    envelope_bytes_total: envelopeBytes.reduce((a, b) => a + b, 0) || null,
++    dangling_edges_after_publish: danglingAfterPublish,
++    store_options: {
++      missing: process.env.KB_V2_MISSING ?? 'none',
++      closure: process.env.KB_V2_CLOSURE === '1',
++      repair_steps: Boolean(opts.repair),
++    },
+     gc_refusals:
+       strategy === 'direct'
+         ? reports
+@@ -521,6 +575,8 @@
+       doc: digest('SELECT * FROM doc ORDER BY path'),
+       search_text: digest('SELECT * FROM search_text ORDER BY id, rank'),
+       quarantine: digest('SELECT * FROM quarantine ORDER BY path'),
++      kb_tombstone: digest('SELECT * FROM kb_tombstone ORDER BY id'),
++      kb_redirect: digest('SELECT * FROM kb_redirect ORDER BY absorbed'),
+     }
+   } finally {
+     db.close()
+@@ -538,6 +594,7 @@
+   out: string,
+ ): Record<string, unknown> {
+   const report = runOnSnapshot(snapshot, scale, { warm: 0 })
++  mkdirSync(dirname(out), { recursive: true })
+   writeFileSync(out, `${JSON.stringify({ workflow: 'W3', scale, ...report }, null, 2)}\n`)
+   const r = spawnSync('python3', [join(SPIKE_DIR, 'harness', 'compare.py'), expected, out], {
+     encoding: 'utf8',
+@@ -562,19 +619,28 @@
+   const work = flags.work ?? join(WORK_DIR, scale, `w2-${strategy}`)
+   const writers = Number(flags.writers ?? 4)
+   const envelopes = Number(flags.envelopes ?? 5)
++  const reps = Number(flags.reps ?? 1)
++  const only = flags.batches ? new Set(flags.batches.split(',')) : null
++  const variant = flags.variant ?? null
+   const batches = []
+   for (const name of readdirSync(deltas)
+-    .filter((d) => /^p\d+$/.test(d))
+-    .sort()) {
++    .filter((d) => /^p\d+$/.test(d) && (only === null || only.has(d)))
++    .sort()
++    .flatMap((d) => Array.from({ length: reps }, () => d))) {
+     // Round-2 scales use the v2 batch format; p05 is checked against the oracle's state.
+     const v2 = isV2(scale)
+     const opts: BatchOptions = v2
+       ? {
++          repair: flags.repair === 'true',
+           v2BaseKb: kbDirFor(scale),
+           expected: join(SPIKE_DIR, 'harness', 'expected', `${scale}-${name}`, 'w3.json'),
+-          checkOut: join(RESULTS_DIR, scale, `w3-after-${name}-${writers}writers.json`),
++          checkOut: join(
++            RESULTS_DIR,
++            scale,
++            `w3-after-${name}-${writers}writers${variant ? `-${variant}` : ''}.json`,
++          ),
+         }
+-      : {}
++      : { repair: flags.repair === 'true' }
+     const b = await batch(base, scale, join(deltas, name), work, writers, envelopes, strategy, opts)
+     console.error(
+       JSON.stringify({
+@@ -585,7 +651,7 @@
+     )
+     batches.push(b)
+   }
+-  const workflow = strategy === 'direct' ? 'w2-direct' : 'w2'
++  const workflow = variant ? `w2-${variant}` : strategy === 'direct' ? 'w2-direct' : 'w2'
+   console.log(
+     writeResult(scale, workflow, {
+       base_store: base,
+@@ -593,6 +659,12 @@
+       writers,
+       envelopes_per_writer: envelopes,
+       strategy,
++      store_options: {
++        missing: process.env.KB_V2_MISSING ?? 'none',
++        closure: process.env.KB_V2_CLOSURE === '1',
++        repair_steps: flags.repair === 'true',
++      },
++      reps,
+       batches,
+     }),
+   )
+diff -ruN '--exclude=__pycache__' a/w2_worker.ts b/w2_worker.ts
+--- a/w2_worker.ts	2026-11-17 03:11:09.077573810 +0000
++++ b/w2_worker.ts	2026-11-17 05:34:27.593187660 +0000
+@@ -6,6 +6,8 @@
+ //
+ // The writer prints one JSON report. Strategy `snapshot` captures SnapshotStore envelopes
+ // (published later by reconcile); `direct` publishes each envelope with DirectStore.write.
++// Spike 2 adds `sparse` (sparse-seed changeset capture, design (l)), and `ops` and
++// `ops-naive` (operation envelopes for the `kb-delta` reducer or its ablation, design (k)).
+ 
+ import { existsSync, writeFileSync } from 'node:fs'
+ import type { DatabaseSync } from 'node:sqlite'
+@@ -14,6 +16,7 @@
+ import { forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+ import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
++import { KB_REDUCER, KB_REDUCER_NAIVE, hydrateRows, referencedNodes } from './v2.ts'
+ import { KbQueries } from './queries.ts'
+ import { genericStore, openReader, queryInstances } from './w3.ts'
+ 
+@@ -70,9 +73,11 @@
+     units: number
+     version?: number
+     tx?: string | null
++    bytes?: number
+     gc_ms?: number
+     gcRetries?: number | string
+   }[] = []
++  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+   const t0 = nowMs()
+   for (let i = 0; i < units.length; i += perEnvelope) {
+     const batch = units.slice(i, i + perEnvelope)
+@@ -107,6 +112,15 @@
+         gcRetries = 'refused 3 times'
+       }
+       captures.push({ ms, units: batch.length, version, gc_ms: round(nowMs() - tGc), gcRetries })
++    } else if (strategy === 'ops' || strategy === 'ops-naive') {
++      const tx = appendRows(snapshot, writerId, strategy, batch.flat(), nodeMap)
++      captures.push({ ms: round(nowMs() - t), units: batch.length, ...tx })
++    } else if (strategy === 'sparse') {
++      const tx = snapshot.write(writerId, apply, {
++        seed: 'sparse',
++        hydrate: hydrateRows(batch.flat()),
++      })
++      captures.push({ ms: round(nowMs() - t), units: batch.length, tx })
+     } else {
+       const tx = snapshot.write(writerId, apply)
+       captures.push({ ms: round(nowMs() - t), units: batch.length, tx })
+@@ -126,6 +140,23 @@
+   )
+ }
+ 
++/**
++ * Append one operation envelope: the rows, preceded by the batch node rows they reference
++ * (the loader resolves display names from them), serialized as JSON lines.
++ */
++export function appendRows(
++  store: ReturnType<typeof genericStore>,
++  writerId: string,
++  strategy: string,
++  rows: KbRow[],
++  nodeMap: Map<string, NodeRow>,
++): { tx: string; bytes: number } {
++  const lines = [...referencedNodes(rows, nodeMap), ...rows].map((r) => JSON.stringify(r))
++  const payload = Buffer.from(lines.join('\n'))
++  const reducer = strategy === 'ops-naive' ? KB_REDUCER_NAIVE : KB_REDUCER
++  return { tx: store.append(writerId, reducer, payload), bytes: payload.length }
++}
++
+ function reader(dir: string, scale: string, outPath: string, stopFile: string) {
+   const store = genericStore(dir)
+   const instances = queryInstances(scale)
+@@ -199,28 +230,84 @@
+   return { nodes, units }
+ }
+ 
+-/** Sustained trickle: capture one-record envelopes until the deadline. */
+-function trickleWriter(dir: string, rowsPath: string, writerId: string, deadline: number) {
++/**
++ * Sustained trickle: capture one-record envelopes until the deadline, at most `rate` per
++ * second (0: as fast as capture allows), with strategy `snapshot` (full copy), `sparse`, or
++ * `ops` (Spike 2).
++ */
++function trickleWriter(
++  dir: string,
++  rowsPath: string,
++  writerId: string,
++  deadline: number,
++  strategy = 'snapshot',
++  rate = 0,
++) {
+   const { nodes, units } = readUnits(rowsPath)
++  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+   const store = genericStore(dir)
+-  const captures: { tx: string | null; start: number; end: number }[] = []
+-  for (const unit of units) {
++  const captures: { tx: string | null; start: number; end: number; ms: number }[] = []
++  const began = Date.now()
++  for (const [i, unit] of units.entries()) {
++    if (rate > 0) {
++      const due = began + (i * 1000) / rate
++      while (Date.now() < due) {
++        Atomics.wait(SLEEP, 0, 0, Math.max(1, due - Date.now()))
++      }
++    }
+     if (Date.now() >= deadline) {
+       break
+     }
+     const start = Date.now()
+-    const tx = store.write(writerId, (db) => {
+-      const loader = new GenericLoader(db)
+-      for (const node of nodes) {
+-        loader.add(node)
+-      }
+-      for (const row of unit) {
+-        loader.add(row)
++    const t = nowMs()
++    let tx: string | null
++    if (strategy === 'ops') {
++      tx = appendRows(store, writerId, strategy, unit, nodeMap).tx
++    } else {
++      // A sparse capture gets only the node rows its record references, as `ops` sends;
++      // a full copy keeps round 1's behavior of loading every batch node name.
++      const names = strategy === 'sparse' ? referencedNodes(unit, nodeMap) : nodes
++      const apply = (db: DatabaseSync): void => {
++        const loader = new GenericLoader(db)
++        for (const node of names) {
++          loader.add(node)
++        }
++        for (const row of unit) {
++          loader.add(row)
++        }
+       }
+-    })
+-    captures.push({ tx, start, end: Date.now() })
++      tx =
++        strategy === 'sparse'
++          ? store.write(writerId, apply, { seed: 'sparse', hydrate: hydrateRows(unit) })
++          : store.write(writerId, apply)
++    }
++    captures.push({ tx, start, end: Date.now(), ms: round(nowMs() - t, 4) })
+   }
+-  console.log(JSON.stringify({ writer: writerId, captures, max_rss_mib: maxRssMiB() }))
++  console.log(
++    JSON.stringify({ writer: writerId, strategy, rate, captures, max_rss_mib: maxRssMiB() }),
++  )
++}
++
++const SLEEP = new Int32Array(new SharedArrayBuffer(4))
++
++/**
++ * The coalescing publisher (design (d)): fold everything pending into one build per round,
++ * then gc with the given retention after each publish, until told to stop.
++ */
++function publisher(dir: string, stopFile: string, retain: number, intervalFactor: number) {
++  const store = genericStore(dir)
++  const report = store.runPublisher({
++    until: () => existsSync(stopFile),
++    intervalFactor,
++    lockOpts: { timeoutMs: 600_001, staleMs: 600_000 },
++    afterPublish: (round) => {
++      const t = Date.now()
++      let gc = { removed: 0, integrityChecked: false }
++      gcWithRetry(() => (gc = store.gc({ retain })))
++      ;(round as unknown as Record<string, unknown>).gc = { ms: Date.now() - t, ...gc }
++    },
++  })
++  console.log(JSON.stringify({ rounds: report.rounds, max_rss_mib: maxRssMiB() }))
+ }
+ 
+ /** Reconcile whatever is pending, then gc with the given retention, until told to stop. */
+@@ -268,12 +355,15 @@
+     const [dir, scale, out, stop] = rest
+     reader(dir!, scale!, out!, stop!)
+   } else if (role === 'trickle-writer') {
+-    const [dir, rows, id, deadline] = rest
+-    trickleWriter(dir!, rows!, id!, Number(deadline))
++    const [dir, rows, id, deadline, strategy, rate] = rest
++    trickleWriter(dir!, rows!, id!, Number(deadline), strategy ?? 'snapshot', Number(rate ?? 0))
++  } else if (role === 'publisher') {
++    const [dir, stop, retain, factor] = rest
++    publisher(dir!, stop!, Number(retain ?? 0), Number(factor ?? 0))
+   } else if (role === 'reconciler') {
+     const [dir, stop, retain] = rest
+     reconciler(dir!, stop!, Number(retain ?? 0))
+   } else if (role !== undefined) {
+-    throw new Error('usage: w2_worker.ts writer|reader|trickle-writer|reconciler ...')
++    throw new Error('usage: w2_worker.ts writer|reader|trickle-writer|publisher|reconciler ...')
+   }
+ }
+diff -ruN '--exclude=__pycache__' a/w2v2.ts b/w2v2.ts
+--- a/w2v2.ts	2026-11-17 03:11:09.145573807 +0000
++++ b/w2v2.ts	2026-11-17 04:48:59.237672701 +0000
+@@ -4,6 +4,12 @@
+ // batches repeated; and the batch with one schema-invalid record.
+ //
+ // Usage: node w2v2.ts <base-store> --scale S1-r2 [--reps 3] [--work <dir>]
++//        [--arms SnapshotStore,DirectStore,Append] [--batches p01,p05] [--fts] [--gc]
++//        [--name w2-v2]
++//
++// Spike 2 (fsqlite v2) adds the `Append` arm: the whole batch as one operation envelope
++// for the `kb-delta` reducer, so the serial reducer applies it in line order. The FTS5
++// sidecar rebuild and the gc after each publish run only with `--fts` and `--gc`.
+ //
+ // The 4-writer runs with a concurrent reader are w2.ts (it reads v2 batches at -r2
+ // scales). Writes results/fsqlite/<scale>/w2-v2.json.
+@@ -31,7 +37,9 @@
+ import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
+ import type { DatabaseSync } from 'node:sqlite'
+ import { UV_PYTHON } from './w1.ts'
+-import { checkAgainstExpected } from './w2.ts'
++import { checkAgainstExpected, semanticDigest } from './w2.ts'
++import { KB_REDUCER } from './v2.ts'
++import { readFileSync } from 'node:fs'
+ import { genericStore } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+@@ -66,7 +74,15 @@
+ }
+ 
+ /** One batch through one arm on a fresh clone; returns timings and the clone's head. */
+-function applyOnce(base: string, rows: string, dir: string, arm: 'SnapshotStore' | 'DirectStore') {
++type Arm = 'SnapshotStore' | 'DirectStore' | 'Append'
++
++function applyOnce(
++  base: string,
++  rows: string,
++  dir: string,
++  arm: Arm,
++  extras: { fts: boolean; gc: boolean },
++) {
+   cloneStore(base, dir)
+   const snap = genericStore(dir).init()
+   const t0 = nowMs()
+@@ -81,6 +97,16 @@
+     const r = snap.reconcile(LOCK)
+     out.reconcile_ms = round(nowMs() - t1)
+     out.quarantined_envelopes = r.quarantined
++  } else if (arm === 'Append') {
++    // The parsed batch is already intermediate JSONL rows in line order.
++    const tx = snap.append('v2', KB_REDUCER, readFileSync(rows))
++    out.capture_ms = round(nowMs() - t0)
++    out.envelope_bytes = statSync(join(dir, 'tx', 'pending', `${tx}.env`)).size
++    const t1 = nowMs()
++    const r = snap.reconcile(LOCK)
++    out.reconcile_ms = round(nowMs() - t1)
++    out.quarantined_envelopes = r.quarantined
++    out.reconcile_timings = JSON.stringify(r.timings)
+   } else {
+     new DirectStore(dir, { schema: genericDdl(), schemaVersion: GENERIC_SCHEMA_VERSION }).write(
+       applyAll(rows),
+@@ -89,10 +115,14 @@
+   }
+   out.visible_ms = round(nowMs() - t0)
+   const head = snap.snapshotPath(snap.currentVersion())
+-  out.fts_rebuild_ms = buildFtsSidecar(head, join(dir, 'search-fts.sqlite')).build_ms ?? null
++  out.fts_rebuild_ms = extras.fts
++    ? (buildFtsSidecar(head, join(dir, 'search-fts.sqlite')).build_ms ?? null)
++    : null
+   const tGc = nowMs()
+-  snap.gc({ retain: 0 })
+-  out.gc_retain0_ms = round(nowMs() - tGc)
++  if (extras.gc) {
++    snap.gc({ retain: 0 })
++  }
++  out.gc_retain0_ms = extras.gc ? round(nowMs() - tGc) : null
+   return { out, head, snap }
+ }
+ 
+@@ -113,24 +143,31 @@
+     throw new Error('usage: w2v2.ts <base-store> --scale S1-r2')
+   }
+   const reps = Number(flags.reps ?? 3)
++  const arms = (flags.arms ?? 'SnapshotStore,DirectStore').split(',') as Arm[]
++  const names = flags.batches ? flags.batches.split(',') : BATCHES
++  const extras = { fts: flags.fts === 'true', gc: flags.gc === 'true' }
+   const baseKb = kbDirFor(scale)
+   const deltas = join(CORPORA_DIR, scale, 'deltas')
+   const work = join(flags.work ?? WORK_DIR, scale, 'w2v2')
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+   const results: Record<string, unknown> = {}
+-  for (const name of BATCHES) {
++  for (const name of names) {
+     const batchDir = join(deltas, name)
+     const rows = join(work, `${name}.jsonl`)
+     const parse = parseBatch(batchDir, baseKb, rows)
+     const trickle = name.startsWith('t')
+-    const arms: Record<string, unknown> = {}
+-    for (const arm of ['SnapshotStore', 'DirectStore'] as const) {
++    const armResults: Record<string, unknown> = {}
++    const digests: Record<string, Record<string, string>> = {}
++    for (const arm of arms) {
+       const runs: Record<string, number | string | null>[] = []
+-      for (let r = 0; r < (trickle ? reps : 1); r++) {
++      for (let r = 0; r < (trickle ? reps : Number(flags['batch-reps'] ?? 1)); r++) {
+         const dir = join(work, `${name}-${arm}`)
+-        const { out, head, snap } = applyOnce(base, rows, dir, arm)
+-        if (r === 0 && arm === 'SnapshotStore') {
++        const { out, head, snap } = applyOnce(base, rows, dir, arm, extras)
++        if (r === 0) {
++          digests[arm] = semanticDigest(head)
++        }
++        if (r === 0 && arm === arms[0]) {
+           const counts = snap.read((db) => ({
+             entities: (db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number }).n,
+             edges: (db.prepare('SELECT count(*) AS n FROM edge').get() as { n: number }).n,
+@@ -142,7 +179,7 @@
+               head,
+               scale,
+               join(SPIKE_DIR, 'harness', 'expected', `${scale}-p05`, 'w3.json'),
+-              join(RESULTS_DIR, scale, 'w3-after-p05.json'),
++              join(RESULTS_DIR, scale, `w3-after-p05-${arm}.json`),
+             )
+             out.w3_check_against_reference = JSON.stringify(check)
+           }
+@@ -152,7 +189,7 @@
+       }
+       const stat = (k: string): number | null =>
+         runs.every((x) => typeof x[k] === 'number') ? median(runs.map((x) => Number(x[k]))) : null
+-      arms[arm] = {
++      armResults[arm] = {
+         reps: runs.length,
+         capture_ms: stat('capture_ms'),
+         reconcile_ms: stat('reconcile_ms'),
+@@ -162,13 +199,21 @@
+         runs,
+       }
+     }
+-    const entry: Record<string, unknown> = { parse, arms }
++    const first = digests[arms[0]!] ?? {}
++    const entry: Record<string, unknown> = {
++      parse,
++      arms: armResults,
++      same_rows_across_arms: arms.every((a) =>
++        Object.keys(first).every((k) => digests[a]?.[k] === first[k]),
++      ),
++      digests,
++    }
+     if (name === 't0010-invalid') {
+       // Without the check, nothing in fsqlite or SQLite refuses the record.
+       const loose = join(work, 'invalid-unvalidated.jsonl')
+       parseBatch(batchDir, baseKb, loose, false)
+       const dir = join(work, 'invalid-unvalidated')
+-      const { snap } = applyOnce(base, loose, dir, 'SnapshotStore')
++      const { snap } = applyOnce(base, loose, dir, 'SnapshotStore', extras)
+       const invalidId = (parse as { quarantined?: { id: string }[] }).quarantined?.[0]?.id ?? ''
+       entry.without_validation = snap.read((db) => ({
+         invalid_record_loaded:
+@@ -184,11 +229,13 @@
+   }
+   rmSync(work, { recursive: true, force: true })
+   console.log(
+-    writeResult(scale, 'w2-v2', {
++    writeResult(scale, flags.name ?? 'w2-v2', {
+       workflow: 'W2 v2 batches, one writer in line order (both arms)',
+       base_store: base,
+       deltas,
+-      gc: 'gc({ retain: 0 }) after each publish',
++      gc: extras.gc ? 'gc({ retain: 0 }) after each publish' : 'not run',
++      fts_sidecar: extras.fts ? 'rebuilt after each publish' : 'not rebuilt',
++      arms,
+       results,
+     }),
+   )
+diff -ruN '--exclude=__pycache__' a/w3.ts b/w3.ts
+--- a/w3.ts	2026-11-17 03:05:15.996674572 +0000
++++ b/w3.ts	2026-11-17 04:46:29.127804212 +0000
+@@ -29,6 +29,7 @@
+ } from './common.ts'
+ import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
+ import { buildFtsSidecar } from './fts.ts'
++import { v2StoreOptions } from './v2.ts'
+ import { KbQueries } from './queries.ts'
+ import type { Params, QueryOptions } from './queries.ts'
+ 
+@@ -74,6 +75,8 @@
+     schema: genericDdl(),
+     schemaVersion: GENERIC_SCHEMA_VERSION,
+     conflictPolicy: GENERIC_POLICY,
++    // Spike 2: reducers, the missing-row policy, and the closure, from the environment.
++    ...v2StoreOptions(),
+   })
+ }
+ 

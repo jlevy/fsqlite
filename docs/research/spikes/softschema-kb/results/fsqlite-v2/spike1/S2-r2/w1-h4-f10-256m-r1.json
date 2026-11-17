@@ -1,0 +1,246 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S2-r2",
+  "workflow": "w1-h4-f10-256m-r1",
+  "recorded_at": "2026-11-17T05:24:19.291Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 13806,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike1/kbscratch/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "kb_bytes": 1152109067,
+  "parse": {
+    "reused": true,
+    "seconds": null,
+    "parser": "parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order",
+    "validation": "not run"
+  },
+  "intermediate_bytes": 1372272643,
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 68.613,
+    "max_rss_mib": 1087.4,
+    "exit": 0,
+    "report": {
+      "arm": "SnapshotStore",
+      "route": "init(), 104 envelopes of 20000 rows, one reconcile",
+      "batch": 20000,
+      "captures": 104,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 210401,
+        "node": 238957,
+        "doc": 224802,
+        "entity": 238957,
+        "edge": 1155758,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 93,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "build": null,
+      "phases": {
+        "init_ddl_ms": 144.279,
+        "decode_ms": 2510.776,
+        "transform_ms": 1461.113,
+        "ingest_ms": 10272.51,
+        "capture_overhead_ms": 8801.695,
+        "capture_note": "per envelope: copy the head, session changeset, envelope files",
+        "reconcile_ms": 40758.797,
+        "reconcile_note": "copy head, apply changesets, quick_check, fsync, publish",
+        "quick_check_warm_ms": 2202.325,
+        "ingest_through_durable_ms": 63590.884
+      },
+      "total_ms": 66101.66,
+      "count_problems": [],
+      "validation": "softschema validation not run",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+        "v2_spike1": {
+          "control_without_derived": true,
+          "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+          "build_cache_kib": 262144,
+          "analysis_limit": 0,
+          "rebuild_above_ratio": 0.5
+        }
+      },
+      "snapshot": "<scratch>/research-c/spike1/kbscratch/fsqlite-spike/S2-r2/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 1985261568,
+      "max_rss_mib": 1087.4
+    },
+    "arm": "SnapshotStore",
+    "ingest_through_durable_seconds": 66.102,
+    "total_with_parse_seconds": null,
+    "store_bytes_before_gc": 3196675624,
+    "gc": {
+      "retain": 0,
+      "ms": 4283.957,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true
+    },
+    "store_bytes": 3196565032,
+    "snapshot_bytes": 1985261568,
+    "fts_sidecar": "none: the FTS5 index is a derived object inside the generation"
+  }
+}

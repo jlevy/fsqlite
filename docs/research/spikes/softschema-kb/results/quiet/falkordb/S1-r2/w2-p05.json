@@ -1,0 +1,296 @@
+{
+ "arm": "falkordb",
+ "arm_label": "FalkorDB (paraverse as built; incremental prototype in W2)",
+ "scale": "S1-r2",
+ "workflow": "w2-p05",
+ "description": "p05: delta2.apply_batch plus a full paraverse rebuild (as built), and the incremental prototype on a fresh server",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpu_count": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "memory_bytes": 16869134336,
+  "os": "Linux 6.18.44-fc-v553",
+  "python": "3.13.18",
+  "filesystems": [
+   {
+    "path": "<scratch>/kb-corpora/S1-r2",
+    "device": "/dev/vda",
+    "type": "ext4",
+    "available_kb": 14543540
+   },
+   {
+    "path": "<scratch>/quiet/fdb/data/S1-r2",
+    "device": "/dev/vda",
+    "type": "ext4",
+    "available_kb": 14543540
+   }
+  ]
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "falkordb": "1.7.1",
+  "falkordblite": "0.10.0",
+  "redis_py": "8.1.0",
+  "falkordb_module": "4.18.3",
+  "redis_server": "8.6.2",
+  "softschema": "0.8.1",
+  "paraverse": "attic/paraverse db/src, unmodified, its uv.lock environment"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "incremental_counts_match_rebuild": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 1
+  },
+  "incremental_durable_s": {
+   "median": 2.102,
+   "min": 2.102,
+   "max": 2.102,
+   "n": 1
+  },
+  "incremental_parse_and_map_s": {
+   "median": 0.81,
+   "min": 0.81,
+   "max": 0.81,
+   "n": 1
+  },
+  "incremental_visible_s": {
+   "median": 1.535,
+   "min": 1.535,
+   "max": 1.535,
+   "n": 1
+  },
+  "incremental_w3_match_rebuild": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 1
+  },
+  "rebuild_durable_s": {
+   "median": 34.893,
+   "min": 34.893,
+   "max": 34.893,
+   "n": 1
+  },
+  "rebuild_kb_build_s": {
+   "median": 2.617,
+   "min": 2.617,
+   "max": 2.617,
+   "n": 1
+  },
+  "rebuild_loader_peak_rss_gb": {
+   "median": 1.158,
+   "min": 1.158,
+   "max": 1.158,
+   "n": 1
+  },
+  "rebuild_server_peak_rss_with_forks_gb": {
+   "median": 0.69,
+   "min": 0.69,
+   "max": 0.69,
+   "n": 1
+  },
+  "rebuild_total_durable_s": {
+   "median": 37.51,
+   "min": 37.51,
+   "max": 37.51,
+   "n": 1
+  },
+  "rebuild_total_visible_s": {
+   "median": 36.92,
+   "min": 36.92,
+   "max": 36.92,
+   "n": 1
+  },
+  "rebuild_visible_s": {
+   "median": 34.303,
+   "min": 34.303,
+   "max": 34.303,
+   "n": 1
+  }
+ },
+ "earlier_contended": {
+  "source": "results/falkordb/S1-r2/w2.json",
+  "values": {
+   "rebuild_total_visible_s": 38.988,
+   "rebuild_visible_s": 36.217,
+   "rebuild_durable_s": 36.831,
+   "rebuild_total_durable_s": 39.602,
+   "incremental_visible_s": 1.547,
+   "incremental_durable_s": 2.152
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T09:02:29Z",
+   "wall_s": 61.013,
+   "load_before": [
+    0.97,
+    1.19,
+    1.33
+   ],
+   "load_after": [
+    0.97,
+    1.15,
+    1.31
+   ],
+   "load1_max_during": 1.07,
+   "foreign_cpu_max": 0.08,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 15.01,
+   "disk_free_gb_min": 14.8,
+   "load_samples": [
+    {
+     "t": 1794906159.2,
+     "load1": 0.97,
+     "own_cpu": 1.002,
+     "foreign_cpu": 0.021
+    },
+    {
+     "t": 1794906169.2,
+     "load1": 0.98,
+     "own_cpu": 1.001,
+     "foreign_cpu": 0.018
+    },
+    {
+     "t": 1794906179.2,
+     "load1": 0.98,
+     "own_cpu": 1.017,
+     "foreign_cpu": 0.014
+    },
+    {
+     "t": 1794906189.2,
+     "load1": 1.07,
+     "own_cpu": 1.181,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794906199.2,
+     "load1": 1.06,
+     "own_cpu": 0.161,
+     "foreign_cpu": 0.02
+    },
+    {
+     "t": 1794906209.2,
+     "load1": 0.97,
+     "own_cpu": 0.137,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794906210.2,
+     "load1": 0.97,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.08
+    }
+   ],
+   "compare": {
+    "w3-after-p05-rebuild.json": "MATCH: 124 ok, 0 differ",
+    "w3-after-p05.json": "MATCH: 124 ok, 0 differ"
+   },
+   "discarded_attempts": [],
+   "metrics": {
+    "rebuild_kb_build_s": 2.617,
+    "rebuild_visible_s": 34.303,
+    "rebuild_total_visible_s": 36.92,
+    "rebuild_durable_s": 34.893,
+    "rebuild_total_durable_s": 37.51,
+    "rebuild_loader_peak_rss_gb": 1.158,
+    "rebuild_server_peak_rss_with_forks_gb": 0.69,
+    "incremental_parse_and_map_s": 0.81,
+    "incremental_visible_s": 1.535,
+    "incremental_durable_s": 2.102,
+    "incremental_counts_match_rebuild": 1,
+    "incremental_w3_match_rebuild": 1
+   },
+   "detail": {
+    "machine": {
+     "cpu_count": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "memory_bytes": 16869134336,
+     "os": "Linux 6.18.44-fc-v553",
+     "python": "3.13.18",
+     "filesystems": [
+      {
+       "path": "<scratch>/kb-corpora/S1-r2",
+       "device": "/dev/vda",
+       "type": "ext4",
+       "available_kb": 14543540
+      },
+      {
+       "path": "<scratch>/quiet/fdb/data/S1-r2",
+       "device": "/dev/vda",
+       "type": "ext4",
+       "available_kb": 14543540
+      }
+     ]
+    },
+    "software": {
+     "falkordb": "1.7.1",
+     "falkordblite": "0.10.0",
+     "redis": "8.1.0",
+     "softschema": "0.8.1",
+     "pyyaml": "6.0.3",
+     "psutil": "7.2.2"
+    },
+    "batch": {
+     "batch": "p05",
+     "changes": 2346,
+     "counts": {
+      "delete": 47,
+      "merge": 23,
+      "new": 1877,
+      "update_refs": 199,
+      "update_value": 200
+     },
+     "paraverse_as_built": {
+      "read_kb_s": 20.96,
+      "load_graph_s": 13.343,
+      "visible_s": 34.303,
+      "durable_s": 34.893,
+      "loader_peak_rss": 1157783552,
+      "server_peak_rss_with_children": 689655808,
+      "kb_build_s": 2.617,
+      "total_visible_s": 36.92,
+      "counts_match_post_batch_stats": true,
+      "w3_matches_oracle": true,
+      "oracle_compare_last_line": "OK      v2.table.deep_largest_kind"
+     },
+     "post_batch": {
+      "ops": 2346,
+      "nodes": 48734,
+      "edges": 235470,
+      "seconds": 2.61
+     },
+     "incremental_prototype": {
+      "ops": 2346,
+      "parse_and_map_s": 0.81,
+      "steps_s": {
+       "drop_origin_edges_s": 0.096,
+       "upsert_nodes_s": 0.35,
+       "create_edges_s": 0.193,
+       "delete_s": 0.025,
+       "merge_s": 0.06
+      },
+      "visible_s": 1.535,
+      "durable_s": 2.102,
+      "counts_match_rebuild": true,
+      "w3_match_rebuild": true,
+      "w3_differences": [],
+      "w3_matches_oracle": true,
+      "oracle_differences": []
+     }
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

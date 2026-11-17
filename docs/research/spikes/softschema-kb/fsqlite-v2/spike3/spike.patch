@@ -1,0 +1,544 @@
+diff -ruN a/common.ts b/common.ts
+--- a/common.ts	2026-11-17 03:07:40.146461225 +0000
++++ b/common.ts	2026-11-17 05:06:33.633828314 +0000
+@@ -17,13 +17,24 @@
+ import { DatabaseSync } from 'node:sqlite'
+ 
+ export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+-export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
+-export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
+-/** The private scratch directory, required so that no store lands in a shared default. */
+-export const SCRATCH = requiredScratch()
++// Spike 3 copy: the package copy beside this tree, results under results/fsqlite-v2/spike3,
++// and the vendored S0 KB read from the repository checkout.
++export const FSQLITE_SRC = resolve(SPIKE_DIR, '../package/src/index.ts')
++export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite-v2', 'spike3')
++export const SCRATCH = process.env.KB_SCRATCH ?? resolve(SPIKE_DIR, '../kbscratch')
+ export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
+ export const WORK_DIR = join(SCRATCH, 'fsqlite-spike')
+-export const S0_KB = resolve(SPIKE_DIR, '../../../../attic/paraverse/vendor/universe2026-md/kb')
++export const S0_KB =
++  process.env.KB_S0_KB ?? '/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb'
++
++/**
++ * Spike 3: extra gc options for every maintenance call the workflows make, from the
++ * KB_GC_OPTS environment variable (JSON), for example
++ * {"verifyMaxAgeMs":60000,"collectOn":"quick"}. Empty means the package defaults.
++ */
++export const GC_OPTS: Record<string, unknown> = process.env.KB_GC_OPTS
++  ? (JSON.parse(process.env.KB_GC_OPTS) as Record<string, unknown>)
++  : {}
+ 
+ /** The KB directory for a scale: S0 is the vendored KB, others come from the corpus dir. */
+ export function kbDirFor(scale: string): string {
+diff -ruN a/fsq.ts b/fsq.ts
+--- a/fsq.ts	2026-11-17 00:35:06.213994286 +0000
++++ b/fsq.ts	2026-11-17 05:06:33.633392843 +0000
+@@ -1,2 +1,3 @@
+ // The spike uses fsqlite only through its public API, imported from the package source.
+-export * from '../../../../../packages/fsqlite/src/index.ts'
++// Spike 3 copy: the fsqlite v2 prototype (maintenance and publication) in ../../package.
++export * from '../../package/src/index.ts'
+diff -ruN a/run.sh b/run.sh
+--- a/run.sh	2026-11-17 01:25:18.978370919 +0000
++++ b/run.sh	2026-11-17 05:07:42.508028188 +0000
+@@ -9,7 +9,7 @@
+ 
+ SCALE=${1:?usage: run.sh <scale>}
+ HERE=$(cd "$(dirname "$0")" && pwd)
+-SCRATCH=${KB_SCRATCH:?set KB_SCRATCH to a private scratch directory}
++SCRATCH=${KB_SCRATCH:-$(cd "$(dirname "$0")/../../kbscratch" && pwd)}
+ WORK=$SCRATCH/fsqlite-spike/$SCALE
+ DELTAS=$SCRATCH/kb-corpora/$SCALE/deltas
+ NODE=(node --disable-warning=ExperimentalWarning)
+diff -ruN a/run_spike3.sh b/run_spike3.sh
+--- a/run_spike3.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike3.sh	2026-11-17 05:31:11.181383218 +0000
+@@ -0,0 +1,50 @@
++#!/usr/bin/env bash
++# Spike 3 (fsqlite v2: maintenance and publication): the workflows that test its four
++# hypotheses, at one scale, against the package copy in ../../package.
++#
++# Usage: fsqlite/run_spike3.sh S0|S1|S2
++#
++# Results go to results/fsqlite-v2/spike3/<scale>/. Working stores go to
++# $KB_SCRATCH/fsqlite-spike/<scale> and are deleted at the end.
++set -euo pipefail
++
++SCALE=${1:?usage: run_spike3.sh <scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}; export KB_SCRATCH
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++RESULTS=$HERE/../results/fsqlite-v2/spike3/$SCALE
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++
++# H3: W1 through both routes; w1.ts runs gc({ retain: 0 }) and records store_over_head.
++"${NODE[@]}" w1.ts --scale "$SCALE"
++# Every W3 run must still match the oracle.
++"${NODE[@]}" w3.ts "$WORK/store-direct" --scale "$SCALE"
++python3 "$HERE/../harness/compare.py" "$HERE/../harness/expected/$SCALE/w3.json" "$RESULTS/w3.json" \
++  | tail -1 | tee "$RESULTS/w3-compare.txt"
++
++# H1: DirectStore W2 with 4 contending writers and gc({ retain: 0 }) after every write,
++# with the package defaults (a full scrub of the pinned head on every collecting gc).
++"${NODE[@]}" w2.ts "$WORK/store-direct" --scale "$SCALE" --deltas "$DELTAS" --strategy direct
++
++# H2: the trickle, three gc configurations. Defaults (scrub every gc); the gate's quick
++# records pin gc and a full scrub runs once a minute; and the design's literal rule (pin
++# the newest full record, scrub once a minute), which collects nothing between scrubs and
++# so keeps one head per publish: S0 only (trickle.ts refuses it above S0 for disk).
++# S2 runs through run_spike3_s2.sh instead of this script.
++TRICKLE=(trickle.ts "$WORK/store-direct" --scale "$SCALE" --delta "$DELTAS/p20"
++  --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-3}")
++"${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle
++KB_GC_OPTS='{"verifyMaxAgeMs":60000,"collectOn":"quick"}' \
++  "${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle-quick
++if [ "$SCALE" = S0 ]; then
++  KB_GC_OPTS='{"verifyMaxAgeMs":60000,"collectOn":"full"}' \
++    "${NODE[@]}" "${TRICKLE[@]}" --name w2-trickle-full-record
++fi
++
++# H4: W6, including the four crash kill points (S0 and S1; S2 skips them, as round 1 did).
++case "$SCALE" in S0 | S1) ;; *) rm -f "$WORK/rows.jsonl" ;; esac
++"${NODE[@]}" w6.ts --scale "$SCALE"
++
++rm -rf "$WORK"
+diff -ruN a/run_spike3_s2.sh b/run_spike3_s2.sh
+--- a/run_spike3_s2.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_spike3_s2.sh	2026-11-17 05:30:14.529199025 +0000
+@@ -0,0 +1,40 @@
++#!/usr/bin/env bash
++# Spike 3 at S2, limited by this VM's free disk: W1 through DirectStore only (the
++# SnapshotStore route needs about 5 GB more), the W3 check, one full scrub, the trickle
++# through the f1.0 arm and the v2 arm on the same store, and W2 DirectStore p01 through
++# both arms. Run it only with at least 6 GB free; it deletes its stores at the end.
++#
++# Usage: fsqlite/run_spike3_s2.sh <f1.0 arm fsqlite dir>
++set -euo pipefail
++BASE_ARM=${1:?usage: run_spike3_s2.sh <f1.0 arm fsqlite dir>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../kbscratch" && pwd)}; export KB_SCRATCH
++WORK=$KB_SCRATCH/fsqlite-spike/S2
++DELTAS=$KB_SCRATCH/kb-corpora/S2/deltas
++RESULTS=$HERE/../results/fsqlite-v2/spike3/S2
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++df -h "$KB_SCRATCH" | tail -1
++
++"${NODE[@]}" w1.ts --scale S2 --routes direct
++rm -f "$WORK/rows.jsonl"
++"${NODE[@]}" w3.ts "$WORK/store-direct" --scale S2
++python3 "$HERE/../harness/compare.py" "$HERE/../harness/expected/S2/w3.json" "$RESULTS/w3.json" \
++  | tail -1 | tee "$RESULTS/w3-compare.txt"
++# A scrub within the hour: the v2 trickle then pins the gate's quick records and keeps
++# this full-verified generation, which the clones share by hard link.
++"${NODE[@]}" --input-type=module -e "
++  const { pathToFileURL } = await import('node:url'); const [here, work] = process.argv.slice(1)
++  const { genericStore } = await import(pathToFileURL(here + '/w3.ts').href); const t = performance.now()
++  const r = genericStore(work + '/store-direct').init().verify(); console.log(JSON.stringify({ scrub_ms: performance.now() - t, ...r }))" "$HERE" "$WORK" | tee "$RESULTS/scrub.json"
++
++TRICKLE=(--scale S2 --delta "$DELTAS/p20" --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-2}")
++(cd "$BASE_ARM" && KB_SCRATCH="$KB_SCRATCH/base" "${NODE[@]}" trickle.ts "$WORK/store-direct" "${TRICKLE[@]}" --name w2-trickle)
++KB_GC_OPTS='{"verifyMaxAgeMs":3600000,"collectOn":"quick"}' \
++  "${NODE[@]}" trickle.ts "$WORK/store-direct" "${TRICKLE[@]}" --name w2-trickle-quick
++
++mkdir -p "$WORK/deltas-p01" && ln -sfn "$DELTAS/p01" "$WORK/deltas-p01/p01"
++(cd "$BASE_ARM" && KB_SCRATCH="$KB_SCRATCH/base" "${NODE[@]}" w2.ts "$WORK/store-direct" --scale S2 \
++  --deltas "$WORK/deltas-p01" --strategy direct)
++"${NODE[@]}" w2.ts "$WORK/store-direct" --scale S2 --deltas "$WORK/deltas-p01" --strategy direct
++rm -rf "$WORK" "$KB_SCRATCH/base"
+diff -ruN a/trickle.ts b/trickle.ts
+--- a/trickle.ts	2026-11-17 01:18:03.429878546 +0000
++++ b/trickle.ts	2026-11-17 05:17:21.847556336 +0000
+@@ -15,6 +15,7 @@
+ import type { DatabaseSync } from 'node:sqlite'
+ import { DirectStore } from './fsq.ts'
+ import {
++  GC_OPTS,
+   SPIKE_DIR,
+   WORK_DIR,
+   cloneStore,
+@@ -95,13 +96,16 @@
+         const head = snap.snapshotPath(snap.currentVersion())
+         const fts = buildFtsSidecar(head, sidecar)
+         const tGc = nowMs()
+-        snap.gc({ retain: 0 })
++        const gc = snap.gc({ retain: 0, ...GC_OPTS })
+         runs.push({
+           capture_ms: round(captureMs),
+           reconcile_ms: round(reconcileMs),
+           visible_ms: round(visible),
+           fts_rebuild_ms: fts.build_ms ?? 0,
+           gc_ms: round(nowMs() - tGc),
++          gc_verify_ms: gc.timings.verify_ms,
++          gc_unlink_ms: gc.timings.unlink_ms,
++          gc_integrity_checked: gc.integrityChecked ? 1 : 0,
+         })
+       }
+       const stat = (k: string): number => median(runs.map((x) => x[k] ?? Number.NaN))
+@@ -115,6 +119,8 @@
+         records_per_s: round((size * 1000) / stat('visible_ms'), 2),
+         fts_rebuild_ms_median: stat('fts_rebuild_ms'),
+         gc_retain0_ms_median: stat('gc_ms'),
++        gc_unlink_ms_median: stat('gc_unlink_ms'),
++        gc_scrubs: runs.filter((x) => x.gc_integrity_checked === 1).length,
+         runs,
+       }
+     }
+@@ -152,7 +158,15 @@
+   const recOut = await reconciler
+   const w = JSON.parse(writerOut) as { captures: { tx: string; start: number; end: number }[] }
+   const r = JSON.parse(recOut) as {
+-    rounds: { pending: string[]; published: number; reconcile_ms: number; gc_ms: number }[]
++    rounds: {
++      pending: string[]
++      published: number
++      reconcile_ms: number
++      gc_ms: number
++      gc_integrity_checked: boolean
++      gc_timings?: { verify_ms: number; locked_ms: number; unlink_ms: number }
++      generations: number
++    }[]
+   }
+   const publishedAt = new Map<string, number>()
+   for (const round_ of r.rounds) {
+@@ -176,6 +190,11 @@
+     records_per_reconcile_median: median(r.rounds.map((x) => x.pending.length)),
+     reconcile_ms_median: median(r.rounds.map((x) => x.reconcile_ms)),
+     gc_retain0_ms_median: median(r.rounds.map((x) => x.gc_ms)),
++    round_ms_median: median(r.rounds.map((x) => x.reconcile_ms + x.gc_ms)),
++    gc_scrubs: r.rounds.filter((x) => x.gc_integrity_checked).length,
++    gc_verify_ms_median: median(r.rounds.map((x) => x.gc_timings?.verify_ms ?? Number.NaN)),
++    gc_unlink_ms_median: median(r.rounds.map((x) => x.gc_timings?.unlink_ms ?? Number.NaN)),
++    generations_max: Math.max(...r.rounds.map((x) => x.generations)),
+     visibility_delay_ms: {
+       p50: round(percentile(delays, 50)),
+       p95: round(percentile(delays, 95)),
+@@ -192,6 +211,17 @@
+   if (!base || !flags.delta) {
+     throw new Error('usage: trickle.ts <base-store> --scale S0 --delta <delta-dir>')
+   }
++  if (GC_OPTS.collectOn === 'full' && Number(GC_OPTS.verifyMaxAgeMs ?? 0) > 0 && scale !== 'S0') {
++    // Pinned to a full record, gc collects nothing between scrubs, so every publish adds a
++    // head-sized generation (147 at S0 in 20 s). Above S0 that exceeds this VM's free disk.
++    console.log(
++      writeResult(scale, flags.name ?? 'w2-trickle', {
++        gc_opts: GC_OPTS,
++        skipped: 'one head per publish is retained between scrubs; exceeds free disk above S0',
++      }),
++    )
++    return
++  }
+   const work = join(flags.work ?? WORK_DIR, scale, 'trickle')
+   rmSync(work, { recursive: true, force: true })
+   mkdirSync(work, { recursive: true })
+@@ -209,12 +239,12 @@
+   const result = {
+     workflow: 'W2 trickle (C18)',
+     delta: flags.delta,
+-    gc: 'gc({ retain: 0 }) after every publish',
++    gc: `gc({ retain: 0, ...${JSON.stringify(GC_OPTS)} }) after every publish`,
+     batches: batches(base, rows, work, Number(flags.reps ?? 3), join(work, 'search-fts.sqlite')),
+     sustained: await sustained(base, rows, work, Number(flags.seconds ?? 20)),
+   }
+   rmSync(work, { recursive: true, force: true })
+-  console.log(writeResult(scale, 'w2-trickle', result))
++  console.log(writeResult(scale, flags.name ?? 'w2-trickle', { gc_opts: GC_OPTS, ...result }))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN a/w1.ts b/w1.ts
+--- a/w1.ts	2026-11-17 03:08:26.557581109 +0000
++++ b/w1.ts	2026-11-17 05:07:16.305974803 +0000
+@@ -11,6 +11,7 @@
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
++  GC_OPTS,
+   SPIKE_DIR,
+   WORK_DIR,
+   isMain,
+@@ -129,7 +130,7 @@
+     // SnapshotStore the archived envelopes stay (gc never prunes tx/applied).
+     const handle = genericStore(store).init()
+     const tGc = nowMs()
+-    const gc = handle.gc({ retain: 0 })
++    const gc = handle.gc({ retain: 0, ...GC_OPTS })
+     const gcMs = nowMs() - tGc
+     const entry: Record<string, unknown> = {
+       ...load,
+@@ -142,6 +143,7 @@
+       gc: { retain: 0, ms: round(gcMs), ...gc },
+       store_bytes: dirBytes(store),
+       snapshot_bytes: statSync(snapshot).size,
++      store_over_head: round(dirBytes(store) / statSync(snapshot).size, 4),
+       breakdown: route === 'direct' ? sizeBreakdown(snapshot) : undefined,
+     }
+     if (route === 'direct') {
+diff -ruN a/w2.ts b/w2.ts
+--- a/w2.ts	2026-11-17 03:47:21.114002383 +0000
++++ b/w2.ts	2026-11-17 05:07:42.499546067 +0000
+@@ -23,6 +23,7 @@
+ import { join } from 'node:path'
+ import { DatabaseSync } from 'node:sqlite'
+ import {
++  GC_OPTS,
+   RESULTS_DIR,
+   SPIKE_DIR,
+   WORK_DIR,
+@@ -585,7 +586,7 @@
+     )
+     batches.push(b)
+   }
+-  const workflow = strategy === 'direct' ? 'w2-direct' : 'w2'
++  const workflow = flags.name ?? (strategy === 'direct' ? 'w2-direct' : 'w2')
+   console.log(
+     writeResult(scale, workflow, {
+       base_store: base,
+@@ -593,6 +594,7 @@
+       writers,
+       envelopes_per_writer: envelopes,
+       strategy,
++      gc_opts: GC_OPTS,
+       batches,
+     }),
+   )
+diff -ruN a/w2_worker.ts b/w2_worker.ts
+--- a/w2_worker.ts	2026-11-17 03:11:09.077573810 +0000
++++ b/w2_worker.ts	2026-11-17 05:07:16.277915523 +0000
+@@ -11,7 +11,7 @@
+ import type { DatabaseSync } from 'node:sqlite'
+ import { DirectStore, FsqliteError } from './fsq.ts'
+ import type { ReadLease } from './fsq.ts'
+-import { forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
++import { GC_OPTS, forEachRowSync, isMain, maxRssMiB, nowMs, round } from './common.ts'
+ import type { KbRow, NodeRow } from './common.ts'
+ import { GENERIC_SCHEMA_VERSION, GenericLoader, genericDdl } from './mapping.ts'
+ import { KbQueries } from './queries.ts'
+@@ -72,6 +72,7 @@
+     tx?: string | null
+     gc_ms?: number
+     gcRetries?: number | string
++    gc?: Record<string, unknown>
+   }[] = []
+   const t0 = nowMs()
+   for (let i = 0; i < units.length; i += perEnvelope) {
+@@ -95,9 +96,15 @@
+       // during its full integrity check. A later gc collects whatever this one left.
+       const tGc = nowMs()
+       let gcRetries: number | string
++      let gcResult: Record<string, unknown> | undefined
+       try {
+         gcRetries = gcWithRetry(
+-          () => direct.gc({ retain: 0, lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } }),
++          () =>
++            (gcResult = direct.gc({
++              retain: 0,
++              lockOpts: { timeoutMs: 600_001, staleMs: 600_000 },
++              ...GC_OPTS,
++            }) as unknown as Record<string, unknown>),
+           3,
+         )
+       } catch (error) {
+@@ -106,7 +113,23 @@
+         }
+         gcRetries = 'refused 3 times'
+       }
+-      captures.push({ ms, units: batch.length, version, gc_ms: round(nowMs() - tGc), gcRetries })
++      captures.push({
++        ms,
++        units: batch.length,
++        version,
++        gc_ms: round(nowMs() - tGc),
++        gcRetries,
++        ...(gcResult === undefined
++          ? {}
++          : {
++              gc: {
++                removed: gcResult.removed,
++                integrityChecked: gcResult.integrityChecked,
++                verified: gcResult.verified,
++                timings: gcResult.timings,
++              },
++            }),
++      })
+     } else {
+       const tx = snapshot.write(writerId, apply)
+       captures.push({ ms: round(nowMs() - t), units: batch.length, tx })
+@@ -242,8 +265,10 @@
+     const start = Date.now()
+     const result = store.reconcile({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+     const published = Date.now()
+-    let gc = { removed: 0, integrityChecked: false }
+-    gcWithRetry(() => (gc = store.gc({ retain })))
++    let gc: Record<string, unknown> = { removed: 0, integrityChecked: false }
++    gcWithRetry(
++      () => (gc = store.gc({ retain, ...GC_OPTS }) as unknown as Record<string, unknown>),
++    )
+     rounds.push({
+       pending,
+       start,
+@@ -252,6 +277,9 @@
+       gc_ms: Date.now() - published,
+       gc_removed: gc.removed,
+       gc_integrity_checked: gc.integrityChecked,
++      gc_verified: gc.verified,
++      gc_timings: gc.timings,
++      generations: store.snapshotVersions().length,
+       version: result.published,
+       applied: result.applied,
+     })
+diff -ruN a/w6.ts b/w6.ts
+--- a/w6.ts	2026-11-17 01:19:50.564734352 +0000
++++ b/w6.ts	2026-11-17 05:23:40.244557907 +0000
+@@ -4,14 +4,15 @@
+ // Usage: node w6.ts --scale S0 [--work <dir>]
+ //
+ // Uses the W1 store and intermediate rows under <work>/<scale>/. The crash tests kill a
+-// fresh import with SIGKILL partway through, then follow the documented recovery: run
+-// validate, remove the abandoned publish.lock only after confirming no client remains
+-// (the kill guarantees it here), run repair, validate again, and rerun the import.
++// fresh import with SIGKILL partway through, then follow the v2 recovery: validate,
++// repair (which breaks a lease whose local owner is gone, with no operator step),
++// validate again, and finish (reconcile the surviving envelopes, or rerun the import).
+ 
+ import { spawn, spawnSync } from 'node:child_process'
+ import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+ import { join } from 'node:path'
+ import { DirectStore, SnapshotStore } from './fsq.ts'
++import { lockStatus, pidAlive } from '../../package/src/lock.ts'
+ import { SPIKE_DIR, WORK_DIR, isMain, nowMs, parseArgs, round, writeResult } from './common.ts'
+ import { GENERIC_POLICY, GENERIC_SCHEMA_VERSION, genericDdl } from './mapping.ts'
+ import { NODE, dirBytes } from './w1.ts'
+@@ -19,7 +20,7 @@
+ import { READER_PRAGMAS, genericStore, openReader, queryInstances } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+-const FSQLITE_CLI = join(SPIKE_DIR, '../../../../packages/fsqlite/src/cli/bin.ts')
++const FSQLITE_CLI = join(SPIKE_DIR, '../package/src/cli/bin.ts')
+ 
+ /** Every file in the store, grouped by its role in the f1.0 layout. */
+ function artifacts(dir: string): Record<string, unknown> {
+@@ -159,6 +160,19 @@
+ 
+ type CrashPhase = 'direct-build' | 'capture' | 'reconcile-build' | 'publication'
+ 
++/** Committed generation numbers in a store, ascending. */
++function listGenerations(dir: string): number[] {
++  try {
++    return readdirSync(join(dir, 'snapshots'))
++      .map((f) => /^([0-9]+)\.fsqlite\.sqlite$/.exec(f)?.[1])
++      .filter((x): x is string => x !== undefined)
++      .map(Number)
++      .sort((a, b) => a - b)
++  } catch {
++    return []
++  }
++}
++
+ /** What to look for before killing: each phase leaves its own transient on disk. */
+ function killPoint(dir: string, phase: CrashPhase, killAtBytes: number): string | null {
+   const snaps = join(dir, 'snapshots')
+@@ -200,9 +214,9 @@
+ }
+ 
+ /**
+- * Kill an import in one phase, then follow the documented recovery: validate, remove an
+- * abandoned publish.lock only once no client can resume (the SIGKILL guarantees it),
+- * repair, validate, and finish (reconcile the surviving envelopes, or rerun the import).
++ * Kill an import in one phase, then follow the v2 recovery: validate, repair (no manual
++ * lock step: the lease of a dead local owner is broken), validate, and finish (reconcile
++ * the surviving envelopes, or rerun the import).
+  */
+ function crash(rows: string, dir: string, phase: CrashPhase, killAtBytes: number) {
+   const route = phase === 'direct-build' ? 'direct' : 'snapshot'
+@@ -233,7 +247,14 @@
+       continue
+     }
+     const killMs = round(nowMs() - t0)
+-    return { attempt, killMs, killedAt, ...recover(rows, dir, route) }
++    // Recovery starts once the crashed process is gone. A SIGKILL during heavy I/O can
++    // leave it in uninterruptible sleep for a moment, and until then its lease is live.
++    const tGone = nowMs()
++    while (child.pid !== undefined && pidAlive(child.pid) && nowMs() - tGone < 60_000) {
++      // spin: this poll is synchronous on purpose, so the child stays an unreaped zombie
++    }
++    const ownerGoneAfterMs = round(nowMs() - tGone)
++    return { attempt, killMs, killedAt, owner_gone_after_ms: ownerGoneAfterMs, ...recover(rows, dir, route) }
+   }
+   return { phase, outcome: 'kill window missed in 5 attempts' }
+ }
+@@ -257,16 +278,17 @@
+   const steps: string[] = ['validate']
+   const t = nowMs()
+   const lockPresent = existsSync(join(dir, 'publish.lock'))
+-  if (lockPresent) {
+-    rmSync(join(dir, 'publish.lock'), { recursive: true, force: true })
+-    steps.push('confirm no client can resume, then remove the abandoned publish.lock (manual)')
+-  }
+-  const repair = handle.repair()
++  const lockBefore = lockStatus(join(dir, 'publish.lock'), 600_000)
++  const generationsBefore = listGenerations(dir)
++  const headBefore = handle.currentVersion()
++  // The spike's lease is 10 minutes; recovery must not wait it out.
++  const repair = handle.repair({ lockOpts: { timeoutMs: 600_001, staleMs: 600_000 } })
+   steps.push('repair')
+   const validateAfter = handle.validate()
+   steps.push('validate')
+   const recoveryMs = round(nowMs() - t)
+   const versionAfterRepair = handle.currentVersion()
++  const generationsAfter = listGenerations(dir)
+   const t2 = nowMs()
+   let finish: Record<string, unknown>
+   if (route === 'snapshot') {
+@@ -276,7 +298,26 @@
+     const counts = s.read(
+       (db) => db.prepare('SELECT count(*) AS n FROM entity').get() as { n: number },
+     )
+-    finish = { reconcile: result, pending_after: s.pendingTxns().length, entities: counts.n }
++    // Exactly once: every envelope the killed import captured is in the head ledger once.
++    const envelopes = ['applied', 'pending', 'quarantine'].flatMap((d) => {
++      try {
++        return readdirSync(join(dir, 'tx', d)).filter((f) => f.endsWith('.txn'))
++      } catch {
++        return []
++      }
++    })
++    const ledger = s.read((db) =>
++      (db.prepare('SELECT tx_id FROM applied_tx').all() as { tx_id: string }[]).map((r) => r.tx_id),
++    )
++    finish = {
++      reconcile: result,
++      pending_after: s.pendingTxns().length,
++      entities: counts.n,
++      envelopes_captured: envelopes.length,
++      envelopes_in_head_ledger: envelopes.filter((e) => ledger.includes(e.replace(/\.txn$/, ''))).length,
++      ledger_rows: ledger.length,
++      validate_after_finish: s.validate().state,
++    }
+     steps.push('reconcile (the importer then resumes the batches it had not captured)')
+   } else {
+     rmSync(dir, { recursive: true, force: true })
+@@ -290,12 +331,18 @@
+     route: route === 'direct' ? 'DirectStore' : 'SnapshotStore',
+     leftovers: leftovers.slice(0, 10),
+     validate_before: validateBefore,
+-    repair_refused_while_lock_present: refusal,
+-    manual_lock_recovery: lockPresent,
++    plan_refusal: refusal,
++    lock_before_recovery: lockBefore,
++    manual_lock_recovery: false,
++    lock_present_at_recovery: lockPresent,
+     repair,
+     validate_after: validateAfter,
+     recovery_ms: recoveryMs,
++    head_before_recovery: headBefore,
+     published_version_after_repair: versionAfterRepair,
++    generations_before_recovery: generationsBefore,
++    generations_after_repair: generationsAfter,
++    published_generation_lost: generationsBefore.some((v: number) => !generationsAfter.includes(v)),
+     finish_ms: round(nowMs() - t2),
+     finish,
+     steps,

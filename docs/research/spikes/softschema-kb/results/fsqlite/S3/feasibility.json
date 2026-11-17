@@ -1,0 +1,48 @@
+{
+  "backend": "fsqlite",
+  "scale": "S3",
+  "workflow": "feasibility",
+  "verdict": "infeasible on this VM; not run, to avoid filling the disk shared with the FalkorDB arm",
+  "corpus": {
+    "scale": "S3",
+    "seed": 20261117,
+    "replicas": 185,
+    "source": "attic/paraverse/vendor/universe2026-md/kb",
+    "nodes": 1000295,
+    "edges": 4682905,
+    "record_files": 920375,
+    "files": 920401,
+    "bytes": 4581886080,
+    "record_bytes": 2870545064,
+    "workers": 4,
+    "prepare_seconds": 0.63,
+    "seconds": 36.88
+  },
+  "measured_growth": {
+    "S0": {
+      "snapshot_bytes": 38637568,
+      "intermediate_rows_bytes": 29562686,
+      "snapshotstore_import_store_bytes": 65518975
+    },
+    "S1": {
+      "snapshot_bytes": 350773248,
+      "intermediate_rows_bytes": 264854291,
+      "snapshotstore_import_store_bytes": 591784621
+    },
+    "S2": {
+      "snapshot_bytes": 1800749056,
+      "intermediate_rows_bytes": 1358668853,
+      "snapshotstore_import_store_bytes": 3035916212
+    }
+  },
+  "projection_gib": {
+    "one_retained_version": 6.7,
+    "intermediate_rows": 5.1,
+    "w1_directstore_peak_with_rows_file": 11.8,
+    "w1_snapshotstore_store_with_archived_envelopes": 13.5,
+    "w2_four_concurrent_working_copies_plus_head": 33.7,
+    "fts_sidecar": 0.6
+  },
+  "free_disk_gib_at_decision": 13.9,
+  "memory": "16 GB shared with the FalkorDB arm"
+}

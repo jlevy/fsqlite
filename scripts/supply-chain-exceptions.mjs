@@ -27,6 +27,26 @@ const AUDIT_IGNORE_LIST =
 const TIME_LIMITED_HEADING = /time[-\s]limited/i
 const TRUST_POLICY_HEADING = /trust[-\s]policy\s+exclusion/i
 const TRUST_POLICY_EXCLUDE_KEY = /^trustPolicyExclude\s*:(.*)$/m
+const RELEASE_AGE_EXCLUDE_KEY = /^minimumReleaseAgeExclude\s*:(.*)$/m
+const NPM_NAME = '(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*'
+const EXACT_VERSION =
+  '(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?'
+const EXACT_VERSIONS = `${EXACT_VERSION}(?:\\s*\\|\\|\\s*${EXACT_VERSION})*`
+// An exact package name, optionally limited to exact versions (`name@1.2.3 || 1.2.4`).
+// pnpm also accepts glob and `!` patterns, which can exempt packages no record names: a
+// lone `!name` rule matches every other package.
+const RELEASE_AGE_EXCLUDE_ENTRY = new RegExp(`^${NPM_NAME}(?:@${EXACT_VERSIONS})?$`)
+// First-party records form a closed grammar, matched against whole lines directly under
+// this exact heading, outside code fences, indented code, and HTML comments. Prose that
+// mentions a name, a sentence after the code span, or a line elsewhere is not a record.
+const FIRST_PARTY_SECTION = '## First-Party Packages'
+// "- `name` on npm" or "- `name` on npm and PyPI": a package the maintainer publishes.
+const FIRST_PARTY_RECORD = new RegExp(`^- \`(${NPM_NAME})\` on npm(?: and PyPI)?$`)
+// "- `name@x.y.z` on npm, a dependency of `parent`": exact versions of a dependency of a
+// recorded first-party package, exempt because of that parent.
+const DEPENDENCY_RECORD = new RegExp(
+  `^- \`(${NPM_NAME}@${EXACT_VERSIONS})\` on npm, a dependency of \`(${NPM_NAME})\`$`,
+)
 const REVIEW_PHRASE = /review\s+this\s+exception\s+by\b/gi
 const REVIEW_DATE = /review\s+this\s+exception\s+by\s+([0-9]{4}-[0-9]{2}-[0-9]{2})(?![0-9])/i
 const REVIEW_TARGET = /review\s+this\s+exception\s+by\s+([^\s,;:)]*)/i
@@ -262,13 +282,14 @@ const unquote = (value) => value.trim().replace(/^(["'])(.*)\1$/, '$2')
 const withoutComment = (line) => line.replace(/\s+#.*$|^\s*#.*$/, '')
 
 /**
- * The entries of the `trustPolicyExclude` list in pnpm-workspace.yaml, written as a block
- * sequence or a flow list, with quotes and comments removed.
+ * The entries of a top-level list in pnpm-workspace.yaml, written as a block sequence or
+ * a flow list, with quotes and comments removed.
  * @param {string} workspaceText
+ * @param {RegExp} keyPattern matches the key's line and captures the rest of it
  * @returns {string[]}
  */
-export const findTrustPolicyExcludes = (workspaceText) => {
-  const key = TRUST_POLICY_EXCLUDE_KEY.exec(workspaceText)
+const findWorkspaceList = (workspaceText, keyPattern) => {
+  const key = keyPattern.exec(workspaceText)
   if (key === null) {
     return []
   }
@@ -298,6 +319,120 @@ export const findTrustPolicyExcludes = (workspaceText) => {
     entries.push(unquote(item[1] ?? ''))
   }
   return entries
+}
+
+/**
+ * The entries of the `trustPolicyExclude` list in pnpm-workspace.yaml.
+ * @param {string} workspaceText
+ */
+export const findTrustPolicyExcludes = (workspaceText) =>
+  findWorkspaceList(workspaceText, TRUST_POLICY_EXCLUDE_KEY)
+
+/**
+ * The entries of the `minimumReleaseAgeExclude` list in pnpm-workspace.yaml.
+ * @param {string} workspaceText
+ */
+export const findReleaseAgeExcludes = (workspaceText) =>
+  findWorkspaceList(workspaceText, RELEASE_AGE_EXCLUDE_KEY)
+
+/**
+ * The first-party records of SUPPLY-CHAIN-SECURITY.md: the whole-line records directly
+ * under the exact "## First-Party Packages" heading, outside code fences and HTML
+ * comments. Indented code and nested list items cannot match, since a record starts at
+ * the line's first column.
+ * @param {string} policyText
+ * @returns {{ firstParty: Set<string>, dependencies: Map<string, string> }}
+ */
+export const findFirstPartyRecords = (policyText) => {
+  // Blank out HTML comments, keeping their line breaks so line structure is unchanged.
+  const visible = policyText.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) =>
+    comment.replace(/[^\n]/g, ''),
+  )
+  const firstParty = new Set()
+  /** @type {Map<string, string>} */
+  const dependencies = new Map()
+  let inFence = false
+  let inSection = false
+  for (const line of visible.split(/\r?\n/)) {
+    if (CODE_FENCE.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) {
+      continue
+    }
+    if (HEADING.test(line)) {
+      inSection = line === FIRST_PARTY_SECTION
+      continue
+    }
+    if (!inSection) {
+      continue
+    }
+    const record = FIRST_PARTY_RECORD.exec(line)
+    if (record) {
+      firstParty.add(record[1])
+    }
+    const dependency = DEPENDENCY_RECORD.exec(line)
+    if (dependency) {
+      dependencies.set(dependency[1], dependency[2])
+    }
+  }
+  return { firstParty, dependencies }
+}
+
+/**
+ * Checks that every `minimumReleaseAgeExclude` entry in pnpm-workspace.yaml is an exact
+ * package name, optionally with exact versions, and has its record in
+ * SUPPLY-CHAIN-SECURITY.md (see findFirstPartyRecords): a bare name needs
+ * "- `name` on npm" (or "on npm and PyPI"), and a versioned entry needs
+ * "- `name@x.y.z` on npm, a dependency of `parent`", where `parent` has a first-party
+ * record. Third-party dependencies keep the cool-off.
+ * @param {{ workspaceText: string, policyText: string }} input
+ * @returns {{ entries: string[], errors: string[], firstParty: number, dependencies: number }}
+ */
+export const checkReleaseAgeExclusions = ({ workspaceText, policyText }) => {
+  const entries = findReleaseAgeExcludes(workspaceText)
+  const records = findFirstPartyRecords(policyText)
+  /** @type {string[]} */
+  const errors = []
+  let firstParty = 0
+  let dependencies = 0
+  for (const entry of entries) {
+    const parent = records.dependencies.get(entry)
+    if (!RELEASE_AGE_EXCLUDE_ENTRY.test(entry)) {
+      errors.push(
+        `minimumReleaseAgeExclude entry ${JSON.stringify(entry)} is not an exact package name; ` +
+          'write the name, optionally with exact versions (name@x.y.z). A glob or "!" ' +
+          'pattern exempts packages that no first-party record names.',
+      )
+    } else if (!entry.slice(1).includes('@')) {
+      if (records.firstParty.has(entry)) {
+        firstParty += 1
+      } else {
+        errors.push(
+          `${entry} is excluded from minimumReleaseAge in pnpm-workspace.yaml but has no ` +
+            `first-party record; write the line "- \`${entry}\` on npm" directly under the ` +
+            `"${FIRST_PARTY_SECTION}" heading of SUPPLY-CHAIN-SECURITY.md, or drop the ` +
+            'exclusion. Only first-party packages and their dependencies skip the cool-off.',
+        )
+      }
+    } else if (parent === undefined) {
+      errors.push(
+        `${entry} is excluded from minimumReleaseAge in pnpm-workspace.yaml but has no ` +
+          `dependency record; write the line "- \`${entry}\` on npm, a dependency of ` +
+          `\`parent\`" directly under the "${FIRST_PARTY_SECTION}" heading of ` +
+          'SUPPLY-CHAIN-SECURITY.md, naming its first-party parent, or drop the exclusion.',
+      )
+    } else if (!records.firstParty.has(parent)) {
+      errors.push(
+        `${entry} is recorded as a dependency of ${parent}, which has no first-party record; ` +
+          'only a dependency of a recorded first-party npm package skips the cool-off.',
+      )
+    } else {
+      dependencies += 1
+    }
+  }
+  return { entries, errors, firstParty, dependencies }
 }
 
 /** @param {string} entry */
@@ -341,9 +476,11 @@ export const PNPM_POLICY_FLOOR_COMMAND = ['config', 'list', '--json']
  * Require the repo's dependency policy in pnpm's resolved configuration, including
  * user or environment settings that could weaken the workspace configuration.
  * @param {string} pnpmOutput
+ * @param {string[]} [releaseAgeExcludes] the `minimumReleaseAgeExclude` entries that
+ *   checkReleaseAgeExclusions found in pnpm-workspace.yaml; pnpm may exempt no others.
  * @returns {string[]}
  */
-export const crossCheckPnpmPolicyFloor = (pnpmOutput) => {
+export const crossCheckPnpmPolicyFloor = (pnpmOutput, releaseAgeExcludes = []) => {
   /** @type {Record<string, unknown>} */
   let config
   try {
@@ -360,11 +497,28 @@ export const crossCheckPnpmPolicyFloor = (pnpmOutput) => {
   if (!Number.isInteger(minimumReleaseAge) || Number(minimumReleaseAge) < MIN_RELEASE_AGE_MINUTES) {
     errors.push(`pnpm minimumReleaseAge must be at least ${MIN_RELEASE_AGE_MINUTES} minutes.`)
   }
-  if (
-    minimumReleaseAgeExclude !== undefined &&
-    (!Array.isArray(minimumReleaseAgeExclude) || minimumReleaseAgeExclude.length > 0)
-  ) {
-    errors.push('pnpm minimumReleaseAgeExclude must be empty or unset.')
+  const exempted = minimumReleaseAgeExclude ?? []
+  if (!Array.isArray(exempted) || !exempted.every((entry) => typeof entry === 'string')) {
+    errors.push(
+      `pnpm minimumReleaseAgeExclude must be a list of package names, not ${JSON.stringify(exempted)}.`,
+    )
+  } else {
+    const recorded = new Set(releaseAgeExcludes)
+    for (const entry of exempted.filter((name) => !recorded.has(name))) {
+      errors.push(
+        `pnpm minimumReleaseAgeExclude exempts ${JSON.stringify(entry)}, which is not a ` +
+          'recorded first-party entry under minimumReleaseAgeExclude in pnpm-workspace.yaml.',
+      )
+    }
+    // The reverse, as for the trust list: an entry the scan found that pnpm does not apply
+    // means the scan and pnpm read the list differently.
+    const applied = new Set(exempted)
+    for (const entry of releaseAgeExcludes.filter((name) => !applied.has(name))) {
+      errors.push(
+        `pnpm-workspace.yaml names ${JSON.stringify(entry)} under minimumReleaseAgeExclude, ` +
+          'but pnpm does not exempt it; check the list syntax.',
+      )
+    }
   }
   for (const [key, expected] of Object.entries({
     minimumReleaseAgeStrict: true,

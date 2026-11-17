@@ -1,0 +1,15 @@
+{
+  "scale": "S3",
+  "seed": 20261117,
+  "replicas": 185,
+  "source": "attic/paraverse/vendor/universe2026-md/kb",
+  "nodes": 1000295,
+  "edges": 4682905,
+  "record_files": 920375,
+  "files": 920401,
+  "bytes": 4581886080,
+  "record_bytes": 2870545064,
+  "workers": 4,
+  "prepare_seconds": 0.63,
+  "seconds": 36.88
+}

@@ -1,0 +1,313 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "W6",
+  "recorded_at": "2026-11-17T01:32:07.426Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 7704,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "artifacts": {
+    "files": 3,
+    "bytes": 350773384,
+    "groups": {
+      "current": {
+        "files": 1,
+        "bytes": 1
+      },
+      "fsqlite.json": {
+        "files": 1,
+        "bytes": 135
+      },
+      "snapshots": {
+        "files": 1,
+        "bytes": 350773248
+      }
+    }
+  },
+  "validate": {
+    "state": "sealed",
+    "current": 1,
+    "pending": 0,
+    "issues": [],
+    "ms": 739.935
+  },
+  "standard_tools": {
+    "python_sqlite3": {
+      "sqlite": "3.53.1",
+      "tables": [
+        "applied_tx",
+        "doc",
+        "edge",
+        "entity",
+        "fsqlite_meta",
+        "kb_file",
+        "kb_line",
+        "kind_schema",
+        "search_text"
+      ],
+      "entities": 48663,
+      "quick_check": "ok",
+      "application_id": 1179865420,
+      "sample": [
+        [
+          "repo:1password/arboard",
+          975
+        ]
+      ]
+    },
+    "sqlite3_cli": "not installed on this VM",
+    "fsqlite_cli_stats": {
+      "exit": 0,
+      "out": "fsqlite stats: <scratch>/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite\n  kind: plain-sqlite (no fsqlite layer)\n  sqlite_version: 3.53.4\n  page_size: 4096\n  page_count: 85638\n  file_bytes: 350773248\n  application_id: 1179865420\n  user_version: 1\n  journal_mode: delete\n  tables: applied_tx=0 doc=44777 edge=227817 entity=48663 fsqlite_meta=4 kb_file=3 kb_line=43052 kind_schema=18 search_text=67554"
+    }
+  },
+  "startup_and_memory_at_rest": {
+    "process_wall_ms": 1216.216,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "import_ms": 90.095,
+    "open_ms": 6.374,
+    "first_query_ms": 0.968,
+    "rss_after_import_mib": 91.445,
+    "rss_after_first_query_mib": 93.398,
+    "rss_after_w3_mib": 117.199,
+    "rss_idle_after_w3_mib": 117.324
+  },
+  "read_overhead": {
+    "store_read_record_p50_ms": 0.7606,
+    "held_connection_record_p50_ms": 0.0862
+  },
+  "crash": {
+    "direct-build": {
+      "attempt": 1,
+      "killMs": 3858.828,
+      "killedAt": "175390720 bytes into the DirectStore build, lock held",
+      "route": "DirectStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.direct-33d0a492f9.sqlite",
+        "snapshots/.direct-33d0a492f9.sqlite-journal"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 0,
+        "issues": [
+          "transient build files present: .direct-33d0a492f9.sqlite, .direct-33d0a492f9.sqlite-journal",
+          "publish.lock present (reconcile in progress or crashed)"
+        ]
+      },
+      "repair_refused_while_lock_present": "repair refused: publish.lock is present; stop every store client on every host, verify none can resume, then remove the abandoned lock before repair",
+      "manual_lock_recovery": true,
+      "repair": {
+        "actions": [
+          "removed transient .direct-33d0a492f9.sqlite",
+          "removed transient .direct-33d0a492f9.sqlite-journal"
+        ],
+        "state": "sealed"
+      },
+      "validate_after": {
+        "state": "sealed",
+        "current": 0,
+        "pending": 0,
+        "issues": []
+      },
+      "recovery_ms": 4.824,
+      "published_version_after_repair": 0,
+      "finish_ms": 5025.778,
+      "finish": {
+        "rerun_exit": 0,
+        "state": "sealed"
+      },
+      "steps": [
+        "validate",
+        "confirm no client can resume, then remove the abandoned publish.lock (manual)",
+        "repair",
+        "validate",
+        "rerun the import"
+      ]
+    },
+    "capture": {
+      "attempt": 1,
+      "killMs": 315.641,
+      "killedAt": "during capture 3 (.work-import-2-042a4b3e1a.sqlite)",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "tx/pending/.work-import-2-042a4b3e1a.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 2,
+        "issues": [
+          "transient build files present: .work-import-2-042a4b3e1a.sqlite"
+        ]
+      },
+      "repair_refused_while_lock_present": null,
+      "manual_lock_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .work-import-2-042a4b3e1a.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 2,
+        "issues": []
+      },
+      "recovery_ms": 3.719,
+      "published_version_after_repair": 0,
+      "finish_ms": 33.303,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 2,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 0
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "reconcile-build": {
+      "attempt": 1,
+      "killMs": 5964.07,
+      "killedAt": "during the reconcile build (.build-3e1e06e65f.sqlite), before the lock",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "snapshots/.build-3e1e06e65f.sqlite",
+        "snapshots/.build-3e1e06e65f.sqlite-journal"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 366,
+        "issues": [
+          "transient build files present: .build-3e1e06e65f.sqlite, .build-3e1e06e65f.sqlite-journal"
+        ]
+      },
+      "repair_refused_while_lock_present": null,
+      "manual_lock_recovery": false,
+      "repair": {
+        "actions": [
+          "removed transient .build-3e1e06e65f.sqlite",
+          "removed transient .build-3e1e06e65f.sqlite-journal"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 366,
+        "issues": []
+      },
+      "recovery_ms": 9.468,
+      "published_version_after_repair": 0,
+      "finish_ms": 4279.39,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 366,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 48663
+      },
+      "steps": [
+        "validate",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    },
+    "publication": {
+      "attempt": 1,
+      "killMs": 9605.01,
+      "killedAt": "holding publish.lock during publication",
+      "route": "SnapshotStore",
+      "leftovers": [
+        "publish.lock",
+        "snapshots/.build-58c2163b4f.sqlite"
+      ],
+      "validate_before": {
+        "state": "in-flight-capture",
+        "current": 0,
+        "pending": 366,
+        "issues": [
+          "transient build files present: .build-58c2163b4f.sqlite",
+          "publish.lock present (reconcile in progress or crashed)"
+        ]
+      },
+      "repair_refused_while_lock_present": "repair refused: publish.lock is present; stop every store client on every host, verify none can resume, then remove the abandoned lock before repair",
+      "manual_lock_recovery": true,
+      "repair": {
+        "actions": [
+          "removed transient .build-58c2163b4f.sqlite"
+        ],
+        "state": "live"
+      },
+      "validate_after": {
+        "state": "live",
+        "current": 0,
+        "pending": 366,
+        "issues": []
+      },
+      "recovery_ms": 286.349,
+      "published_version_after_repair": 0,
+      "finish_ms": 3729.79,
+      "finish": {
+        "reconcile": {
+          "published": 1,
+          "applied": 366,
+          "quarantined": 0,
+          "attempts": 1
+        },
+        "pending_after": 0,
+        "entities": 48663
+      },
+      "steps": [
+        "validate",
+        "confirm no client can resume, then remove the abandoned publish.lock (manual)",
+        "repair",
+        "validate",
+        "reconcile (the importer then resumes the batches it had not captured)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,337 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "W2 trickle (C18)",
+  "recorded_at": "2026-11-17T05:22:10.625Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 13720,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike3/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "gc_opts": {
+    "verifyMaxAgeMs": 60000,
+    "collectOn": "quick"
+  },
+  "delta": "<scratch>/research-c/spike3/kbscratch/kb-corpora/S1/deltas/p20",
+  "gc": "gc({ retain: 0, ...{\"verifyMaxAgeMs\":60000,\"collectOn\":\"quick\"} }) after every publish",
+  "batches": {
+    "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 363.048,
+      "reconcile_ms": 611.793,
+      "visible_ms_median": 1116.935,
+      "records_per_s": 0.9,
+      "fts_rebuild_ms_median": 718.968,
+      "gc_retain0_ms_median": 604.779,
+      "gc_unlink_ms_median": 3.334,
+      "gc_scrubs": 1,
+      "runs": [
+        {
+          "capture_ms": 286.438,
+          "reconcile_ms": 500.462,
+          "visible_ms": 786.903,
+          "fts_rebuild_ms": 718.968,
+          "gc_ms": 933.272,
+          "gc_verify_ms": 782.109,
+          "gc_unlink_ms": 3.334,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 505.139,
+          "reconcile_ms": 611.793,
+          "visible_ms": 1116.935,
+          "fts_rebuild_ms": 699.58,
+          "gc_ms": 2.44,
+          "gc_verify_ms": 1.126,
+          "gc_unlink_ms": 0.385,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 363.048,
+          "reconcile_ms": 949.336,
+          "visible_ms": 1312.388,
+          "fts_rebuild_ms": 770.588,
+          "gc_ms": 604.779,
+          "gc_verify_ms": 1.224,
+          "gc_unlink_ms": 275.357,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 998.102,
+      "records_per_s": 1,
+      "fts_rebuild_ms_median": 727.008,
+      "gc_retain0_ms_median": 480.439,
+      "gc_unlink_ms_median": 285.353,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 998.102,
+          "fts_rebuild_ms": 675.526,
+          "gc_ms": 844.222,
+          "gc_verify_ms": 1.114,
+          "gc_unlink_ms": 421.387,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 708.137,
+          "fts_rebuild_ms": 727.008,
+          "gc_ms": 287.724,
+          "gc_verify_ms": 1.135,
+          "gc_unlink_ms": 285.353,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 1217.748,
+          "fts_rebuild_ms": 836.678,
+          "gc_ms": 480.439,
+          "gc_verify_ms": 0.993,
+          "gc_unlink_ms": 242.467,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "SnapshotStore.10": {
+      "arm": "SnapshotStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 321.452,
+      "reconcile_ms": 909.989,
+      "visible_ms_median": 1210.901,
+      "records_per_s": 8.26,
+      "fts_rebuild_ms_median": 695.621,
+      "gc_retain0_ms_median": 381.388,
+      "gc_unlink_ms_median": 254.004,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 321.452,
+          "reconcile_ms": 909.989,
+          "visible_ms": 1231.445,
+          "fts_rebuild_ms": 695.621,
+          "gc_ms": 350.614,
+          "gc_verify_ms": 1.013,
+          "gc_unlink_ms": 254.004,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 363.435,
+          "reconcile_ms": 847.462,
+          "visible_ms": 1210.901,
+          "fts_rebuild_ms": 732.902,
+          "gc_ms": 381.388,
+          "gc_verify_ms": 1.128,
+          "gc_unlink_ms": 247.034,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 270.059,
+          "reconcile_ms": 915.942,
+          "visible_ms": 1186.004,
+          "fts_rebuild_ms": 695.296,
+          "gc_ms": 483.287,
+          "gc_verify_ms": 1.255,
+          "gc_unlink_ms": 288.64,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.10": {
+      "arm": "DirectStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 844.878,
+      "records_per_s": 11.84,
+      "fts_rebuild_ms_median": 737.01,
+      "gc_retain0_ms_median": 271.104,
+      "gc_unlink_ms_median": 159.546,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 606.972,
+          "fts_rebuild_ms": 737.01,
+          "gc_ms": 327.473,
+          "gc_verify_ms": 1.326,
+          "gc_unlink_ms": 241.453,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 844.878,
+          "fts_rebuild_ms": 801.849,
+          "gc_ms": 271.104,
+          "gc_verify_ms": 1.135,
+          "gc_unlink_ms": 140.913,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 957.291,
+          "fts_rebuild_ms": 734.244,
+          "gc_ms": 161.684,
+          "gc_verify_ms": 1.053,
+          "gc_unlink_ms": 159.546,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "SnapshotStore.100": {
+      "arm": "SnapshotStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 457.605,
+      "reconcile_ms": 530.618,
+      "visible_ms_median": 928.447,
+      "records_per_s": 107.71,
+      "fts_rebuild_ms_median": 731.354,
+      "gc_retain0_ms_median": 282.359,
+      "gc_unlink_ms_median": 279.943,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 457.605,
+          "reconcile_ms": 470.84,
+          "visible_ms": 928.447,
+          "fts_rebuild_ms": 653.824,
+          "gc_ms": 1348.712,
+          "gc_verify_ms": 1.014,
+          "gc_unlink_ms": 1200.998,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 658.496,
+          "reconcile_ms": 685.181,
+          "visible_ms": 1343.681,
+          "fts_rebuild_ms": 753.469,
+          "gc_ms": 282.359,
+          "gc_verify_ms": 1.129,
+          "gc_unlink_ms": 279.943,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 304.58,
+          "reconcile_ms": 530.618,
+          "visible_ms": 835.2,
+          "fts_rebuild_ms": 731.354,
+          "gc_ms": 245.015,
+          "gc_verify_ms": 0.954,
+          "gc_unlink_ms": 243.129,
+          "gc_integrity_checked": 0
+        }
+      ]
+    },
+    "DirectStore.100": {
+      "arm": "DirectStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 708.647,
+      "records_per_s": 141.11,
+      "fts_rebuild_ms_median": 706.028,
+      "gc_retain0_ms_median": 276.765,
+      "gc_unlink_ms_median": 253.359,
+      "gc_scrubs": 0,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 532.525,
+          "fts_rebuild_ms": 689.293,
+          "gc_ms": 240.097,
+          "gc_verify_ms": 1.276,
+          "gc_unlink_ms": 237.69,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 708.647,
+          "fts_rebuild_ms": 776.335,
+          "gc_ms": 1098.997,
+          "gc_verify_ms": 1.13,
+          "gc_unlink_ms": 253.359,
+          "gc_integrity_checked": 0
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 750.977,
+          "fts_rebuild_ms": 706.028,
+          "gc_ms": 276.765,
+          "gc_verify_ms": 0.968,
+          "gc_unlink_ms": 262.968,
+          "gc_integrity_checked": 0
+        }
+      ]
+    }
+  },
+  "sustained": {
+    "seconds": 20,
+    "writers": 1,
+    "records_captured": 31,
+    "capture_records_per_s": 1.53,
+    "capture_ms_median": 565,
+    "reconciles": 14,
+    "records_per_reconcile_median": 2,
+    "reconcile_ms_median": 1114,
+    "gc_retain0_ms_median": 321,
+    "round_ms_median": 1428,
+    "gc_scrubs": 1,
+    "gc_verify_ms_median": 0.87,
+    "gc_unlink_ms_median": 312.616,
+    "generations_max": 2,
+    "visibility_delay_ms": {
+      "p50": 2434,
+      "p95": 3816,
+      "max": 3945
+    },
+    "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+  }
+}

@@ -1,0 +1,290 @@
+{
+  "backend": "fsqlite",
+  "scale": "S2",
+  "workflow": "w2",
+  "recorded_at": "2026-11-17T01:41:09.304Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 13026,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "base_store": "<scratch>/fsqlite-spike/S2/store-direct",
+  "deltas": "<scratch>/kb-corpora/S2/deltas",
+  "writers": 4,
+  "envelopes_per_writer": 5,
+  "strategy": "snapshot",
+  "batches": [
+    {
+      "batch": "p01",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 2487,
+        "new": 1990,
+        "updated": 497,
+        "new_edges": 14487
+      },
+      "units": 2487,
+      "parse_ms": 564.796,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 10195.501,
+        "p95_ms": 11389.482,
+        "max_ms": 12902.801
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 51273,
+      "writer_max_rss_mib": 112.1,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "ms": 3439.045
+      },
+      "visible_after_ms": 54724,
+      "visible_after_first_capture_ms": 54480.425537109375,
+      "fts_sidecar_rebuild": {
+        "rows": 348100,
+        "build_ms": 3723.391,
+        "bytes": 150118400
+      },
+      "indexed_search_visible_after_ms": 58436,
+      "published_after_ms": 54712,
+      "versions_published": 1,
+      "entities": {
+        "before": 248722,
+        "after": 250712,
+        "added": 1990
+      },
+      "updated_records_changed": "497/497",
+      "base_copy": {
+        "bytes": 1800749056,
+        "median_ms": 1338.445,
+        "mib_per_s": 1283.1
+      },
+      "head_copy": {
+        "bytes": 1813835776,
+        "median_ms": 1313.584,
+        "mib_per_s": 1316.9
+      },
+      "reader": {
+        "queries": 4406,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 35,
+          "p50_ms": 1.399,
+          "p95_ms": 79.047,
+          "max_ms": 85.786
+        },
+        "during_writes": {
+          "n": 4057,
+          "p50_ms": 1.227,
+          "p95_ms": 59.542,
+          "max_ms": 269.728
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 3.896,
+          "p95_ms": 4.503,
+          "max_ms": 4.503
+        },
+        "max_rss_mib": 196.7
+      }
+    },
+    {
+      "batch": "p05",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 12436,
+        "new": 9949,
+        "updated": 2487,
+        "new_edges": 69845
+      },
+      "units": 12436,
+      "parse_ms": 3365.656,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 7401.533,
+        "p95_ms": 13285.421,
+        "max_ms": 33729.836
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 52392,
+      "writer_max_rss_mib": 177,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "ms": 6494.542
+      },
+      "visible_after_ms": 58933,
+      "visible_after_first_capture_ms": 58203.959228515625,
+      "fts_sidecar_rebuild": {
+        "rows": 359440,
+        "build_ms": 3940.004,
+        "bytes": 154013696
+      },
+      "indexed_search_visible_after_ms": 62827,
+      "published_after_ms": 58887,
+      "versions_published": 1,
+      "entities": {
+        "before": 248722,
+        "after": 258671,
+        "added": 9949
+      },
+      "updated_records_changed": "2487/2487",
+      "base_copy": {
+        "bytes": 1800749056,
+        "median_ms": 722.067,
+        "mib_per_s": 2378.4
+      },
+      "head_copy": {
+        "bytes": 1862504448,
+        "median_ms": 812.146,
+        "mib_per_s": 2187.1
+      },
+      "reader": {
+        "queries": 4652,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 37,
+          "p50_ms": 1.072,
+          "p95_ms": 64.456,
+          "max_ms": 76.639
+        },
+        "during_writes": {
+          "n": 4295,
+          "p50_ms": 1.268,
+          "p95_ms": 60.834,
+          "max_ms": 231.42
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 5.813,
+          "p95_ms": 13.807,
+          "max_ms": 13.807
+        },
+        "max_rss_mib": 206.6
+      }
+    },
+    {
+      "batch": "p20",
+      "strategy": "snapshot",
+      "arm": "SnapshotStore",
+      "delta": {
+        "changes": 49744,
+        "new": 39795,
+        "updated": 9949,
+        "new_edges": 284166
+      },
+      "units": 49744,
+      "parse_ms": 10704.055,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 4813.058,
+        "p95_ms": 14307.722,
+        "max_ms": 18392.269
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 38543,
+      "writer_max_rss_mib": 313.4,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "ms": 13570.879
+      },
+      "visible_after_ms": 52144,
+      "visible_after_first_capture_ms": 51271.456298828125,
+      "fts_sidecar_rebuild": {
+        "rows": 401971,
+        "build_ms": 4417.908,
+        "bytes": 172068864
+      },
+      "indexed_search_visible_after_ms": 56532,
+      "published_after_ms": 52114,
+      "versions_published": 1,
+      "entities": {
+        "before": 248722,
+        "after": 288517,
+        "added": 39795
+      },
+      "updated_records_changed": "9949/9949",
+      "base_copy": {
+        "bytes": 1800749056,
+        "median_ms": 800.693,
+        "mib_per_s": 2144.8
+      },
+      "head_copy": {
+        "bytes": 2070048768,
+        "median_ms": 857.132,
+        "mib_per_s": 2303.2
+      },
+      "reader": {
+        "queries": 4070,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 37,
+          "p50_ms": 1.158,
+          "p95_ms": 62.663,
+          "max_ms": 86.734
+        },
+        "during_writes": {
+          "n": 3742,
+          "p50_ms": 1.254,
+          "p95_ms": 61.092,
+          "max_ms": 255.022
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 3.32,
+          "p95_ms": 7.088,
+          "max_ms": 7.088
+        },
+        "max_rss_mib": 206.7
+      }
+    }
+  ]
+}

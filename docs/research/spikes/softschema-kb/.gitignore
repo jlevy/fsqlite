@@ -1,0 +1,4 @@
+# Python bytecode and local environments from spike runs
+__pycache__/
+*.pyc
+.venv/

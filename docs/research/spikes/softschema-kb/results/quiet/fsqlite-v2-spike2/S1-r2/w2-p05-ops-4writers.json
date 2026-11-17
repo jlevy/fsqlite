@@ -1,0 +1,318 @@
+{
+ "arm": "fsqlite-v2-spike2",
+ "arm_label": "fsqlite v2 Spike 2 (operation envelopes, serial reducer, coalescing publisher)",
+ "scale": "S1-r2",
+ "workflow": "w2-p05-ops-4writers",
+ "description": "p05 from 4 writers appending operation envelopes; facts reducer and closure in one build",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14797,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike2/package.patch; spike code plus spike2/spike.patch"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "capture_p50_ms": {
+   "median": 6.025,
+   "min": 6.025,
+   "max": 6.025,
+   "n": 1
+  },
+  "closure_ms": {
+   "median": 0.58,
+   "min": 0.58,
+   "max": 0.58,
+   "n": 1
+  },
+  "dangling_after_publish": {
+   "median": 0,
+   "min": 0,
+   "max": 0,
+   "n": 1
+  },
+  "envelope_bytes": {
+   "median": 11761988,
+   "min": 11761988,
+   "max": 11761988,
+   "n": 1
+  },
+  "indexed_search_visible_ms": {
+   "median": 2836,
+   "min": 2836,
+   "max": 2836,
+   "n": 1
+  },
+  "quarantined": {
+   "median": 0,
+   "min": 0,
+   "max": 0,
+   "n": 1
+  },
+  "reader_errors": {
+   "median": 0,
+   "min": 0,
+   "max": 0,
+   "n": 1
+  },
+  "reader_p95_during_ms": {
+   "median": 13.873,
+   "min": 13.873,
+   "max": 13.873,
+   "n": 1
+  },
+  "reconcile_ms": {
+   "median": 1575.903,
+   "min": 1575.903,
+   "max": 1575.903,
+   "n": 1
+  },
+  "rows_equal_line_order": {
+   "median": 1,
+   "min": 1,
+   "max": 1,
+   "n": 1
+  },
+  "visible_ms": {
+   "median": 1982,
+   "min": 1982,
+   "max": 1982,
+   "n": 1
+  },
+  "writers_wall_ms": {
+   "median": 401,
+   "min": 401,
+   "max": 401,
+   "n": 1
+  }
+ },
+ "earlier_contended": {
+  "source": "results/fsqlite-v2/spike2/S1-r2/w2-ops.json (median of 3)",
+  "values": {
+   "visible_ms": 1945,
+   "writers_wall_ms": 603,
+   "reconcile_ms": 1372.271
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:54:29Z",
+   "wall_s": 19.007,
+   "load_before": [
+    0.98,
+    1.36,
+    1.42
+   ],
+   "load_after": [
+    0.99,
+    1.33,
+    1.41
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.024,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 15.02,
+   "disk_free_gb_min": 14.12,
+   "load_samples": [
+    {
+     "t": 1794905680.0,
+     "load1": 0.98,
+     "own_cpu": 0.439,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794905689.0,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.024
+    }
+   ],
+   "compare": {
+    "w3-after-p05-4writers-ops.json": "MATCH: 124 ok, 0 differ"
+   },
+   "discarded_attempts": [],
+   "metrics": {
+    "visible_ms": 1982,
+    "writers_wall_ms": 401,
+    "capture_p50_ms": 6.025,
+    "reconcile_ms": 1575.903,
+    "quarantined": 0,
+    "indexed_search_visible_ms": 2836,
+    "reader_p95_during_ms": 13.873,
+    "reader_errors": 0,
+    "rows_equal_line_order": 1,
+    "closure_ms": 0.58,
+    "dangling_after_publish": 0,
+    "envelope_bytes": 11761988
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14797,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "store_options": {
+     "missing": "none",
+     "closure": true,
+     "repair_steps": false
+    },
+    "batch": {
+     "batch": "p05",
+     "strategy": "ops",
+     "arm": "SnapshotStore, operation envelopes",
+     "delta": {
+      "changes": 2346,
+      "counts": {
+       "delete": 47,
+       "merge": 23,
+       "new": 1877,
+       "update_refs": 199,
+       "update_value": 200
+      },
+      "edges": 13538
+     },
+     "w3_check_against_reference": {
+      "expected": "<scratch>/quiet/spike2/spike/harness/expected/S1-r2-p05/w3.json",
+      "result": "MATCH: 124 ok, 0 differ",
+      "differing": []
+     },
+     "same_rows_as_one_writer_in_line_order": {
+      "equal": true,
+      "differing_tables": [],
+      "concurrent": {
+       "entity": "48734:d4acd2f3dba97af5",
+       "edge": "235470:e6146c67c7b9f4ac",
+       "doc": "45864:e4c04bdf03467115",
+       "search_text": "68444:806202840d260297",
+       "quarantine": "0:e3b0c44298fc1c14",
+       "kb_tombstone": "47:9a175e4d10fa0815",
+       "kb_redirect": "23:7379f0ed8301f160"
+      },
+      "line_order": {
+       "entity": "48734:d4acd2f3dba97af5",
+       "edge": "235470:e6146c67c7b9f4ac",
+       "doc": "45864:e4c04bdf03467115",
+       "search_text": "68444:806202840d260297",
+       "quarantine": "0:e3b0c44298fc1c14",
+       "kb_tombstone": "47:9a175e4d10fa0815",
+       "kb_redirect": "23:7379f0ed8301f160"
+      }
+     },
+     "units": 2346,
+     "parse_ms": 1402.598,
+     "writers": 4,
+     "envelopes": 20,
+     "capture_ms": {
+      "n": 20,
+      "p50_ms": 6.025,
+      "p95_ms": 11.646,
+      "max_ms": 21.685
+     },
+     "envelope_bytes_total": 11761988,
+     "dangling_edges_after_publish": 0,
+     "store_options": {
+      "missing": "none",
+      "closure": true,
+      "repair_steps": false
+     },
+     "gc_refusals": null,
+     "gc_after_write_ms": null,
+     "writers_wall_ms": 401,
+     "writer_max_rss_mib": 117.9,
+     "reconcile": {
+      "published": 2,
+      "applied": 20,
+      "quarantined": 0,
+      "attempts": 1,
+      "omittedMissing": 0,
+      "closure": {
+       "edges_on_deleted_or_absorbed_before": 0,
+       "removed": 0,
+       "moved": 0,
+       "edges_on_deleted_or_absorbed_after": 0,
+       "ms": 0.58
+      },
+      "timings": {
+       "copy_ms": 211.78977600112557,
+       "open_ms": 1.0180430002510548,
+       "apply_ms": 840.8720059990883,
+       "closure_ms": 1.1695440001785755,
+       "gate_ms": 227.31140999868512,
+       "fsync_ms": 286.48238199949265,
+       "commit_ms": 3.1590740010142326,
+       "published_at_epoch_ms": 1794905674213,
+       "settle_ms": 1.6179889999330044
+      },
+      "ms": 1575.903,
+      "quarantine_reasons": []
+     },
+     "visible_after_ms": 1982,
+     "visible_after_first_capture_ms": 1722.58349609375,
+     "fts_sidecar_rebuild": {
+      "rows": 68444,
+      "build_ms": 746.344,
+      "bytes": 33427456
+     },
+     "indexed_search_visible_after_ms": 2836,
+     "published_after_ms": 1977,
+     "complete_after_ms": 1977,
+     "versions_published": 1,
+     "entities": {
+      "before": 46927,
+      "after": 48734,
+      "added": 1807
+     },
+     "updated_records_changed": "0/0",
+     "base_copy": null,
+     "head_copy": null,
+     "reader": {
+      "queries": 937,
+      "errors": 0,
+      "quiet": {
+       "n": 121,
+       "p50_ms": 0.701,
+       "p95_ms": 14.579,
+       "max_ms": 27.152
+      },
+      "during_writes": {
+       "n": 455,
+       "p50_ms": 0.456,
+       "p95_ms": 13.873,
+       "max_ms": 94.396
+      },
+      "reopen_ms": {
+       "n": 2,
+       "p50_ms": 3.958,
+       "p95_ms": 5.871,
+       "max_ms": 5.871
+      },
+      "max_rss_mib": 220.8
+     }
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

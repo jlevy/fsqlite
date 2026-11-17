@@ -1,0 +1,91 @@
+{
+  "workflow": "W5",
+  "backend": "falkordb",
+  "scale": "S2-r2",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 15849832
+      },
+      {
+        "path": "<scratch>/fdb-data/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 15849832
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2-r2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 238957,
+    "edges": 1155758,
+    "record_files": 224802,
+    "bytes": 1152109067
+  },
+  "export": {
+    "records": 224800,
+    "nodes": 238957,
+    "edges": 1155758,
+    "seconds": 446.755
+  },
+  "comparison": {
+    "records": 224800,
+    "payload_equal": 224800,
+    "payload_diff_samples": [],
+    "softschema_block_equal": 224800,
+    "documents_equal_parsed": 224800,
+    "frontmatter_title_equal": 224800,
+    "byte_identical_files": 0,
+    "record_bytes_source": 691793823,
+    "record_bytes_export": 609221922,
+    "markdown_bodies_lost": 64195,
+    "nodes_equal_by_id_kind_path": true,
+    "node_name_differences_by_kind": {
+      "profile": 26542
+    },
+    "edges_equal_as_multiset": true,
+    "edges_source": 1155758,
+    "edges_export": 1155758,
+    "schemas_source": 18,
+    "schemas_exported": 16,
+    "schemas_equal": 16,
+    "not_exported": [
+      "README.md",
+      "_schemas/faq.schema.yaml",
+      "_schemas/media.schema.yaml",
+      "_search/documents.jsonl",
+      "coverage.json",
+      "faq.yaml",
+      "media.yaml"
+    ],
+    "seconds": 154.026,
+    "export_softschema_validation": {
+      "sampled": 500,
+      "problems": 0,
+      "problem_samples": [],
+      "seconds": 4.814,
+      "note": "each exported record against the schema its reconstructed softschema block names"
+    }
+  },
+  "reload_s": 154.995,
+  "reloaded_w3_matches_source_w3": true,
+  "reloaded_w3_differences": []
+}

@@ -1,0 +1,488 @@
+{
+ "arm": "fsqlite-v2-spike3",
+ "arm_label": "fsqlite v2 Spike 3 (maintenance and publication; gc collectOn quick)",
+ "scale": "S2-r2",
+ "workflow": "trickle-sustained",
+ "description": "60 s: as the baseline, with gc({retain:0, collectOn:'quick', verifyMaxAgeMs:1h})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 15102,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike3/package.patch; spike code plus spike3/spike.patch"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "capture_records_per_s": {
+   "median": 0.33,
+   "min": 0.33,
+   "max": 0.36,
+   "n": 3
+  },
+  "gc_ms_median": {
+   "median": 1835,
+   "min": 1405,
+   "max": 1855,
+   "n": 3
+  },
+  "gc_scrubs": {
+   "median": 0,
+   "min": 0,
+   "max": 0,
+   "n": 3
+  },
+  "gc_share_of_build_plus_gc": {
+   "median": 0.3276,
+   "min": 0.3067,
+   "max": 0.3621,
+   "n": 3
+  },
+  "gc_unlink_ms_median": {
+   "median": 1629.013,
+   "min": 1277.908,
+   "max": 1834.178,
+   "n": 3
+  },
+  "generations_max": {
+   "median": 2,
+   "min": 2,
+   "max": 2,
+   "n": 3
+  },
+  "reconcile_ms_median": {
+   "median": 3233,
+   "min": 3176,
+   "max": 3807,
+   "n": 3
+  },
+  "reconciles": {
+   "median": 12,
+   "min": 12,
+   "max": 12,
+   "n": 3
+  },
+  "records_captured": {
+   "median": 20,
+   "min": 20,
+   "max": 22,
+   "n": 3
+  },
+  "records_per_reconcile_median": {
+   "median": 2,
+   "min": 1,
+   "max": 2,
+   "n": 3
+  },
+  "round_ms_median": {
+   "median": 5265,
+   "min": 4882,
+   "max": 5395,
+   "n": 3
+  },
+  "visibility_max_ms": {
+   "median": 14203,
+   "min": 13958,
+   "max": 14635,
+   "n": 3
+  },
+  "visibility_p50_ms": {
+   "median": 9156,
+   "min": 8825,
+   "max": 9492,
+   "n": 3
+  },
+  "visibility_p95_ms": {
+   "median": 12209,
+   "min": 11171,
+   "max": 13376,
+   "n": 3
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:23:49Z",
+   "wall_s": 70.016,
+   "load_before": [
+    0.99,
+    1.06,
+    1.22
+   ],
+   "load_after": [
+    2.31,
+    1.47,
+    1.35
+   ],
+   "load1_max_during": 2.37,
+   "foreign_cpu_max": 0.094,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.47,
+   "disk_free_gb_min": 7.63,
+   "load_samples": [
+    {
+     "t": 1794900239.5,
+     "load1": 1.3,
+     "own_cpu": 0.91,
+     "foreign_cpu": 0.048
+    },
+    {
+     "t": 1794900249.5,
+     "load1": 1.56,
+     "own_cpu": 0.448,
+     "foreign_cpu": 0.036
+    },
+    {
+     "t": 1794900259.5,
+     "load1": 1.79,
+     "own_cpu": 0.53,
+     "foreign_cpu": 0.027
+    },
+    {
+     "t": 1794900269.5,
+     "load1": 2.12,
+     "own_cpu": 0.499,
+     "foreign_cpu": 0.025
+    },
+    {
+     "t": 1794900279.5,
+     "load1": 2.26,
+     "own_cpu": 0.305,
+     "foreign_cpu": 0.014
+    },
+    {
+     "t": 1794900289.5,
+     "load1": 2.37,
+     "own_cpu": 0.556,
+     "foreign_cpu": 0.026
+    },
+    {
+     "t": 1794900299.5,
+     "load1": 2.31,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.094
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 20,
+    "capture_records_per_s": 0.33,
+    "visibility_p50_ms": 9492,
+    "visibility_p95_ms": 12209,
+    "visibility_max_ms": 13958,
+    "gc_ms_median": 1835,
+    "reconciles": 12,
+    "records_per_reconcile_median": 2,
+    "reconcile_ms_median": 3233,
+    "gc_share_of_build_plus_gc": 0.3621,
+    "round_ms_median": 5265,
+    "gc_scrubs": 0,
+    "gc_unlink_ms_median": 1834.178,
+    "generations_max": 2
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15102,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": {
+     "verifyMaxAgeMs": 3600000,
+     "collectOn": "quick"
+    },
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 20,
+     "capture_records_per_s": 0.33,
+     "capture_ms_median": 2369,
+     "reconciles": 12,
+     "records_per_reconcile_median": 2,
+     "reconcile_ms_median": 3233,
+     "gc_retain0_ms_median": 1835,
+     "round_ms_median": 5265,
+     "gc_scrubs": 0,
+     "gc_verify_ms_median": 0.793,
+     "gc_unlink_ms_median": 1834.178,
+     "generations_max": 2,
+     "visibility_delay_ms": {
+      "p50": 9492,
+      "p95": 12209,
+      "max": 13958
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:25:59Z",
+   "wall_s": 69.016,
+   "load_before": [
+    0.91,
+    1.22,
+    1.28
+   ],
+   "load_after": [
+    1.58,
+    1.38,
+    1.33
+   ],
+   "load1_max_during": 1.68,
+   "foreign_cpu_max": 0.05,
+   "waited_for_quiet_s": 60.0,
+   "disk_free_gb_before": 13.47,
+   "disk_free_gb_min": 7.63,
+   "load_samples": [
+    {
+     "t": 1794900369.5,
+     "load1": 1.16,
+     "own_cpu": 0.832,
+     "foreign_cpu": 0.028
+    },
+    {
+     "t": 1794900379.5,
+     "load1": 1.29,
+     "own_cpu": 0.407,
+     "foreign_cpu": 0.05
+    },
+    {
+     "t": 1794900389.5,
+     "load1": 1.47,
+     "own_cpu": 0.632,
+     "foreign_cpu": 0.023
+    },
+    {
+     "t": 1794900399.5,
+     "load1": 1.55,
+     "own_cpu": 0.449,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794900409.5,
+     "load1": 1.62,
+     "own_cpu": 0.569,
+     "foreign_cpu": 0.026
+    },
+    {
+     "t": 1794900419.5,
+     "load1": 1.68,
+     "own_cpu": 0.517,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794900428.5,
+     "load1": 1.58,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.013
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 22,
+    "capture_records_per_s": 0.36,
+    "visibility_p50_ms": 9156,
+    "visibility_p95_ms": 11171,
+    "visibility_max_ms": 14203,
+    "gc_ms_median": 1855,
+    "reconciles": 12,
+    "records_per_reconcile_median": 2,
+    "reconcile_ms_median": 3807,
+    "gc_share_of_build_plus_gc": 0.3276,
+    "round_ms_median": 5395,
+    "gc_scrubs": 0,
+    "gc_unlink_ms_median": 1629.013,
+    "generations_max": 2
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15101,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": {
+     "verifyMaxAgeMs": 3600000,
+     "collectOn": "quick"
+    },
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 22,
+     "capture_records_per_s": 0.36,
+     "capture_ms_median": 2547,
+     "reconciles": 12,
+     "records_per_reconcile_median": 2,
+     "reconcile_ms_median": 3807,
+     "gc_retain0_ms_median": 1855,
+     "round_ms_median": 5395,
+     "gc_scrubs": 0,
+     "gc_verify_ms_median": 0.833,
+     "gc_unlink_ms_median": 1629.013,
+     "generations_max": 2,
+     "visibility_delay_ms": {
+      "p50": 9156,
+      "p95": 11171,
+      "max": 14203
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T07:27:38Z",
+   "wall_s": 68.024,
+   "load_before": [
+    0.95,
+    1.25,
+    1.29
+   ],
+   "load_after": [
+    2.18,
+    1.55,
+    1.39
+   ],
+   "load1_max_during": 2.28,
+   "foreign_cpu_max": 0.072,
+   "waited_for_quiet_s": 30.0,
+   "disk_free_gb_before": 13.47,
+   "disk_free_gb_min": 6.0,
+   "load_samples": [
+    {
+     "t": 1794900468.6,
+     "load1": 1.11,
+     "own_cpu": 0.818,
+     "foreign_cpu": 0.018
+    },
+    {
+     "t": 1794900478.6,
+     "load1": 1.41,
+     "own_cpu": 0.437,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794900488.6,
+     "load1": 1.64,
+     "own_cpu": 0.444,
+     "foreign_cpu": 0.023
+    },
+    {
+     "t": 1794900498.6,
+     "load1": 1.7,
+     "own_cpu": 0.567,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794900508.6,
+     "load1": 2.07,
+     "own_cpu": 0.496,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794900518.6,
+     "load1": 2.28,
+     "own_cpu": 0.323,
+     "foreign_cpu": 0.072
+    },
+    {
+     "t": 1794900526.6,
+     "load1": 2.18,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.026
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 20,
+    "capture_records_per_s": 0.33,
+    "visibility_p50_ms": 8825,
+    "visibility_p95_ms": 13376,
+    "visibility_max_ms": 14635,
+    "gc_ms_median": 1405,
+    "reconciles": 12,
+    "records_per_reconcile_median": 1,
+    "reconcile_ms_median": 3176,
+    "gc_share_of_build_plus_gc": 0.3067,
+    "round_ms_median": 4882,
+    "gc_scrubs": 0,
+    "gc_unlink_ms_median": 1277.908,
+    "generations_max": 2
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15061,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": {
+     "verifyMaxAgeMs": 3600000,
+     "collectOn": "quick"
+    },
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 20,
+     "capture_records_per_s": 0.33,
+     "capture_ms_median": 2914,
+     "reconciles": 12,
+     "records_per_reconcile_median": 1,
+     "reconcile_ms_median": 3176,
+     "gc_retain0_ms_median": 1405,
+     "round_ms_median": 4882,
+     "gc_scrubs": 0,
+     "gc_verify_ms_median": 0.82,
+     "gc_unlink_ms_median": 1277.908,
+     "generations_max": 2,
+     "visibility_delay_ms": {
+      "p50": 8825,
+      "p95": 13376,
+      "max": 14635
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  }
+ ],
+ "superseded_runs": []
+}

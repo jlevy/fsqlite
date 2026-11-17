@@ -1,0 +1,228 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S1-r2",
+ "workflow": "trickle-one",
+ "description": "one v2 record per publish, 3 publishes, then gc({retain:0}) and the FTS5 sidecar",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14789,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "DirectStore.fts_sidecar_rebuild_ms": {
+   "median": 715.596,
+   "min": 715.596,
+   "max": 715.596,
+   "n": 1
+  },
+  "DirectStore.gc_ms": {
+   "median": 996.655,
+   "min": 996.655,
+   "max": 996.655,
+   "n": 1
+  },
+  "DirectStore.gc_share_of_publish_plus_gc": {
+   "median": 0.6163,
+   "min": 0.6163,
+   "max": 0.6163,
+   "n": 1
+  },
+  "DirectStore.visible_ms": {
+   "median": 617.811,
+   "min": 617.811,
+   "max": 617.811,
+   "n": 1
+  },
+  "SnapshotStore.capture_ms": {
+   "median": 310.001,
+   "min": 310.001,
+   "max": 310.001,
+   "n": 1
+  },
+  "SnapshotStore.fts_sidecar_rebuild_ms": {
+   "median": 731.317,
+   "min": 731.317,
+   "max": 731.317,
+   "n": 1
+  },
+  "SnapshotStore.gc_ms": {
+   "median": 987.089,
+   "min": 987.089,
+   "max": 987.089,
+   "n": 1
+  },
+  "SnapshotStore.gc_share_of_publish_plus_gc": {
+   "median": 0.5411,
+   "min": 0.5411,
+   "max": 0.5411,
+   "n": 1
+  },
+  "SnapshotStore.reconcile_ms": {
+   "median": 490.216,
+   "min": 490.216,
+   "max": 490.216,
+   "n": 1
+  },
+  "SnapshotStore.visible_ms": {
+   "median": 800.219,
+   "min": 800.219,
+   "max": 800.219,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:52:11Z",
+   "wall_s": 15.006,
+   "load_before": [
+    0.93,
+    1.45,
+    1.46
+   ],
+   "load_after": [
+    1.03,
+    1.45,
+    1.46
+   ],
+   "load1_max_during": 1.03,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 20.0,
+   "disk_free_gb_before": 15.02,
+   "disk_free_gb_min": 14.23,
+   "load_samples": [
+    {
+     "t": 1794905541.1,
+     "load1": 0.94,
+     "own_cpu": 0.826,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794905546.1,
+     "load1": 1.03,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.03
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "SnapshotStore.visible_ms": 800.219,
+    "SnapshotStore.capture_ms": 310.001,
+    "SnapshotStore.reconcile_ms": 490.216,
+    "SnapshotStore.gc_ms": 987.089,
+    "SnapshotStore.gc_share_of_publish_plus_gc": 0.5411,
+    "SnapshotStore.fts_sidecar_rebuild_ms": 731.317,
+    "DirectStore.visible_ms": 617.811,
+    "DirectStore.gc_ms": 996.655,
+    "DirectStore.gc_share_of_publish_plus_gc": 0.6163,
+    "DirectStore.fts_sidecar_rebuild_ms": 715.596
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14789,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "batches": {
+     "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 310.001,
+      "reconcile_ms": 490.216,
+      "visible_ms_median": 800.219,
+      "records_per_s": 1.25,
+      "fts_rebuild_ms_median": 731.317,
+      "gc_retain0_ms_median": 987.089,
+      "runs": [
+       {
+        "capture_ms": 245.128,
+        "reconcile_ms": 397.695,
+        "visible_ms": 642.828,
+        "fts_rebuild_ms": 733.938,
+        "gc_ms": 757.872
+       },
+       {
+        "capture_ms": 311.804,
+        "reconcile_ms": 565.018,
+        "visible_ms": 876.825,
+        "fts_rebuild_ms": 731.317,
+        "gc_ms": 987.089
+       },
+       {
+        "capture_ms": 310.001,
+        "reconcile_ms": 490.216,
+        "visible_ms": 800.219,
+        "fts_rebuild_ms": 691.923,
+        "gc_ms": 1078.099
+       }
+      ]
+     },
+     "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 617.811,
+      "records_per_s": 1.62,
+      "fts_rebuild_ms_median": 715.596,
+      "gc_retain0_ms_median": 996.655,
+      "runs": [
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 631.377,
+        "fts_rebuild_ms": 718.051,
+        "gc_ms": 996.655
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 594.655,
+        "fts_rebuild_ms": 677.979,
+        "gc_ms": 955.27
+       },
+       {
+        "capture_ms": 0,
+        "reconcile_ms": 0,
+        "visible_ms": 617.811,
+        "fts_rebuild_ms": 715.596,
+        "gc_ms": 1029.68
+       }
+      ]
+     }
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

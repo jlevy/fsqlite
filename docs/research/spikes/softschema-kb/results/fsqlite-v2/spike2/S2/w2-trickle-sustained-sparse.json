@@ -1,0 +1,206 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S2",
+  "workflow": "W2 trickle (C18), fsqlite v2 Spike 2",
+  "recorded_at": "2026-11-17T05:44:16.244Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14801,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "delta": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2/deltas/p20",
+  "gc": "gc({ retain: 0 }) after every publish",
+  "fts_sidecar": "not rebuilt",
+  "batches": null,
+  "sustained": {
+    "seconds": 60,
+    "writers": 1,
+    "strategy": "sparse",
+    "offered_records_per_s": 200,
+    "interval_factor": 0,
+    "records_captured": 11800,
+    "capture_records_per_s": 196.67,
+    "capture_ms": {
+      "p50": 2.3409,
+      "p95": 4.143
+    },
+    "records_published": 11800,
+    "published_records_per_s": 166.43,
+    "publishes": 8,
+    "records_per_publish_median": 1881,
+    "build_ms_median": 3607,
+    "apply_ms_median": 898.269,
+    "gc_retain0_ms_median": 5865,
+    "publish_cycle_ms": {
+      "median": 9611,
+      "p95": 11297
+    },
+    "visibility_delay_ms": {
+      "p50": 8807,
+      "p95": 13497,
+      "max": 15158
+    },
+    "visibility_delay_in_cycles": {
+      "p50": 0.92,
+      "p95": 1.4
+    },
+    "rounds": [
+      {
+        "applied": 2,
+        "build_ms": 3059,
+        "waited_ms": 902,
+        "gc_ms": 4593,
+        "timings": {
+          "copy_ms": 1010.8350210003555,
+          "open_ms": 0.5120919980108738,
+          "apply_ms": 4.966144002974033,
+          "gate_ms": 1115.324913997203,
+          "fsync_ms": 918.4661890007555,
+          "commit_ms": 3.4319759979844093,
+          "published_at_epoch_ms": 1794894175284,
+          "settle_ms": 0.6910680010914803
+        }
+      },
+      {
+        "applied": 1533,
+        "build_ms": 3465,
+        "waited_ms": 9,
+        "gc_ms": 6411,
+        "timings": {
+          "copy_ms": 901.5893270000815,
+          "open_ms": 0.44764600321650505,
+          "apply_ms": 898.2685269974172,
+          "gate_ms": 824.3604249991477,
+          "fsync_ms": 796.7584690004587,
+          "commit_ms": 4.783949002623558,
+          "published_at_epoch_ms": 1794894183323,
+          "settle_ms": 29.266246996819973
+        }
+      },
+      {
+        "applied": 1977,
+        "build_ms": 3929,
+        "waited_ms": 8,
+        "gc_ms": 5854,
+        "timings": {
+          "copy_ms": 895.292132999748,
+          "open_ms": 2.0658090002834797,
+          "apply_ms": 1822.6966900005937,
+          "gate_ms": 1127.6357400007546,
+          "fsync_ms": 29.589057002216578,
+          "commit_ms": 4.0414789989590645,
+          "published_at_epoch_ms": 1794894193661,
+          "settle_ms": 39.25407899916172
+        }
+      },
+      {
+        "applied": 1957,
+        "build_ms": 3607,
+        "waited_ms": 7,
+        "gc_ms": 5788,
+        "timings": {
+          "copy_ms": 873.7252179980278,
+          "open_ms": 2.9887540005147457,
+          "apply_ms": 1526.2169070020318,
+          "gate_ms": 1116.3086759969592,
+          "fsync_ms": 40.14717300236225,
+          "commit_ms": 5.370280999690294,
+          "published_at_epoch_ms": 1794894203135,
+          "settle_ms": 32.924975998699665
+        }
+      },
+      {
+        "applied": 1881,
+        "build_ms": 3890,
+        "waited_ms": 8,
+        "gc_ms": 6378,
+        "timings": {
+          "copy_ms": 832.5727440007031,
+          "open_ms": 4.712241999804974,
+          "apply_ms": 1268.1231180019677,
+          "gate_ms": 870.4297540001571,
+          "fsync_ms": 872.3545740023255,
+          "commit_ms": 4.351216997951269,
+          "published_at_epoch_ms": 1794894212825,
+          "settle_ms": 29.34967999905348
+        }
+      },
+      {
+        "applied": 2052,
+        "build_ms": 4917,
+        "waited_ms": 9,
+        "gc_ms": 5865,
+        "timings": {
+          "copy_ms": 988.8792739994824,
+          "open_ms": 7.722433999180794,
+          "apply_ms": 1816.4855650030077,
+          "gate_ms": 1104.0034519992769,
+          "fsync_ms": 951.6732719987631,
+          "commit_ms": 2.771246001124382,
+          "published_at_epoch_ms": 1794894224122,
+          "settle_ms": 35.83183899894357
+        }
+      },
+      {
+        "applied": 2162,
+        "build_ms": 3769,
+        "waited_ms": 12,
+        "gc_ms": 6118,
+        "timings": {
+          "copy_ms": 904.4718310013413,
+          "open_ms": 8.310426000505686,
+          "apply_ms": 629.1470410004258,
+          "gate_ms": 1280.085326999426,
+          "fsync_ms": 858.677283000201,
+          "commit_ms": 4.789155002683401,
+          "published_at_epoch_ms": 1794894233733,
+          "settle_ms": 70.282312002033
+        }
+      },
+      {
+        "applied": 236,
+        "build_ms": 3196,
+        "waited_ms": 1,
+        "gc_ms": 6817,
+        "timings": {
+          "copy_ms": 869.53818000108,
+          "open_ms": 13.509661998599768,
+          "apply_ms": 166.508354999125,
+          "gate_ms": 1156.111429002136,
+          "fsync_ms": 979.7130459994078,
+          "commit_ms": 2.816761001944542,
+          "published_at_epoch_ms": 1794894243114,
+          "settle_ms": 4.565274000167847
+        }
+      }
+    ],
+    "note": "one writer process capturing one-record envelopes at the offered rate; one publisher process (runPublisher) folding everything pending per build, then gc({ retain: 0 })"
+  }
+}

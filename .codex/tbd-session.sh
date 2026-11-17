@@ -63,46 +63,46 @@ tbd_configured_fallback_version() {
     return 1
 }
 
-# Run the pinned fallback under this repository's supply-chain rules. npm does not read
-# pnpm-workspace.yaml, so pass the cool-off (which also applies to the pin itself) and the
-# no-install-scripts rule explicitly. TBD_FALLBACK_COOL_OFF_DAYS must equal
-# minimumReleaseAge, which the hook checker asserts. Without a working node the cutoff
-# cannot be computed, and the fallback fails closed.
-TBD_FALLBACK_COOL_OFF_DAYS=14
-tbd_fallback_cutoff() {
-    local cutoff
-    if ! command -v node &> /dev/null; then
-        echo "[tbd] node is required to compute the cool-off cutoff for the npx fallback." >&2
-        return 1
-    fi
-    if ! cutoff=$(node -e 'const days = Number(process.argv[1]); console.log(new Date(Date.now() - days * 86400000).toISOString())' "$TBD_FALLBACK_COOL_OFF_DAYS") ||
-        [[ ! $cutoff =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$ ]]; then
-        echo "[tbd] node failed to compute the cool-off cutoff for the npx fallback." >&2
-        return 1
-    fi
-    printf '%s\n' "$cutoff"
+# Run the pinned fallback under this repository's supply-chain rules (see
+# SUPPLY-CHAIN-SECURITY.md). get-tbd is first-party and has no cool-off, but npx resolves
+# its third-party dependency ranges afresh and no lockfile pins them. So the fallback
+# looks up the pin's own publish time on the public registry and passes it as --before:
+# the pin and the dependency versions it resolved to at release need no cool-off, and
+# nothing published later is installed. If the lookup fails, the fallback does not run.
+# npm does not read pnpm-workspace.yaml, so the rules are flags, and npm's config
+# precedence puts command-line flags above environment variables and .npmrc files: an
+# inherited registry, before, or ignore-scripts setting cannot change them. npx keys its
+# cache by the spec string alone and reuses a cached install without checking it again,
+# so a dedicated cache that only these runs fill keeps out a copy that another npx run
+# fetched; the first run that fills it is trusted.
+tbd_pin_publish_time() {
+    local times
+    times=$(npm view --registry=https://registry.npmjs.org/ "get-tbd@$configured_fallback_version" time --json) || return 1
+    printf '%s' "$times" | node -e '
+        let text = ""
+        process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
+            let time
+            try {
+                time = JSON.parse(text)[process.argv[1]]
+            } catch {
+                process.exit(1)
+            }
+            if (typeof time !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$/.test(time)) process.exit(1)
+            process.stdout.write(time)
+        })' "$configured_fallback_version"
 }
 
 tbd_run_fallback() {
-    local cutoff
-    if ! cutoff=$(tbd_fallback_cutoff); then
+    local published
+    if ! published=$(tbd_pin_publish_time) || [ -z "$published" ]; then
+        echo "[tbd] Cannot read the publish time of get-tbd@$configured_fallback_version from registry.npmjs.org; not running the fallback without a --before bound." >&2
         return 1
     fi
-    # Pass the policy as flags: npm's config precedence puts command-line flags above
-    # environment variables, so an inherited NPM_CONFIG_BEFORE or NPM_CONFIG_IGNORE_SCRIPTS
-    # cannot loosen it. npx keys its cache by the spec string alone, so a dedicated cache
-    # that only these constrained runs fill keeps a copy fetched without the cool-off out.
-    npx --yes --before="$cutoff" --ignore-scripts --cache="${XDG_CACHE_HOME:-$HOME/.cache}/tbd-fallback-npm" "get-tbd@$configured_fallback_version" "$@"
+    npx --yes --ignore-scripts --registry=https://registry.npmjs.org/ --before="$published" --cache="${XDG_CACHE_HOME:-$HOME/.cache}/tbd-fallback-npm" "get-tbd@$configured_fallback_version" "$@"
 }
 
 tbd_print_install_hint() {
-    local cutoff
-    if cutoff=$(tbd_fallback_cutoff 2> /dev/null); then
-        echo "[tbd] Install it with: npm install -g --ignore-scripts --before=$cutoff get-tbd@$configured_fallback_version" >&2
-    else
-        echo "[tbd] Install it with: npm install -g --ignore-scripts get-tbd@$configured_fallback_version" >&2
-        echo "[tbd] Use a get-tbd release published at least $TBD_FALLBACK_COOL_OFF_DAYS days ago." >&2
-    fi
+    echo "[tbd] Install it with: npm install -g --ignore-scripts get-tbd@$configured_fallback_version" >&2
 }
 
 tbd_local_can_read_repository() {

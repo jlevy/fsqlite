@@ -1,0 +1,503 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S1-r2",
+  "workflow": "W2 v2 batches, one writer in line order (both arms)",
+  "recorded_at": "2026-11-17T05:03:05.047Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 10644,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1-r2/kb",
+    "corpus": {
+      "scale": "S1-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 46927,
+      "edges": 226281,
+      "record_files": 44057,
+      "record_bytes": 135246904,
+      "files": 44081,
+      "bytes": 225144535,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 1249,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r8",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 408
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r8",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 31
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r8",
+          "p99": 29
+        },
+        "organization": {
+          "max": 3712,
+          "max_node": "org:github",
+          "p99": 10
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r8",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r8",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r8",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r8",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r8",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r8",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r8",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r8",
+          "p99": 3
+        },
+        "software": {
+          "max": 4781,
+          "max_node": "software:github-copilot",
+          "p99": 4781
+        },
+        "term": {
+          "max": 1666,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 613
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r8",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r8",
+          "p99": 6
+        },
+        "_all": {
+          "max": 4781,
+          "p99": 75
+        }
+      },
+      "workers": 4,
+      "seconds": 14.9
+    },
+    "node_total": 46927,
+    "edge_total": 226281
+  },
+  "base_store": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S1-r2/store-direct",
+  "deltas": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1-r2/deltas",
+  "gc": "not run",
+  "fts_sidecar": "not rebuilt",
+  "arms": [
+    "DirectStore",
+    "Append"
+  ],
+  "results": {
+    "p01": {
+      "parse": {
+        "wall_ms": 385.393,
+        "seconds": 0.286,
+        "counts": {
+          "node": 455,
+          "op": 469,
+          "doc": 455,
+          "entity": 455,
+          "edge": 2663
+        },
+        "validation_seconds": 0.079,
+        "validated": 455,
+        "ops": 469,
+        "quarantined": []
+      },
+      "arms": {
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 1294.653,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 969.276,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null,
+              "state": "{\"entities\":47288,\"edges\":228150,\"quarantine\":[]}"
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 1294.653,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 1389.913,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        },
+        "Append": {
+          "reps": 3,
+          "capture_ms": 4.838,
+          "reconcile_ms": 954.079,
+          "visible_ms": 958.958,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "Append",
+              "capture_ms": 5.824,
+              "envelope_bytes": 2389758,
+              "reconcile_ms": 845.22,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":193.1519809998572,\"open_ms\":1.118662003427744,\"apply_ms\":168.50971399992704,\"closure_ms\":1.0881939977407455,\"gate_ms\":216.0809569992125,\"fsync_ms\":236.12206900119781,\"commit_ms\":26.122517999261618,\"published_at_epoch_ms\":1794891724953,\"settle_ms\":0.9631329998373985}",
+              "visible_ms": 851.108,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 4.078,
+              "envelope_bytes": 2389758,
+              "reconcile_ms": 1082.935,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":335.56538600102067,\"open_ms\":1.4774769991636276,\"apply_ms\":192.33627500012517,\"closure_ms\":0.5652140006422997,\"gate_ms\":198.91449400037527,\"fsync_ms\":350.12149100005627,\"commit_ms\":2.3370699994266033,\"published_at_epoch_ms\":1794891727985,\"settle_ms\":0.534010998904705}",
+              "visible_ms": 1087.055,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 4.838,
+              "envelope_bytes": 2389758,
+              "reconcile_ms": 954.079,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":184.8826959989965,\"open_ms\":1.2094210013747215,\"apply_ms\":179.7166499979794,\"closure_ms\":0.601442001760006,\"gate_ms\":242.64583499729633,\"fsync_ms\":341.5280640013516,\"commit_ms\":1.614946998655796,\"published_at_epoch_ms\":1794891729224,\"settle_ms\":0.6740339994430542}",
+              "visible_ms": 958.958,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        }
+      },
+      "same_rows_across_arms": true,
+      "digests": {
+        "DirectStore": {
+          "entity": "47288:420b4826f31f39c0",
+          "edge": "228150:2881184debfb62f9",
+          "doc": "44418:c30639ad8ce9b7b4",
+          "search_text": "66338:323c156bd9d979bf",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "9:338ab282e6a5b92c",
+          "kb_redirect": "5:c83581b36316ba91"
+        },
+        "Append": {
+          "entity": "47288:420b4826f31f39c0",
+          "edge": "228150:2881184debfb62f9",
+          "doc": "44418:c30639ad8ce9b7b4",
+          "search_text": "66338:323c156bd9d979bf",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "9:338ab282e6a5b92c",
+          "kb_redirect": "5:c83581b36316ba91"
+        }
+      }
+    },
+    "p05": {
+      "parse": {
+        "wall_ms": 1643.268,
+        "seconds": 1.429,
+        "counts": {
+          "node": 2276,
+          "op": 2346,
+          "doc": 2276,
+          "entity": 2276,
+          "edge": 13538
+        },
+        "validation_seconds": 0.362,
+        "validated": 2276,
+        "ops": 2346,
+        "quarantined": []
+      },
+      "arms": {
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 2076.114,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2121.937,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null,
+              "state": "{\"entities\":48734,\"edges\":235470,\"quarantine\":[]}",
+              "w3_check_against_reference": "{\"expected\":\"<scratch>/research-c/spike2/spike/harness/expected/S1-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 1990.526,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 2076.114,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        },
+        "Append": {
+          "reps": 3,
+          "capture_ms": 19.618,
+          "reconcile_ms": 1270.119,
+          "visible_ms": 1289.834,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "Append",
+              "capture_ms": 19.296,
+              "envelope_bytes": 11991964,
+              "reconcile_ms": 1050.735,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":139.17266300320625,\"open_ms\":0.7921739965677261,\"apply_ms\":579.2638280019164,\"closure_ms\":0.6421509981155396,\"gate_ms\":175.61415000259876,\"fsync_ms\":151.732416998595,\"commit_ms\":1.919037003070116,\"published_at_epoch_ms\":1794891747849,\"settle_ms\":0.4961489997804165}",
+              "visible_ms": 1070.077,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 21.017,
+              "envelope_bytes": 11991964,
+              "reconcile_ms": 1270.119,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":158.3432070016861,\"open_ms\":0.9496489986777306,\"apply_ms\":664.2410960011184,\"closure_ms\":1.0075029991567135,\"gate_ms\":205.54482699930668,\"fsync_ms\":229.0332079976797,\"commit_ms\":7.687492001801729,\"published_at_epoch_ms\":1794891751105,\"settle_ms\":0.5536269992589951}",
+              "visible_ms": 1291.177,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 19.618,
+              "envelope_bytes": 11991964,
+              "reconcile_ms": 1270.188,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":159.7887779995799,\"open_ms\":0.8641299977898598,\"apply_ms\":633.227870002389,\"closure_ms\":0.9770679995417595,\"gate_ms\":208.07572799921036,\"fsync_ms\":263.0909640006721,\"commit_ms\":2.4407650008797646,\"published_at_epoch_ms\":1794891752691,\"settle_ms\":0.4552920013666153}",
+              "visible_ms": 1289.834,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        }
+      },
+      "same_rows_across_arms": true,
+      "digests": {
+        "DirectStore": {
+          "entity": "48734:d4acd2f3dba97af5",
+          "edge": "235470:e6146c67c7b9f4ac",
+          "doc": "45864:e4c04bdf03467115",
+          "search_text": "68444:806202840d260297",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "47:9a175e4d10fa0815",
+          "kb_redirect": "23:7379f0ed8301f160"
+        },
+        "Append": {
+          "entity": "48734:d4acd2f3dba97af5",
+          "edge": "235470:e6146c67c7b9f4ac",
+          "doc": "45864:e4c04bdf03467115",
+          "search_text": "68444:806202840d260297",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "47:9a175e4d10fa0815",
+          "kb_redirect": "23:7379f0ed8301f160"
+        }
+      }
+    },
+    "p20": {
+      "parse": {
+        "wall_ms": 5226.241,
+        "seconds": 5.098,
+        "counts": {
+          "node": 9103,
+          "op": 9385,
+          "doc": 9103,
+          "entity": 9103,
+          "edge": 54562
+        },
+        "validation_seconds": 1.252,
+        "validated": 9103,
+        "ops": 9385,
+        "quarantined": []
+      },
+      "arms": {
+        "DirectStore": {
+          "reps": 3,
+          "capture_ms": null,
+          "reconcile_ms": null,
+          "visible_ms": 3686.803,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3706.281,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null,
+              "state": "{\"entities\":54153,\"edges\":264200,\"quarantine\":[]}"
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3686.803,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "DirectStore",
+              "visible_ms": 3622.737,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        },
+        "Append": {
+          "reps": 3,
+          "capture_ms": 94.736,
+          "reconcile_ms": 2917.519,
+          "visible_ms": 3014.08,
+          "fts_rebuild_ms": null,
+          "gc_retain0_ms": null,
+          "runs": [
+            {
+              "arm": "Append",
+              "capture_ms": 73.823,
+              "envelope_bytes": 48084190,
+              "reconcile_ms": 2917.519,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":203.83740599825978,\"open_ms\":2.7780969999730587,\"apply_ms\":2208.742132000625,\"closure_ms\":1.7443840019404888,\"gate_ms\":262.50617699697614,\"fsync_ms\":234.08704299852252,\"commit_ms\":2.073532998561859,\"published_at_epoch_ms\":1794891775217,\"settle_ms\":0.4947030022740364}",
+              "visible_ms": 2991.385,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 94.736,
+              "envelope_bytes": 48084190,
+              "reconcile_ms": 3829.077,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":268.3964320011437,\"open_ms\":0.8998459987342358,\"apply_ms\":3036.526059001684,\"closure_ms\":1.833933997899294,\"gate_ms\":259.5413979999721,\"fsync_ms\":244.4129290021956,\"commit_ms\":15.838968999683857,\"published_at_epoch_ms\":1794891781328,\"settle_ms\":0.5047749988734722}",
+              "visible_ms": 3923.847,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            },
+            {
+              "arm": "Append",
+              "capture_ms": 107.235,
+              "envelope_bytes": 48084190,
+              "reconcile_ms": 2906.76,
+              "quarantined_envelopes": 0,
+              "reconcile_timings": "{\"copy_ms\":327.92141599953175,\"open_ms\":0.8054950013756752,\"apply_ms\":2142.320218000561,\"closure_ms\":1.5006889998912811,\"gate_ms\":225.23327999934554,\"fsync_ms\":192.42226899787784,\"commit_ms\":13.815104000270367,\"published_at_epoch_ms\":1794891784705,\"settle_ms\":0.5931199975311756}",
+              "visible_ms": 3014.08,
+              "fts_rebuild_ms": null,
+              "gc_retain0_ms": null
+            }
+          ]
+        }
+      },
+      "same_rows_across_arms": true,
+      "digests": {
+        "DirectStore": {
+          "entity": "54153:940b345277d17a1e",
+          "edge": "264200:9addee2c48afd645",
+          "doc": "51283:0a55f1a64796897a",
+          "search_text": "76192:3730306dadb23fe9",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "188:b9e1e34c9c4700b1",
+          "kb_redirect": "94:3527a437d18a77d6"
+        },
+        "Append": {
+          "entity": "54153:940b345277d17a1e",
+          "edge": "264200:9addee2c48afd645",
+          "doc": "51283:0a55f1a64796897a",
+          "search_text": "76192:3730306dadb23fe9",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "188:b9e1e34c9c4700b1",
+          "kb_redirect": "94:3527a437d18a77d6"
+        }
+      }
+    }
+  }
+}

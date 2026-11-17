@@ -1,0 +1,247 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W2 trickle (C18)",
+  "recorded_at": "2026-11-17T05:10:34.195Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 9599,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "delta": "<scratch>/research-c/spike3/kbscratch-base/kb-corpora/S0/deltas/p20",
+  "gc": "gc({ retain: 0 }) after every publish",
+  "batches": {
+    "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 175.89,
+      "reconcile_ms": 907.377,
+      "visible_ms_median": 1044.224,
+      "records_per_s": 0.96,
+      "fts_rebuild_ms_median": 254.251,
+      "gc_retain0_ms_median": 137.147,
+      "runs": [
+        {
+          "capture_ms": 175.89,
+          "reconcile_ms": 291.764,
+          "visible_ms": 467.657,
+          "fts_rebuild_ms": 247.978,
+          "gc_ms": 137.147
+        },
+        {
+          "capture_ms": 1054.629,
+          "reconcile_ms": 1138.312,
+          "visible_ms": 2192.944,
+          "fts_rebuild_ms": 254.251,
+          "gc_ms": 128.888
+        },
+        {
+          "capture_ms": 136.843,
+          "reconcile_ms": 907.377,
+          "visible_ms": 1044.224,
+          "fts_rebuild_ms": 399.946,
+          "gc_ms": 305.776
+        }
+      ]
+    },
+    "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 198.11,
+      "records_per_s": 5.05,
+      "fts_rebuild_ms_median": 149,
+      "gc_retain0_ms_median": 200.814,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 221.565,
+          "fts_rebuild_ms": 149,
+          "gc_ms": 106.533
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 198.11,
+          "fts_rebuild_ms": 90.919,
+          "gc_ms": 200.814
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 140.004,
+          "fts_rebuild_ms": 269.349,
+          "gc_ms": 243.077
+        }
+      ]
+    },
+    "SnapshotStore.10": {
+      "arm": "SnapshotStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 84.056,
+      "reconcile_ms": 89.052,
+      "visible_ms_median": 159.192,
+      "records_per_s": 62.82,
+      "fts_rebuild_ms_median": 156.274,
+      "gc_retain0_ms_median": 132.932,
+      "runs": [
+        {
+          "capture_ms": 88.417,
+          "reconcile_ms": 131.301,
+          "visible_ms": 219.72,
+          "fts_rebuild_ms": 86.288,
+          "gc_ms": 107.051
+        },
+        {
+          "capture_ms": 84.056,
+          "reconcile_ms": 62.881,
+          "visible_ms": 146.938,
+          "fts_rebuild_ms": 229.905,
+          "gc_ms": 184.898
+        },
+        {
+          "capture_ms": 70.138,
+          "reconcile_ms": 89.052,
+          "visible_ms": 159.192,
+          "fts_rebuild_ms": 156.274,
+          "gc_ms": 132.932
+        }
+      ]
+    },
+    "DirectStore.10": {
+      "arm": "DirectStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 157.409,
+      "records_per_s": 63.53,
+      "fts_rebuild_ms_median": 143.238,
+      "gc_retain0_ms_median": 145.296,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 144.347,
+          "fts_rebuild_ms": 194.563,
+          "gc_ms": 145.296
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 163.897,
+          "fts_rebuild_ms": 143.238,
+          "gc_ms": 160.322
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 157.409,
+          "fts_rebuild_ms": 106.217,
+          "gc_ms": 106.395
+        }
+      ]
+    },
+    "SnapshotStore.100": {
+      "arm": "SnapshotStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 83.241,
+      "reconcile_ms": 89.735,
+      "visible_ms_median": 189.669,
+      "records_per_s": 527.23,
+      "fts_rebuild_ms_median": 200.897,
+      "gc_retain0_ms_median": 206.985,
+      "runs": [
+        {
+          "capture_ms": 99.932,
+          "reconcile_ms": 89.735,
+          "visible_ms": 189.669,
+          "fts_rebuild_ms": 199.067,
+          "gc_ms": 206.985
+        },
+        {
+          "capture_ms": 79.187,
+          "reconcile_ms": 174.84,
+          "visible_ms": 254.03,
+          "fts_rebuild_ms": 221.921,
+          "gc_ms": 261.181
+        },
+        {
+          "capture_ms": 83.241,
+          "reconcile_ms": 85.417,
+          "visible_ms": 168.66,
+          "fts_rebuild_ms": 200.897,
+          "gc_ms": 88.509
+        }
+      ]
+    },
+    "DirectStore.100": {
+      "arm": "DirectStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 219.084,
+      "records_per_s": 456.45,
+      "fts_rebuild_ms_median": 143.475,
+      "gc_retain0_ms_median": 225.896,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 219.084,
+          "fts_rebuild_ms": 137.644,
+          "gc_ms": 308.97
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 164.633,
+          "fts_rebuild_ms": 269.507,
+          "gc_ms": 225.896
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 234.897,
+          "fts_rebuild_ms": 143.475,
+          "gc_ms": 153.903
+        }
+      ]
+    }
+  },
+  "sustained": {
+    "seconds": 20,
+    "writers": 1,
+    "records_captured": 138,
+    "capture_records_per_s": 6.84,
+    "capture_ms_median": 111,
+    "reconciles": 37,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 174,
+    "gc_retain0_ms_median": 210,
+    "visibility_delay_ms": {
+      "p50": 567,
+      "p95": 2032,
+      "max": 3152
+    },
+    "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+  }
+}

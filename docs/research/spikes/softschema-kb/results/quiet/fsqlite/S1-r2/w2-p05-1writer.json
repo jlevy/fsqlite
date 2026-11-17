@@ -1,0 +1,165 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S1-r2",
+ "workflow": "w2-p05-1writer",
+ "description": "p05 as one SnapshotStore envelope in line order, then one reconcile",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14803,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "capture_ms": {
+   "median": 977.998,
+   "min": 977.998,
+   "max": 977.998,
+   "n": 1
+  },
+  "envelope_bytes": {
+   "median": 10187290,
+   "min": 10187290,
+   "max": 10187290,
+   "n": 1
+  },
+  "fts_sidecar_rebuild_ms": {
+   "median": 693.431,
+   "min": 693.431,
+   "max": 693.431,
+   "n": 1
+  },
+  "gc_retain0_ms": {
+   "median": 672.088,
+   "min": 672.088,
+   "max": 672.088,
+   "n": 1
+  },
+  "reconcile_ms": {
+   "median": 834.385,
+   "min": 834.385,
+   "max": 834.385,
+   "n": 1
+  },
+  "visible_ms": {
+   "median": 1812.439,
+   "min": 1812.439,
+   "max": 1812.439,
+   "n": 1
+  }
+ },
+ "earlier_contended": {
+  "source": "results/fsqlite/S1-r2/w2-v2.json",
+  "values": {
+   "visible_ms": 1663.684,
+   "capture_ms": 848.187,
+   "reconcile_ms": 815.458
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:51:12Z",
+   "wall_s": 13.005,
+   "load_before": [
+    0.98,
+    1.54,
+    1.48
+   ],
+   "load_after": [
+    0.99,
+    1.52,
+    1.48
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.023,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 15.02,
+   "disk_free_gb_min": 14.56,
+   "load_samples": [
+    {
+     "t": 1794905482.9,
+     "load1": 0.99,
+     "own_cpu": 0.519,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794905485.9,
+     "load1": 0.99,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.023
+    }
+   ],
+   "compare": {
+    "w3-after-p05.json": "MATCH: 124 ok, 0 differ"
+   },
+   "discarded_attempts": [],
+   "metrics": {
+    "visible_ms": 1812.439,
+    "capture_ms": 977.998,
+    "reconcile_ms": 834.385,
+    "fts_sidecar_rebuild_ms": 693.431,
+    "gc_retain0_ms": 672.088,
+    "envelope_bytes": 10187290
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14803,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "run": {
+     "arm": "SnapshotStore",
+     "capture_ms": 977.998,
+     "envelope_bytes": 10187290,
+     "reconcile_ms": 834.385,
+     "quarantined_envelopes": 0,
+     "visible_ms": 1812.439,
+     "fts_rebuild_ms": 693.431,
+     "gc_retain0_ms": 672.088,
+     "state": "{\"entities\":48734,\"edges\":235470,\"quarantine\":[]}",
+     "w3_check_against_reference": "{\"expected\":\"<scratch>/quiet/base/repo/docs/research/spikes/softschema-kb/harness/expected/S1-r2-p05/w3.json\",\"result\":\"MATCH: 124 ok, 0 differ\",\"differing\":[]}"
+    },
+    "parse": {
+     "wall_ms": 1651.915,
+     "seconds": 1.491,
+     "counts": {
+      "node": 2276,
+      "op": 2346,
+      "doc": 2276,
+      "entity": 2276,
+      "edge": 13538
+     },
+     "validation_seconds": 0.34,
+     "validated": 2276,
+     "ops": 2346,
+     "quarantined": []
+    }
+   }
+  }
+ ],
+ "superseded_runs": []
+}

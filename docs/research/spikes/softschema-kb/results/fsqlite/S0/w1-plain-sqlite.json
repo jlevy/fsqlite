@@ -1,0 +1,89 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W1 control (C15)",
+  "recorded_at": "2026-11-17T01:21:24.034Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14719,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "indexes_first": {
+    "arm": "plain SQLite (indexes-first)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 4796,
+      "node": 5407,
+      "doc": 4977,
+      "entity": 5407,
+      "edge": 25313,
+      "update": 0,
+      "removed": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 0.632,
+      "decode_ms": 55.334,
+      "transform_ms": 39.384,
+      "ingest_ms": 164.141,
+      "index_ms": 0,
+      "verify_counts_ms": 1.541,
+      "commit_durable_ms": 71.046,
+      "ingest_through_durable_ms": 339.338
+    },
+    "total_ms": 394.672,
+    "file_bytes": 38621184,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "indexes_after": {
+    "arm": "plain SQLite (indexes-after)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 4796,
+      "node": 5407,
+      "doc": 4977,
+      "entity": 5407,
+      "edge": 25313,
+      "update": 0,
+      "removed": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 0.946,
+      "decode_ms": 59.256,
+      "transform_ms": 45.303,
+      "ingest_ms": 128.244,
+      "index_ms": 36.149,
+      "verify_counts_ms": 2.721,
+      "commit_durable_ms": 75.279,
+      "ingest_through_durable_ms": 377.214
+    },
+    "total_ms": 436.469,
+    "file_bytes": 38064128,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "max_rss_mib": 171
+}

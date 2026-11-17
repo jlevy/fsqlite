@@ -1,0 +1,226 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1-r2",
+  "workflow": "W1 control (C15)",
+  "recorded_at": "2026-11-17T03:51:48.735Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 6623,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S1-r2/kb",
+    "corpus": {
+      "scale": "S1-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 46927,
+      "edges": 226281,
+      "record_files": 44057,
+      "record_bytes": 135246904,
+      "files": 44081,
+      "bytes": 225144535,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 1249,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r8",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 408
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r8",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 31
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r8",
+          "p99": 29
+        },
+        "organization": {
+          "max": 3712,
+          "max_node": "org:github",
+          "p99": 10
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r8",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r8",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r8",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r8",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r8",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r8",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r8",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r8",
+          "p99": 3
+        },
+        "software": {
+          "max": 4781,
+          "max_node": "software:github-copilot",
+          "p99": 4781
+        },
+        "term": {
+          "max": 1666,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 613
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r8",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r8",
+          "p99": 6
+        },
+        "_all": {
+          "max": 4781,
+          "p99": 75
+        }
+      },
+      "workers": 4,
+      "seconds": 14.9
+    },
+    "node_total": 46927,
+    "edge_total": 226281
+  },
+  "indexes_first": {
+    "arm": "plain SQLite (indexes-first)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 41348,
+      "node": 46927,
+      "doc": 44057,
+      "entity": 46927,
+      "edge": 226281,
+      "update": 0,
+      "removed": 0,
+      "op": 0,
+      "quarantined": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 1.287,
+      "decode_ms": 504.173,
+      "transform_ms": 298.774,
+      "ingest_ms": 2316.535,
+      "index_ms": 0,
+      "verify_counts_ms": 18.438,
+      "commit_durable_ms": 488.865,
+      "ingest_through_durable_ms": 3580.752
+    },
+    "total_ms": 4084.925,
+    "file_bytes": 380309504,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "indexes_after": {
+    "arm": "plain SQLite (indexes-after)",
+    "counts": {
+      "schema": 18,
+      "file": 3,
+      "line": 41348,
+      "node": 46927,
+      "doc": 44057,
+      "entity": 46927,
+      "edge": 226281,
+      "update": 0,
+      "removed": 0,
+      "op": 0,
+      "quarantined": 0
+    },
+    "count_problems": [],
+    "phases": {
+      "ddl_ms": 1.137,
+      "decode_ms": 521.33,
+      "transform_ms": 334.086,
+      "ingest_ms": 1196.369,
+      "index_ms": 654.76,
+      "verify_counts_ms": 12.28,
+      "commit_durable_ms": 583.383,
+      "ingest_through_durable_ms": 3397.059
+    },
+    "total_ms": 3918.389,
+    "file_bytes": 372047872,
+    "config": {
+      "journal_mode": "DELETE",
+      "synchronous": "FULL",
+      "bulk_pragmas": "PRAGMA cache_size = -262144;",
+      "node": "v22.23.4"
+    }
+  },
+  "max_rss_mib": 440.5
+}

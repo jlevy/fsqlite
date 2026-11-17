@@ -1,0 +1,289 @@
+{
+ "arm": "falkordb",
+ "arm_label": "FalkorDB (paraverse as built; incremental prototype in W2)",
+ "scale": "S1-r2",
+ "workflow": "w1-default",
+ "description": "paraverse load_kb + load_graph into an empty server, redislite's default save rules, then SAVE",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpu_count": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "memory_bytes": 16869134336,
+  "os": "Linux 6.18.44-fc-v553",
+  "python": "3.13.18",
+  "filesystems": [
+   {
+    "path": "<scratch>/kb-corpora/S1-r2/kb",
+    "device": "/dev/vda",
+    "type": "ext4",
+    "available_kb": 14713396
+   },
+   {
+    "path": "<scratch>/quiet/fdb/data/S1-r2",
+    "device": "/dev/vda",
+    "type": "ext4",
+    "available_kb": 14713396
+   }
+  ]
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "falkordb": "1.7.1",
+  "falkordblite": "0.10.0",
+  "redis_py": "8.1.0",
+  "falkordb_module": "4.18.3",
+  "redis_server": "8.6.2",
+  "softschema": "0.8.1",
+  "paraverse": "attic/paraverse db/src, unmodified, its uv.lock environment"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "durable_s": {
+   "median": 33.353,
+   "min": 33.353,
+   "max": 33.353,
+   "n": 1
+  },
+  "durable_save_s": {
+   "median": 0.533,
+   "min": 0.533,
+   "max": 0.533,
+   "n": 1
+  },
+  "ingest_through_durable_s": {
+   "median": 13.345,
+   "min": 13.345,
+   "max": 13.345,
+   "n": 1
+  },
+  "load_graph_s": {
+   "median": 12.62,
+   "min": 12.62,
+   "max": 12.62,
+   "n": 1
+  },
+  "loader_peak_rss_gb": {
+   "median": 1.074,
+   "min": 1.074,
+   "max": 1.074,
+   "n": 1
+  },
+  "parse_s": {
+   "median": 15.967,
+   "min": 15.967,
+   "max": 15.967,
+   "n": 1
+  },
+  "rdb_bytes": {
+   "median": 55217433,
+   "min": 55217433,
+   "max": 55217433,
+   "n": 1
+  },
+  "read_kb_s": {
+   "median": 20.008,
+   "min": 20.008,
+   "max": 20.008,
+   "n": 1
+  },
+  "servable_s": {
+   "median": 32.629,
+   "min": 32.629,
+   "max": 32.629,
+   "n": 1
+  },
+  "server_peak_rss_gb": {
+   "median": 0.385,
+   "min": 0.385,
+   "max": 0.385,
+   "n": 1
+  },
+  "server_peak_rss_with_forks_gb": {
+   "median": 0.385,
+   "min": 0.385,
+   "max": 0.385,
+   "n": 1
+  },
+  "server_used_memory_gb": {
+   "median": 0.278,
+   "min": 0.278,
+   "max": 0.278,
+   "n": 1
+  }
+ },
+ "earlier_contended": {
+  "source": "results/falkordb/S1-r2/w1.json",
+  "values": {
+   "ingest_through_durable_s": 13.812,
+   "servable_s": 31.646,
+   "durable_s": 32.35,
+   "loader_peak_rss_gb": 1.074,
+   "server_peak_rss_with_forks_gb": 0.386,
+   "rdb_bytes": 55214546
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T09:00:09Z",
+   "wall_s": 38.012,
+   "load_before": [
+    0.98,
+    1.32,
+    1.4
+   ],
+   "load_after": [
+    0.91,
+    1.26,
+    1.37
+   ],
+   "load1_max_during": 0.99,
+   "foreign_cpu_max": 0.017,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 15.07,
+   "disk_free_gb_min": 15.01,
+   "load_samples": [
+    {
+     "t": 1794906020.0,
+     "load1": 0.99,
+     "own_cpu": 0.949,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794906030.0,
+     "load1": 0.99,
+     "own_cpu": 1.011,
+     "foreign_cpu": 0.009
+    },
+    {
+     "t": 1794906040.0,
+     "load1": 0.99,
+     "own_cpu": 1.162,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794906048.0,
+     "load1": 0.91,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.012
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 13.345,
+    "servable_s": 32.629,
+    "durable_s": 33.353,
+    "read_kb_s": 20.008,
+    "load_graph_s": 12.62,
+    "durable_save_s": 0.533,
+    "parse_s": 15.967,
+    "loader_peak_rss_gb": 1.074,
+    "server_peak_rss_gb": 0.385,
+    "server_peak_rss_with_forks_gb": 0.385,
+    "server_used_memory_gb": 0.278,
+    "rdb_bytes": 55217433
+   },
+   "detail": {
+    "machine": {
+     "cpu_count": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "memory_bytes": 16869134336,
+     "os": "Linux 6.18.44-fc-v553",
+     "python": "3.13.18",
+     "filesystems": [
+      {
+       "path": "<scratch>/kb-corpora/S1-r2/kb",
+       "device": "/dev/vda",
+       "type": "ext4",
+       "available_kb": 14713396
+      },
+      {
+       "path": "<scratch>/quiet/fdb/data/S1-r2",
+       "device": "/dev/vda",
+       "type": "ext4",
+       "available_kb": 14713396
+      }
+     ]
+    },
+    "software": {
+     "falkordb": "1.7.1",
+     "falkordblite": "0.10.0",
+     "redis": "8.1.0",
+     "softschema": "0.8.1",
+     "pyyaml": "6.0.3",
+     "psutil": "7.2.2",
+     "falkordb_module": "4.18.3",
+     "redis_server": "8.6.2"
+    },
+    "server_config": {
+     "graph_config": {
+      "TIMEOUT": 0,
+      "TIMEOUT_DEFAULT": 0,
+      "TIMEOUT_MAX": 0,
+      "CACHE_SIZE": 25,
+      "ASYNC_DELETE": true,
+      "OMP_THREAD_COUNT": 4,
+      "THREAD_COUNT": 4,
+      "RESULTSET_SIZE": -1,
+      "VKEY_MAX_ENTITY_COUNT": 100000,
+      "MAX_QUEUED_QUERIES": 4294967295,
+      "QUERY_MEM_CAPACITY": 0,
+      "DELTA_MAX_PENDING_CHANGES": 10000,
+      "NODE_CREATION_BUFFER": 16384,
+      "CMD_INFO": true,
+      "MAX_INFO_QUERIES": 1000,
+      "EFFECTS_THRESHOLD": 300,
+      "BOLT_PORT": 65535,
+      "DELAY_INDEXING": false,
+      "IMPORT_FOLDER": "/var/lib/FalkorDB/import/",
+      "TEMP_FOLDER": "/tmp",
+      "JS_HEAP_SIZE": 268435456,
+      "JS_STACK_SIZE": 1048576
+     },
+     "redis_config": {
+      "save": "900 1 300 100 60 200 15 1000",
+      "appendonly": "no",
+      "maxmemory": "0",
+      "maxmemory-policy": "noeviction",
+      "io-threads": "1"
+     },
+     "client_socket_timeout": null
+    },
+    "phases": {
+     "discover_s": 4.239,
+     "parse_s": 15.967,
+     "validate_s": 0.022,
+     "read_other_s": 0.0,
+     "transform_s": 2.456,
+     "ingest_s": 6.758,
+     "index_s": 0.239,
+     "verify_s": 1.464,
+     "schemas_s": 0.321,
+     "constraint_s": 0.105,
+     "meta_s": 1.278,
+     "swap_s": 0.001,
+     "durable_save_s": 0.533
+    },
+    "memory": {
+     "loader_peak_rss": 1074475008,
+     "loader_peak_rss_sampled": 1074888704,
+     "server_peak_rss": 385200128,
+     "server_peak_rss_with_children": 385200128,
+     "server_used_memory": 278320416,
+     "server_used_memory_peak": 291867624,
+     "server_used_memory_rss": 384573440,
+     "machine_available_lowest": 14363680768
+    },
+    "aborted": false
+   }
+  }
+ ],
+ "superseded_runs": []
+}

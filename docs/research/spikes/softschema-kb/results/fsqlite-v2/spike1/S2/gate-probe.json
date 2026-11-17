@@ -1,0 +1,36 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S2",
+  "workflow": "gate probe",
+  "recorded_at": "2026-11-17T05:08:41.516739Z",
+  "command": "node probes/q3.mjs <S2 store-direct head> (read-only, warm, while trickle.ts ran on a clone and the FalkorDB arm ran)",
+  "per_table_quick_check_ms": {
+    "search_fts_data": 58,
+    "search_text": 55,
+    "doc": 142,
+    "facet_count": 46,
+    "kb_line": 156,
+    "search_fts_docsize": 13,
+    "search_doc": 33,
+    "sqlite_stat1": 0,
+    "quarantine": 0,
+    "entity": 406,
+    "kb_file": 0,
+    "search_fts_config": 0,
+    "edge": 254,
+    "applied_tx": 0,
+    "fsqlite_meta": 0,
+    "search_fts_idx": 0,
+    "kind_schema": 0
+  },
+  "per_table_total_ms": [
+    1165,
+    889
+  ],
+  "whole_quick_check_with_fts5_ms": [
+    2318,
+    2048
+  ],
+  "note": "the update-path gate checks every ordinary and shadow table with quick_check(T) and skips the FTS5 xIntegrity check; a rebuild runs the whole quick_check"
+}

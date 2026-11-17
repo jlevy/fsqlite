@@ -1,0 +1,319 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W2 trickle (C18)",
+  "recorded_at": "2026-11-17T05:13:23.963Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 9209,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "gc_opts": {},
+  "delta": "<scratch>/research-c/spike3/kbscratch/kb-corpora/S0/deltas/p20",
+  "gc": "gc({ retain: 0, ...{} }) after every publish",
+  "batches": {
+    "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 84.957,
+      "reconcile_ms": 272.606,
+      "visible_ms_median": 357.568,
+      "records_per_s": 2.8,
+      "fts_rebuild_ms_median": 81.551,
+      "gc_retain0_ms_median": 337.542,
+      "gc_unlink_ms_median": 34.473,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 84.957,
+          "reconcile_ms": 272.606,
+          "visible_ms": 357.568,
+          "fts_rebuild_ms": 75.225,
+          "gc_ms": 67.409,
+          "gc_verify_ms": 64.522,
+          "gc_unlink_ms": 0.815,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 38.15,
+          "reconcile_ms": 59.067,
+          "visible_ms": 97.22,
+          "fts_rebuild_ms": 81.551,
+          "gc_ms": 403.907,
+          "gc_verify_ms": 165.275,
+          "gc_unlink_ms": 40.493,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 198.243,
+          "reconcile_ms": 1035.526,
+          "visible_ms": 1233.772,
+          "fts_rebuild_ms": 88.777,
+          "gc_ms": 337.542,
+          "gc_verify_ms": 301.922,
+          "gc_unlink_ms": 34.473,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "DirectStore.1": {
+      "arm": "DirectStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 78.326,
+      "records_per_s": 12.77,
+      "fts_rebuild_ms_median": 77.155,
+      "gc_retain0_ms_median": 95.73,
+      "gc_unlink_ms_median": 32.397,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 78.326,
+          "fts_rebuild_ms": 73.784,
+          "gc_ms": 95.73,
+          "gc_verify_ms": 60.857,
+          "gc_unlink_ms": 33.845,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 80.127,
+          "fts_rebuild_ms": 95.979,
+          "gc_ms": 113.958,
+          "gc_verify_ms": 72.138,
+          "gc_unlink_ms": 32.397,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 75.893,
+          "fts_rebuild_ms": 77.155,
+          "gc_ms": 95.611,
+          "gc_verify_ms": 64.582,
+          "gc_unlink_ms": 30.167,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "SnapshotStore.10": {
+      "arm": "SnapshotStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 31.91,
+      "reconcile_ms": 58.227,
+      "visible_ms_median": 92.079,
+      "records_per_s": 108.6,
+      "fts_rebuild_ms_median": 76.251,
+      "gc_retain0_ms_median": 102.409,
+      "gc_unlink_ms_median": 39.851,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 31.91,
+          "reconcile_ms": 60.167,
+          "visible_ms": 92.079,
+          "fts_rebuild_ms": 73.223,
+          "gc_ms": 102.409,
+          "gc_verify_ms": 61.495,
+          "gc_unlink_ms": 39.93,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 34.869,
+          "reconcile_ms": 58.227,
+          "visible_ms": 93.099,
+          "fts_rebuild_ms": 77.229,
+          "gc_ms": 97.79,
+          "gc_verify_ms": 64.673,
+          "gc_unlink_ms": 32.265,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 27.389,
+          "reconcile_ms": 57.252,
+          "visible_ms": 84.643,
+          "fts_rebuild_ms": 76.251,
+          "gc_ms": 105.067,
+          "gc_verify_ms": 64.239,
+          "gc_unlink_ms": 39.851,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "DirectStore.10": {
+      "arm": "DirectStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 89.026,
+      "records_per_s": 112.33,
+      "fts_rebuild_ms_median": 102.319,
+      "gc_retain0_ms_median": 118.216,
+      "gc_unlink_ms_median": 34.842,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 86.047,
+          "fts_rebuild_ms": 106.541,
+          "gc_ms": 118.216,
+          "gc_verify_ms": 86.043,
+          "gc_unlink_ms": 31.175,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 89.026,
+          "fts_rebuild_ms": 102.319,
+          "gc_ms": 111.348,
+          "gc_verify_ms": 71.867,
+          "gc_unlink_ms": 38.422,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 95.592,
+          "fts_rebuild_ms": 81.139,
+          "gc_ms": 125.174,
+          "gc_verify_ms": 84.939,
+          "gc_unlink_ms": 34.842,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "SnapshotStore.100": {
+      "arm": "SnapshotStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 44.764,
+      "reconcile_ms": 76.678,
+      "visible_ms_median": 121.445,
+      "records_per_s": 823.42,
+      "fts_rebuild_ms_median": 85.275,
+      "gc_retain0_ms_median": 112.604,
+      "gc_unlink_ms_median": 39.517,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 54.514,
+          "reconcile_ms": 79.382,
+          "visible_ms": 133.9,
+          "fts_rebuild_ms": 85.275,
+          "gc_ms": 112.604,
+          "gc_verify_ms": 69.545,
+          "gc_unlink_ms": 41.782,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 44.231,
+          "reconcile_ms": 76.426,
+          "visible_ms": 120.661,
+          "fts_rebuild_ms": 84.381,
+          "gc_ms": 130.27,
+          "gc_verify_ms": 95.01,
+          "gc_unlink_ms": 31.217,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 44.764,
+          "reconcile_ms": 76.678,
+          "visible_ms": 121.445,
+          "fts_rebuild_ms": 86.233,
+          "gc_ms": 111.739,
+          "gc_verify_ms": 71.049,
+          "gc_unlink_ms": 39.517,
+          "gc_integrity_checked": 1
+        }
+      ]
+    },
+    "DirectStore.100": {
+      "arm": "DirectStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": null,
+      "reconcile_ms": null,
+      "visible_ms_median": 99.957,
+      "records_per_s": 1000.43,
+      "fts_rebuild_ms_median": 89.823,
+      "gc_retain0_ms_median": 102.638,
+      "gc_unlink_ms_median": 31.23,
+      "gc_scrubs": 3,
+      "runs": [
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 99.355,
+          "fts_rebuild_ms": 87.36,
+          "gc_ms": 102.273,
+          "gc_verify_ms": 70.431,
+          "gc_unlink_ms": 30.773,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 101.711,
+          "fts_rebuild_ms": 89.823,
+          "gc_ms": 102.638,
+          "gc_verify_ms": 70.408,
+          "gc_unlink_ms": 31.23,
+          "gc_integrity_checked": 1
+        },
+        {
+          "capture_ms": 0,
+          "reconcile_ms": 0,
+          "visible_ms": 99.957,
+          "fts_rebuild_ms": 122.462,
+          "gc_ms": 216.699,
+          "gc_verify_ms": 87.654,
+          "gc_unlink_ms": 32.224,
+          "gc_integrity_checked": 1
+        }
+      ]
+    }
+  },
+  "sustained": {
+    "seconds": 20,
+    "writers": 1,
+    "records_captured": 285,
+    "capture_records_per_s": 14.23,
+    "capture_ms_median": 46,
+    "reconciles": 58,
+    "records_per_reconcile_median": 5,
+    "reconcile_ms_median": 122,
+    "gc_retain0_ms_median": 128,
+    "round_ms_median": 252,
+    "gc_scrubs": 58,
+    "gc_verify_ms_median": 70.438,
+    "gc_unlink_ms_median": 51.181,
+    "generations_max": 1,
+    "visibility_delay_ms": {
+      "p50": 304,
+      "p95": 1301,
+      "max": 2054
+    },
+    "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+  }
+}

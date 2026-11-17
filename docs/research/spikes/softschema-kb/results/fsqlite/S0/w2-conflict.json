@@ -1,0 +1,113 @@
+{
+  "backend": "fsqlite",
+  "scale": "S0",
+  "workflow": "W2 conflicting writes (C20)",
+  "recorded_at": "2026-11-17T01:22:33.048Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14503,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "attic/paraverse/vendor/universe2026-md/kb",
+    "node_total": 5407,
+    "edge_total": 25313
+  },
+  "record": "person:dylan-ratcliffe",
+  "field": "payload.bio (and its search_text rank 2 row)",
+  "note": "Envelopes apply in byte-sorted tx-id order; tx ids start with a millisecond timestamp, so agentA (captured first) applies first.",
+  "results": {
+    "lww": {
+      "envelope_order": [
+        "1794878552187-000000000000-agentA-7ff2add3c6",
+        "1794878552217-000000000001-agentB-81e2d4ede9"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 2,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent B.",
+      "winner": "agentB",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "applied",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": []
+    },
+    "union": {
+      "envelope_order": [
+        "1794878552480-000000000000-agentA-355ce6b124",
+        "1794878552514-000000000001-agentB-ff48ee0392"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 2,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent A.",
+      "winner": "agentA",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "applied",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": []
+    },
+    "strict": {
+      "envelope_order": [
+        "1794878552780-000000000000-agentA-0952128b21",
+        "1794878552815-000000000001-agentB-8281a5da15"
+      ],
+      "reconcile": {
+        "published": 2,
+        "applied": 1,
+        "quarantined": 1,
+        "attempts": 1
+      },
+      "before": "Dylan is the co-founder and CEO of Overmind, where he and a small team show engineers the blast radius of every infrastructure change before it merges. Before Overmind, he spent seven years at Puppet leading professional services teams across EMEA, shipping the kind of automation engineers have to trust to sleep at night. He’s watched four waves of automation reshape software delivery, and AI is the first one to change the shape of the engineering role itself, which is why he can’t stop talking about it. Originally from Melbourne, he now lives in San Francisco and spends his weekends exploring California with his wife and puppy.",
+      "published": "Bio from agent A.",
+      "winner": "agentA",
+      "recoverable": [
+        {
+          "where": "applied",
+          "writer": "agentA",
+          "bio": "Bio from agent A."
+        },
+        {
+          "where": "quarantine",
+          "writer": "agentB",
+          "bio": "Bio from agent B."
+        }
+      ],
+      "quarantine": [
+        "1794878552815-000000000001-agentB-8281a5da15.txn"
+      ]
+    }
+  }
+}

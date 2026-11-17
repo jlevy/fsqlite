@@ -1,0 +1,100 @@
+{
+  "workflow": "W1",
+  "backend": "falkordb",
+  "arm": "paraverse as built",
+  "scale": "S3",
+  "save_mode": "default",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S3/kb",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 12532008
+      },
+      {
+        "path": "<scratch>/fdb-data/S3",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 12532008
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2",
+    "falkordb_module": "4.18.3",
+    "redis_server": "8.6.2"
+  },
+  "server_config": {
+    "graph_config": {
+      "TIMEOUT": 0,
+      "TIMEOUT_DEFAULT": 0,
+      "TIMEOUT_MAX": 0,
+      "CACHE_SIZE": 25,
+      "ASYNC_DELETE": true,
+      "OMP_THREAD_COUNT": 4,
+      "THREAD_COUNT": 4,
+      "RESULTSET_SIZE": -1,
+      "VKEY_MAX_ENTITY_COUNT": 100000,
+      "MAX_QUEUED_QUERIES": 4294967295,
+      "QUERY_MEM_CAPACITY": 0,
+      "DELTA_MAX_PENDING_CHANGES": 10000,
+      "NODE_CREATION_BUFFER": 16384,
+      "CMD_INFO": true,
+      "MAX_INFO_QUERIES": 1000,
+      "EFFECTS_THRESHOLD": 300,
+      "BOLT_PORT": 65535,
+      "DELAY_INDEXING": false,
+      "IMPORT_FOLDER": "/var/lib/FalkorDB/import/",
+      "TEMP_FOLDER": "/tmp",
+      "JS_HEAP_SIZE": 268435456,
+      "JS_STACK_SIZE": 1048576
+    },
+    "redis_config": {
+      "save": "900 1 300 100 60 200 15 1000",
+      "appendonly": "no",
+      "maxmemory": "0",
+      "maxmemory-policy": "noeviction",
+      "io-threads": "1"
+    },
+    "client_socket_timeout": null
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S3/kb",
+    "seed": 20261117,
+    "replicas": 185,
+    "nodes": 1000295,
+    "edges": 4682905,
+    "record_files": 920375,
+    "bytes": 4581886080
+  },
+  "parser": {
+    "name": "PyYAML CSafeLoader via paraverse kb.read_artifact",
+    "processes": 1,
+    "jobs": 1
+  },
+  "aborted": true,
+  "abort_reason": "memory guard: loader RSS above the 6.0 GB cap",
+  "abort_stage": "parse",
+  "artifacts_parsed_at_abort": 0,
+  "elapsed_s_at_abort": 46.297,
+  "phases_s_at_abort": {
+    "discover": 33.797,
+    "parse_graph_export": 1.983
+  },
+  "memory_at_abort": {
+    "loader_peak_rss": 6083059712,
+    "server_peak_rss_with_children": 18075648,
+    "machine_available": 9605279744
+  }
+}

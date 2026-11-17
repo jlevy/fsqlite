@@ -1,0 +1,702 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S2-r2",
+ "workflow": "trickle-sustained",
+ "description": "60 s: one writer capturing one-record envelopes, one reconciler looping reconcile then gc({retain:0})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 15083,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "capture_records_per_s": {
+   "median": 0.47,
+   "min": 0.46,
+   "max": 0.5,
+   "n": 3
+  },
+  "gc_ms_median": {
+   "median": 5604,
+   "min": 5564,
+   "max": 5692,
+   "n": 3
+  },
+  "gc_share_of_build_plus_gc": {
+   "median": 0.6046,
+   "min": 0.5453,
+   "max": 0.6549,
+   "n": 3
+  },
+  "reconcile_ms_median": {
+   "median": 3722,
+   "min": 2932,
+   "max": 4672,
+   "n": 3
+  },
+  "reconciles": {
+   "median": 7,
+   "min": 7,
+   "max": 8,
+   "n": 3
+  },
+  "records_captured": {
+   "median": 29,
+   "min": 28,
+   "max": 30,
+   "n": 3
+  },
+  "records_per_reconcile_median": {
+   "median": 4,
+   "min": 3,
+   "max": 4,
+   "n": 3
+  },
+  "visibility_max_ms": {
+   "median": 17235,
+   "min": 15813,
+   "max": 18730,
+   "n": 3
+  },
+  "visibility_p50_ms": {
+   "median": 10069,
+   "min": 9433,
+   "max": 10712,
+   "n": 3
+  },
+  "visibility_p95_ms": {
+   "median": 16121,
+   "min": 14380,
+   "max": 18083,
+   "n": 3
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:32:28Z",
+   "wall_s": 73.019,
+   "load_before": [
+    0.92,
+    0.98,
+    1.05
+   ],
+   "load_after": [
+    1.68,
+    1.22,
+    1.13
+   ],
+   "load1_max_during": 1.88,
+   "foreign_cpu_max": 0.033,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 12.31,
+   "disk_free_gb_min": 6.47,
+   "load_samples": [
+    {
+     "t": 1794904358.3,
+     "load1": 1.09,
+     "own_cpu": 1.16,
+     "foreign_cpu": 0.02
+    },
+    {
+     "t": 1794904368.3,
+     "load1": 1.23,
+     "own_cpu": 0.696,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794904378.3,
+     "load1": 1.35,
+     "own_cpu": 0.863,
+     "foreign_cpu": 0.005
+    },
+    {
+     "t": 1794904388.3,
+     "load1": 1.53,
+     "own_cpu": 0.77,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794904398.3,
+     "load1": 1.76,
+     "own_cpu": 0.914,
+     "foreign_cpu": 0.033
+    },
+    {
+     "t": 1794904408.3,
+     "load1": 1.88,
+     "own_cpu": 0.951,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794904418.3,
+     "load1": 1.74,
+     "own_cpu": 0.754,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794904421.3,
+     "load1": 1.68,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.02
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 28,
+    "capture_records_per_s": 0.46,
+    "visibility_p50_ms": 10712,
+    "visibility_p95_ms": 18083,
+    "visibility_max_ms": 18730,
+    "gc_ms_median": 5604,
+    "reconciles": 7,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 4672,
+    "gc_share_of_build_plus_gc": 0.5453
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15083,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 28,
+     "capture_records_per_s": 0.46,
+     "capture_ms_median": 1578,
+     "reconciles": 7,
+     "records_per_reconcile_median": 4,
+     "reconcile_ms_median": 4672,
+     "gc_retain0_ms_median": 5604,
+     "visibility_delay_ms": {
+      "p50": 10712,
+      "p95": 18083,
+      "max": 18730
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:34:21Z",
+   "wall_s": 71.017,
+   "load_before": [
+    0.93,
+    1.08,
+    1.08
+   ],
+   "load_after": [
+    1.76,
+    1.33,
+    1.17
+   ],
+   "load1_max_during": 1.89,
+   "foreign_cpu_max": 0.026,
+   "waited_for_quiet_s": 40.0,
+   "disk_free_gb_before": 12.31,
+   "disk_free_gb_min": 6.47,
+   "load_samples": [
+    {
+     "t": 1794904471.4,
+     "load1": 1.09,
+     "own_cpu": 1.211,
+     "foreign_cpu": 0.014
+    },
+    {
+     "t": 1794904481.4,
+     "load1": 1.55,
+     "own_cpu": 0.978,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794904491.4,
+     "load1": 1.62,
+     "own_cpu": 0.98,
+     "foreign_cpu": 0.023
+    },
+    {
+     "t": 1794904501.4,
+     "load1": 1.76,
+     "own_cpu": 0.794,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794904511.4,
+     "load1": 1.87,
+     "own_cpu": 0.875,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794904521.4,
+     "load1": 1.89,
+     "own_cpu": 0.82,
+     "foreign_cpu": 0.018
+    },
+    {
+     "t": 1794904531.4,
+     "load1": 1.76,
+     "own_cpu": 0.007,
+     "foreign_cpu": 0.026
+    },
+    {
+     "t": 1794904532.4,
+     "load1": 1.76,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.01
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 30,
+    "capture_records_per_s": 0.5,
+    "visibility_p50_ms": 10069,
+    "visibility_p95_ms": 16121,
+    "visibility_max_ms": 17235,
+    "gc_ms_median": 5692,
+    "reconciles": 7,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 3722,
+    "gc_share_of_build_plus_gc": 0.6046
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15099,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 30,
+     "capture_records_per_s": 0.5,
+     "capture_ms_median": 1531,
+     "reconciles": 7,
+     "records_per_reconcile_median": 4,
+     "reconcile_ms_median": 3722,
+     "gc_retain0_ms_median": 5692,
+     "visibility_delay_ms": {
+      "p50": 10069,
+      "p95": 16121,
+      "max": 17235
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:36:17Z",
+   "wall_s": 73.018,
+   "load_before": [
+    0.92,
+    1.17,
+    1.13
+   ],
+   "load_after": [
+    1.78,
+    1.4,
+    1.21
+   ],
+   "load1_max_during": 1.92,
+   "foreign_cpu_max": 0.018,
+   "waited_for_quiet_s": 45.0,
+   "disk_free_gb_before": 12.31,
+   "disk_free_gb_min": 6.47,
+   "load_samples": [
+    {
+     "t": 1794904587.4,
+     "load1": 1.17,
+     "own_cpu": 1.266,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794904597.4,
+     "load1": 1.45,
+     "own_cpu": 1.011,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794904607.4,
+     "load1": 1.62,
+     "own_cpu": 0.88,
+     "foreign_cpu": 0.016
+    },
+    {
+     "t": 1794904617.4,
+     "load1": 1.68,
+     "own_cpu": 0.816,
+     "foreign_cpu": 0.018
+    },
+    {
+     "t": 1794904627.4,
+     "load1": 1.73,
+     "own_cpu": 0.884,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794904637.4,
+     "load1": 1.92,
+     "own_cpu": 0.734,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794904647.4,
+     "load1": 1.78,
+     "own_cpu": 0.833,
+     "foreign_cpu": 0.004
+    },
+    {
+     "t": 1794904650.4,
+     "load1": 1.78,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.003
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 29,
+    "capture_records_per_s": 0.47,
+    "visibility_p50_ms": 9433,
+    "visibility_p95_ms": 14380,
+    "visibility_max_ms": 15813,
+    "gc_ms_median": 5564,
+    "reconciles": 8,
+    "records_per_reconcile_median": 3,
+    "reconcile_ms_median": 2932,
+    "gc_share_of_build_plus_gc": 0.6549
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15093,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 29,
+     "capture_records_per_s": 0.47,
+     "capture_ms_median": 1478,
+     "reconciles": 8,
+     "records_per_reconcile_median": 3,
+     "reconcile_ms_median": 2932,
+     "gc_retain0_ms_median": 5564,
+     "visibility_delay_ms": {
+      "p50": 9433,
+      "p95": 14380,
+      "max": 15813
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  }
+ ],
+ "superseded_runs": [
+  {
+   "rep": 1,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T06:54:05Z",
+   "wall_s": 76.017,
+   "load_before": [
+    0.92,
+    1.02,
+    1.1
+   ],
+   "load_after": [
+    1.54,
+    1.24,
+    1.18
+   ],
+   "load1_max_during": 1.76,
+   "foreign_cpu_max": 0.065,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898455.6,
+     "load1": 1.17,
+     "own_cpu": 1.397,
+     "foreign_cpu": 0.046
+    },
+    {
+     "t": 1794898465.6,
+     "load1": 1.53,
+     "own_cpu": 0.983,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898475.6,
+     "load1": 1.6,
+     "own_cpu": 0.883,
+     "foreign_cpu": 0.038
+    },
+    {
+     "t": 1794898485.6,
+     "load1": 1.66,
+     "own_cpu": 0.793,
+     "foreign_cpu": 0.065
+    },
+    {
+     "t": 1794898495.6,
+     "load1": 1.72,
+     "own_cpu": 0.975,
+     "foreign_cpu": 0.025
+    },
+    {
+     "t": 1794898505.6,
+     "load1": 1.76,
+     "own_cpu": 0.874,
+     "foreign_cpu": 0.022
+    },
+    {
+     "t": 1794898515.6,
+     "load1": 1.64,
+     "own_cpu": 0.755,
+     "foreign_cpu": 0.042
+    },
+    {
+     "t": 1794898521.6,
+     "load1": 1.54,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.025
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 32,
+    "capture_records_per_s": 0.53,
+    "visibility_p50_ms": 9508,
+    "visibility_p95_ms": 15094,
+    "visibility_max_ms": 15133,
+    "gc_ms_median": 5697,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 2915,
+    "gc_share_of_build_plus_gc": 0.6615
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T06:55:51Z",
+   "wall_s": 76.018,
+   "load_before": [
+    0.93,
+    1.12,
+    1.14
+   ],
+   "load_after": [
+    1.57,
+    1.31,
+    1.21
+   ],
+   "load1_max_during": 1.73,
+   "foreign_cpu_max": 0.068,
+   "waited_for_quiet_s": 30.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898561.6,
+     "load1": 1.18,
+     "own_cpu": 1.354,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898571.6,
+     "load1": 1.38,
+     "own_cpu": 0.971,
+     "foreign_cpu": 0.032
+    },
+    {
+     "t": 1794898581.6,
+     "load1": 1.56,
+     "own_cpu": 0.863,
+     "foreign_cpu": 0.01
+    },
+    {
+     "t": 1794898591.6,
+     "load1": 1.63,
+     "own_cpu": 0.867,
+     "foreign_cpu": 0.029
+    },
+    {
+     "t": 1794898601.6,
+     "load1": 1.69,
+     "own_cpu": 0.94,
+     "foreign_cpu": 0.032
+    },
+    {
+     "t": 1794898611.6,
+     "load1": 1.73,
+     "own_cpu": 0.811,
+     "foreign_cpu": 0.015
+    },
+    {
+     "t": 1794898621.6,
+     "load1": 1.62,
+     "own_cpu": 0.647,
+     "foreign_cpu": 0.013
+    },
+    {
+     "t": 1794898627.6,
+     "load1": 1.57,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.068
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 30,
+    "capture_records_per_s": 0.49,
+    "visibility_p50_ms": 9519,
+    "visibility_p95_ms": 15916,
+    "visibility_max_ms": 17287,
+    "gc_ms_median": 5697,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 3234,
+    "gc_share_of_build_plus_gc": 0.6379
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "superseded: ran in the coordinator's contaminated window (06:45 to 07:10 UTC) and was rerun",
+   "started_at": "2026-11-17T06:57:37Z",
+   "wall_s": 76.019,
+   "load_before": [
+    0.95,
+    1.18,
+    1.17
+   ],
+   "load_after": [
+    1.64,
+    1.36,
+    1.23
+   ],
+   "load1_max_during": 1.71,
+   "foreign_cpu_max": 0.031,
+   "waited_for_quiet_s": 30.0,
+   "disk_free_gb_before": 13.02,
+   "disk_free_gb_min": 7.18,
+   "load_samples": [
+    {
+     "t": 1794898667.7,
+     "load1": 1.11,
+     "own_cpu": 1.143,
+     "foreign_cpu": 0.031
+    },
+    {
+     "t": 1794898677.7,
+     "load1": 1.25,
+     "own_cpu": 0.951,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794898687.7,
+     "load1": 1.53,
+     "own_cpu": 0.876,
+     "foreign_cpu": 0.004
+    },
+    {
+     "t": 1794898697.7,
+     "load1": 1.6,
+     "own_cpu": 0.87,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794898707.7,
+     "load1": 1.66,
+     "own_cpu": 0.936,
+     "foreign_cpu": 0.021
+    },
+    {
+     "t": 1794898717.7,
+     "load1": 1.71,
+     "own_cpu": 0.98,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794898727.7,
+     "load1": 1.6,
+     "own_cpu": 0.755,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794898733.7,
+     "load1": 1.64,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.018
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 33,
+    "capture_records_per_s": 0.54,
+    "visibility_p50_ms": 9548,
+    "visibility_p95_ms": 14105,
+    "visibility_max_ms": 15824,
+    "gc_ms_median": 5122,
+    "reconciles": 8,
+    "records_per_reconcile_median": 4,
+    "reconcile_ms_median": 3294,
+    "gc_share_of_build_plus_gc": 0.6086
+   }
+  }
+ ]
+}

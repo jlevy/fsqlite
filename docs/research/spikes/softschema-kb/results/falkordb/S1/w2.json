@@ -1,0 +1,364 @@
+{
+  "workflow": "W2",
+  "backend": "falkordb",
+  "arms": {
+    "paraverse_as_built": "full rebuild with paraverse load_kb + load_graph, then RENAME",
+    "incremental_prototype": "spike-only upsert with paraverse's mapping functions; not part of paraverse"
+  },
+  "scale": "S1",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 8168536
+      },
+      {
+        "path": "<scratch>/fdb-data/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 8168536
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S1/kb",
+    "seed": 20261117,
+    "replicas": 9,
+    "nodes": 48663,
+    "edges": 227817,
+    "record_files": 44775,
+    "bytes": 221432416
+  },
+  "batches": [
+    {
+      "pct": 1,
+      "changes": 487,
+      "new": 390,
+      "updated": 97,
+      "new_edges": 2340,
+      "post_delta_nodes": 49053,
+      "post_delta_edges": 230157,
+      "kb_materialize": {
+        "linked": 44797,
+        "overlaid": 487,
+        "nodes": 49053,
+        "edges": 230157,
+        "seconds": 18.33
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 18.332,
+        "read_kb_s": 32.039,
+        "load_graph_s": 12.635,
+        "db_visible_s": 44.673,
+        "total_visible_s": 63.005,
+        "durable_save_s": 0.596,
+        "durable_s": 45.269,
+        "server_peak_rss": 658419712,
+        "loader_peak_rss_sampled": 1066770432,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 0.234,
+        "write_s": 0.122,
+        "publish_s": 0.003,
+        "db_visible_s": 0.359,
+        "durable_save_s": 0.53,
+        "durable_s": 0.888,
+        "new_record_visible": true,
+        "counts": {
+          "new": 390,
+          "updated": 97,
+          "edges": 2340
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "pct": 5,
+      "changes": 2433,
+      "new": 1946,
+      "updated": 487,
+      "new_edges": 14456,
+      "post_delta_nodes": 50609,
+      "post_delta_edges": 242273,
+      "kb_materialize": {
+        "linked": 44797,
+        "overlaid": 2433,
+        "nodes": 50609,
+        "edges": 242273,
+        "seconds": 2.86
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 2.861,
+        "read_kb_s": 20.487,
+        "load_graph_s": 16.312,
+        "db_visible_s": 36.799,
+        "total_visible_s": 39.66,
+        "durable_save_s": 0.569,
+        "durable_s": 37.368,
+        "server_peak_rss": 667168768,
+        "loader_peak_rss_sampled": 1127047168,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 0.944,
+        "write_s": 0.706,
+        "publish_s": 0.001,
+        "db_visible_s": 1.65,
+        "durable_save_s": 1.631,
+        "durable_s": 3.282,
+        "new_record_visible": true,
+        "counts": {
+          "new": 1946,
+          "updated": 487,
+          "edges": 14456
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    },
+    {
+      "pct": 20,
+      "changes": 9733,
+      "new": 7786,
+      "updated": 1947,
+      "new_edges": 54941,
+      "post_delta_nodes": 56449,
+      "post_delta_edges": 282758,
+      "kb_materialize": {
+        "linked": 44797,
+        "overlaid": 9733,
+        "nodes": 56449,
+        "edges": 282758,
+        "seconds": 9.73
+      },
+      "paraverse_as_built": {
+        "kb_build_s": 9.729,
+        "read_kb_s": 39.655,
+        "load_graph_s": 17.347,
+        "db_visible_s": 57.003,
+        "total_visible_s": 66.732,
+        "durable_save_s": 2.199,
+        "durable_s": 59.201,
+        "server_peak_rss": 719290368,
+        "loader_peak_rss_sampled": 1226539008,
+        "new_record_visible": true,
+        "counts_match_post_delta_stats": true
+      },
+      "incremental_prototype": {
+        "parse_and_map_s": 3.975,
+        "write_s": 2.645,
+        "publish_s": 0.001,
+        "db_visible_s": 6.621,
+        "durable_save_s": 0.651,
+        "durable_s": 7.272,
+        "new_record_visible": true,
+        "counts": {
+          "new": 7786,
+          "updated": 1947,
+          "edges": 54941
+        },
+        "counts_match_rebuild": true,
+        "w3_match_rebuild": true,
+        "w3_differences": []
+      }
+    }
+  ],
+  "concurrency": {
+    "writers": 4,
+    "writer_exit_codes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "writers_wall_s": 2.556,
+    "writer_reports": [
+      {
+        "part": 0,
+        "prepare_s": 0.319,
+        "apply_s": 1.977,
+        "counts": {
+          "new": 487,
+          "updated": 122,
+          "edges": 3785
+        },
+        "errors": []
+      },
+      {
+        "part": 1,
+        "prepare_s": 0.379,
+        "apply_s": 1.962,
+        "counts": {
+          "new": 487,
+          "updated": 122,
+          "edges": 3883
+        },
+        "errors": []
+      },
+      {
+        "part": 2,
+        "prepare_s": 0.46,
+        "apply_s": 1.746,
+        "counts": {
+          "new": 486,
+          "updated": 122,
+          "edges": 3417
+        },
+        "errors": []
+      },
+      {
+        "part": 3,
+        "prepare_s": 0.305,
+        "apply_s": 1.848,
+        "counts": {
+          "new": 486,
+          "updated": 121,
+          "edges": 3371
+        },
+        "errors": []
+      }
+    ],
+    "counts_match_post_delta_stats": true,
+    "reader_idle": {
+      "by_category": {
+        "facet": {
+          "n": 26,
+          "p50_ms": 11.227,
+          "p95_ms": 12.454
+        },
+        "neighborhood": {
+          "n": 39,
+          "p50_ms": 1.664,
+          "p95_ms": 2.324
+        },
+        "path": {
+          "n": 65,
+          "p50_ms": 7.949,
+          "p95_ms": 11.86
+        },
+        "record": {
+          "n": 52,
+          "p50_ms": 1.214,
+          "p95_ms": 1.657
+        },
+        "search": {
+          "n": 52,
+          "p50_ms": 72.78,
+          "p95_ms": 79.849
+        },
+        "table": {
+          "n": 78,
+          "p50_ms": 5.011,
+          "p95_ms": 10.462
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 5.13
+    },
+    "reader_during_writers": {
+      "by_category": {
+        "facet": {
+          "n": 16,
+          "p50_ms": 17.084,
+          "p95_ms": 26.052
+        },
+        "neighborhood": {
+          "n": 24,
+          "p50_ms": 2.566,
+          "p95_ms": 11.784
+        },
+        "path": {
+          "n": 40,
+          "p50_ms": 10.023,
+          "p95_ms": 23.621
+        },
+        "record": {
+          "n": 32,
+          "p50_ms": 1.49,
+          "p95_ms": 13.554
+        },
+        "search": {
+          "n": 32,
+          "p50_ms": 78.282,
+          "p95_ms": 90.95
+        },
+        "table": {
+          "n": 48,
+          "p50_ms": 6.543,
+          "p95_ms": 22.62
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 3.85
+    },
+    "rebuild_with_reader_s": 35.818,
+    "reader_during_rebuild": {
+      "by_category": {
+        "facet": {
+          "n": 166,
+          "p50_ms": 12.183,
+          "p95_ms": 18.313
+        },
+        "neighborhood": {
+          "n": 249,
+          "p50_ms": 2.016,
+          "p95_ms": 3.841
+        },
+        "path": {
+          "n": 415,
+          "p50_ms": 8.603,
+          "p95_ms": 15.578
+        },
+        "record": {
+          "n": 332,
+          "p50_ms": 1.372,
+          "p95_ms": 4.233
+        },
+        "search": {
+          "n": 332,
+          "p50_ms": 76.391,
+          "p95_ms": 91.795
+        },
+        "table": {
+          "n": 498,
+          "p50_ms": 5.733,
+          "p95_ms": 13.095
+        }
+      },
+      "errors": 0,
+      "error_samples": [],
+      "seconds": 37.17
+    },
+    "pct": 5
+  },
+  "notes": [
+    "paraverse supports only full rebuilds: a new staging graph, then RENAME over the live one.",
+    "kb_build_s stands in for the KB build that regenerates _graph; it hard-links the base and overlays the delta.",
+    "The incremental prototype is not part of paraverse: it upserts nodes with paraverse's mapping and creates new records' edges; edge changes of updated records would need an edge diff from the build (none in these deltas).",
+    "Incremental correctness: per-kind and per-relation counts and all W3 results equal those of the full rebuild.",
+    "db_visible_s is servable (queries see the change); durable_s adds an explicit SAVE, since the default save rules would persist it only at the next snapshot."
+  ]
+}

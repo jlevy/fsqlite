@@ -1,0 +1,489 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2-spike1 (derived objects built in each generation)",
+  "scale": "S1",
+  "workflow": "w1",
+  "recorded_at": "2026-11-17T04:55:12.822Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 10704,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike1/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "kb_bytes": 221432416,
+  "parse": {
+    "label": "parse",
+    "seconds": 11.894,
+    "max_rss_mib": 150.7,
+    "exit": 0,
+    "report": {
+      "seconds": 11.721,
+      "jobs": 4,
+      "counts": {
+        "schema": 18,
+        "line": 43052,
+        "node": 48663,
+        "file": 3,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817
+      }
+    },
+    "parser": "parse_kb.py: PyYAML CSafeLoader in a process pool, rows streamed in path order",
+    "validation": "not run"
+  },
+  "intermediate_bytes": 264854291,
+  "direct": {
+    "label": "load-direct",
+    "seconds": 6.396,
+    "max_rss_mib": 459.8,
+    "exit": 0,
+    "report": {
+      "arm": "DirectStore",
+      "route": "init() with the base DDL, then one DirectStore.write({ derived: \"rebuild\" }) streaming every row",
+      "version": 1,
+      "build": {
+        "lane": "direct",
+        "mode": "rebuild",
+        "buildCacheKiB": 262144,
+        "envelopes": 0,
+        "changedRows": 0,
+        "drop_ms": 0.5818970017135143,
+        "apply_ms": 2400.9673599991947,
+        "changes_ms": 0,
+        "closure_ms": 0.154,
+        "closureRemoved": 0,
+        "derive_ms": 1447.266,
+        "statistics_ms": 121.358,
+        "plans_ms": 0.694,
+        "hook_ms": 1569.472,
+        "gate": "full",
+        "gate_ms": 640.736,
+        "plans": [
+          {
+            "name": "view sessions_by_start",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_all_by_stars",
+            "uses": [
+              "ix_view_repos_all_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+            ]
+          },
+          {
+            "name": "view sessions_by_start total",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars total",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "people_by_org join without a hint",
+            "uses": [
+              "ix_entity_id_kind",
+              "sqlite_autoindex_entity_1"
+            ],
+            "ok": true,
+            "plan": [
+              "CO-ROUTINE m",
+              "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+              "SCAN m",
+              "SEARCH e USING INDEX ix_entity_id_kind (id=? AND kind=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ],
+        "createdObjects": [
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_facet_top"
+        ],
+        "droppedObjects": [
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "ix_facet_top"
+        ]
+      },
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 43052,
+        "node": 48663,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "phases": {
+        "init_ddl_ms": 43.549,
+        "decode_ms": 501.611,
+        "transform_ms": 315.258,
+        "ingest_ms": 1048.077,
+        "verify_counts_ms": 62.345,
+        "publish_ms": 2779.265,
+        "publish_note": "derived build (indexes, FTS5, facets, ANALYZE, plan assertions), COMMIT, quick_check (full, FTS5 included), foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+        "derived_hook_ms": 1569.472,
+        "gate_ms": 640.736,
+        "publish_without_hook_and_gate_ms": 569.057,
+        "quick_check_warm_ms": 616.654,
+        "ingest_through_durable_ms": 4721.791
+      },
+      "total_ms": 5223.402,
+      "validation": "softschema validation not run (as in paraverse default load)",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+        "v2_spike1": {
+          "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+          "build_cache_kib": 262144,
+          "analysis_limit": 0,
+          "rebuild_above_ratio": 0.5
+        }
+      },
+      "snapshot": "<scratch>/research-c/spike1/kbscratch/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 395423744,
+      "max_rss_mib": 459.8
+    },
+    "arm": "DirectStore",
+    "ingest_through_durable_seconds": 5.894,
+    "total_with_parse_seconds": 18.29,
+    "store_bytes_before_gc": 395579528,
+    "gc": {
+      "retain": 0,
+      "ms": 1390.813,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true
+    },
+    "store_bytes": 395423880,
+    "snapshot_bytes": 395423744,
+    "breakdown": {
+      "entity": 146104320,
+      "kb_line": 81342464,
+      "doc": 36474880,
+      "edge": 22691840,
+      "search_fts_data": 17879040,
+      "ix_edge_origin": 16977920,
+      "ix_edge_rel": 16740352,
+      "ix_edge_in": 16740352,
+      "search_text": 12234752,
+      "ix_facet_top": 4358144,
+      "facet_count": 4354048,
+      "ix_entity_kind_label": 3371008,
+      "sqlite_autoindex_search_doc_1": 2805760,
+      "search_doc": 2502656,
+      "ix_entity_id_kind": 2256896,
+      "sqlite_autoindex_doc_1": 2228224,
+      "ix_entity_path": 2129920,
+      "sqlite_autoindex_entity_1": 1974272,
+      "search_fts_docsize": 806912,
+      "ix_view_repos_by_stars": 524288,
+      "ix_view_repos_all_by_stars": 454656,
+      "ix_view_sessions_by_start": 200704,
+      "kind_schema": 131072,
+      "search_fts_idx": 45056,
+      "kb_file": 40960,
+      "sqlite_schema": 12288,
+      "sqlite_stat1": 4096,
+      "sqlite_autoindex_quarantine_1": 4096,
+      "sqlite_autoindex_kind_schema_1": 4096,
+      "sqlite_autoindex_kb_file_1": 4096,
+      "sqlite_autoindex_fsqlite_meta_1": 4096,
+      "sqlite_autoindex_applied_tx_1": 4096,
+      "search_fts_config": 4096,
+      "quarantine": 4096,
+      "fsqlite_meta": 4096,
+      "applied_tx": 4096
+    },
+    "fts_sidecar": "none: the FTS5 index is a derived object inside the generation",
+    "derived_bytes": {
+      "search_fts_and_search_doc": 24043520,
+      "facet_count": 8712192,
+      "secondary_indexes": 59396096,
+      "sqlite_stat1": 4096
+    }
+  },
+  "snapshot": {
+    "label": "load-snapshot",
+    "seconds": 10.222,
+    "max_rss_mib": 631.3,
+    "exit": 0,
+    "report": {
+      "arm": "SnapshotStore",
+      "route": "init(), 21 envelopes of 20000 rows, one reconcile",
+      "batch": 20000,
+      "captures": 21,
+      "counts": {
+        "schema": 18,
+        "file": 3,
+        "line": 43052,
+        "node": 48663,
+        "doc": 44777,
+        "entity": 48663,
+        "edge": 227817,
+        "update": 0,
+        "removed": 0,
+        "op": 0,
+        "quarantined": 0
+      },
+      "reconcile": {
+        "published": 1,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1
+      },
+      "build": {
+        "lane": "reconcile",
+        "mode": "rebuild",
+        "buildCacheKiB": 262144,
+        "envelopes": 20,
+        "changedRows": 0,
+        "drop_ms": 0.7708010002970695,
+        "apply_ms": 1485.8474289979786,
+        "changes_ms": 37.81073700077832,
+        "closure_ms": 0.213,
+        "closureRemoved": 0,
+        "derive_ms": 1401.194,
+        "statistics_ms": 113.794,
+        "plans_ms": 0.6,
+        "hook_ms": 1553.612,
+        "gate": "full",
+        "gate_ms": 468.683,
+        "plans": [
+          {
+            "name": "view sessions_by_start",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_all_by_stars",
+            "uses": [
+              "ix_view_repos_all_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+            ]
+          },
+          {
+            "name": "view sessions_by_start total",
+            "uses": [
+              "ix_view_sessions_by_start"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+            ]
+          },
+          {
+            "name": "view repos_by_stars total",
+            "uses": [
+              "ix_view_repos_by_stars"
+            ],
+            "ok": true,
+            "plan": [
+              "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+            ]
+          },
+          {
+            "name": "people_by_org join without a hint",
+            "uses": [
+              "ix_entity_id_kind",
+              "sqlite_autoindex_entity_1"
+            ],
+            "ok": true,
+            "plan": [
+              "CO-ROUTINE m",
+              "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+              "SCAN m",
+              "SEARCH e USING INDEX ix_entity_id_kind (id=? AND kind=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ],
+        "createdObjects": [
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_facet_top"
+        ],
+        "droppedObjects": [
+          "search_doc",
+          "search_fts",
+          "facet_count",
+          "ix_entity_kind_label",
+          "ix_entity_id_kind",
+          "ix_entity_path",
+          "ix_view_sessions_by_start",
+          "ix_view_repos_by_stars",
+          "ix_view_repos_all_by_stars",
+          "ix_edge_in",
+          "ix_edge_rel",
+          "ix_edge_origin",
+          "ix_facet_top"
+        ]
+      },
+      "phases": {
+        "init_ddl_ms": 44.668,
+        "decode_ms": 506.248,
+        "transform_ms": 330.486,
+        "ingest_ms": 1928.57,
+        "capture_overhead_ms": 1734.318,
+        "capture_note": "per envelope: copy the head, session changeset, envelope files",
+        "reconcile_ms": 4652.081,
+        "reconcile_note": "copy head, apply changesets, quick_check, fsync, publish",
+        "quick_check_warm_ms": 431.887,
+        "ingest_through_durable_ms": 9122.718
+      },
+      "total_ms": 9628.966,
+      "count_problems": [],
+      "validation": "softschema validation not run",
+      "config": {
+        "bulk_pragmas": "PRAGMA cache_size = -262144;",
+        "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+        "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+        "lock_options": {
+          "staleMs": 600000,
+          "timeoutMs": 600001
+        },
+        "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it",
+        "v2_spike1": {
+          "derived": "indexes, FTS5 trigram index (search_fts, search_doc), facet_count summary, and statistics built inside the generation build; the DirectStore import drops them before the rows and rebuilds them after (indexes after rows); a bulk reconcile does the same",
+          "build_cache_kib": 262144,
+          "analysis_limit": 0,
+          "rebuild_above_ratio": 0.5
+        }
+      },
+      "snapshot": "<scratch>/research-c/spike1/kbscratch/fsqlite-spike/S1/store-snapshot/snapshots/000000000001.fsqlite.sqlite",
+      "snapshot_bytes": 403144704,
+      "max_rss_mib": 631.3
+    },
+    "arm": "SnapshotStore",
+    "ingest_through_durable_seconds": 9.716,
+    "total_with_parse_seconds": 22.116,
+    "store_bytes_before_gc": 636316333,
+    "gc": {
+      "retain": 0,
+      "ms": 1044.285,
+      "removed": 1,
+      "kept": 1,
+      "leased": [],
+      "integrityChecked": true
+    },
+    "store_bytes": 636160685,
+    "snapshot_bytes": 403144704,
+    "fts_sidecar": "none: the FTS5 index is a derived object inside the generation"
+  }
+}

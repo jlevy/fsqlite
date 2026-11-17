@@ -1,0 +1,377 @@
+{
+  "backend": "fsqlite",
+  "scale": "S2",
+  "workflow": "W3",
+  "recorded_at": "2026-11-17T01:37:08.319Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 14668,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "arm": "fsqlite (published snapshot, held read connection)",
+  "software": {
+    "fsqlite_api": "packages/fsqlite/src/index.ts",
+    "mapping": "generic (a)"
+  },
+  "store": "<scratch>/fsqlite-spike/S2/store-direct",
+  "version": 1,
+  "options": {
+    "search": "search_text substring scan",
+    "path": "recursive CTE (in-engine)",
+    "warm_runs": 5,
+    "timeout_ms": 60000,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "cold": "new connection, snapshot evicted from the OS page cache with posix_fadvise"
+  },
+  "config": {
+    "page_size": 4096,
+    "page_count": 439636,
+    "journal_mode": "delete",
+    "reader_cache_size": -65536,
+    "reader_mmap_size": 0,
+    "sqlite_version": "3.53.4",
+    "node": "v22.23.4"
+  },
+  "snapshot": "<scratch>/fsqlite-spike/S2/store-direct/snapshots/000000000001.fsqlite.sqlite",
+  "queries": [
+    {
+      "name": "path.person_person_2",
+      "category": "path",
+      "params": {
+        "a": "person:dylan-ratcliffe-r23",
+        "b": "person:pamela-fox-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:dylan-ratcliffe-r23",
+          "software:github-copilot-r23",
+          "person:pamela-fox-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 1291.2126,
+        "cold_open_ms": 0.566,
+        "cold_evicted": true,
+        "warm_ms": [
+          240.7169,
+          225.2056,
+          225.8948,
+          234.1758,
+          228.511
+        ],
+        "p50_ms": 228.511,
+        "p95_ms": 240.7169
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 ) SELECT id, min(hop) AS hop, max(hub) AS hub FROM walk GROUP BY id",
+          "plan": [
+            "CO-ROUTINE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY"
+          ]
+        },
+        {
+          "sql": "SELECT target AS n FROM edge WHERE source = ?1 UNION SELECT source FROM edge WHERE target = ?1",
+          "plan": [
+            "MERGE (UNION)",
+            "LEFT",
+            "SEARCH edge USING PRIMARY KEY (source=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH edge USING COVERING INDEX ix_edge_in (target=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_org_3",
+      "category": "path",
+      "params": {
+        "a": "person:pamela-fox-r23",
+        "b": "org:netlify-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:pamela-fox-r23",
+          "term:topic-2024/ai-r23",
+          "person:matt-biilmann-r23",
+          "org:netlify-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 1901.3848,
+        "cold_open_ms": 0.716,
+        "cold_evicted": true,
+        "warm_ms": [
+          416.6922,
+          403.132,
+          412.0592,
+          452.814,
+          412.2551
+        ],
+        "p50_ms": 412.2551,
+        "p95_ms": 452.814
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 ) SELECT id, min(hop) AS hop, max(hub) AS hub FROM walk GROUP BY id",
+          "plan": [
+            "CO-ROUTINE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY"
+          ]
+        },
+        {
+          "sql": "SELECT target AS n FROM edge WHERE source = ?1 UNION SELECT source FROM edge WHERE target = ?1",
+          "plan": [
+            "MERGE (UNION)",
+            "LEFT",
+            "SEARCH edge USING PRIMARY KEY (source=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH edge USING COVERING INDEX ix_edge_in (target=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_repo_3",
+      "category": "path",
+      "params": {
+        "a": "person:aaron-reich-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:aaron-reich-r23",
+          "software:github-copilot-r23",
+          "person:carlin-cherry-r23",
+          "repo:github/docs-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 1163.2942,
+        "cold_open_ms": 0.6099,
+        "cold_evicted": true,
+        "warm_ms": [
+          258.2788,
+          207.5954,
+          210.3692,
+          214.1674,
+          209.1563
+        ],
+        "p50_ms": 210.3692,
+        "p95_ms": 258.2788
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 ) SELECT id, min(hop) AS hop, max(hub) AS hub FROM walk GROUP BY id",
+          "plan": [
+            "CO-ROUTINE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY"
+          ]
+        },
+        {
+          "sql": "SELECT target AS n FROM edge WHERE source = ?1 UNION SELECT source FROM edge WHERE target = ?1",
+          "plan": [
+            "MERGE (UNION)",
+            "LEFT",
+            "SEARCH edge USING PRIMARY KEY (source=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH edge USING COVERING INDEX ix_edge_in (target=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.person_person_4",
+      "category": "path",
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "person:dylan-ratcliffe-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": 4,
+        "path": [
+          "person:francis-storr-r23",
+          "term:topic-2023/continuous-integration-continuous-deployment-ci-cd-r23",
+          "person:andrew-hoog-r23",
+          "software:github-copilot-r23",
+          "person:dylan-ratcliffe-r23"
+        ]
+      },
+      "timings": {
+        "cold_ms": 468.9303,
+        "cold_open_ms": 0.5936,
+        "cold_evicted": true,
+        "warm_ms": [
+          64.0051,
+          68.5801,
+          79.2272,
+          61.4176,
+          66.7051
+        ],
+        "p50_ms": 66.7051,
+        "p95_ms": 79.2272
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 ) SELECT id, min(hop) AS hop, max(hub) AS hub FROM walk GROUP BY id",
+          "plan": [
+            "CO-ROUTINE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY"
+          ]
+        },
+        {
+          "sql": "SELECT target AS n FROM edge WHERE source = ?1 UNION SELECT source FROM edge WHERE target = ?1",
+          "plan": [
+            "MERGE (UNION)",
+            "LEFT",
+            "SEARCH edge USING PRIMARY KEY (source=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH edge USING COVERING INDEX ix_edge_in (target=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "path.unreachable",
+      "category": "path",
+      "params": {
+        "a": "person:francis-storr-r23",
+        "b": "repo:github/docs-r23",
+        "max_hops": 4
+      },
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 524.9008,
+        "cold_open_ms": 0.5918,
+        "cold_evicted": true,
+        "warm_ms": [
+          73.1253,
+          67.6873,
+          104.4929,
+          95.9206,
+          65.8938
+        ],
+        "p50_ms": 73.1253,
+        "p95_ms": 104.4929
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < ?2 AND w.hub = 0 AND w.id <> ?3 ) SELECT id, min(hop) AS hop, max(hub) AS hub FROM walk GROUP BY id",
+          "plan": [
+            "CO-ROUTINE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY"
+          ]
+        }
+      ]
+    }
+  ]
+}

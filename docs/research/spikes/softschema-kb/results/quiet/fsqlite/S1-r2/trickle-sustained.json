@@ -1,0 +1,206 @@
+{
+ "arm": "fsqlite",
+ "arm_label": "fsqlite f1.0 baseline",
+ "scale": "S1-r2",
+ "workflow": "trickle-sustained",
+ "description": "60 s: one writer capturing one-record envelopes, one reconciler looping reconcile then gc({retain:0})",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 15045,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 (format f1.0), unmodified scratch copy"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "capture_records_per_s": {
+   "median": 2.46,
+   "min": 2.46,
+   "max": 2.46,
+   "n": 1
+  },
+  "gc_ms_median": {
+   "median": 1029,
+   "min": 1029,
+   "max": 1029,
+   "n": 1
+  },
+  "gc_share_of_build_plus_gc": {
+   "median": 0.4993,
+   "min": 0.4993,
+   "max": 0.4993,
+   "n": 1
+  },
+  "reconcile_ms_median": {
+   "median": 1032,
+   "min": 1032,
+   "max": 1032,
+   "n": 1
+  },
+  "reconciles": {
+   "median": 30,
+   "min": 30,
+   "max": 30,
+   "n": 1
+  },
+  "records_captured": {
+   "median": 148,
+   "min": 148,
+   "max": 148,
+   "n": 1
+  },
+  "records_per_reconcile_median": {
+   "median": 5,
+   "min": 5,
+   "max": 5,
+   "n": 1
+  },
+  "visibility_max_ms": {
+   "median": 3984,
+   "min": 3984,
+   "max": 3984,
+   "n": 1
+  },
+  "visibility_p50_ms": {
+   "median": 2405,
+   "min": 2405,
+   "max": 2405,
+   "n": 1
+  },
+  "visibility_p95_ms": {
+   "median": 3579,
+   "min": 3579,
+   "max": 3579,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:52:31Z",
+   "wall_s": 63.014,
+   "load_before": [
+    0.95,
+    1.42,
+    1.45
+   ],
+   "load_after": [
+    1.6,
+    1.54,
+    1.49
+   ],
+   "load1_max_during": 1.65,
+   "foreign_cpu_max": 0.03,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 15.02,
+   "disk_free_gb_min": 13.88,
+   "load_samples": [
+    {
+     "t": 1794905561.1,
+     "load1": 1.19,
+     "own_cpu": 0.97,
+     "foreign_cpu": 0.017
+    },
+    {
+     "t": 1794905571.1,
+     "load1": 1.31,
+     "own_cpu": 0.874,
+     "foreign_cpu": 0.03
+    },
+    {
+     "t": 1794905581.1,
+     "load1": 1.42,
+     "own_cpu": 0.735,
+     "foreign_cpu": 0.006
+    },
+    {
+     "t": 1794905591.1,
+     "load1": 1.51,
+     "own_cpu": 0.81,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794905601.1,
+     "load1": 1.59,
+     "own_cpu": 0.757,
+     "foreign_cpu": 0.007
+    },
+    {
+     "t": 1794905611.1,
+     "load1": 1.65,
+     "own_cpu": 0.809,
+     "foreign_cpu": 0.012
+    },
+    {
+     "t": 1794905614.1,
+     "load1": 1.6,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.007
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "records_captured": 148,
+    "capture_records_per_s": 2.46,
+    "visibility_p50_ms": 2405,
+    "visibility_p95_ms": 3579,
+    "visibility_max_ms": 3984,
+    "gc_ms_median": 1029,
+    "reconciles": 30,
+    "records_per_reconcile_median": 5,
+    "reconcile_ms_median": 1032,
+    "gc_share_of_build_plus_gc": 0.4993
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 15045,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "gc_opts": null,
+    "sustained": {
+     "seconds": 60,
+     "writers": 1,
+     "records_captured": 148,
+     "capture_records_per_s": 2.46,
+     "capture_ms_median": 322,
+     "reconciles": 30,
+     "records_per_reconcile_median": 5,
+     "reconcile_ms_median": 1032,
+     "gc_retain0_ms_median": 1029,
+     "visibility_delay_ms": {
+      "p50": 2405,
+      "p95": 3579,
+      "max": 3984
+     },
+     "note": "one writer process capturing one-record envelopes; one reconciler looping reconcile then gc"
+    },
+    "rounds": null
+   }
+  }
+ ],
+ "superseded_runs": []
+}

@@ -1,0 +1,549 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S2-r2",
+  "workflow": "w2-ops-naive",
+  "recorded_at": "2026-11-17T05:30:55.742Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 12912,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2-r2/kb",
+    "corpus": {
+      "scale": "S2-r2",
+      "round": 2,
+      "seed": 20261117,
+      "seed_namespace": "r2",
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 238957,
+      "edges": 1155758,
+      "record_files": 224802,
+      "record_bytes": 691793823,
+      "files": 224826,
+      "bytes": 1152109067,
+      "shared": {
+        "count": 217,
+        "rule": "all software; top 25 organizations by S0 degree; facets facet:topic* and their terms",
+        "by_kind": {
+          "facet": 4,
+          "organization": 25,
+          "software": 61,
+          "term": 127
+        }
+      },
+      "perturbation": {
+        "session_slot_shift": "5-minute steps within +-60 minutes, never across a date",
+        "repository_stars_factor": [
+          0.5,
+          2
+        ],
+        "text_share": 0.3,
+        "word_share": 0.25,
+        "retitled_sessions": 6970,
+        "vocabulary_words": 3992
+      },
+      "degree": {
+        "day": {
+          "max": 97,
+          "max_node": "day:2026-10-28-r9",
+          "p99": 97
+        },
+        "event": {
+          "max": 408,
+          "max_node": "event:github-universe-2026",
+          "p99": 394
+        },
+        "experience": {
+          "max": 1,
+          "max_node": "experience:wellness-lounge-r9",
+          "p99": 1
+        },
+        "facet": {
+          "max": 34,
+          "max_node": "facet:topic-2024",
+          "p99": 24
+        },
+        "github_account": {
+          "max": 47,
+          "max_node": "gh:github-r9",
+          "p99": 29
+        },
+        "organization": {
+          "max": 18882,
+          "max_node": "org:github",
+          "p99": 9
+        },
+        "package": {
+          "max": 1,
+          "max_node": "pkg:pypi/torch-r9",
+          "p99": 1
+        },
+        "page": {
+          "max": 0,
+          "max_node": "page:githubuniverse.com/pricing-r9",
+          "p99": 0
+        },
+        "person": {
+          "max": 69,
+          "max_node": "person:pamela-fox-r9",
+          "p99": 53
+        },
+        "profile": {
+          "max": 1,
+          "max_node": "profile:zeba-khan-r9",
+          "p99": 1
+        },
+        "repository": {
+          "max": 37,
+          "max_node": "repo:github/docs-r9",
+          "p99": 7
+        },
+        "room": {
+          "max": 52,
+          "max_node": "room:demos-donuts-gateway-pavilion-level-2-r9",
+          "p99": 52
+        },
+        "session": {
+          "max": 91,
+          "max_node": "session:2025/1617k-r9",
+          "p99": 51
+        },
+        "social_account": {
+          "max": 4,
+          "max_node": "acct:x/johnmaeda-r9",
+          "p99": 3
+        },
+        "software": {
+          "max": 24428,
+          "max_node": "software:github-copilot",
+          "p99": 24428
+        },
+        "term": {
+          "max": 8511,
+          "max_node": "term:topic-2025/ai-agentic-ai-generative-ai-fine-tuned-modeling-models",
+          "p99": 148
+        },
+        "venue": {
+          "max": 16,
+          "max_node": "venue:gateway-pavilion-r9",
+          "p99": 16
+        },
+        "website": {
+          "max": 6,
+          "max_node": "site:priyapahwa.com-r9",
+          "p99": 6
+        },
+        "_all": {
+          "max": 24428,
+          "p99": 58
+        }
+      },
+      "workers": 4,
+      "seconds": 32
+    },
+    "node_total": 238957,
+    "edge_total": 1155758
+  },
+  "base_store": "<scratch>/research-c/spike2/kbscratch/fsqlite-spike/S2-r2/store-direct",
+  "deltas": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2-r2/deltas",
+  "writers": 4,
+  "envelopes_per_writer": 5,
+  "strategy": "ops-naive",
+  "store_options": {
+    "missing": "none",
+    "closure": false,
+    "repair_steps": false
+  },
+  "reps": 1,
+  "batches": [
+    {
+      "batch": "p01",
+      "strategy": "ops-naive",
+      "arm": "SnapshotStore, operation envelopes",
+      "delta": {
+        "changes": 2390,
+        "counts": {
+          "delete": 48,
+          "merge": 24,
+          "new": 1912,
+          "update_refs": 203,
+          "update_value": 203
+        },
+        "edges": 14040
+      },
+      "w3_check_against_reference": null,
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": true,
+        "differing_tables": [],
+        "concurrent": {
+          "entity": "240797:efddaf4de449e408",
+          "edge": "1165554:19eecca63a56420e",
+          "doc": "226642:08d1685becb1ccbf",
+          "search_text": "338147:5a599c5f06167468",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "48:3d788d9070a30210",
+          "kb_redirect": "24:ae71d78778f4d99c"
+        },
+        "line_order": {
+          "entity": "240797:efddaf4de449e408",
+          "edge": "1165554:19eecca63a56420e",
+          "doc": "226642:08d1685becb1ccbf",
+          "search_text": "338147:5a599c5f06167468",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "48:3d788d9070a30210",
+          "kb_redirect": "24:ae71d78778f4d99c"
+        }
+      },
+      "units": 2390,
+      "parse_ms": 1386.791,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 9.971,
+        "p95_ms": 22.427,
+        "max_ms": 28.212
+      },
+      "envelope_bytes_total": 12193844,
+      "dangling_edges_after_publish": 0,
+      "store_options": {
+        "missing": "none",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 499,
+      "writer_max_rss_mib": 116.5,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 1302.2039880007505,
+          "open_ms": 1.6089520007371902,
+          "apply_ms": 1013.5412099994719,
+          "closure_ms": 0.23787999898195267,
+          "gate_ms": 1152.6011909991503,
+          "fsync_ms": 377.6818850003183,
+          "commit_ms": 2.418079998344183,
+          "published_at_epoch_ms": 1794893292696,
+          "settle_ms": 1.0574430003762245
+        },
+        "ms": 3855.239,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 4366,
+      "visible_after_first_capture_ms": 4032.63916015625,
+      "fts_sidecar_rebuild": {
+        "rows": 338147,
+        "build_ms": 4370.537,
+        "bytes": 149282816
+      },
+      "indexed_search_visible_after_ms": 9286,
+      "published_after_ms": 4355,
+      "complete_after_ms": 4355,
+      "versions_published": 1,
+      "entities": {
+        "before": 238957,
+        "after": 240797,
+        "added": 1840
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": null,
+      "head_copy": null,
+      "reader": {
+        "queries": 433,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 31,
+          "p50_ms": 0.316,
+          "p95_ms": 130.496,
+          "max_ms": 135.871
+        },
+        "during_writes": {
+          "n": 164,
+          "p50_ms": 1.192,
+          "p95_ms": 114.133,
+          "max_ms": 287.917
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 3.829,
+          "p95_ms": 5.823,
+          "max_ms": 5.823
+        },
+        "max_rss_mib": 273.5
+      }
+    },
+    {
+      "batch": "p05",
+      "strategy": "ops-naive",
+      "arm": "SnapshotStore, operation envelopes",
+      "delta": {
+        "changes": 11948,
+        "counts": {
+          "delete": 239,
+          "merge": 119,
+          "new": 9558,
+          "update_refs": 1016,
+          "update_value": 1016
+        },
+        "edges": 70371
+      },
+      "w3_check_against_reference": {
+        "expected": "<scratch>/research-c/spike2/spike/harness/expected/S2-r2-p05/w3.json",
+        "result": "MATCH: 124 ok, 0 differ",
+        "differing": []
+      },
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": false,
+        "differing_tables": [
+          "edge"
+        ],
+        "concurrent": {
+          "entity": "248157:65d113bd3c6c4a2c",
+          "edge": "1204889:b90293c870db09dd",
+          "doc": "234002:53a077ea12bebbbf",
+          "search_text": "348820:43bc4ecfc5523546",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "239:52fc249194baed60",
+          "kb_redirect": "119:94e180a41833f62a"
+        },
+        "line_order": {
+          "entity": "248157:65d113bd3c6c4a2c",
+          "edge": "1204889:fdd9c1ee16c9ebb4",
+          "doc": "234002:53a077ea12bebbbf",
+          "search_text": "348820:43bc4ecfc5523546",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "239:52fc249194baed60",
+          "kb_redirect": "119:94e180a41833f62a"
+        }
+      },
+      "units": 11948,
+      "parse_ms": 7201.38,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 62.359,
+        "p95_ms": 106.448,
+        "max_ms": 213.199
+      },
+      "envelope_bytes_total": 61239161,
+      "dangling_edges_after_publish": 1,
+      "store_options": {
+        "missing": "none",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 1275,
+      "writer_max_rss_mib": 172.7,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 1415.6998319998384,
+          "open_ms": 1.122384000569582,
+          "apply_ms": 5226.246629998088,
+          "closure_ms": 0.262813001871109,
+          "gate_ms": 1526.3071549981833,
+          "fsync_ms": 641.965270999819,
+          "commit_ms": 12.003958001732826,
+          "published_at_epoch_ms": 1794893326185,
+          "settle_ms": 1.1009619981050491
+        },
+        "ms": 8826.803,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 10164,
+      "visible_after_first_capture_ms": 9426.017578125,
+      "fts_sidecar_rebuild": {
+        "rows": 348820,
+        "build_ms": 5707.262,
+        "bytes": 152694784
+      },
+      "indexed_search_visible_after_ms": 16595,
+      "published_after_ms": 10102,
+      "complete_after_ms": 10102,
+      "versions_published": 1,
+      "entities": {
+        "before": 238957,
+        "after": 248157,
+        "added": 9200
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": null,
+      "head_copy": null,
+      "reader": {
+        "queries": 552,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "during_writes": {
+          "n": 327,
+          "p50_ms": 1.107,
+          "p95_ms": 126.838,
+          "max_ms": 552.298
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 15.779,
+          "p95_ms": 523.061,
+          "max_ms": 523.061
+        },
+        "max_rss_mib": 272
+      }
+    },
+    {
+      "batch": "p20",
+      "strategy": "ops-naive",
+      "arm": "SnapshotStore, operation envelopes",
+      "delta": {
+        "changes": 47791,
+        "counts": {
+          "delete": 956,
+          "merge": 478,
+          "new": 38233,
+          "update_refs": 4062,
+          "update_value": 4062
+        },
+        "edges": 278409
+      },
+      "w3_check_against_reference": null,
+      "same_rows_as_one_writer_in_line_order": {
+        "equal": false,
+        "differing_tables": [
+          "edge"
+        ],
+        "concurrent": {
+          "entity": "275756:cdb251bef9a3b43a",
+          "edge": "1349138:2a76470f4d87b09b",
+          "doc": "261601:7cfa100273f85fd8",
+          "search_text": "388473:4cb66e6ceadedc42",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "956:f8a99a7b3bfa9ca7",
+          "kb_redirect": "478:9ca5557e155e73db"
+        },
+        "line_order": {
+          "entity": "275756:cdb251bef9a3b43a",
+          "edge": "1349094:7598b567f6eb310f",
+          "doc": "261601:7cfa100273f85fd8",
+          "search_text": "388473:4cb66e6ceadedc42",
+          "quarantine": "0:e3b0c44298fc1c14",
+          "kb_tombstone": "956:f8a99a7b3bfa9ca7",
+          "kb_redirect": "478:9ca5557e155e73db"
+        }
+      },
+      "units": 47791,
+      "parse_ms": 28196.286,
+      "writers": 4,
+      "envelopes": 20,
+      "capture_ms": {
+        "n": 20,
+        "p50_ms": 212.465,
+        "p95_ms": 330.92,
+        "max_ms": 346.308
+      },
+      "envelope_bytes_total": 242424569,
+      "dangling_edges_after_publish": 70,
+      "store_options": {
+        "missing": "none",
+        "closure": false,
+        "repair_steps": false
+      },
+      "gc_refusals": null,
+      "gc_after_write_ms": null,
+      "writers_wall_ms": 2399,
+      "writer_max_rss_mib": 359.7,
+      "reconcile": {
+        "published": 2,
+        "applied": 20,
+        "quarantined": 0,
+        "attempts": 1,
+        "omittedMissing": 0,
+        "closure": null,
+        "timings": {
+          "copy_ms": 1301.0918570011854,
+          "open_ms": 1.6362669989466667,
+          "apply_ms": 20433.02903100103,
+          "closure_ms": 0.354568000882864,
+          "gate_ms": 1630.0943449996412,
+          "fsync_ms": 754.2127230018377,
+          "commit_ms": 12.185562998056412,
+          "published_at_epoch_ms": 1794893437276,
+          "settle_ms": 1.3881600014865398
+        },
+        "ms": 24136.297,
+        "quarantine_reasons": []
+      },
+      "visible_after_ms": 26585,
+      "visible_after_first_capture_ms": 25620.326904296875,
+      "fts_sidecar_rebuild": {
+        "rows": 388473,
+        "build_ms": 5955.633,
+        "bytes": 170659840
+      },
+      "indexed_search_visible_after_ms": 33470,
+      "published_after_ms": 26536,
+      "complete_after_ms": 26536,
+      "versions_published": 1,
+      "entities": {
+        "before": 238957,
+        "after": 275756,
+        "added": 36799
+      },
+      "updated_records_changed": "0/0",
+      "base_copy": null,
+      "head_copy": null,
+      "reader": {
+        "queries": 1292,
+        "errors": 0,
+        "error_samples": [],
+        "quiet": {
+          "n": 28,
+          "p50_ms": 0.267,
+          "p95_ms": 129.11,
+          "max_ms": 135.033
+        },
+        "during_writes": {
+          "n": 1027,
+          "p50_ms": 1.174,
+          "p95_ms": 121.177,
+          "max_ms": 581.53
+        },
+        "reopen_ms": {
+          "n": 2,
+          "p50_ms": 15.763,
+          "p95_ms": 149.749,
+          "max_ms": 149.749
+        },
+        "max_rss_mib": 271
+      }
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "backend": "fsqlite",
+  "scale": "S1",
+  "workflow": "W5",
+  "recorded_at": "2026-11-17T01:53:13.463Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 12518,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "export": {
+    "label": "export",
+    "seconds": 74.059,
+    "max_rss_mib": 626.8,
+    "exit": 0,
+    "report": {
+      "export": {
+        "snapshot": "<scratch>/fsqlite-spike/S1/store-direct/snapshots/000000000001.fsqlite.sqlite",
+        "files_written": 44801,
+        "graph_and_files_seconds": 1.067,
+        "seconds": 70.182,
+        "jobs": 4
+      },
+      "compare": {
+        "source_files": 44801,
+        "exported_files": 44801,
+        "missing": [],
+        "missing_count": 0,
+        "extra": [],
+        "extra_count": 0,
+        "compared": 44801,
+        "bytes_equal": 44798,
+        "parsed_equal": 44799,
+        "parsed_different": [
+          "_graph/edges.jsonl",
+          "_graph/nodes.jsonl"
+        ],
+        "order_only_differences": [
+          "_graph/edges.jsonl",
+          "_graph/nodes.jsonl"
+        ],
+        "content_differences": [],
+        "byte_differences": [
+          {
+            "path": "_graph/edges.jsonl",
+            "bytes_equal": false,
+            "parsed_equal": false,
+            "same_rows_any_order": true,
+            "byte_delta": 0,
+            "lines_changed": 227812
+          },
+          {
+            "path": "_graph/nodes.jsonl",
+            "bytes_equal": false,
+            "parsed_equal": false,
+            "same_rows_any_order": true,
+            "byte_delta": 0,
+            "lines_changed": 48660
+          },
+          {
+            "path": "_schemas/profile.schema.yaml",
+            "bytes_equal": false,
+            "parsed_equal": true,
+            "same_rows_any_order": true,
+            "byte_delta": 1,
+            "lines_changed": 1
+          }
+        ],
+        "byte_different_count": 3,
+        "by_area": {
+          "(root)": {
+            "files": 3,
+            "bytes_equal": 3,
+            "parsed_equal": 3
+          },
+          "_graph": {
+            "files": 4,
+            "bytes_equal": 2,
+            "parsed_equal": 2
+          },
+          "_schemas": {
+            "files": 18,
+            "bytes_equal": 17,
+            "parsed_equal": 18
+          },
+          "_search": {
+            "files": 1,
+            "bytes_equal": 1,
+            "parsed_equal": 1
+          },
+          "accounts": {
+            "files": 11601,
+            "bytes_equal": 11601,
+            "parsed_equal": 11601
+          },
+          "events": {
+            "files": 36,
+            "bytes_equal": 36,
+            "parsed_equal": 36
+          },
+          "experiences": {
+            "files": 99,
+            "bytes_equal": 99,
+            "parsed_equal": 99
+          },
+          "organizations": {
+            "files": 2790,
+            "bytes_equal": 2790,
+            "parsed_equal": 2790
+          },
+          "packages": {
+            "files": 1206,
+            "bytes_equal": 1206,
+            "parsed_equal": 1206
+          },
+          "pages": {
+            "files": 81,
+            "bytes_equal": 81,
+            "parsed_equal": 81
+          },
+          "people": {
+            "files": 5193,
+            "bytes_equal": 5193,
+            "parsed_equal": 5193
+          },
+          "profiles": {
+            "files": 5193,
+            "bytes_equal": 5193,
+            "parsed_equal": 5193
+          },
+          "repositories": {
+            "files": 10395,
+            "bytes_equal": 10395,
+            "parsed_equal": 10395
+          },
+          "rooms": {
+            "files": 765,
+            "bytes_equal": 765,
+            "parsed_equal": 765
+          },
+          "sessions": {
+            "files": 4680,
+            "bytes_equal": 4680,
+            "parsed_equal": 4680
+          },
+          "software": {
+            "files": 549,
+            "bytes_equal": 549,
+            "parsed_equal": 549
+          },
+          "taxonomy": {
+            "files": 306,
+            "bytes_equal": 306,
+            "parsed_equal": 306
+          },
+          "venues": {
+            "files": 522,
+            "bytes_equal": 522,
+            "parsed_equal": 522
+          },
+          "websites": {
+            "files": 1359,
+            "bytes_equal": 1359,
+            "parsed_equal": 1359
+          }
+        },
+        "seconds": 3.582
+      }
+    }
+  },
+  "reload": {
+    "parse_seconds": 9.903,
+    "load_seconds": 4.23,
+    "w3_queries_checked": 24,
+    "w3_mismatches": []
+  }
+}

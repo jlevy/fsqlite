@@ -1,0 +1,5157 @@
+{
+  "workflow": "W3",
+  "scale": "S1-r2",
+  "options": {
+    "search": "search_text substring scan",
+    "facets": "live GROUP BY over edge",
+    "path": "bidirectional BFS (application-side, shared)",
+    "warm_runs": 0,
+    "timeout_ms": null,
+    "reader_pragmas": "PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY;",
+    "cold": "new connection, snapshot evicted from the OS page cache with posix_fadvise"
+  },
+  "config": {
+    "page_size": 4096,
+    "page_count": 104442,
+    "journal_mode": "delete",
+    "reader_cache_size": -65536,
+    "reader_mmap_size": 0,
+    "sqlite_version": "3.53.4",
+    "node": "v22.23.4"
+  },
+  "snapshot": "<scratch>/kbscratch/fsqlite-spike/S1-r2/w2-ops/p05/store/snapshots/000000000002.fsqlite.sqlite",
+  "queries": [
+    {
+      "name": "v2.record.00",
+      "category": "record",
+      "params": {
+        "id": "repo:ente/ente-r5"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "286567aef92ee0a8b6e6e4c4719a5198a40027d704cc348d4cd6d41323f5a98e",
+        "json_bytes": 1287
+      },
+      "timings": {
+        "cold_ms": 2.5409,
+        "cold_open_ms": 1.0155,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.01",
+      "category": "record",
+      "params": {
+        "id": "repo:voidzero-dev/vite-plus-r4"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "6c8f9c3e97af4ce74259a1651aaea826019574328b068364bafe5bbbf062fa12",
+        "json_bytes": 1582
+      },
+      "timings": {
+        "cold_ms": 2.0675,
+        "cold_open_ms": 0.7911,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.02",
+      "category": "record",
+      "params": {
+        "id": "acct:linkedin/in/isumeetshetty-r2"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "3218f47a59015e7c3986d2bcfa1118286a4bfd8d3d85124692ffe410af0bc1cf",
+        "json_bytes": 1552
+      },
+      "timings": {
+        "cold_ms": 1.9554,
+        "cold_open_ms": 0.9315,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.03",
+      "category": "record",
+      "params": {
+        "id": "acct:x/nishnha-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e2cc5ad62b8fb9b2a80a2020f283ca1bb79a1f486e3e62172951b02d5f547ca4",
+        "json_bytes": 1660
+      },
+      "timings": {
+        "cold_ms": 2.0526,
+        "cold_open_ms": 0.7384,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.04",
+      "category": "record",
+      "params": {
+        "id": "person:cindy-cui-r6"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "cdfe5a18f91a8a32032fcfd9d516ddae54725f37136763f787cda0502ba00658",
+        "json_bytes": 2825
+      },
+      "timings": {
+        "cold_ms": 2.3117,
+        "cold_open_ms": 0.7996,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.05",
+      "category": "record",
+      "params": {
+        "id": "person:donia-chaiehloudj-r2"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "5b9209e88250163c7672b3bc3a16958659adc7e263634cd49bb4901079323b8e",
+        "json_bytes": 7701
+      },
+      "timings": {
+        "cold_ms": 3.06,
+        "cold_open_ms": 0.8261,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.06",
+      "category": "record",
+      "params": {
+        "id": "profile:janice-r7"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "2ed94ebd5d699c441f16e015cba6d4f14031b678d7642b9722a7dd52c123a639",
+        "json_bytes": 8358
+      },
+      "timings": {
+        "cold_ms": 1.9041,
+        "cold_open_ms": 0.7436,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.07",
+      "category": "record",
+      "params": {
+        "id": "profile:steven-ewing-r2"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "27a9b05751297cb2ce34ef28b0e0c9a8f985d83c186d8b040e980aa178bffea1",
+        "json_bytes": 14645
+      },
+      "timings": {
+        "cold_ms": 1.8899,
+        "cold_open_ms": 0.7619,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.08",
+      "category": "record",
+      "params": {
+        "id": "session:bld2450d-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "b859d856b898cb3a149ac4dea461ec3f11509ed20640d76b0d88a6ed876fe5a3",
+        "json_bytes": 5213
+      },
+      "timings": {
+        "cold_ms": 2.784,
+        "cold_open_ms": 0.8071,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.09",
+      "category": "record",
+      "params": {
+        "id": "session:2025/1616k-r1"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "96165fc5d1077210677e4c52360601d4bcda36941853031d5a47e9031eca5f0f",
+        "json_bytes": 15248
+      },
+      "timings": {
+        "cold_ms": 4.129,
+        "cold_open_ms": 0.731,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.10",
+      "category": "record",
+      "params": {
+        "id": "org:tec-de-monterrey-r7"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "2949269be560ba72c165b7f48eacb8a1bf2c38e9326ecac8ed4f9a24c69ed77a",
+        "json_bytes": 672
+      },
+      "timings": {
+        "cold_ms": 1.7633,
+        "cold_open_ms": 0.8077,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.11",
+      "category": "record",
+      "params": {
+        "id": "org:nordstrom-r7"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "eca8d3452f03ed07a9ceecc432a7d9849270a27e1a4fc9d916b31981421df475",
+        "json_bytes": 8104
+      },
+      "timings": {
+        "cold_ms": 2.4426,
+        "cold_open_ms": 0.7332,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.12",
+      "category": "record",
+      "params": {
+        "id": "gh:jbaruch-port-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "718c21f96bc2529390f0eb1d0da753bb67457308f9323ea84842388d32adad5f",
+        "json_bytes": 923
+      },
+      "timings": {
+        "cold_ms": 1.6508,
+        "cold_open_ms": 0.7294,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.13",
+      "category": "record",
+      "params": {
+        "id": "gh:thealexlichter-r6"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "0303b129cbdb8d671e2149156e8a787d2efbe8f668bd0212abe2e2fe54227e22",
+        "json_bytes": 6024
+      },
+      "timings": {
+        "cold_ms": 2.6533,
+        "cold_open_ms": 0.7461,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.14",
+      "category": "record",
+      "params": {
+        "id": "site:fluentbytes.com-r2"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "41c469c00c294be0350b1a51ad61123ce45f6651694a6f17efe8439003e74b95",
+        "json_bytes": 1084
+      },
+      "timings": {
+        "cold_ms": 1.667,
+        "cold_open_ms": 0.7448,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.15",
+      "category": "record",
+      "params": {
+        "id": "site:frenck.dev-r2"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "2d58666e7a1903fce59db7300914714d18bd493b8c0a5c5654fdb06a9388462b",
+        "json_bytes": 1926
+      },
+      "timings": {
+        "cold_ms": 2.1095,
+        "cold_open_ms": 0.715,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.16",
+      "category": "record",
+      "params": {
+        "id": "pkg:go/github.com/atlassian/escalator-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "c529dee6cfb7deb58be5b3e0eaec77f96dd0dcd3a7b7c001626eb6afdf5fc036",
+        "json_bytes": 638
+      },
+      "timings": {
+        "cold_ms": 1.3734,
+        "cold_open_ms": 0.7092,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.17",
+      "category": "record",
+      "params": {
+        "id": "pkg:npm/@modelcontextprotocol/sdk-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "9d13b7aa5a6898a547372d57bfe5ffc93861468c5b2170094393db0bbd323a30",
+        "json_bytes": 906
+      },
+      "timings": {
+        "cold_ms": 1.4441,
+        "cold_open_ms": 0.6768,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.18",
+      "category": "record",
+      "params": {
+        "id": "room:radhaus-fort-mason-r3"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "45e6004e52d5341aad188e6a21efd2e0183601014f985b5d2b54d286420d50dd",
+        "json_bytes": 897
+      },
+      "timings": {
+        "cold_ms": 1.7342,
+        "cold_open_ms": 0.7239,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.19",
+      "category": "record",
+      "params": {
+        "id": "room:ybca-demo-stage-r4"
+      },
+      "hub": false,
+      "result": {
+        "sha256": "6e9063c62adc98a61d223c1b072ba5406f08f68b04e210374110a258c55a0699",
+        "json_bytes": 5130
+      },
+      "timings": {
+        "cold_ms": 3.4131,
+        "cold_open_ms": 0.7088,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.00",
+      "category": "neighborhood",
+      "params": {
+        "id": "repo:cncf/servicedesk-r3",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "157e97cc7be568c4b117150566d3308d18d3c746789c38d25e823ec442e69c4b",
+        "json_bytes": 798
+      },
+      "timings": {
+        "cold_ms": 2.3044,
+        "cold_open_ms": 0.7412,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.01",
+      "category": "neighborhood",
+      "params": {
+        "id": "repo:nuevofoundation/workshops-r3",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "fde92d496610fb59d9638c8507742e5202f39476d2e6544a4357886a2c049234",
+        "json_bytes": 2568
+      },
+      "timings": {
+        "cold_ms": 3.9684,
+        "cold_open_ms": 0.7744,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.02",
+      "category": "neighborhood",
+      "params": {
+        "id": "acct:linkedin/in/javiercardoso",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "32cd5074e78e9a2a4f0dc370e65133201d879e8a2bb29ee032f2e7fb9e5c2440",
+        "json_bytes": 1342
+      },
+      "timings": {
+        "cold_ms": 2.3607,
+        "cold_open_ms": 0.7318,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.03",
+      "category": "neighborhood",
+      "params": {
+        "id": "acct:x/frenck-r7",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "5048f2895075837753b710059cbf7d2887621a2c6361ea8bf91cfd39317f3498",
+        "json_bytes": 2064
+      },
+      "timings": {
+        "cold_ms": 3.3468,
+        "cold_open_ms": 0.743,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.04",
+      "category": "neighborhood",
+      "params": {
+        "id": "person:sophine-clachar-r4",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "86f1c953b826f2b6ba7ec091d585d5ac3ad8867d7245741f6eaf36120d923bbb",
+        "json_bytes": 11680
+      },
+      "timings": {
+        "cold_ms": 19.4048,
+        "cold_open_ms": 0.7077,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.05",
+      "category": "neighborhood",
+      "params": {
+        "id": "person:krystal-folkes-brown-r1",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "00059494bc1565b420ca68b82f0125e0880f8561ecc3bbd2ccbf014d7fdc9927",
+        "json_bytes": 12049
+      },
+      "timings": {
+        "cold_ms": 25.6567,
+        "cold_open_ms": 0.7846,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.06",
+      "category": "neighborhood",
+      "params": {
+        "id": "profile:jenny-hwang-r1",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "f004601673d93e663e824afd3773dfaba42d7f2e00c755cf854c9bfe6799218d",
+        "json_bytes": 1025
+      },
+      "timings": {
+        "cold_ms": 2.4187,
+        "cold_open_ms": 0.7464,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.07",
+      "category": "neighborhood",
+      "params": {
+        "id": "profile:zeba-khan-r3",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "334108fcf10323362955de430adcbfbe6eba1e3b63e8c3258fcfdb9ff3653a5f",
+        "json_bytes": 626
+      },
+      "timings": {
+        "cold_ms": 2.114,
+        "cold_open_ms": 0.6984,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.08",
+      "category": "neighborhood",
+      "params": {
+        "id": "session:2024/ai1437d-r5",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "536e7e1b637779549921f7b588cc7d80260035b5aef5292528ed3ea16a5e12cf",
+        "json_bytes": 11908
+      },
+      "timings": {
+        "cold_ms": 22.611,
+        "cold_open_ms": 0.7929,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.09",
+      "category": "neighborhood",
+      "params": {
+        "id": "session:2023/dev2845k-r6",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e51eb51947456a8e77b4fa2c247d280ddfe2aecf743da844b8ebc476b9156c3d",
+        "json_bytes": 12175
+      },
+      "timings": {
+        "cold_ms": 20.5056,
+        "cold_open_ms": 0.7707,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.10",
+      "category": "neighborhood",
+      "params": {
+        "id": "org:butter-r7",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "026ad3adc4d976033468716d242ca165a907d85f357822ddde9ee43683ae71f2",
+        "json_bytes": 761
+      },
+      "timings": {
+        "cold_ms": 2.5595,
+        "cold_open_ms": 0.7566,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.11",
+      "category": "neighborhood",
+      "params": {
+        "id": "org:logitech-r2",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "fbedc58a401e226c39e1db75b25662654117b5ff425b1203cbe1833dabfb7181",
+        "json_bytes": 3034
+      },
+      "timings": {
+        "cold_ms": 3.9325,
+        "cold_open_ms": 0.6427,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.12",
+      "category": "neighborhood",
+      "params": {
+        "id": "gh:dbenedic-insight-r1",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "13f530368c0bf590385ca0f570243100c153c2a5794412430bff4557109e4b1a",
+        "json_bytes": 918
+      },
+      "timings": {
+        "cold_ms": 2.5442,
+        "cold_open_ms": 0.7283,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.13",
+      "category": "neighborhood",
+      "params": {
+        "id": "gh:microsoft-r8",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d5298a5e425c74c79c0b91471af574c3177f20a04a4a4a14e6f8524bda6b9a2c",
+        "json_bytes": 12118
+      },
+      "timings": {
+        "cold_ms": 8.5782,
+        "cold_open_ms": 0.7746,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.14",
+      "category": "neighborhood",
+      "params": {
+        "id": "site:andrelandgraf.dev-r4",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e11eb25a64d3d236f02bbd7b34f08bd5ca665ff3830c1f7bc8861444191c24b3",
+        "json_bytes": 2187
+      },
+      "timings": {
+        "cold_ms": 3.1708,
+        "cold_open_ms": 0.7767,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.15",
+      "category": "neighborhood",
+      "params": {
+        "id": "site:maggieappleton.com-r2",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "08863225b7b22e97fd83fbef3f99b4043b770ba24f97da6afc4b4209fc7b25e2",
+        "json_bytes": 1537
+      },
+      "timings": {
+        "cold_ms": 3.4474,
+        "cold_open_ms": 0.7447,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.16",
+      "category": "neighborhood",
+      "params": {
+        "id": "pkg:go/github.com/overmindtech/cli-r5",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "330f185e0728d3fdcf0d902618c81b5e199d3b2b112c693e871baf2e50f28265",
+        "json_bytes": 31
+      },
+      "timings": {
+        "cold_ms": 1.4307,
+        "cold_open_ms": 0.7754,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.17",
+      "category": "neighborhood",
+      "params": {
+        "id": "pkg:pypi/tiktoken-r5",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "330f185e0728d3fdcf0d902618c81b5e199d3b2b112c693e871baf2e50f28265",
+        "json_bytes": 31
+      },
+      "timings": {
+        "cold_ms": 1.4177,
+        "cold_open_ms": 0.7297,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.18",
+      "category": "neighborhood",
+      "params": {
+        "id": "room:palio-640-sacramento-st-r3",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e14eb95f1e86e3b18b55cf9d47c4e2a853e5d31bba8ce4d7b5a2245f0cd177a8",
+        "json_bytes": 672
+      },
+      "timings": {
+        "cold_ms": 2.5609,
+        "cold_open_ms": 0.7758,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.19",
+      "category": "neighborhood",
+      "params": {
+        "id": "room:demo-stage-gateway-pavilion-r1",
+        "limit": 200
+      },
+      "hub": false,
+      "result": {
+        "sha256": "cd676d2b0282ac477752f7ae568ce6d1d5115c006cf14b80f41902a7171d6bef",
+        "json_bytes": 9831
+      },
+      "timings": {
+        "cold_ms": 6.3883,
+        "cold_open_ms": 0.8077,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.00",
+      "category": "path",
+      "params": {
+        "a": "session:2024/dev2063d-r5",
+        "b": "session:bld1398h-r5",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 2,
+        "path": [
+          "session:2024/dev2063d-r5",
+          "software:github-copilot",
+          "session:bld1398h-r5"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.8951,
+        "cold_open_ms": 0.7808,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.01",
+      "category": "path",
+      "params": {
+        "a": "person:sean-josephson-r1",
+        "b": "person:madison-ficorilli-r6",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:sean-josephson-r1",
+          "term:topic-2023/security",
+          "person:madison-ficorilli-r6"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.2426,
+        "cold_open_ms": 0.7126,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.02",
+      "category": "path",
+      "params": {
+        "a": "person:shravan-mahajan-r3",
+        "b": "person:alpha-romer-coma-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:shravan-mahajan-r3",
+          "term:topic/ai-agents",
+          "person:alpha-romer-coma-r3"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.9176,
+        "cold_open_ms": 0.708,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.03",
+      "category": "path",
+      "params": {
+        "a": "session:tru2230d-r2",
+        "b": "person:yadhav-jayaraman",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 2,
+        "path": [
+          "session:tru2230d-r2",
+          "software:github-copilot",
+          "person:yadhav-jayaraman"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.8329,
+        "cold_open_ms": 0.8159,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.04",
+      "category": "path",
+      "params": {
+        "a": "person:ben-dang-r3",
+        "b": "person:suzanne-daniels-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:ben-dang-r3",
+          "term:topic-2025/custom-integrations-and-apis",
+          "person:suzanne-daniels-r3"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.6967,
+        "cold_open_ms": 0.7554,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.05",
+      "category": "path",
+      "params": {
+        "a": "org:imbue-r7",
+        "b": "person:jon-janego-r2",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 3,
+        "path": [
+          "org:imbue-r7",
+          "person:russell-horton-r2",
+          "org:github",
+          "person:jon-janego-r2"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.2276,
+        "cold_open_ms": 0.7641,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.06",
+      "category": "path",
+      "params": {
+        "a": "org:gaad-foundation-r6",
+        "b": "session:2023/ai1273d-r6",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 3,
+        "path": [
+          "org:gaad-foundation-r6",
+          "person:joe-devon-r6",
+          "term:topic-2023/artificial-intelligence-ai",
+          "session:2023/ai1273d-r6"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.1061,
+        "cold_open_ms": 0.69,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.07",
+      "category": "path",
+      "params": {
+        "a": "person:thomas-bissell-r3",
+        "b": "repo:staticwebdev/mongoose-starter-r7",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 3,
+        "path": [
+          "person:thomas-bissell-r3",
+          "term:topic-2025/continuous-integration-continuous-deployment-ci-cd",
+          "person:christopher-harrison-r7",
+          "repo:staticwebdev/mongoose-starter-r7"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.2238,
+        "cold_open_ms": 0.7214,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.08",
+      "category": "path",
+      "params": {
+        "a": "repo:turbo/signals.nim-r3",
+        "b": "session:bld2011d-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 3,
+        "path": [
+          "repo:turbo/signals.nim-r3",
+          "person:pierre-tempel-r3",
+          "term:topic/ai-agents",
+          "session:bld2011d-r3"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.8458,
+        "cold_open_ms": 0.7017,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.09",
+      "category": "path",
+      "params": {
+        "a": "repo:doniacld/tiny-hen-r5",
+        "b": "person:ryan-platt-r6",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 3,
+        "path": [
+          "repo:doniacld/tiny-hen-r5",
+          "person:donia-chaiehloudj-r5",
+          "software:github-copilot",
+          "person:ryan-platt-r6"
+        ]
+      },
+      "timings": {
+        "cold_ms": 2.6473,
+        "cold_open_ms": 0.657,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.10",
+      "category": "path",
+      "params": {
+        "a": "repo:review-bench/reviewbench-r3",
+        "b": "repo:xriley/orbit-theme-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 4,
+        "path": [
+          "repo:review-bench/reviewbench-r3",
+          "person:alejandro-carderera-r3",
+          "term:topic/ai-agents",
+          "person:camila-maia-r3",
+          "repo:xriley/orbit-theme-r3"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.0547,
+        "cold_open_ms": 0.6499,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.11",
+      "category": "path",
+      "params": {
+        "a": "session:2025/aut1512s-r2",
+        "b": "repo:quitepicky/site-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 4,
+        "path": [
+          "session:2025/aut1512s-r2",
+          "software:github-actions",
+          "org:github",
+          "person:alex-gorischek-r3",
+          "repo:quitepicky/site-r3"
+        ]
+      },
+      "timings": {
+        "cold_ms": 12.5616,
+        "cold_open_ms": 0.6522,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.12",
+      "category": "path",
+      "params": {
+        "a": "repo:frigginglorious/summer-of-ruby-class-r5",
+        "b": "repo:abelberhane/prompt-engineering-r5",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 4,
+        "path": [
+          "repo:frigginglorious/summer-of-ruby-class-r5",
+          "person:jeremiah-isaacson-r5",
+          "software:github-copilot",
+          "person:abel-berhane-r5",
+          "repo:abelberhane/prompt-engineering-r5"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.0273,
+        "cold_open_ms": 0.6739,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.13",
+      "category": "path",
+      "params": {
+        "a": "org:infosys-r4",
+        "b": "repo:geektrainer/help-desk-bot-lab-r8",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 4,
+        "path": [
+          "org:infosys-r4",
+          "person:naresh-choudhary-r4",
+          "term:topic-2023/artificial-intelligence-ai",
+          "person:christopher-harrison-r8",
+          "repo:geektrainer/help-desk-bot-lab-r8"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.709,
+        "cold_open_ms": 0.7037,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.14",
+      "category": "path",
+      "params": {
+        "a": "person:alfredo-deza-r5",
+        "b": "session:2089-r5",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": 4,
+        "path": [
+          "person:alfredo-deza-r5",
+          "org:microsoft",
+          "session:2073-r5",
+          "term:session-type/social-r5",
+          "session:2089-r5"
+        ]
+      },
+      "timings": {
+        "cold_ms": 24.9928,
+        "cold_open_ms": 0.7035,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.15",
+      "category": "path",
+      "params": {
+        "a": "org:mistral-r8",
+        "b": "person:eric-bouguen-r2",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 23.9352,
+        "cold_open_ms": 0.9235,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.16",
+      "category": "path",
+      "params": {
+        "a": "repo:cncf/mentoring-r3",
+        "b": "session:2023/dev1705p-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 4.2973,
+        "cold_open_ms": 0.787,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.17",
+      "category": "path",
+      "params": {
+        "a": "repo:openhomefoundation/roadmap-r2",
+        "b": "repo:slackhq/go-audit-r3",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 2.3063,
+        "cold_open_ms": 0.7694,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.18",
+      "category": "path",
+      "params": {
+        "a": "repo:kevinbackhouse/dbusparse-r2",
+        "b": "session:2025/1869-r2",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 9.4755,
+        "cold_open_ms": 0.7016,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.19",
+      "category": "path",
+      "params": {
+        "a": "repo:thealexlichter/h3-basic-auth-r6",
+        "b": "session:2023/dev2784s",
+        "max_hops": 4
+      },
+      "hub": false,
+      "result": {
+        "hops": null,
+        "path": []
+      },
+      "timings": {
+        "cold_ms": 12.3061,
+        "cold_open_ms": 0.7319,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.00",
+      "category": "search",
+      "params": {
+        "term": "safeguarding",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "288603415bb6c274235eba21b339bdd722d89c4470ce3ae7fbbb503ec3f4e0ae",
+        "json_bytes": 2231
+      },
+      "timings": {
+        "cold_ms": 117.3484,
+        "cold_open_ms": 0.7619,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.01",
+      "category": "search",
+      "params": {
+        "term": "thorley",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "f8ae558df7fe0c776124eb4cb43a8714de2f277aa52a3c072a6e19dc74d02a1e",
+        "json_bytes": 2011
+      },
+      "timings": {
+        "cold_ms": 118.896,
+        "cold_open_ms": 0.7973,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.02",
+      "category": "search",
+      "params": {
+        "term": "bourne",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d4f5b2f14e2fbe7c72583affd54b44aa9f03679053682d5454f5d6f80db92932",
+        "json_bytes": 1705
+      },
+      "timings": {
+        "cold_ms": 118.6187,
+        "cold_open_ms": 0.7683,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.03",
+      "category": "search",
+      "params": {
+        "term": "gerth",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "20b40d54133b3b60f94121d55f75164794595c62c489686f588d15532db0a1ab",
+        "json_bytes": 1707
+      },
+      "timings": {
+        "cold_ms": 131.3576,
+        "cold_open_ms": 0.8297,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.04",
+      "category": "search",
+      "params": {
+        "term": "albaugh",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "bcbad4a5f5261e3065dc3f9cb8a85a304627b22eac396414d57d4dc712716b60",
+        "json_bytes": 1631
+      },
+      "timings": {
+        "cold_ms": 128.633,
+        "cold_open_ms": 1.2145,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.05",
+      "category": "search",
+      "params": {
+        "term": "rodes",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "46e18d940eb225eaecc85f2e79cc9ba91e33486bdb294d776a33f6001de32218",
+        "json_bytes": 1737
+      },
+      "timings": {
+        "cold_ms": 106.0338,
+        "cold_open_ms": 0.7044,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.06",
+      "category": "search",
+      "params": {
+        "term": "jemiah",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "635aa74dd1a16a14f0547652808eded955fbe0401a2d4968fb7346a03efe30c6",
+        "json_bytes": 1619
+      },
+      "timings": {
+        "cold_ms": 88.0678,
+        "cold_open_ms": 0.7034,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.07",
+      "category": "search",
+      "params": {
+        "term": "success",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e6e9b500b530fd5cb401d5ae1915b5d86a61ddf803c3869d9cddb327ced3611d",
+        "json_bytes": 2651
+      },
+      "timings": {
+        "cold_ms": 92.6761,
+        "cold_open_ms": 0.7387,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.08",
+      "category": "search",
+      "params": {
+        "term": "take",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "118fe62bbdf8574342244d9aa74e73e71f4fc9ee9dbf1828d633725476bf3057",
+        "json_bytes": 2558
+      },
+      "timings": {
+        "cold_ms": 116.4267,
+        "cold_open_ms": 0.7495,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.09",
+      "category": "search",
+      "params": {
+        "term": "keynote",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "5d849e34fe1ce729fd2eac5a0c723dbf5584441180509d0199bcbf8c09d37848",
+        "json_bytes": 1574
+      },
+      "timings": {
+        "cold_ms": 116.444,
+        "cold_open_ms": 0.824,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.10",
+      "category": "search",
+      "params": {
+        "term": "policy",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "59ede459a5f62c0b35fec42cb578f6b1779ab7d856e075ca474310a999c8f6fc",
+        "json_bytes": 2598
+      },
+      "timings": {
+        "cold_ms": 93.7441,
+        "cold_open_ms": 0.7639,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.11",
+      "category": "search",
+      "params": {
+        "term": "context",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "67cd2aef3bdfdddf6d136fe88cebac714256de4da4accb34550d31be6be192d9",
+        "json_bytes": 2196
+      },
+      "timings": {
+        "cold_ms": 91.1798,
+        "cold_open_ms": 0.7302,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.12",
+      "category": "search",
+      "params": {
+        "term": "will",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "04ec2bfdd949374415152add8c6f681a02e17946c268b65534c45d9d606bbe53",
+        "json_bytes": 2183
+      },
+      "timings": {
+        "cold_ms": 117.206,
+        "cold_open_ms": 0.7324,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.13",
+      "category": "search",
+      "params": {
+        "term": "idan",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "9104063aee6836c92e5b12ea74ab0428ccc83ddcdfd20791eb6bd410609d6206",
+        "json_bytes": 1734
+      },
+      "timings": {
+        "cold_ms": 108.3198,
+        "cold_open_ms": 0.806,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.14",
+      "category": "search",
+      "params": {
+        "term": "world",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "77a53d929de13f9a51a9464fea3adde4310699f3bfe809318c5826017565c144",
+        "json_bytes": 2377
+      },
+      "timings": {
+        "cold_ms": 120.9672,
+        "cold_open_ms": 0.8415,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.15",
+      "category": "search",
+      "params": {
+        "term": "management",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "73ee4b2b0459bf1a87b687fa71222eee8a864a96277c8aea5340fc8854b9a2be",
+        "json_bytes": 3041
+      },
+      "timings": {
+        "cold_ms": 120.0923,
+        "cold_open_ms": 0.7986,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.16",
+      "category": "search",
+      "params": {
+        "term": "manage",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "3a2138267f0e9a2bb89399310aec5917f683e470932e21427c6d803cdbfd8af5",
+        "json_bytes": 3062
+      },
+      "timings": {
+        "cold_ms": 113.0687,
+        "cold_open_ms": 0.8178,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.17",
+      "category": "search",
+      "params": {
+        "term": "global",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "16b62b35091d74a2239f4dfa1d0a30eb1d4639d2e8e66dd72ebee4a0b2d3b679",
+        "json_bytes": 2625
+      },
+      "timings": {
+        "cold_ms": 117.4417,
+        "cold_open_ms": 0.7968,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.18",
+      "category": "search",
+      "params": {
+        "term": "work",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "ad9fe8310d8393d8bd34e73ed9d2f6022977d82ccafd161b8edab7f805ef241b",
+        "json_bytes": 2144
+      },
+      "timings": {
+        "cold_ms": 117.6367,
+        "cold_open_ms": 0.7784,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.search.19",
+      "category": "search",
+      "params": {
+        "term": "about",
+        "limit": 20
+      },
+      "hub": false,
+      "result": {
+        "sha256": "795950636f248a53a9a0574d59bc028d208c93ebe7a0304ab0c05292f6bf556e",
+        "json_bytes": 2792
+      },
+      "timings": {
+        "cold_ms": 126.0663,
+        "cold_open_ms": 0.8149,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH hits AS MATERIALIZED (SELECT id, min(rank) AS rank FROM search_text WHERE instr(text, ?) > 0 GROUP BY id) SELECT h.id, e.kind, e.label AS name, h.rank, (SELECT count(*) FROM hits) AS total FROM hits h JOIN entity e ON e.id = h.id ORDER BY h.rank, h.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE hits",
+            "SCAN search_text",
+            "SCAN h",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN hits",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.00",
+      "category": "facet",
+      "params": {
+        "relation": "expert_in",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "1f3aa942c46b326150f62a58f8e6d71302e66cafab97da2e2e5eaa500c450ad4",
+        "json_bytes": 4488
+      },
+      "timings": {
+        "cold_ms": 23.3291,
+        "cold_open_ms": 0.8887,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.01",
+      "category": "facet",
+      "params": {
+        "relation": "about_topic",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "a933a3b273404304a833efcb8cb07dd4680513e74cdf12fdfb4140050f67a653",
+        "json_bytes": 4524
+      },
+      "timings": {
+        "cold_ms": 14.6024,
+        "cold_open_ms": 0.864,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.02",
+      "category": "facet",
+      "params": {
+        "relation": "for_audience",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d4afb91dfb99f2d16ff6cea934a3a6eca2f2b294c64708b4eeca630999e7899a",
+        "json_bytes": 5319
+      },
+      "timings": {
+        "cold_ms": 14.0362,
+        "cold_open_ms": 0.9214,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.03",
+      "category": "facet",
+      "params": {
+        "relation": "affiliated_with",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "184d0c63a0c55bc19c53c0b5e3e2393f1b5348ea4a0f8e3d7aeef55aee130030",
+        "json_bytes": 2530
+      },
+      "timings": {
+        "cold_ms": 14.9837,
+        "cold_open_ms": 0.8216,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.04",
+      "category": "facet",
+      "params": {
+        "relation": "for_industry",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "662b64f08a42ce13926075aaee83aec08120d39a236121de7f51cd931635c3b8",
+        "json_bytes": 4331
+      },
+      "timings": {
+        "cold_ms": 12.4504,
+        "cold_open_ms": 0.8566,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.05",
+      "category": "facet",
+      "params": {
+        "relation": "works_with",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d06d6ec7952b66755f3e6430b7da4b83df74c67564518b61e5c105a17b2234fa",
+        "json_bytes": 3214
+      },
+      "timings": {
+        "cold_ms": 8.8031,
+        "cold_open_ms": 0.8418,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.06",
+      "category": "facet",
+      "params": {
+        "relation": "features_product",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "85d04cf5fbbcd321e2284efcd63a71b18175728edc053ce40aa39e6a00371249",
+        "json_bytes": 3908
+      },
+      "timings": {
+        "cold_ms": 9.7672,
+        "cold_open_ms": 0.7107,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.07",
+      "category": "facet",
+      "params": {
+        "relation": "has_account",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "6a785a72c1672e09093a31a6b13f3e0e9fdc607353bc7188892def4b63d226c9",
+        "json_bytes": 4147
+      },
+      "timings": {
+        "cold_ms": 17.8037,
+        "cold_open_ms": 0.7839,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.08",
+      "category": "facet",
+      "params": {
+        "relation": "delivered_as",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "0b75846af92e6eb2f5f075b50836ccb5acbb2ea94a19bb0602f8fde853bab4c0",
+        "json_bytes": 3880
+      },
+      "timings": {
+        "cold_ms": 8.2237,
+        "cold_open_ms": 0.8606,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.09",
+      "category": "facet",
+      "params": {
+        "relation": "owns",
+        "source_kind": "github_account",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "b29d0303e9e561c4b53df05e071dd1bd3188761504e4591a8790011eaaf73c6a",
+        "json_bytes": 4208
+      },
+      "timings": {
+        "cold_ms": 14.0188,
+        "cold_open_ms": 0.8104,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.10",
+      "category": "facet",
+      "params": {
+        "relation": "presents",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "5c0176a8790557b55a9cdcab9324d869d484bf2a3e002673f1346d5998690bb8",
+        "json_bytes": 5397
+      },
+      "timings": {
+        "cold_ms": 12.395,
+        "cold_open_ms": 0.7302,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.11",
+      "category": "facet",
+      "params": {
+        "relation": "participates_in",
+        "source_kind": "person",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "7d6d23a13751a5a687c5ac8b2907232bd43c2b36d05257285d2bc060b3053df5",
+        "json_bytes": 2925
+      },
+      "timings": {
+        "cold_ms": 6.6939,
+        "cold_open_ms": 0.7993,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.12",
+      "category": "facet",
+      "params": {
+        "relation": "mentions",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "cb6ee71eab78704593b1d94a8aada7972283a326fa13957e08f5357655ed2a35",
+        "json_bytes": 3044
+      },
+      "timings": {
+        "cold_ms": 16.1831,
+        "cold_open_ms": 0.8077,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.13",
+      "category": "facet",
+      "params": {
+        "relation": "in_track",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "7d99fb982ca173759ca9009e83712a6692050b9e13ab6f0a743a86e831e55a53",
+        "json_bytes": 3739
+      },
+      "timings": {
+        "cold_ms": 7.217,
+        "cold_open_ms": 0.9029,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.14",
+      "category": "facet",
+      "params": {
+        "relation": "pinned",
+        "source_kind": "github_account",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "42849044f071fe221b6897528319abcf7cccbbd6ed9bb737c10c70db9539c60e",
+        "json_bytes": 4066
+      },
+      "timings": {
+        "cold_ms": 14.177,
+        "cold_open_ms": 0.9064,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.15",
+      "category": "facet",
+      "params": {
+        "relation": "describes",
+        "source_kind": "profile",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "850477c02a6631a04e5a86cea3029d413f41d21c4959a9fdce4cb19152a9dbc5",
+        "json_bytes": 3414
+      },
+      "timings": {
+        "cold_ms": 13.7522,
+        "cold_open_ms": 0.9193,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.16",
+      "category": "facet",
+      "params": {
+        "relation": "held_in",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "ff545a793708c38093a514399889f87545f3e0581c7eefdef76a943925e8a072",
+        "json_bytes": 4056
+      },
+      "timings": {
+        "cold_ms": 9.5608,
+        "cold_open_ms": 0.885,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.17",
+      "category": "facet",
+      "params": {
+        "relation": "scheduled_on",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "9d90278073c2583eb419259fc8cbb78bdc03f0e5bd8be2f356dda3529e004d5a",
+        "json_bytes": 3310
+      },
+      "timings": {
+        "cold_ms": 6.6865,
+        "cold_open_ms": 0.9281,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.18",
+      "category": "facet",
+      "params": {
+        "relation": "has_type",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "e8a0d78a31e955fe0f5159c14a9c42c36103774d4a06b845aa69f5f5ef17abe3",
+        "json_bytes": 3931
+      },
+      "timings": {
+        "cold_ms": 7.705,
+        "cold_open_ms": 0.8876,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.19",
+      "category": "facet",
+      "params": {
+        "relation": "part_of",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "b1e2191db1054324444400ff55c0f8cb938da14e7b1f8487f2ac6482846a4a08",
+        "json_bytes": 2916
+      },
+      "timings": {
+        "cold_ms": 6.2564,
+        "cold_open_ms": 0.8134,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.00",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "75ba4d526231a6a9c5324499eb3b6f202296d6689d6dea71fb765bab41d3a015",
+        "json_bytes": 6451
+      },
+      "timings": {
+        "cold_ms": 3.9391,
+        "cold_open_ms": 0.7237,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.01",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": 100,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "9a8446ee0633a65ad99c7fb2fc7b7dd03afce09c563cc0244313fe8984109899",
+        "json_bytes": 6369
+      },
+      "timings": {
+        "cold_ms": 3.7311,
+        "cold_open_ms": 0.7562,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.02",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": 500,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d25ef5ed9f5f85b3177f7f864a08431a010805107398e21ae2fd9126a92771d4",
+        "json_bytes": 6268
+      },
+      "timings": {
+        "cold_ms": 3.7403,
+        "cold_open_ms": 0.7787,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.03",
+      "category": "table",
+      "params": {
+        "table": "sessions_by_start",
+        "offset": "last",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "f09283519842ad2fd5fcab71d107c118dbf3ac77583d9459af0d2c7cf5246237",
+        "json_bytes": 2454
+      },
+      "timings": {
+        "cold_ms": 3.1508,
+        "cold_open_ms": 0.8821,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, derived ->> '$.start_epoch' AS value FROM entity INDEXED BY ix_view_sessions_by_start WHERE kind = 'session' AND json_type(payload, '$.sponsored') = ? ORDER BY derived ->> '$.start_key', id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_sessions_by_start (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.04",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:github",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "38c19ab21e0a9785aced7be9ef9de88506684a11c9b26e0e93b514d6c0393b98",
+        "json_bytes": 4200
+      },
+      "timings": {
+        "cold_ms": 46.9766,
+        "cold_open_ms": 0.8013,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.05",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:microsoft",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "56b51f41c11bb9b1a82411d253257d573ec83b2af6ee9db5c812ec9a37bb1e38",
+        "json_bytes": 4115
+      },
+      "timings": {
+        "cold_ms": 16.0462,
+        "cold_open_ms": 0.9323,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.06",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:google",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "8113051b4fac40250b5a9d78e98a5d92ab2706433d4ed025e24c54df13d22ef3",
+        "json_bytes": 2258
+      },
+      "timings": {
+        "cold_ms": 2.4429,
+        "cold_open_ms": 0.8084,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.07",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:octopus-deploy",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "366828a4351743574d0b2bc4693fecebc8be3802d179b1e93c9a2903b4ccfa9b",
+        "json_bytes": 3806
+      },
+      "timings": {
+        "cold_ms": 3.0292,
+        "cold_open_ms": 0.8057,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.08",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:dream-games-r1",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "bd408b5fe85673cd35983ddb3b8776fd8a9c151f1494f2f9301074daed18d4a9",
+        "json_bytes": 109
+      },
+      "timings": {
+        "cold_ms": 1.4045,
+        "cold_open_ms": 0.8035,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.09",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:gsk-r5",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "64f1d0aed57e5fbb007a97d5ecb5600da3b48372a98db8dd7778cb32722a657f",
+        "json_bytes": 109
+      },
+      "timings": {
+        "cold_ms": 1.4384,
+        "cold_open_ms": 0.8263,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.10",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:databricks-r7",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "47ae07565b322f89c511a68eb10fc19d0d14d4e36fa279c50d834e7b2c4ac70a",
+        "json_bytes": 103
+      },
+      "timings": {
+        "cold_ms": 1.3457,
+        "cold_open_ms": 0.7892,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.11",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:avanade-r8",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "2bdecd04e639ec84e564d3e5f5617f3bda78e965938c59dc9a8bca83e155510e",
+        "json_bytes": 332
+      },
+      "timings": {
+        "cold_ms": 1.446,
+        "cold_open_ms": 0.6294,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.12",
+      "category": "table",
+      "params": {
+        "table": "people_by_org",
+        "org": "org:github",
+        "offset": "last",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "c58d9a6e9b06eb890a885ad04bccc848b1bed186c328922bf5aac9f022c6831a",
+        "json_bytes": 2084
+      },
+      "timings": {
+        "cold_ms": 47.4224,
+        "cold_open_ms": 0.7307,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person'",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT e.id, e.label AS name, e.label AS value FROM (SELECT DISTINCT source FROM edge WHERE target = ? AND relation = 'affiliated_with') m CROSS JOIN entity e ON e.id = m.source WHERE +e.kind = 'person' ORDER BY e.label, e.id LIMIT ? OFFSET ?",
+          "plan": [
+            "CO-ROUTINE m",
+            "SEARCH edge USING COVERING INDEX ix_edge_rel (relation=? AND target=?)",
+            "SCAN m",
+            "SEARCH e USING INDEX sqlite_autoindex_entity_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.13",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Python",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "b993944d7d0d4d379f03a3c7ec112dd3603b69002a3bb27e1d9e9f57342a7172",
+        "json_bytes": 3854
+      },
+      "timings": {
+        "cold_ms": 2.991,
+        "cold_open_ms": 0.7718,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.14",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "TypeScript",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "db0f127a8550ed75a64e33b9f5455e5d1a9e0371c88db953acf5516cd1dcd8e1",
+        "json_bytes": 3844
+      },
+      "timings": {
+        "cold_ms": 3.006,
+        "cold_open_ms": 0.7819,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.15",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Go",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "3ee54bff883e2119fec64b963ab44e121cee944d83de77267cd26093728ddaa0",
+        "json_bytes": 3826
+      },
+      "timings": {
+        "cold_ms": 2.6499,
+        "cold_open_ms": 0.8152,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.16",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Rust",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "d45839133f321473b4c89a6f9d783b955b42ea3d3c007df449a17977f7576800",
+        "json_bytes": 3516
+      },
+      "timings": {
+        "cold_ms": 2.1423,
+        "cold_open_ms": 0.7837,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.17",
+      "category": "table",
+      "params": {
+        "table": "repos_by_stars",
+        "language": "Ruby",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "81f9c1a3f2dffb77d0f48176fca01377ab65f3cc71b651739e65e1dcf991a4c2",
+        "json_bytes": 3827
+      },
+      "timings": {
+        "cold_ms": 2.0035,
+        "cold_open_ms": 0.7067,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository' AND payload ->> '$.primary_language' = ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_by_stars WHERE kind = 'repository' AND payload ->> '$.primary_language' = ? ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SEARCH entity USING INDEX ix_view_repos_by_stars (<expr>=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.18",
+      "category": "table",
+      "params": {
+        "table": "repos_all_by_stars",
+        "offset": 0,
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "a9c92b9a5dfbe0781d248e7cc515f52363eb41ba347e6c09e07ec4b020b325c5",
+        "json_bytes": 3759
+      },
+      "timings": {
+        "cold_ms": 4.662,
+        "cold_open_ms": 0.6912,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository'",
+          "plan": [
+            "SEARCH entity USING COVERING INDEX ix_entity_kind_label (kind=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_all_by_stars WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.table.deep_largest_kind",
+      "category": "table",
+      "params": {
+        "table": "repos_all_by_stars",
+        "offset": "last",
+        "limit": 50
+      },
+      "hub": false,
+      "result": {
+        "sha256": "63a5292fa2c414f20b7debc1cb679ffe66f31c6806140c413982417ae4c9abca",
+        "json_bytes": 3337
+      },
+      "timings": {
+        "cold_ms": 5.5365,
+        "cold_open_ms": 0.6835,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT count(*) AS n FROM entity WHERE kind = 'repository'",
+          "plan": [
+            "SEARCH entity USING COVERING INDEX ix_entity_kind_label (kind=?)"
+          ]
+        },
+        {
+          "sql": "SELECT id, label AS name, payload ->> '$.stars' AS value FROM entity INDEXED BY ix_view_repos_all_by_stars WHERE kind = 'repository' ORDER BY payload ->> '$.stars' DESC, id LIMIT ? OFFSET ?",
+          "plan": [
+            "SCAN entity USING INDEX ix_view_repos_all_by_stars"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.record.hub",
+      "category": "record",
+      "params": {
+        "id": "org:openai"
+      },
+      "hub": true,
+      "result": {
+        "sha256": "4e2912dffcb36b5812ff670ec2a437d5f267f82a5a6e8dbd06e676c9751c9b95",
+        "json_bytes": 29770
+      },
+      "timings": {
+        "cold_ms": 6.0634,
+        "cold_open_ms": 0.7074,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "SELECT id, kind, label, path, payload FROM entity WHERE id = ?",
+          "plan": [
+            "SEARCH entity USING INDEX sqlite_autoindex_entity_1 (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.target AS other, t.kind, g.props FROM edge g JOIN entity t ON t.id = g.target WHERE g.source = ?",
+          "plan": [
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        },
+        {
+          "sql": "SELECT g.relation, g.source AS other, s.kind, g.props FROM edge g JOIN entity s ON s.id = g.source WHERE g.target = ?",
+          "plan": [
+            "SEARCH g USING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.neighborhood.hub",
+      "category": "neighborhood",
+      "params": {
+        "id": "software:vs-code",
+        "limit": 200
+      },
+      "hub": true,
+      "result": {
+        "sha256": "d1ed4d8377b403cf61f2482f797e446c76b4232c8718f2b32af1fc3f3f60e0ed",
+        "json_bytes": 11586
+      },
+      "timings": {
+        "cold_ms": 82.538,
+        "cold_open_ms": 0.6794,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH RECURSIVE walk(id, hop, hub) AS ( SELECT ?1, 0, 0 UNION SELECT g.target, w.hop + 1, t.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.source = w.id JOIN entity t ON t.id = g.target WHERE w.hop < 2 AND w.hub = 0 UNION SELECT g.source, w.hop + 1, s.kind IN ('event', 'day', 'facet') FROM walk w JOIN edge g ON g.target = w.id JOIN entity s ON s.id = g.source WHERE w.hop < 2 AND w.hub = 0 ), near AS MATERIALIZED (SELECT id, min(hop) AS hop FROM walk WHERE id <> ?1 GROUP BY id) SELECT n.id, e.kind, n.hop, (SELECT count(*) FROM near) AS total, (SELECT count(*) FROM near WHERE hop = 1) AS hop1 FROM near n JOIN entity e ON e.id = n.id ORDER BY n.hop, n.id LIMIT ?2",
+          "plan": [
+            "MATERIALIZE near",
+            "MATERIALIZE walk",
+            "SETUP",
+            "SCAN CONSTANT ROW",
+            "RECURSIVE STEP",
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN w",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN w",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCAN walk",
+            "USE TEMP B-TREE FOR GROUP BY",
+            "SCAN n",
+            "SEARCH e USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 5",
+            "SCAN near",
+            "SCALAR SUBQUERY 6",
+            "BLOOM FILTER ON near (hop=?)",
+            "SEARCH near USING AUTOMATIC PARTIAL COVERING INDEX (hop=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.path.hub",
+      "category": "path",
+      "params": {
+        "a": "person:dylan-ratcliffe-r1",
+        "b": "person:pamela-fox-r4",
+        "max_hops": 4
+      },
+      "hub": true,
+      "result": {
+        "hops": 2,
+        "path": [
+          "person:dylan-ratcliffe-r1",
+          "term:topic/ai-agents",
+          "person:pamela-fox-r4"
+        ]
+      },
+      "timings": {
+        "cold_ms": 3.0813,
+        "cold_open_ms": 0.758,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH f(id) AS (SELECT value FROM json_each(?)) SELECT g.source AS u, g.target AS v, t.kind IN ('event', 'day', 'facet') AS hub FROM f JOIN edge g ON g.source = f.id JOIN entity t ON t.id = g.target UNION ALL SELECT g.target, g.source, s.kind IN ('event', 'day', 'facet') FROM f JOIN edge g ON g.target = f.id JOIN entity s ON s.id = g.source",
+          "plan": [
+            "COMPOUND QUERY",
+            "LEFT-MOST SUBQUERY",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING PRIMARY KEY (source=?)",
+            "SEARCH t USING COVERING INDEX ix_entity_id_kind (id=?)",
+            "UNION ALL",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH g USING COVERING INDEX ix_edge_in (target=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "v2.facet.hub",
+      "category": "facet",
+      "params": {
+        "relation": "mentions",
+        "source_kind": "session",
+        "limit": 50
+      },
+      "hub": true,
+      "result": {
+        "sha256": "cb6ee71eab78704593b1d94a8aada7972283a326fa13957e08f5357655ed2a35",
+        "json_bytes": 3044
+      },
+      "timings": {
+        "cold_ms": 12.0079,
+        "cold_open_ms": 0.6822,
+        "cold_evicted": true,
+        "warm_ms": [],
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "plans": [
+        {
+          "sql": "WITH groups AS MATERIALIZED ( SELECT g.target AS id, count(DISTINCT g.source) AS n FROM edge g JOIN entity s ON s.id = g.source WHERE g.relation = ? AND s.kind = ? GROUP BY g.target ) SELECT gr.id, e.label AS name, gr.n AS count, (SELECT count(*) FROM groups) AS total FROM groups gr JOIN entity e ON e.id = gr.id ORDER BY gr.n DESC, gr.id LIMIT ?",
+          "plan": [
+            "MATERIALIZE groups",
+            "SEARCH g USING COVERING INDEX ix_edge_rel (relation=?)",
+            "SEARCH s USING COVERING INDEX ix_entity_id_kind (id=? AND kind=?)",
+            "SCAN gr",
+            "SEARCH e USING INDEX ix_entity_id_kind (id=?)",
+            "SCALAR SUBQUERY 2",
+            "SCAN groups",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        }
+      ]
+    }
+  ],
+  "oracle_check": {
+    "expected": "harness/expected/S1-r2-p05/w3.json",
+    "expected_sha256": "398f7c3bc6f7da83978c1c781cc74690d0744498e76810c06e1ba615feb45228",
+    "paths_checked_against": "delta2.py --apply output for S1-r2-p05",
+    "outcome": "MATCH: 124 ok, 0 differ",
+    "answers": "non-path answers replaced by compare.digest (sha256 of canonical JSON); path answers kept; see harness/slim_results.py"
+  }
+}

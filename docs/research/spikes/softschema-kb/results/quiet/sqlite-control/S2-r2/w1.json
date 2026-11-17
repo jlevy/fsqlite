@@ -1,0 +1,346 @@
+{
+ "arm": "sqlite-control",
+ "arm_label": "plain SQLite control (node:sqlite, same DDL and SQL)",
+ "scale": "S2-r2",
+ "workflow": "w1",
+ "description": "plain SQLite, indexes declared before the load (fsqlite's order), one transaction, synchronous FULL",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14669,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "not used: node:sqlite directly, the spike's DDL and SQL"
+ },
+ "repetitions_kept": 3,
+ "summary": {
+  "file_bytes": {
+   "median": 1946136576,
+   "min": 1946136576,
+   "max": 1946136576,
+   "n": 3
+  },
+  "ingest_through_durable_in_process_s": {
+   "median": 19.815,
+   "min": 18.622,
+   "max": 20.356,
+   "n": 3
+  },
+  "ingest_through_durable_s": {
+   "median": 19.815,
+   "min": 18.622,
+   "max": 20.356,
+   "n": 3
+  },
+  "peak_rss_mib": {
+   "median": 482.6,
+   "min": 471.7,
+   "max": 498.3,
+   "n": 3
+  },
+  "phase.commit_durable_ms": {
+   "median": 1782.788,
+   "min": 1696.775,
+   "max": 1810.403,
+   "n": 3
+  },
+  "phase.decode_ms": {
+   "median": 2413.806,
+   "min": 2394.357,
+   "max": 2487.661,
+   "n": 3
+  },
+  "phase.index_ms": {
+   "median": 0,
+   "min": 0,
+   "max": 0,
+   "n": 3
+  },
+  "phase.ingest_ms": {
+   "median": 14305.292,
+   "min": 13243.704,
+   "max": 15082.908,
+   "n": 3
+  },
+  "phase.transform_ms": {
+   "median": 1314.588,
+   "min": 1299.384,
+   "max": 1348.703,
+   "n": 3
+  }
+ },
+ "earlier_contended": {
+  "source": "results/fsqlite/S2-r2/w1-plain-sqlite.json",
+  "values": {
+   "ingest_through_durable_s": 19.048
+  }
+ },
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:32:04Z",
+   "wall_s": 23.008,
+   "load_before": [
+    0.98,
+    1.2,
+    1.3
+   ],
+   "load_after": [
+    1.07,
+    1.2,
+    1.3
+   ],
+   "load1_max_during": 1.07,
+   "foreign_cpu_max": 0.037,
+   "waited_for_quiet_s": 10.0,
+   "disk_free_gb_before": 12.82,
+   "disk_free_gb_min": 10.87,
+   "load_samples": [
+    {
+     "t": 1794897134.1,
+     "load1": 0.99,
+     "own_cpu": 1.04,
+     "foreign_cpu": 0.034
+    },
+    {
+     "t": 1794897144.1,
+     "load1": 0.99,
+     "own_cpu": 0.99,
+     "foreign_cpu": 0.011
+    },
+    {
+     "t": 1794897147.1,
+     "load1": 1.07,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.037
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 19.815,
+    "ingest_through_durable_in_process_s": 19.815,
+    "peak_rss_mib": 498.3,
+    "file_bytes": 1946136576,
+    "phase.decode_ms": 2487.661,
+    "phase.transform_ms": 1348.703,
+    "phase.ingest_ms": 14305.292,
+    "phase.index_ms": 0,
+    "phase.commit_durable_ms": 1782.788
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14669,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "ddl_ms": 1.343,
+     "decode_ms": 2487.661,
+     "transform_ms": 1348.703,
+     "ingest_ms": 14305.292,
+     "index_ms": 0,
+     "verify_counts_ms": 93.722,
+     "commit_durable_ms": 1782.788,
+     "ingest_through_durable_ms": 19814.557
+    },
+    "config": {
+     "journal_mode": "DELETE",
+     "synchronous": "FULL",
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "node": "v22.23.4"
+    },
+    "count_problems": []
+   }
+  },
+  {
+   "rep": 2,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:32:32Z",
+   "wall_s": 25.014,
+   "load_before": [
+    0.98,
+    1.18,
+    1.29
+   ],
+   "load_after": [
+    1.35,
+    1.25,
+    1.31
+   ],
+   "load1_max_during": 1.35,
+   "foreign_cpu_max": 0.507,
+   "waited_for_quiet_s": 5.0,
+   "disk_free_gb_before": 10.87,
+   "disk_free_gb_min": 10.87,
+   "load_samples": [
+    {
+     "t": 1794897162.1,
+     "load1": 0.99,
+     "own_cpu": 0.905,
+     "foreign_cpu": 0.023
+    },
+    {
+     "t": 1794897172.1,
+     "load1": 1.3,
+     "own_cpu": 0.982,
+     "foreign_cpu": 0.291
+    },
+    {
+     "t": 1794897177.1,
+     "load1": 1.35,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.507
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 20.356,
+    "ingest_through_durable_in_process_s": 20.356,
+    "peak_rss_mib": 482.6,
+    "file_bytes": 1946136576,
+    "phase.decode_ms": 2394.357,
+    "phase.transform_ms": 1299.384,
+    "phase.ingest_ms": 15082.908,
+    "phase.index_ms": 0,
+    "phase.commit_durable_ms": 1696.775
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14183,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "ddl_ms": 1.403,
+     "decode_ms": 2394.357,
+     "transform_ms": 1299.384,
+     "ingest_ms": 15082.908,
+     "index_ms": 0,
+     "verify_counts_ms": 107.715,
+     "commit_durable_ms": 1696.775,
+     "ingest_through_durable_ms": 20355.997
+    },
+    "config": {
+     "journal_mode": "DELETE",
+     "synchronous": "FULL",
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "node": "v22.23.4"
+    },
+    "count_problems": []
+   }
+  },
+  {
+   "rep": 3,
+   "verdict": "keep",
+   "started_at": "2026-11-17T06:34:02Z",
+   "wall_s": 23.015,
+   "load_before": [
+    0.99,
+    1.19,
+    1.29
+   ],
+   "load_after": [
+    1.33,
+    1.26,
+    1.31
+   ],
+   "load1_max_during": 1.39,
+   "foreign_cpu_max": 0.696,
+   "waited_for_quiet_s": 65.0,
+   "disk_free_gb_before": 10.87,
+   "disk_free_gb_min": 10.87,
+   "load_samples": [
+    {
+     "t": 1794897252.2,
+     "load1": 1.39,
+     "own_cpu": 0.947,
+     "foreign_cpu": 0.696
+    },
+    {
+     "t": 1794897262.2,
+     "load1": 1.33,
+     "own_cpu": 0.992,
+     "foreign_cpu": 0.066
+    },
+    {
+     "t": 1794897265.2,
+     "load1": 1.33,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.329
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 18.622,
+    "ingest_through_durable_in_process_s": 18.622,
+    "peak_rss_mib": 471.7,
+    "file_bytes": 1946136576,
+    "phase.decode_ms": 2413.806,
+    "phase.transform_ms": 1314.588,
+    "phase.ingest_ms": 13243.704,
+    "phase.index_ms": 0,
+    "phase.commit_durable_ms": 1810.403
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14320,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "ddl_ms": 1.742,
+     "decode_ms": 2413.806,
+     "transform_ms": 1314.588,
+     "ingest_ms": 13243.704,
+     "index_ms": 0,
+     "verify_counts_ms": 94.659,
+     "commit_durable_ms": 1810.403,
+     "ingest_through_durable_ms": 18622.01
+    },
+    "config": {
+     "journal_mode": "DELETE",
+     "synchronous": "FULL",
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "node": "v22.23.4"
+    },
+    "count_problems": []
+   }
+  }
+ ],
+ "superseded_runs": []
+}

@@ -1,0 +1,88 @@
+diff -ruN a/common.ts b/common.ts
+--- a/common.ts	2026-11-17 03:07:40.146461225 +0000
++++ b/common.ts	2026-11-17 05:08:42.393518484 +0000
+@@ -17,13 +17,13 @@
+ import { DatabaseSync } from 'node:sqlite'
+ 
+ export const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+-export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../../../packages/fsqlite/src/index.ts')
+-export const RESULTS_DIR = join(SPIKE_DIR, 'results', 'fsqlite')
++export const FSQLITE_SRC = resolve(SPIKE_DIR, '../../orig-package/src/index.ts')
++export const RESULTS_DIR = join(SPIKE_DIR, '../../softschema-kb/results', 'fsqlite-v2', 'spike3-base')
+-/** The private scratch directory, required so that no store lands in a shared default. */
+-export const SCRATCH = requiredScratch()
++export const SCRATCH =
++  process.env.KB_SCRATCH ?? resolve(SPIKE_DIR, '../../kbscratch-base')
+ export const CORPORA_DIR = join(SCRATCH, 'kb-corpora')
+ export const WORK_DIR = join(SCRATCH, 'fsqlite-spike')
+-export const S0_KB = resolve(SPIKE_DIR, '../../../../attic/paraverse/vendor/universe2026-md/kb')
++export const S0_KB = '/home/user/fsqlite/attic/paraverse/vendor/universe2026-md/kb'
+ 
+ /** The KB directory for a scale: S0 is the vendored KB, others come from the corpus dir. */
+ export function kbDirFor(scale: string): string {
+diff -ruN a/fsq.ts b/fsq.ts
+--- a/fsq.ts	2026-11-17 00:35:06.213994286 +0000
++++ b/fsq.ts	2026-11-17 05:08:42.393372283 +0000
+@@ -1,2 +1,3 @@
+ // The spike uses fsqlite only through its public API, imported from the package source.
+-export * from '../../../../../packages/fsqlite/src/index.ts'
++// Spike 3 baseline arm: the unmodified f1.0 package copy.
++export * from '../../../orig-package/src/index.ts'
+diff -ruN a/run_base.sh b/run_base.sh
+--- a/run_base.sh	1970-01-01 00:00:00.000000000 +0000
++++ b/run_base.sh	2026-11-17 05:08:42.397172255 +0000
+@@ -0,0 +1,18 @@
++#!/usr/bin/env bash
++# Spike 3 baseline arm: the same workflows against the unmodified f1.0 package copy, run
++# in the same time window as the v2 arm, so contention affects both alike.
++set -euo pipefail
++SCALE=${1:?usage: run_base.sh <scale>}
++HERE=$(cd "$(dirname "$0")" && pwd)
++export KB_SCRATCH=${KB_SCRATCH:-$(cd "$HERE/../../../kbscratch-base" && pwd)}
++WORK=$KB_SCRATCH/fsqlite-spike/$SCALE
++DELTAS=$KB_SCRATCH/kb-corpora/$SCALE/deltas
++NODE=(node --disable-warning=ExperimentalWarning)
++cd "$HERE"
++"${NODE[@]}" w1.ts --scale "$SCALE"
++"${NODE[@]}" w2.ts "$WORK/store-direct" --scale "$SCALE" --deltas "$DELTAS" --strategy direct
++"${NODE[@]}" trickle.ts "$WORK/store-direct" --scale "$SCALE" --delta "$DELTAS/p20" \
++  --seconds "${TRICKLE_SECONDS:-20}" --reps "${TRICKLE_REPS:-3}" --name w2-trickle
++case "$SCALE" in S0 | S1) ;; *) rm -f "$WORK/rows.jsonl" ;; esac
++"${NODE[@]}" w6.ts --scale "$SCALE"
++rm -rf "$WORK"
+diff -ruN a/trickle.ts b/trickle.ts
+--- a/trickle.ts	2026-11-17 01:18:03.429878546 +0000
++++ b/trickle.ts	2026-11-17 05:08:42.393644540 +0000
+@@ -214,7 +214,7 @@
+     sustained: await sustained(base, rows, work, Number(flags.seconds ?? 20)),
+   }
+   rmSync(work, { recursive: true, force: true })
+-  console.log(writeResult(scale, 'w2-trickle', result))
++  console.log(writeResult(scale, flags.name ?? 'w2-trickle', result))
+ }
+ 
+ if (isMain(import.meta.url)) {
+diff -ruN a/w2.ts b/w2.ts
+--- a/w2.ts	2026-11-17 03:47:21.114002383 +0000
++++ b/w2.ts	2026-11-17 05:08:42.393730559 +0000
+@@ -585,7 +585,7 @@
+     )
+     batches.push(b)
+   }
+-  const workflow = strategy === 'direct' ? 'w2-direct' : 'w2'
++  const workflow = flags.name ?? (strategy === 'direct' ? 'w2-direct' : 'w2')
+   console.log(
+     writeResult(scale, workflow, {
+       base_store: base,
+diff -ruN a/w6.ts b/w6.ts
+--- a/w6.ts	2026-11-17 01:19:50.564734352 +0000
++++ b/w6.ts	2026-11-17 05:08:42.393588733 +0000
+@@ -19,7 +19,7 @@
+ import { READER_PRAGMAS, genericStore, openReader, queryInstances } from './w3.ts'
+ 
+ const HERE = join(SPIKE_DIR, 'fsqlite')
+-const FSQLITE_CLI = join(SPIKE_DIR, '../../../../packages/fsqlite/src/cli/bin.ts')
++const FSQLITE_CLI = join(SPIKE_DIR, '../../orig-package/src/cli/bin.ts')
+ 
+ /** Every file in the store, grouped by its role in the f1.0 layout. */
+ function artifacts(dir: string): Record<string, unknown> {

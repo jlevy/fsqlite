@@ -13,6 +13,46 @@ const generatedProse = new Set([
   '.codex/ensure-gh-cli.sh',
   'pnpm-lock.yaml',
 ])
+// Benchmark output the research spikes write. Its `.json` files quote dataset text
+// verbatim, so the editorial rules for maintained prose do not apply to them; any other
+// file in these directories, such as a README, is checked. `.prettierignore` lists the
+// same globs, and check-doc-claims.test.mjs checks that the two lists agree.
+export const generatedDataGlobs = [
+  'docs/research/spikes/*/harness/expected/',
+  'docs/research/spikes/*/results/',
+]
+// Patched prototype copies of the package, whose READMEs state their own test counts.
+export const prototypeDocGlob = 'docs/research/spikes/*/fsqlite-v2/'
+
+/**
+ * A directory glob, where `*` is one path segment, as a pattern for the paths inside it.
+ * @param {string} glob
+ */
+const globPrefix = (glob) =>
+  new RegExp(
+    `^${glob
+      .split('*')
+      .map((part) => part.replace(/[^\w/-]/gu, '\\$&'))
+      .join('[^/]+')}`,
+    'u',
+  )
+const generatedData = generatedDataGlobs.map(globPrefix)
+const prototypeDocs = globPrefix(prototypeDocGlob)
+
+/** Whether the editorial rules skip a file: spike benchmark `.json` only. @param {string} repoPath */
+export const isGeneratedData = (repoPath) =>
+  extname(repoPath) === '.json' && generatedData.some((pattern) => pattern.test(repoPath))
+
+/** Whether the test-count check skips a Markdown file. @param {string} repoPath */
+export const skipsTestCountClaims = (repoPath) => prototypeDocs.test(repoPath)
+
+/**
+ * Whether a text holds a machine-local path: a `file://` URL, a home directory, or an
+ * agent session's scratch directory.
+ * @param {string} source
+ */
+export const hasMachineLocalPath = (source) =>
+  /file:\/\//iu.test(source) || /\/(?:Users|home)\/[\w.-]+\/|\/tmp\/claude-\d+\//u.test(source)
 // Sub-agent definitions are agent prompts, not docs, so they carry no doc footer.
 const agentPromptDirs = ['.claude/agents/']
 const executableMarkdown = new Set(['packages/fsqlite/test/cli-golden/cli.tryscript.md'])
@@ -93,7 +133,7 @@ function isInsideRepo(path) {
 
 /** @param {string} path @param {string} source */
 function checkMarkdownSafety(path, source) {
-  if (/file:\/\//iu.test(source) || /\/(?:Users|home)\/[\w.-]+\//u.test(source)) {
+  if (hasMachineLocalPath(source)) {
     throw new Error(`${path}: documentation contains a machine-local path`)
   }
 
@@ -145,11 +185,11 @@ function withoutTbdManagedBlocks(source) {
 }
 
 /** Fail on an em or en dash or a missing doc footer in maintained prose. */
-export function checkEditorialSafety() {
-  const proseFiles = filesBelow(repoDir, (path) => proseExtensions.has(extname(path)))
+export function checkEditorialSafety(root = repoDir) {
+  const proseFiles = filesBelow(root, (path) => proseExtensions.has(extname(path)))
   for (const path of proseFiles) {
-    const repoPath = relative(repoDir, path).split(sep).join('/')
-    if (generatedProse.has(repoPath)) {
+    const repoPath = relative(root, path).split(sep).join('/')
+    if (generatedProse.has(repoPath) || isGeneratedData(repoPath)) {
       continue
     }
 
@@ -168,6 +208,30 @@ export function checkEditorialSafety() {
   }
 }
 
+/**
+ * Fail on a JSON file under docs/ that does not parse or that holds a machine-local path.
+ * The editorial rules skip the spike result files, and Prettier ignores them, so this is
+ * the check that reads them.
+ */
+export function checkDataFiles(root = repoDir) {
+  const files = filesBelow(join(root, 'docs'), (path) => extname(path) === '.json')
+  for (const path of files) {
+    const source = readFileSync(path, 'utf8')
+    if (hasMachineLocalPath(source)) {
+      throw new Error(`${path}: data file contains a machine-local path`)
+    }
+    try {
+      JSON.parse(source)
+    } catch (error) {
+      throw new Error(
+        `${path}: not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
+  }
+  return files.length
+}
+
 /** Fail on a machine-local path or a broken, escaping local link in any Markdown file. */
 export function checkMarkdownLinks() {
   const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
@@ -182,7 +246,14 @@ export function checkMarkdownLinks() {
  * @param {number} nodeTests
  */
 export function checkDocClaims(nodeTests) {
-  const markdown = filesBelow(repoDir, (path) => extname(path) === '.md')
+  // The v2 prototypes document patched copies of the package, whose test counts differ
+  // from the package's by design, so their count claims are not checked here.
+  const markdown = filesBelow(
+    repoDir,
+    (path) =>
+      extname(path) === '.md' &&
+      !skipsTestCountClaims(relative(repoDir, path).split(sep).join('/')),
+  )
   const claimPatterns = [
     {
       label: 'node:test',

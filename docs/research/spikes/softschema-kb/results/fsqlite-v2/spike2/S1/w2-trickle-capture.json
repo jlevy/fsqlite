@@ -1,0 +1,377 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S1",
+  "workflow": "W2 trickle (C18), fsqlite v2 Spike 2",
+  "recorded_at": "2026-11-17T05:06:22.045Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 6897,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1/kb",
+    "corpus": {
+      "scale": "S1",
+      "seed": 20261117,
+      "replicas": 9,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 48663,
+      "edges": 227817,
+      "record_files": 44775,
+      "files": 44801,
+      "bytes": 221432416,
+      "record_bytes": 138731820,
+      "workers": 4,
+      "prepare_seconds": 0.66,
+      "seconds": 2.25
+    },
+    "node_total": 48663,
+    "edge_total": 227817
+  },
+  "delta": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S1/deltas/p20",
+  "gc": "gc({ retain: 0 }) after every publish",
+  "fts_sidecar": "not rebuilt",
+  "batches": {
+    "SnapshotStore.1": {
+      "arm": "SnapshotStore",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 305.284,
+      "reconcile_ms": 582.603,
+      "visible_ms_median": 903.57,
+      "records_per_s": 1.11,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 951.943,
+      "runs": [
+        {
+          "capture_ms": 286.3195,
+          "reconcile_ms": 690.296,
+          "visible_ms": 976.616,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 720.797
+        },
+        {
+          "capture_ms": 305.2843,
+          "reconcile_ms": 462.182,
+          "visible_ms": 767.472,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 951.943
+        },
+        {
+          "capture_ms": 320.9655,
+          "reconcile_ms": 582.603,
+          "visible_ms": 903.57,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1471.425
+        }
+      ]
+    },
+    "Sparse.1": {
+      "arm": "Sparse",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 3.31,
+      "reconcile_ms": 603.432,
+      "visible_ms_median": 611.098,
+      "records_per_s": 1.64,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1012.776,
+      "runs": [
+        {
+          "capture_ms": 7.6649,
+          "reconcile_ms": 603.432,
+          "visible_ms": 611.098,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1012.776
+        },
+        {
+          "capture_ms": 3.3096,
+          "reconcile_ms": 655.301,
+          "visible_ms": 658.611,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1023.772
+        },
+        {
+          "capture_ms": 2.8429,
+          "reconcile_ms": 355.521,
+          "visible_ms": 358.367,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 937.665
+        }
+      ]
+    },
+    "Ops.1": {
+      "arm": "Ops",
+      "records": 1,
+      "reps": 3,
+      "capture_ms": 0.669,
+      "reconcile_ms": 562.841,
+      "visible_ms_median": 563.577,
+      "records_per_s": 1.77,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 939.989,
+      "runs": [
+        {
+          "capture_ms": 0.6339,
+          "reconcile_ms": 448.998,
+          "visible_ms": 449.632,
+          "envelope_bytes": 1561,
+          "fts_rebuild_ms": null,
+          "gc_ms": 921.114
+        },
+        {
+          "capture_ms": 0.7355,
+          "reconcile_ms": 562.841,
+          "visible_ms": 563.577,
+          "envelope_bytes": 1679,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1306.414
+        },
+        {
+          "capture_ms": 0.669,
+          "reconcile_ms": 593.815,
+          "visible_ms": 594.484,
+          "envelope_bytes": 1664,
+          "fts_rebuild_ms": null,
+          "gc_ms": 939.989
+        }
+      ]
+    },
+    "SnapshotStore.10": {
+      "arm": "SnapshotStore",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 272.066,
+      "reconcile_ms": 548.225,
+      "visible_ms_median": 823.705,
+      "records_per_s": 12.14,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1038.742,
+      "runs": [
+        {
+          "capture_ms": 272.0658,
+          "reconcile_ms": 577.186,
+          "visible_ms": 849.253,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 928.667
+        },
+        {
+          "capture_ms": 236.9015,
+          "reconcile_ms": 412.842,
+          "visible_ms": 649.745,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1038.742
+        },
+        {
+          "capture_ms": 275.4774,
+          "reconcile_ms": 548.225,
+          "visible_ms": 823.705,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1092.043
+        }
+      ]
+    },
+    "Sparse.10": {
+      "arm": "Sparse",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 4.291,
+      "reconcile_ms": 489.689,
+      "visible_ms_median": 493.779,
+      "records_per_s": 20.25,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1077.483,
+      "runs": [
+        {
+          "capture_ms": 4.2909,
+          "reconcile_ms": 490.169,
+          "visible_ms": 494.465,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1077.483
+        },
+        {
+          "capture_ms": 4.0896,
+          "reconcile_ms": 489.689,
+          "visible_ms": 493.779,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1133.212
+        },
+        {
+          "capture_ms": 7.2528,
+          "reconcile_ms": 462.45,
+          "visible_ms": 469.703,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 951.332
+        }
+      ]
+    },
+    "Ops.10": {
+      "arm": "Ops",
+      "records": 10,
+      "reps": 3,
+      "capture_ms": 0.837,
+      "reconcile_ms": 511.885,
+      "visible_ms_median": 523.095,
+      "records_per_s": 19.12,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1102.057,
+      "runs": [
+        {
+          "capture_ms": 11.2087,
+          "reconcile_ms": 511.885,
+          "visible_ms": 523.095,
+          "envelope_bytes": 15293,
+          "fts_rebuild_ms": null,
+          "gc_ms": 990.036
+        },
+        {
+          "capture_ms": 0.8372,
+          "reconcile_ms": 503.885,
+          "visible_ms": 504.723,
+          "envelope_bytes": 17941,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1184.151
+        },
+        {
+          "capture_ms": 0.7676,
+          "reconcile_ms": 640.889,
+          "visible_ms": 641.657,
+          "envelope_bytes": 17321,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1102.057
+        }
+      ]
+    },
+    "SnapshotStore.100": {
+      "arm": "SnapshotStore",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 260.342,
+      "reconcile_ms": 580.015,
+      "visible_ms_median": 857.04,
+      "records_per_s": 116.68,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 999.366,
+      "runs": [
+        {
+          "capture_ms": 239.0287,
+          "reconcile_ms": 733.53,
+          "visible_ms": 972.559,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 971.914
+        },
+        {
+          "capture_ms": 277.0249,
+          "reconcile_ms": 580.015,
+          "visible_ms": 857.04,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1109.163
+        },
+        {
+          "capture_ms": 260.3422,
+          "reconcile_ms": 488.361,
+          "visible_ms": 748.704,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 999.366
+        }
+      ]
+    },
+    "Sparse.100": {
+      "arm": "Sparse",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 15.479,
+      "reconcile_ms": 508.399,
+      "visible_ms_median": 522.005,
+      "records_per_s": 191.57,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1024.309,
+      "runs": [
+        {
+          "capture_ms": 17.6916,
+          "reconcile_ms": 436.17,
+          "visible_ms": 453.862,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 949.612
+        },
+        {
+          "capture_ms": 15.4788,
+          "reconcile_ms": 553.743,
+          "visible_ms": 569.222,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1024.309
+        },
+        {
+          "capture_ms": 13.6059,
+          "reconcile_ms": 508.399,
+          "visible_ms": 522.005,
+          "envelope_bytes": 0,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1085.779
+        }
+      ]
+    },
+    "Ops.100": {
+      "arm": "Ops",
+      "records": 100,
+      "reps": 3,
+      "capture_ms": 2.206,
+      "reconcile_ms": 548.365,
+      "visible_ms_median": 550.571,
+      "records_per_s": 181.63,
+      "fts_rebuild_ms_median": null,
+      "gc_retain0_ms_median": 1056.706,
+      "runs": [
+        {
+          "capture_ms": 2.1635,
+          "reconcile_ms": 503.256,
+          "visible_ms": 505.421,
+          "envelope_bytes": 263457,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1519.963
+        },
+        {
+          "capture_ms": 2.2056,
+          "reconcile_ms": 548.365,
+          "visible_ms": 550.571,
+          "envelope_bytes": 247114,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1056.706
+        },
+        {
+          "capture_ms": 3.0376,
+          "reconcile_ms": 561.83,
+          "visible_ms": 564.868,
+          "envelope_bytes": 226120,
+          "fts_rebuild_ms": null,
+          "gc_ms": 1047.302
+        }
+      ]
+    }
+  },
+  "sustained": null
+}

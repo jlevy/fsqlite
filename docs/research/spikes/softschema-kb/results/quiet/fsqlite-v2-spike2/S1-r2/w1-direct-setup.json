@@ -1,0 +1,236 @@
+{
+ "arm": "fsqlite-v2-spike2",
+ "arm_label": "fsqlite v2 Spike 2 (operation envelopes, serial reducer, coalescing publisher)",
+ "scale": "S1-r2",
+ "workflow": "w1-direct-setup",
+ "description": "Spike 2 base store (fact tables in the DDL), DirectStore; built as the W2 and trickle base",
+ "pass": "quiet re-measurement, one benchmark process at a time",
+ "machine": {
+  "cpus": 4,
+  "cpu_model": "Intel(R) Xeon(R) Processor",
+  "mem_total_mib": 16088,
+  "mem_free_mib": 14914,
+  "os": "linux 6.18.44-fc-v553",
+  "filesystem": "ext2/ext3",
+  "node": "v22.23.4",
+  "sqlite": "3.53.4",
+  "python": "Python 3.13.18"
+ },
+ "versions": {
+  "node": "v22.23.4",
+  "sqlite_in_node": "3.53.4",
+  "python": "3.13.18",
+  "python_sqlite3": "3.53.1",
+  "pyyaml": "6.0.3 (CSafeLoader)",
+  "os": "Linux 6.18.44, ext4",
+  "fsqlite": "packages/fsqlite 0.1.0 plus fsqlite-v2/spike2/package.patch; spike code plus spike2/spike.patch"
+ },
+ "repetitions_kept": 1,
+ "summary": {
+  "fts_sidecar_build_ms": {
+   "median": 678.835,
+   "min": 678.835,
+   "max": 678.835,
+   "n": 1
+  },
+  "fts_sidecar_bytes": {
+   "median": 34099200,
+   "min": 34099200,
+   "max": 34099200,
+   "n": 1
+  },
+  "gc_retain0_ms": {
+   "median": 761.646,
+   "min": 761.646,
+   "max": 761.646,
+   "n": 1
+  },
+  "import_process_wall_s": {
+   "median": 4.887,
+   "min": 4.887,
+   "max": 4.887,
+   "n": 1
+  },
+  "ingest_through_durable_in_process_s": {
+   "median": 4.003,
+   "min": 4.003,
+   "max": 4.003,
+   "n": 1
+  },
+  "ingest_through_durable_s": {
+   "median": 4.39,
+   "min": 4.39,
+   "max": 4.39,
+   "n": 1
+  },
+  "peak_rss_mib": {
+   "median": 434,
+   "min": 434,
+   "max": 434,
+   "n": 1
+  },
+  "phase.decode_ms": {
+   "median": 496.92,
+   "min": 496.92,
+   "max": 496.92,
+   "n": 1
+  },
+  "phase.ingest_ms": {
+   "median": 2250.139,
+   "min": 2250.139,
+   "max": 2250.139,
+   "n": 1
+  },
+  "phase.publish_ms": {
+   "median": 875.407,
+   "min": 875.407,
+   "max": 875.407,
+   "n": 1
+  },
+  "phase.quick_check_warm_ms": {
+   "median": 256.841,
+   "min": 256.841,
+   "max": 256.841,
+   "n": 1
+  },
+  "phase.transform_ms": {
+   "median": 300.676,
+   "min": 300.676,
+   "max": 300.676,
+   "n": 1
+  },
+  "phase.verify_counts_ms": {
+   "median": 19.388,
+   "min": 19.388,
+   "max": 19.388,
+   "n": 1
+  },
+  "snapshot_bytes": {
+   "median": 380334080,
+   "min": 380334080,
+   "max": 380334080,
+   "n": 1
+  },
+  "store_bytes_after_gc": {
+   "median": 380334216,
+   "min": 380334216,
+   "max": 380334216,
+   "n": 1
+  },
+  "store_over_head": {
+   "median": 1.0,
+   "min": 1.0,
+   "max": 1.0,
+   "n": 1
+  }
+ },
+ "earlier_contended": null,
+ "runs": [
+  {
+   "rep": 1,
+   "verdict": "keep",
+   "started_at": "2026-11-17T08:54:21Z",
+   "wall_s": 8.004,
+   "load_before": [
+    0.97,
+    1.37,
+    1.43
+   ],
+   "load_after": [
+    0.98,
+    1.36,
+    1.42
+   ],
+   "load1_max_during": 0.98,
+   "foreign_cpu_max": 0.044,
+   "waited_for_quiet_s": 0.0,
+   "disk_free_gb_before": 15.43,
+   "disk_free_gb_min": 15.02,
+   "load_samples": [
+    {
+     "t": 1794905669.9,
+     "load1": 0.98,
+     "own_cpu": 0.0,
+     "foreign_cpu": 0.044
+    }
+   ],
+   "compare": null,
+   "discarded_attempts": [],
+   "metrics": {
+    "ingest_through_durable_s": 4.39,
+    "import_process_wall_s": 4.887,
+    "peak_rss_mib": 434,
+    "snapshot_bytes": 380334080,
+    "store_bytes_after_gc": 380334216,
+    "store_over_head": 1.0,
+    "gc_retain0_ms": 761.646,
+    "ingest_through_durable_in_process_s": 4.003,
+    "phase.decode_ms": 496.92,
+    "phase.transform_ms": 300.676,
+    "phase.ingest_ms": 2250.139,
+    "phase.verify_counts_ms": 19.388,
+    "phase.publish_ms": 875.407,
+    "phase.quick_check_warm_ms": 256.841,
+    "fts_sidecar_build_ms": 678.835,
+    "fts_sidecar_bytes": 34099200
+   },
+   "detail": {
+    "machine": {
+     "cpus": 4,
+     "cpu_model": "Intel(R) Xeon(R) Processor",
+     "mem_total_mib": 16088,
+     "mem_free_mib": 14914,
+     "os": "linux 6.18.44-fc-v553",
+     "filesystem": "ext2/ext3",
+     "node": "v22.23.4",
+     "sqlite": "3.53.4",
+     "python": "Python 3.13.18"
+    },
+    "phases": {
+     "init_ddl_ms": 57.157,
+     "decode_ms": 496.92,
+     "transform_ms": 300.676,
+     "ingest_ms": 2250.139,
+     "verify_counts_ms": 19.388,
+     "publish_ms": 875.407,
+     "publish_note": "COMMIT, quick_check, foreign_key_check, fsync, no-replace link, pointer swap, directory fsyncs",
+     "quick_check_warm_ms": 256.841,
+     "ingest_through_durable_ms": 4002.815
+    },
+    "gc": {
+     "retain": 0,
+     "ms": 761.646,
+     "removed": 1,
+     "kept": 1,
+     "leased": [],
+     "integrityChecked": true
+    },
+    "config": {
+     "bulk_pragmas": "PRAGMA cache_size = -262144;",
+     "build_journal_mode": "DELETE (fsqlite builds and publishes in rollback-journal mode)",
+     "build_synchronous": "DirectStore FULL; SnapshotStore working copies and reconcile builds OFF until the publish fsync",
+     "lock_options": {
+      "staleMs": 600000,
+      "timeoutMs": 600001
+     },
+     "gc": "none during the import; w1.ts then runs gc({ retain: 0 }) and times it"
+    },
+    "counts": {
+     "schema": 18,
+     "file": 3,
+     "line": 41348,
+     "node": 46927,
+     "doc": 44057,
+     "entity": 46927,
+     "edge": 226281,
+     "update": 0,
+     "removed": 0,
+     "op": 0,
+     "quarantined": 0
+    },
+    "store_over_head_reported": null
+   }
+  }
+ ],
+ "superseded_runs": []
+}

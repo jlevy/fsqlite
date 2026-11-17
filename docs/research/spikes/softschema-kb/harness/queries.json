@@ -1,0 +1,2779 @@
+{
+  "version": 1,
+  "description": "W3 UI queries for the softschema KB storage spike. Each entry is one measured query instance: run it once cold, then 50 times warm, and record the canonical result described by its semantics and the conventions.",
+  "conventions": {
+    "graph": "Nodes are the rows of _graph/nodes.jsonl and edges the rows of _graph/edges.jsonl. Edge attributes are every key of an edge row except source, relation and target, with null values dropped. Relation names are compared in lower case, as in edges.jsonl (FalkorDB stores them upper case).",
+    "payload": "A node's payload is the envelope mapping of its artifact, parsed with paraverse's portable YAML loader (date and timestamp scalars stay strings). Day and term nodes are the mapping with the matching id inside their event or facet artifact (paraverse kb.payload_for).",
+    "display_name": "The nodes.jsonl name; when that equals the node id (profiles), the nodes.jsonl name of the first top-level payload string, in document order, that is a typed reference to a node whose name differs from its id (paraverse mapping.readable_name).",
+    "start_epoch": "For sessions: the earliest payload.slots[*].start as Unix seconds (ISO 8601; a value with no UTC offset is UTC); null when no slot has a parsable start (paraverse mapping._session_fields).",
+    "scalar_strings": "payload.title and payload.bio count only when they are strings that are not typed references (paraverse stores typed references as edges, not properties).",
+    "ordering": "Strings order by Unicode code point (SQLite BINARY collation, FalkorDB ORDER BY). Every ordering ends with a tie-break on id ascending, so results are total orders.",
+    "case_folding": "Search terms are lower-case ASCII. A text matches when the term is a substring of the lower-cased text. The oracle checks that ASCII-only and Unicode lower-casing give identical results for every term at every scale, so either is correct.",
+    "hubs": "Hub kinds are event, day and facet (paraverse queries.HUB_LABELS). Paths may not pass through a hub, and neighborhoods do not expand through one; a hub can still be an endpoint or a listed neighbor.",
+    "comparison": "Results compare as canonical JSON (sorted keys). Lists are ordered as stated. Path results compare on hops only, since several shortest paths can exist; the returned path must still be a valid hub-free path of that length.",
+    "oracle": "harness/oracle.py computes every result from the KB files and is the executable form of these definitions; harness/expected/<scale>/w3.json holds its output."
+  },
+  "scales": {
+    "S0": {
+      "replicas": 1,
+      "selection_replica": 0,
+      "seed": null
+    },
+    "S1": {
+      "replicas": 9,
+      "selection_replica": 4,
+      "seed": 20261117
+    },
+    "S2": {
+      "replicas": 46,
+      "selection_replica": 23,
+      "seed": 20261117
+    },
+    "S3": {
+      "replicas": 185,
+      "selection_replica": 92,
+      "seed": 20261117
+    }
+  },
+  "id_mapping": "Synthetic scales are replicas of S0 (corpus/idmap.py). Replica 0 keeps S0 IDs; replica r appends -r<r> to the ID (person:pamela-fox-r23). Synthetic parameters use the copies in selection_replica, which always exist.",
+  "result_file": {
+    "path": "results/<backend>/<scale>/w3.json",
+    "shape": "{workflow: 'W3', backend, scale, machine, software, corpus, queries: [{name, category, params, result, timings: {cold_ms, warm_ms: [50 values], p50_ms, p95_ms}}]}. compare.py reads name, result and params."
+  },
+  "queries": [
+    {
+      "name": "table.sessions_by_start.p1",
+      "category": "table",
+      "semantics": "Sessions whose payload.sponsored is exactly false, ordered by start_epoch ascending with nulls last, then id. Return the total row count and one page: rows {id, name: display_name, value: start_epoch}.",
+      "params": {
+        "S0": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        },
+        "S1": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        },
+        "S3": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "table.sessions_by_start.p3",
+      "category": "table",
+      "semantics": "As table.sessions_by_start.p1, third page.",
+      "params": {
+        "S0": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        },
+        "S1": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        },
+        "S2": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        },
+        "S3": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "table.people_by_org.p1",
+      "category": "table",
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S0": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": 0,
+          "limit": 50
+        },
+        "S1": {
+          "table": "people_by_org",
+          "org": "org:github-r4",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2": {
+          "table": "people_by_org",
+          "org": "org:github-r23",
+          "offset": 0,
+          "limit": 50
+        },
+        "S3": {
+          "table": "people_by_org",
+          "org": "org:github-r92",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "table.people_by_org.p3",
+      "category": "table",
+      "semantics": "As table.people_by_org.p1, third page.",
+      "params": {
+        "S0": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": 100,
+          "limit": 50
+        },
+        "S1": {
+          "table": "people_by_org",
+          "org": "org:github-r4",
+          "offset": 100,
+          "limit": 50
+        },
+        "S2": {
+          "table": "people_by_org",
+          "org": "org:github-r23",
+          "offset": 100,
+          "limit": 50
+        },
+        "S3": {
+          "table": "people_by_org",
+          "org": "org:github-r92",
+          "offset": 100,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "table.repos_by_stars.p1",
+      "category": "table",
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S0": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        },
+        "S1": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        },
+        "S3": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "table.repos_by_stars.p3",
+      "category": "table",
+      "semantics": "As table.repos_by_stars.p1, third page.",
+      "params": {
+        "S0": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 100,
+          "limit": 50
+        },
+        "S1": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 100,
+          "limit": 50
+        },
+        "S2": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 100,
+          "limit": 50
+        },
+        "S3": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 100,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "record.person",
+      "category": "record",
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S0": {
+          "id": "person:dylan-ratcliffe"
+        },
+        "S1": {
+          "id": "person:dylan-ratcliffe-r4"
+        },
+        "S2": {
+          "id": "person:dylan-ratcliffe-r23"
+        },
+        "S3": {
+          "id": "person:dylan-ratcliffe-r92"
+        }
+      }
+    },
+    {
+      "name": "record.session",
+      "category": "record",
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S0": {
+          "id": "session:2024/dev1826d"
+        },
+        "S1": {
+          "id": "session:2024/dev1826d-r4"
+        },
+        "S2": {
+          "id": "session:2024/dev1826d-r23"
+        },
+        "S3": {
+          "id": "session:2024/dev1826d-r92"
+        }
+      }
+    },
+    {
+      "name": "record.organization",
+      "category": "record",
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S0": {
+          "id": "org:netlify"
+        },
+        "S1": {
+          "id": "org:netlify-r4"
+        },
+        "S2": {
+          "id": "org:netlify-r23"
+        },
+        "S3": {
+          "id": "org:netlify-r92"
+        }
+      }
+    },
+    {
+      "name": "record.repository",
+      "category": "record",
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S0": {
+          "id": "repo:github/docs"
+        },
+        "S1": {
+          "id": "repo:github/docs-r4"
+        },
+        "S2": {
+          "id": "repo:github/docs-r23"
+        },
+        "S3": {
+          "id": "repo:github/docs-r92"
+        }
+      }
+    },
+    {
+      "name": "search.copilot",
+      "category": "search",
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S0": {
+          "term": "copilot",
+          "limit": 20
+        },
+        "S1": {
+          "term": "copilot",
+          "limit": 20
+        },
+        "S2": {
+          "term": "copilot",
+          "limit": 20
+        },
+        "S3": {
+          "term": "copilot",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "search.kubernetes",
+      "category": "search",
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S0": {
+          "term": "kubernetes",
+          "limit": 20
+        },
+        "S1": {
+          "term": "kubernetes",
+          "limit": 20
+        },
+        "S2": {
+          "term": "kubernetes",
+          "limit": 20
+        },
+        "S3": {
+          "term": "kubernetes",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "search.supply_chain",
+      "category": "search",
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S0": {
+          "term": "supply chain",
+          "limit": 20
+        },
+        "S1": {
+          "term": "supply chain",
+          "limit": 20
+        },
+        "S2": {
+          "term": "supply chain",
+          "limit": 20
+        },
+        "S3": {
+          "term": "supply chain",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "search.accessibility",
+      "category": "search",
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S0": {
+          "term": "accessibility",
+          "limit": 20
+        },
+        "S1": {
+          "term": "accessibility",
+          "limit": 20
+        },
+        "S2": {
+          "term": "accessibility",
+          "limit": 20
+        },
+        "S3": {
+          "term": "accessibility",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "path.person_person_2",
+      "category": "path",
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S0": {
+          "a": "person:dylan-ratcliffe",
+          "b": "person:pamela-fox",
+          "max_hops": 4
+        },
+        "S1": {
+          "a": "person:dylan-ratcliffe-r4",
+          "b": "person:pamela-fox-r4",
+          "max_hops": 4
+        },
+        "S2": {
+          "a": "person:dylan-ratcliffe-r23",
+          "b": "person:pamela-fox-r23",
+          "max_hops": 4
+        },
+        "S3": {
+          "a": "person:dylan-ratcliffe-r92",
+          "b": "person:pamela-fox-r92",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "path.person_org_3",
+      "category": "path",
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S0": {
+          "a": "person:pamela-fox",
+          "b": "org:netlify",
+          "max_hops": 4
+        },
+        "S1": {
+          "a": "person:pamela-fox-r4",
+          "b": "org:netlify-r4",
+          "max_hops": 4
+        },
+        "S2": {
+          "a": "person:pamela-fox-r23",
+          "b": "org:netlify-r23",
+          "max_hops": 4
+        },
+        "S3": {
+          "a": "person:pamela-fox-r92",
+          "b": "org:netlify-r92",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "path.person_repo_3",
+      "category": "path",
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S0": {
+          "a": "person:aaron-reich",
+          "b": "repo:github/docs",
+          "max_hops": 4
+        },
+        "S1": {
+          "a": "person:aaron-reich-r4",
+          "b": "repo:github/docs-r4",
+          "max_hops": 4
+        },
+        "S2": {
+          "a": "person:aaron-reich-r23",
+          "b": "repo:github/docs-r23",
+          "max_hops": 4
+        },
+        "S3": {
+          "a": "person:aaron-reich-r92",
+          "b": "repo:github/docs-r92",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "path.person_person_4",
+      "category": "path",
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S0": {
+          "a": "person:francis-storr",
+          "b": "person:dylan-ratcliffe",
+          "max_hops": 4
+        },
+        "S1": {
+          "a": "person:francis-storr-r4",
+          "b": "person:dylan-ratcliffe-r4",
+          "max_hops": 4
+        },
+        "S2": {
+          "a": "person:francis-storr-r23",
+          "b": "person:dylan-ratcliffe-r23",
+          "max_hops": 4
+        },
+        "S3": {
+          "a": "person:francis-storr-r92",
+          "b": "person:dylan-ratcliffe-r92",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "path.unreachable",
+      "category": "path",
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S0": {
+          "a": "person:francis-storr",
+          "b": "repo:github/docs",
+          "max_hops": 4
+        },
+        "S1": {
+          "a": "person:francis-storr-r4",
+          "b": "repo:github/docs-r4",
+          "max_hops": 4
+        },
+        "S2": {
+          "a": "person:francis-storr-r23",
+          "b": "repo:github/docs-r23",
+          "max_hops": 4
+        },
+        "S3": {
+          "a": "person:francis-storr-r92",
+          "b": "repo:github/docs-r92",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "facet.sessions_per_topic",
+      "category": "facet",
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S0": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S1": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S3": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "facet.people_per_org",
+      "category": "facet",
+      "semantics": "As facet.sessions_per_topic, for affiliated_with edges whose source is a person (people per organization).",
+      "params": {
+        "S0": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S1": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S3": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "neighborhood.person",
+      "category": "neighborhood",
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S0": {
+          "id": "person:francis-storr",
+          "limit": 200
+        },
+        "S1": {
+          "id": "person:francis-storr-r4",
+          "limit": 200
+        },
+        "S2": {
+          "id": "person:francis-storr-r23",
+          "limit": 200
+        },
+        "S3": {
+          "id": "person:francis-storr-r92",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "neighborhood.session",
+      "category": "neighborhood",
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S0": {
+          "id": "session:2024/dev1826d",
+          "limit": 200
+        },
+        "S1": {
+          "id": "session:2024/dev1826d-r4",
+          "limit": 200
+        },
+        "S2": {
+          "id": "session:2024/dev1826d-r23",
+          "limit": 200
+        },
+        "S3": {
+          "id": "session:2024/dev1826d-r92",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "neighborhood.organization",
+      "category": "neighborhood",
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S0": {
+          "id": "org:netlify",
+          "limit": 200
+        },
+        "S1": {
+          "id": "org:netlify-r4",
+          "limit": 200
+        },
+        "S2": {
+          "id": "org:netlify-r23",
+          "limit": 200
+        },
+        "S3": {
+          "id": "org:netlify-r92",
+          "limit": 200
+        }
+      }
+    }
+  ],
+  "v2": {
+    "description": "Round-2 query set: many seeded parameter sets per category, a deep page, and growing-hub queries.",
+    "scales": {
+      "S1-r2": {
+        "base_scale": "S1",
+        "replicas": 9,
+        "seed": 20261117,
+        "seed_namespace": "r2"
+      },
+      "S2-r2": {
+        "base_scale": "S2",
+        "replicas": 46,
+        "seed": 20261117,
+        "seed_namespace": "r2"
+      }
+    },
+    "warm_iterations": 20,
+    "conventions": {
+      "inherits": "Every v1 convention applies unchanged.",
+      "corpora": "Round-2 corpora from corpus/generate2.py (seed namespace r2): shared entities keep their S0 IDs; every other entity uses the replica suffix rule of idmap.py. Every edge row carries an origin attribute, which is part of the canonical edge attrs.",
+      "table_repos_all_by_stars": "Every repository node, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name: display_name, value: stars}.",
+      "last_page": "offset 'last' means max(0, floor((total - 1) / limit) * limit) for that query's total; the result then also carries the computed offset as `offset`.",
+      "repetitions": "One cold run, then 20 warm runs per instance (C6: many parameter sets, fewer repetitions).",
+      "hub": "Entries with hub: true target a shared entity whose degree grows with the scale."
+    },
+    "counts": {
+      "facet": 21,
+      "neighborhood": 21,
+      "path": 21,
+      "record": 21,
+      "search": 20,
+      "table": 20
+    }
+  },
+  "queries_v2": [
+    {
+      "name": "v2.record.00",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "repo:ente/ente-r5"
+        },
+        "S2-r2": {
+          "id": "repo:ente/ente-r9"
+        }
+      }
+    },
+    {
+      "name": "v2.record.01",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "repo:voidzero-dev/vite-plus-r4"
+        },
+        "S2-r2": {
+          "id": "repo:voidzero-dev/vite-plus-r41"
+        }
+      }
+    },
+    {
+      "name": "v2.record.02",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "acct:linkedin/in/isumeetshetty-r2"
+        },
+        "S2-r2": {
+          "id": "acct:linkedin/in/isumeetshetty-r31"
+        }
+      }
+    },
+    {
+      "name": "v2.record.03",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "acct:x/nishnha-r3"
+        },
+        "S2-r2": {
+          "id": "acct:x/nishnha-r28"
+        }
+      }
+    },
+    {
+      "name": "v2.record.04",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "person:cindy-cui-r6"
+        },
+        "S2-r2": {
+          "id": "person:cindy-cui-r6"
+        }
+      }
+    },
+    {
+      "name": "v2.record.05",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "person:donia-chaiehloudj-r2"
+        },
+        "S2-r2": {
+          "id": "person:donia-chaiehloudj-r16"
+        }
+      }
+    },
+    {
+      "name": "v2.record.06",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "profile:janice-r7"
+        },
+        "S2-r2": {
+          "id": "profile:janice-r11"
+        }
+      }
+    },
+    {
+      "name": "v2.record.07",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "profile:steven-ewing-r2"
+        },
+        "S2-r2": {
+          "id": "profile:steven-ewing-r36"
+        }
+      }
+    },
+    {
+      "name": "v2.record.08",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "session:bld2450d-r3"
+        },
+        "S2-r2": {
+          "id": "session:bld2450d-r22"
+        }
+      }
+    },
+    {
+      "name": "v2.record.09",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "session:2025/1616k-r1"
+        },
+        "S2-r2": {
+          "id": "session:2025/1616k-r20"
+        }
+      }
+    },
+    {
+      "name": "v2.record.10",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "org:tec-de-monterrey-r7"
+        },
+        "S2-r2": {
+          "id": "org:tec-de-monterrey-r40"
+        }
+      }
+    },
+    {
+      "name": "v2.record.11",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "org:nordstrom-r7"
+        },
+        "S2-r2": {
+          "id": "org:nordstrom-r36"
+        }
+      }
+    },
+    {
+      "name": "v2.record.12",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "gh:jbaruch-port-r3"
+        },
+        "S2-r2": {
+          "id": "gh:jbaruch-port-r16"
+        }
+      }
+    },
+    {
+      "name": "v2.record.13",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "gh:thealexlichter-r6"
+        },
+        "S2-r2": {
+          "id": "gh:thealexlichter-r24"
+        }
+      }
+    },
+    {
+      "name": "v2.record.14",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "site:fluentbytes.com-r2"
+        },
+        "S2-r2": {
+          "id": "site:fluentbytes.com-r39"
+        }
+      }
+    },
+    {
+      "name": "v2.record.15",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "site:frenck.dev-r2"
+        },
+        "S2-r2": {
+          "id": "site:frenck.dev-r22"
+        }
+      }
+    },
+    {
+      "name": "v2.record.16",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "pkg:go/github.com/atlassian/escalator-r3"
+        },
+        "S2-r2": {
+          "id": "pkg:go/github.com/atlassian/escalator-r21"
+        }
+      }
+    },
+    {
+      "name": "v2.record.17",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "pkg:npm/@modelcontextprotocol/sdk-r3"
+        },
+        "S2-r2": {
+          "id": "pkg:npm/@modelcontextprotocol/sdk-r23"
+        }
+      }
+    },
+    {
+      "name": "v2.record.18",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "room:radhaus-fort-mason-r3"
+        },
+        "S2-r2": {
+          "id": "room:radhaus-fort-mason-r7"
+        }
+      }
+    },
+    {
+      "name": "v2.record.19",
+      "category": "record",
+      "hub": false,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "room:ybca-demo-stage-r4"
+        },
+        "S2-r2": {
+          "id": "room:ybca-demo-stage-r34"
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.00",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "repo:cncf/servicedesk-r3",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "repo:cncf/servicedesk-r18",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.01",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "repo:nuevofoundation/workshops-r3",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "repo:nuevofoundation/workshops-r35",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.02",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "acct:linkedin/in/javiercardoso",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "acct:linkedin/in/javiercardoso-r15",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.03",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "acct:x/frenck-r7",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "acct:x/frenck-r22",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.04",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "person:sophine-clachar-r4",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "person:sophine-clachar-r38",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.05",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "person:krystal-folkes-brown-r1",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "person:krystal-folkes-brown-r26",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.06",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "profile:jenny-hwang-r1",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "profile:jenny-hwang-r12",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.07",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "profile:zeba-khan-r3",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "profile:zeba-khan-r14",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.08",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "session:2024/ai1437d-r5",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "session:2024/ai1437d-r24",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.09",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "session:2023/dev2845k-r6",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "session:2023/dev2845k-r38",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.10",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "org:butter-r7",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "org:butter-r38",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.11",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "org:logitech-r2",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "org:logitech-r14",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.12",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "gh:dbenedic-insight-r1",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "gh:dbenedic-insight-r6",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.13",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "gh:microsoft-r8",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "gh:microsoft-r8",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.14",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "site:andrelandgraf.dev-r4",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "site:andrelandgraf.dev-r38",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.15",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "site:maggieappleton.com-r2",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "site:maggieappleton.com-r39",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.16",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "pkg:go/github.com/overmindtech/cli-r5",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "pkg:go/github.com/overmindtech/cli-r20",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.17",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "pkg:pypi/tiktoken-r5",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "pkg:pypi/tiktoken-r44",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.18",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "room:palio-640-sacramento-st-r3",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "room:palio-640-sacramento-st-r23",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.19",
+      "category": "neighborhood",
+      "hub": false,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "room:demo-stage-gateway-pavilion-r1",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "room:demo-stage-gateway-pavilion-r7",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.path.00",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "session:2024/dev2063d-r5",
+          "b": "session:bld1398h-r5",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "session:2024/dev2063d-r5",
+          "b": "session:bld1398h-r5",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.01",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:sean-josephson-r1",
+          "b": "person:madison-ficorilli-r6",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:sean-josephson-r7",
+          "b": "person:madison-ficorilli-r8",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.02",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:shravan-mahajan-r3",
+          "b": "person:alpha-romer-coma-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:shravan-mahajan-r39",
+          "b": "person:alpha-romer-coma-r39",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.03",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "session:tru2230d-r2",
+          "b": "person:yadhav-jayaraman",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "session:tru2230d-r4",
+          "b": "person:yadhav-jayaraman-r22",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.04",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:ben-dang-r3",
+          "b": "person:suzanne-daniels-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:ben-dang-r31",
+          "b": "person:suzanne-daniels-r31",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.05",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "org:imbue-r7",
+          "b": "person:jon-janego-r2",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "org:imbue-r39",
+          "b": "person:jon-janego-r30",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.06",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "org:gaad-foundation-r6",
+          "b": "session:2023/ai1273d-r6",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "org:gaad-foundation-r14",
+          "b": "session:2023/ai1273d-r14",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.07",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:thomas-bissell-r3",
+          "b": "repo:staticwebdev/mongoose-starter-r7",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:thomas-bissell-r5",
+          "b": "repo:staticwebdev/mongoose-starter-r21",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.08",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:turbo/signals.nim-r3",
+          "b": "session:bld2011d-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:turbo/signals.nim-r10",
+          "b": "session:bld2011d-r10",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.09",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:doniacld/tiny-hen-r5",
+          "b": "person:ryan-platt-r6",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:doniacld/tiny-hen-r31",
+          "b": "person:ryan-platt-r19",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.10",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:review-bench/reviewbench-r3",
+          "b": "repo:xriley/orbit-theme-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:review-bench/reviewbench-r7",
+          "b": "repo:xriley/orbit-theme-r7",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.11",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "session:2025/aut1512s-r2",
+          "b": "repo:quitepicky/site-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "session:2025/aut1512s-r32",
+          "b": "repo:quitepicky/site-r44",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.12",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:frigginglorious/summer-of-ruby-class-r5",
+          "b": "repo:abelberhane/prompt-engineering-r5",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:frigginglorious/summer-of-ruby-class-r7",
+          "b": "repo:abelberhane/prompt-engineering-r7",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.13",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "org:infosys-r4",
+          "b": "repo:geektrainer/help-desk-bot-lab-r8",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "org:infosys-r10",
+          "b": "repo:geektrainer/help-desk-bot-lab-r31",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.14",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:alfredo-deza-r5",
+          "b": "session:2089-r5",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:alfredo-deza-r27",
+          "b": "session:2089-r27",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.15",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "org:mistral-r8",
+          "b": "person:eric-bouguen-r2",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "org:mistral-r27",
+          "b": "person:eric-bouguen-r25",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.16",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:cncf/mentoring-r3",
+          "b": "session:2023/dev1705p-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:cncf/mentoring-r19",
+          "b": "session:2023/dev1705p-r19",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.17",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:openhomefoundation/roadmap-r2",
+          "b": "repo:slackhq/go-audit-r3",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:openhomefoundation/roadmap-r19",
+          "b": "repo:slackhq/go-audit-r26",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.18",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:kevinbackhouse/dbusparse-r2",
+          "b": "session:2025/1869-r2",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:kevinbackhouse/dbusparse-r37",
+          "b": "session:2025/1869-r37",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.path.19",
+      "category": "path",
+      "hub": false,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "repo:thealexlichter/h3-basic-auth-r6",
+          "b": "session:2023/dev2784s",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "repo:thealexlichter/h3-basic-auth-r4",
+          "b": "session:2023/dev2784s-r2",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.search.00",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "safeguarding",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "safeguarding",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.01",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "thorley",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "thorley",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.02",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "bourne",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "bourne",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.03",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "gerth",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "gerth",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.04",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "albaugh",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "albaugh",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.05",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "rodes",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "rodes",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.06",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "jemiah",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "jemiah",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.07",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "success",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "success",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.08",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "take",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "take",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.09",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "keynote",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "keynote",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.10",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "policy",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "policy",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.11",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "context",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "context",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.12",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "will",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "will",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.13",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "idan",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "idan",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.14",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "world",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "world",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.15",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "management",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "management",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.16",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "manage",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "manage",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.17",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "global",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "global",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.18",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "work",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "work",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.search.19",
+      "category": "search",
+      "hub": false,
+      "semantics": "Every node matching `term` in display_name (rank 0), else payload.title (rank 1), else payload.bio (rank 2), across all kinds. Return the total match count and the first `limit` hits by (rank, id): {id, kind, name, rank}.",
+      "params": {
+        "S1-r2": {
+          "term": "about",
+          "limit": 20
+        },
+        "S2-r2": {
+          "term": "about",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "name": "v2.facet.00",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "expert_in",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "expert_in",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.01",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "about_topic",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.02",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "for_audience",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "for_audience",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.03",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "affiliated_with",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.04",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "for_industry",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "for_industry",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.05",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "works_with",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "works_with",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.06",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "features_product",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "features_product",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.07",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "has_account",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "has_account",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.08",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "delivered_as",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "delivered_as",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.09",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "owns",
+          "source_kind": "github_account",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "owns",
+          "source_kind": "github_account",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.10",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "presents",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "presents",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.11",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "participates_in",
+          "source_kind": "person",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "participates_in",
+          "source_kind": "person",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.12",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "mentions",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "mentions",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.13",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "in_track",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "in_track",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.14",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "pinned",
+          "source_kind": "github_account",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "pinned",
+          "source_kind": "github_account",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.15",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "describes",
+          "source_kind": "profile",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "describes",
+          "source_kind": "profile",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.16",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "held_in",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "held_in",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.17",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "scheduled_on",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "scheduled_on",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.18",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "has_type",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "has_type",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.facet.19",
+      "category": "facet",
+      "hub": false,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "part_of",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "part_of",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.00",
+      "category": "table",
+      "hub": false,
+      "semantics": "Sessions whose payload.sponsored is exactly false, ordered by start_epoch ascending with nulls last, then id. Return the total row count and one page: rows {id, name: display_name, value: start_epoch}.",
+      "params": {
+        "S1-r2": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "sessions_by_start",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.01",
+      "category": "table",
+      "hub": false,
+      "semantics": "Sessions whose payload.sponsored is exactly false, ordered by start_epoch ascending with nulls last, then id. Return the total row count and one page: rows {id, name: display_name, value: start_epoch}.",
+      "params": {
+        "S1-r2": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "sessions_by_start",
+          "offset": 100,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.02",
+      "category": "table",
+      "hub": false,
+      "semantics": "Sessions whose payload.sponsored is exactly false, ordered by start_epoch ascending with nulls last, then id. Return the total row count and one page: rows {id, name: display_name, value: start_epoch}.",
+      "params": {
+        "S1-r2": {
+          "table": "sessions_by_start",
+          "offset": 500,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "sessions_by_start",
+          "offset": 500,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.03",
+      "category": "table",
+      "hub": false,
+      "semantics": "Sessions whose payload.sponsored is exactly false, ordered by start_epoch ascending with nulls last, then id. Return the total row count and one page: rows {id, name: display_name, value: start_epoch}.",
+      "params": {
+        "S1-r2": {
+          "table": "sessions_by_start",
+          "offset": "last",
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "sessions_by_start",
+          "offset": "last",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.04",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.05",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:microsoft",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:microsoft",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.06",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:google",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:google",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.07",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:octopus-deploy",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:octopus-deploy",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.08",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:dream-games-r1",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:dream-games-r2",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.09",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:gsk-r5",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:gsk-r30",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.10",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:databricks-r7",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:databricks-r42",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.11",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:avanade-r8",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:avanade-r43",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.12",
+      "category": "table",
+      "hub": false,
+      "semantics": "Distinct person nodes with at least one affiliated_with edge to `org` (paraverse's rel=out:AFFILIATED_WITH:<org> table filter), ordered by display_name (code point, no case folding), then id. Rows {id, name, value: display_name}.",
+      "params": {
+        "S1-r2": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": "last",
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "people_by_org",
+          "org": "org:github",
+          "offset": "last",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.13",
+      "category": "table",
+      "hub": false,
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_by_stars",
+          "language": "Python",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.14",
+      "category": "table",
+      "hub": false,
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_by_stars",
+          "language": "TypeScript",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_by_stars",
+          "language": "TypeScript",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.15",
+      "category": "table",
+      "hub": false,
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_by_stars",
+          "language": "Go",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_by_stars",
+          "language": "Go",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.16",
+      "category": "table",
+      "hub": false,
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_by_stars",
+          "language": "Rust",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_by_stars",
+          "language": "Rust",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.17",
+      "category": "table",
+      "hub": false,
+      "semantics": "Repository nodes whose payload.primary_language equals `language`, ordered by payload.stars descending with nulls last, then id ascending. Rows {id, name, value: stars}.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_by_stars",
+          "language": "Ruby",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_by_stars",
+          "language": "Ruby",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.18",
+      "category": "table",
+      "hub": false,
+      "semantics": "See v2.conventions.table_repos_all_by_stars and last_page.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_all_by_stars",
+          "offset": 0,
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_all_by_stars",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.table.deep_largest_kind",
+      "category": "table",
+      "hub": false,
+      "semantics": "See v2.conventions.table_repos_all_by_stars and last_page.",
+      "params": {
+        "S1-r2": {
+          "table": "repos_all_by_stars",
+          "offset": "last",
+          "limit": 50
+        },
+        "S2-r2": {
+          "table": "repos_all_by_stars",
+          "offset": "last",
+          "limit": 50
+        }
+      }
+    },
+    {
+      "name": "v2.record.hub",
+      "category": "record",
+      "hub": true,
+      "semantics": "One entity: {id, kind, name: display_name, kb_path: nodes.jsonl path, payload, out, in}. out maps each relation to the edges leaving the entity, in to the edges arriving, each item {id: other endpoint, kind, attrs}, ordered by (id, canonical JSON of attrs). Relations are keys in sorted order; parallel edges are all listed.",
+      "params": {
+        "S1-r2": {
+          "id": "org:openai"
+        },
+        "S2-r2": {
+          "id": "org:openai"
+        }
+      }
+    },
+    {
+      "name": "v2.neighborhood.hub",
+      "category": "neighborhood",
+      "hub": true,
+      "semantics": "hop1: nodes adjacent to `id` in either direction. hop2: nodes adjacent to a non-hub hop1 node, minus hop1 and `id`. Return {total: |hop1| + |hop2|, hop1: |hop1|, nodes}, where nodes is the first `limit` of hop1 then hop2, each in id order: {id, kind, hop}.",
+      "params": {
+        "S1-r2": {
+          "id": "software:vs-code",
+          "limit": 200
+        },
+        "S2-r2": {
+          "id": "software:vs-code",
+          "limit": 200
+        }
+      }
+    },
+    {
+      "name": "v2.path.hub",
+      "category": "path",
+      "hub": true,
+      "semantics": "Shortest undirected path from `a` to `b` over every relation, at most `max_hops` edges, with no hub as an intermediate node. Return {hops, path: [a, ..., b]}; hops is null and path empty when no such path exists.",
+      "params": {
+        "S1-r2": {
+          "a": "person:dylan-ratcliffe-r1",
+          "b": "person:pamela-fox-r4",
+          "max_hops": 4
+        },
+        "S2-r2": {
+          "a": "person:dylan-ratcliffe-r1",
+          "b": "person:pamela-fox-r11",
+          "max_hops": 4
+        }
+      }
+    },
+    {
+      "name": "v2.facet.hub",
+      "category": "facet",
+      "hub": true,
+      "semantics": "Group the about_topic edges whose source is a session by target, counting distinct sources. Return the number of groups and the top `limit` groups by (count descending, id): {id, name: display_name, count}.",
+      "params": {
+        "S1-r2": {
+          "relation": "mentions",
+          "source_kind": "session",
+          "limit": 50
+        },
+        "S2-r2": {
+          "relation": "mentions",
+          "source_kind": "session",
+          "limit": 50
+        }
+      }
+    }
+  ]
+}

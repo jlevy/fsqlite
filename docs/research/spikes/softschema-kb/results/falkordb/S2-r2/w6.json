@@ -1,0 +1,141 @@
+{
+  "workflow": "W6",
+  "backend": "falkordb",
+  "scale": "S2-r2",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 15831492
+      },
+      {
+        "path": "<scratch>/fdb-data/S2-r2",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 15831492
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2"
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S2-r2/kb",
+    "seed": 20261117,
+    "replicas": 46,
+    "nodes": 238957,
+    "edges": 1155758,
+    "record_files": 224802,
+    "bytes": 1152109067
+  },
+  "artifacts": {
+    "data_dir": {
+      "paraverse-graph.rdb": 281515015,
+      "paraverse-graph.rdb.settings": 369
+    },
+    "runtime_dir_while_serving": [
+      "redis.config",
+      "redis.log",
+      "redis.pid",
+      "redis.socket"
+    ],
+    "count": 2,
+    "bytes": 281515384
+  },
+  "standard_tools": {
+    "rdb_magic": "REDIS0013",
+    "redis_check_rdb_exit_code": 1,
+    "redis_check_rdb_tail": [
+      "[info] 0 expires",
+      "[info] 0 already expired",
+      "[info] 0 subexpires"
+    ],
+    "stock_redis_server_without_module": {
+      "binary": "/usr/bin/redis-server",
+      "version": "Redis server v=7.0.15 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=d064f9f48c901a92",
+      "exit_code": 1,
+      "log_tail": [
+        "Configuration loaded",
+        "monotonic clock: POSIX clock_gettime",
+        "Failed opening Unix socket: unix socket path too long (109), must be under 108"
+      ]
+    },
+    "notes": [
+      "redis_check_rdb is the bundled binary in check mode: it validates the file's structure, not the graph contents.",
+      "The RDB is Redis's binary snapshot format; graphs are module values that only a redis-server with the FalkorDB module can load.",
+      "Any Redis client (redis-cli, redis-py) can query a running server with GRAPH.QUERY; nothing reads the file directly."
+    ]
+  },
+  "startup": {
+    "start_to_first_query_s": [
+      11.066,
+      11.655,
+      13.624
+    ],
+    "median_s": 11.655,
+    "server_rss_at_rest": 1474015232,
+    "server_used_memory_at_rest": 1358671184
+  },
+  "crash_loader_killed": {
+    "staging_appeared_after_s": 97.628,
+    "killed_after_staging_s": 32.77,
+    "live_graph_unchanged": true,
+    "orphan_staging_graphs": {
+      "kb__staging_17387_a84188": 238957
+    },
+    "retry_exit_code": 0,
+    "retry_s": 175.638,
+    "live_graph_after_retry_matches_kb": true,
+    "graphs_after_retry": [
+      "kb",
+      "kb__staging_17387_a84188"
+    ]
+  },
+  "crash_server_killed": {
+    "killed_after_staging_s": 32.77,
+    "loader_exit_code": 1,
+    "loader_error": "redis.exceptions.ConnectionError: Error while reading from <scratch>/tmp/tmpx5tw05lr/redis.socket : (104, 'Connection reset by peer')",
+    "rdb_present_after_kill": true,
+    "restart_error_before_manual_cleanup": null,
+    "restart_s": 12.744,
+    "graphs_after_restart": [
+      "kb",
+      "kb__staging_18932_910990"
+    ],
+    "live_graph_intact_after_restart": true,
+    "restarted_serves": "previous load",
+    "orphan_staging_graphs_after_restart": {
+      "kb__staging_18932_910990": 96417
+    },
+    "retry_exit_code": 0,
+    "retry_s": 175.707,
+    "live_graph_after_retry_matches_kb": true
+  },
+  "crash_server_killed_after_load": {
+    "loader_exit_code": 0,
+    "killed_after_completed_load_s": 5.045,
+    "bgsave_between_load_and_kill": false,
+    "restart_error_before_manual_cleanup": "ConnectionError: Error 111 connecting to <scratch>/tmp/tmps4mtbr94/redis.socket. Connection refused.",
+    "restart_s": 19.643,
+    "restarted_serves": "previous load",
+    "graphs_after_restart": [
+      "kb",
+      "kb__staging_23037_d17d75"
+    ],
+    "orphan_staging_graphs_after_restart": {
+      "kb__staging_23037_d17d75": 238957
+    }
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "workflow": "W1",
+  "backend": "falkordb",
+  "arm": "paraverse as built",
+  "scale": "S1",
+  "save_mode": "default",
+  "machine": {
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "memory_bytes": 16869134336,
+    "os": "Linux 6.18.44-fc-v553",
+    "python": "3.13.18",
+    "filesystems": [
+      {
+        "path": "<scratch>/kb-corpora/S1/kb",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14118040
+      },
+      {
+        "path": "<scratch>/fdb-data/S1",
+        "device": "/dev/vda",
+        "type": "ext4",
+        "available_kb": 14118040
+      }
+    ]
+  },
+  "software": {
+    "falkordb": "1.7.1",
+    "falkordblite": "0.10.0",
+    "redis": "8.1.0",
+    "softschema": "0.8.1",
+    "pyyaml": "6.0.3",
+    "psutil": "7.2.2",
+    "falkordb_module": "4.18.3",
+    "redis_server": "8.6.2"
+  },
+  "server_config": {
+    "graph_config": {
+      "TIMEOUT": 0,
+      "TIMEOUT_DEFAULT": 0,
+      "TIMEOUT_MAX": 0,
+      "CACHE_SIZE": 25,
+      "ASYNC_DELETE": true,
+      "OMP_THREAD_COUNT": 4,
+      "THREAD_COUNT": 4,
+      "RESULTSET_SIZE": -1,
+      "VKEY_MAX_ENTITY_COUNT": 100000,
+      "MAX_QUEUED_QUERIES": 4294967295,
+      "QUERY_MEM_CAPACITY": 0,
+      "DELTA_MAX_PENDING_CHANGES": 10000,
+      "NODE_CREATION_BUFFER": 16384,
+      "CMD_INFO": true,
+      "MAX_INFO_QUERIES": 1000,
+      "EFFECTS_THRESHOLD": 300,
+      "BOLT_PORT": 65535,
+      "DELAY_INDEXING": false,
+      "IMPORT_FOLDER": "/var/lib/FalkorDB/import/",
+      "TEMP_FOLDER": "/tmp",
+      "JS_HEAP_SIZE": 268435456,
+      "JS_STACK_SIZE": 1048576
+    },
+    "redis_config": {
+      "save": "900 1 300 100 60 200 15 1000",
+      "appendonly": "no",
+      "maxmemory": "0",
+      "maxmemory-policy": "noeviction",
+      "io-threads": "1"
+    },
+    "client_socket_timeout": null
+  },
+  "corpus": {
+    "kb": "<scratch>/kb-corpora/S1/kb",
+    "seed": 20261117,
+    "replicas": 9,
+    "nodes": 48663,
+    "edges": 227817,
+    "record_files": 44775,
+    "bytes": 221432416
+  },
+  "parser": {
+    "name": "PyYAML CSafeLoader via paraverse kb.read_artifact",
+    "processes": 1,
+    "jobs": 1
+  },
+  "aborted": false,
+  "phases": {
+    "discover_s": 4.027,
+    "parse_s": 15.045,
+    "validate_s": 0.028,
+    "read_other_s": -0.148,
+    "transform_s": 2.438,
+    "ingest_s": 7.274,
+    "index_s": 0.591,
+    "verify_s": 1.382,
+    "schemas_s": 0.42,
+    "constraint_s": 0.103,
+    "meta_s": 1.276,
+    "swap_s": 0.0,
+    "durable_save_s": 0.532
+  },
+  "phase_notes": {
+    "validate_s": "paraverse's envelope and contract checks only; softschema validation is not part of paraverse's default load (see softschema_validation)",
+    "read_other_s": "load_kb's payload_for pass and bookkeeping",
+    "ingest_s": "load_graph minus every other timed phase: the UNWIND/CREATE batches for nodes and edges"
+  },
+  "softschema_validation": null,
+  "timings": {
+    "server_start_s": 0.12,
+    "read_kb_s": 18.953,
+    "load_graph_s": 13.485,
+    "servable_s": 32.438,
+    "durable_s": 33.144,
+    "ingest_through_durable_s": 14.19,
+    "wall_s": 33.273
+  },
+  "memory": {
+    "loader_peak_rss": 1050234880,
+    "loader_peak_rss_sampled": 1050644480,
+    "server_peak_rss": 381558784,
+    "server_peak_rss_with_children": 381558784,
+    "server_used_memory": 270749936,
+    "server_used_memory_peak": 285222944,
+    "server_used_memory_rss": 381038592,
+    "machine_available_lowest": 13590282240
+  },
+  "size": {
+    "rdb_bytes": 55215521,
+    "data_dir_files": [
+      "paraverse-graph.rdb",
+      "paraverse-graph.rdb.settings"
+    ]
+  },
+  "load_report": {
+    "node_total": 48663,
+    "edge_total": 227817,
+    "engine": "4.18.3"
+  },
+  "notes": [
+    "load_kb parses every artifact into memory before load_graph writes; both run in this process.",
+    "servable_s is files to a renamed, queryable live graph; durable_s adds the explicit SAVE.",
+    "The client is paraverse's open_db with socket_timeout=None: with redis-py 8.1.0's default 5 s timeout, paraverse's own load fails at S2 in loader._count_edges (see fdb.open_embedded)."
+  ]
+}

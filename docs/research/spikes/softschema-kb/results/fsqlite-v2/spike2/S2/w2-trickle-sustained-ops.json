@@ -1,0 +1,214 @@
+{
+  "backend": "fsqlite",
+  "variant": "fsqlite-v2/spike2",
+  "scale": "S2",
+  "workflow": "W2 trickle (C18), fsqlite v2 Spike 2",
+  "recorded_at": "2026-11-17T05:42:44.481Z",
+  "machine": {
+    "cpus": 4,
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "mem_total_mib": 16088,
+    "mem_free_mib": 15026,
+    "os": "linux 6.18.44-fc-v553",
+    "filesystem": "ext2/ext3",
+    "node": "v22.23.4",
+    "sqlite": "3.53.4",
+    "python": "Python 3.13.18"
+  },
+  "corpus": {
+    "kb": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2/kb",
+    "corpus": {
+      "scale": "S2",
+      "seed": 20261117,
+      "replicas": 46,
+      "source": "attic/paraverse/vendor/universe2026-md/kb",
+      "nodes": 248722,
+      "edges": 1164398,
+      "record_files": 228850,
+      "files": 228876,
+      "bytes": 1135690973,
+      "record_bytes": 711930585,
+      "workers": 4,
+      "prepare_seconds": 0.67,
+      "seconds": 7.43
+    },
+    "node_total": 248722,
+    "edge_total": 1164398
+  },
+  "delta": "<scratch>/research-c/spike2/kbscratch/kb-corpora/S2/deltas/p20",
+  "gc": "gc({ retain: 0 }) after every publish",
+  "fts_sidecar": "not rebuilt",
+  "batches": null,
+  "sustained": {
+    "seconds": 60,
+    "writers": 1,
+    "strategy": "ops",
+    "offered_records_per_s": 200,
+    "interval_factor": 0,
+    "records_captured": 11761,
+    "capture_records_per_s": 196.03,
+    "capture_ms": {
+      "p50": 0.1681,
+      "p95": 0.4112
+    },
+    "records_published": 11761,
+    "published_records_per_s": 171.9,
+    "publishes": 8,
+    "records_per_publish_median": 1842,
+    "build_ms_median": 3217,
+    "apply_ms_median": 426.523,
+    "gc_retain0_ms_median": 6042,
+    "publish_cycle_ms": {
+      "median": 9327,
+      "p95": 11899
+    },
+    "visibility_delay_ms": {
+      "p50": 8117,
+      "p95": 12960,
+      "max": 15299
+    },
+    "visibility_delay_in_cycles": {
+      "p50": 0.87,
+      "p95": 1.39
+    },
+    "rounds": [
+      {
+        "applied": 2,
+        "build_ms": 3217,
+        "waited_ms": 1072,
+        "gc_ms": 5245,
+        "timings": {
+          "copy_ms": 995.7160359993577,
+          "open_ms": 1.1670570001006126,
+          "apply_ms": 3.5637750029563904,
+          "closure_ms": 0.12786399945616722,
+          "gate_ms": 1095.7618720009923,
+          "fsync_ms": 1112.7844769991934,
+          "commit_ms": 3.3882519975304604,
+          "published_at_epoch_ms": 1794894091796,
+          "settle_ms": 1.0084390006959438
+        }
+      },
+      {
+        "applied": 1692,
+        "build_ms": 3509,
+        "waited_ms": 2,
+        "gc_ms": 6419,
+        "timings": {
+          "copy_ms": 940.1685940027237,
+          "open_ms": 1.1492679975926876,
+          "apply_ms": 620.4473970010877,
+          "closure_ms": 0.10992399975657463,
+          "gate_ms": 1082.796696998179,
+          "fsync_ms": 831.1261919997633,
+          "commit_ms": 4.693120997399092,
+          "published_at_epoch_ms": 1794894100528,
+          "settle_ms": 26.084945999085903
+        }
+      },
+      {
+        "applied": 1986,
+        "build_ms": 3434,
+        "waited_ms": 1,
+        "gc_ms": 8151,
+        "timings": {
+          "copy_ms": 794.1103690005839,
+          "open_ms": 2.381497997790575,
+          "apply_ms": 596.8908459991217,
+          "closure_ms": 0.11871200054883957,
+          "gate_ms": 1163.1938950009644,
+          "fsync_ms": 839.1848760023713,
+          "commit_ms": 3.7001529969274998,
+          "published_at_epoch_ms": 1794894110376,
+          "settle_ms": 31.947237998247147
+        }
+      },
+      {
+        "applied": 2318,
+        "build_ms": 3752,
+        "waited_ms": 2,
+        "gc_ms": 6049,
+        "timings": {
+          "copy_ms": 928.7219480015337,
+          "open_ms": 3.835106998682022,
+          "apply_ms": 729.989413999021,
+          "closure_ms": 0.09134000167250633,
+          "gate_ms": 1103.4217230007052,
+          "fsync_ms": 943.058780003339,
+          "commit_ms": 2.445388998836279,
+          "published_at_epoch_ms": 1794894122275,
+          "settle_ms": 37.22659399732947
+        }
+      },
+      {
+        "applied": 1960,
+        "build_ms": 3420,
+        "waited_ms": 2,
+        "gc_ms": 6156,
+        "timings": {
+          "copy_ms": 864.1407370008528,
+          "open_ms": 7.317579999566078,
+          "apply_ms": 606.8393579982221,
+          "closure_ms": 0.08194399997591972,
+          "gate_ms": 971.5267480015755,
+          "fsync_ms": 934.1934580020607,
+          "commit_ms": 3.656243998557329,
+          "published_at_epoch_ms": 1794894131754,
+          "settle_ms": 30.42432200163603
+        }
+      },
+      {
+        "applied": 1916,
+        "build_ms": 3170,
+        "waited_ms": 1,
+        "gc_ms": 6042,
+        "timings": {
+          "copy_ms": 808.5587810017169,
+          "open_ms": 5.144505999982357,
+          "apply_ms": 426.52321899682283,
+          "closure_ms": 0.12132400274276733,
+          "gate_ms": 951.5566769987345,
+          "fsync_ms": 943.0079149976373,
+          "commit_ms": 3.2514990009367466,
+          "published_at_epoch_ms": 1794894141081,
+          "settle_ms": 28.95966599881649
+        }
+      },
+      {
+        "applied": 1842,
+        "build_ms": 2206,
+        "waited_ms": 1,
+        "gc_ms": 5106,
+        "timings": {
+          "copy_ms": 882.019807998091,
+          "open_ms": 5.396005000919104,
+          "apply_ms": 368.4946420006454,
+          "closure_ms": 0.07404099777340889,
+          "gate_ms": 900.8816680014133,
+          "fsync_ms": 16.75553299859166,
+          "commit_ms": 3.1905450001358986,
+          "published_at_epoch_ms": 1794894149333,
+          "settle_ms": 26.654523000121117
+        }
+      },
+      {
+        "applied": 45,
+        "build_ms": 2530,
+        "waited_ms": 0,
+        "gc_ms": 5141,
+        "timings": {
+          "copy_ms": 744.9364919997752,
+          "open_ms": 8.303933002054691,
+          "apply_ms": 9.682783998548985,
+          "closure_ms": 0.06078600138425827,
+          "gate_ms": 832.3395969979465,
+          "fsync_ms": 930.1633809991181,
+          "commit_ms": 2.1837750002741814,
+          "published_at_epoch_ms": 1794894156995,
+          "settle_ms": 1.1940379999578
+        }
+      }
+    ],
+    "note": "one writer process capturing one-record envelopes at the offered rate; one publisher process (runPublisher) folding everything pending per build, then gc({ retain: 0 })"
+  }
+}
