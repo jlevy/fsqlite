@@ -91,9 +91,8 @@ The file’s `oracle_check` records the expected file and its sha256, the KB the
 checked against (`$KB_CORPORA/<scale>/kb`, the vendored S0 KB, or the `delta2.py
 --apply` output for an after-batch file), and the verdict.
 A file that did not match (the path-CTE subsets and the no-closure ablations) keeps its
-full answers. The full answers of every slimmed file are in the history: commit
-`2e2962b` for the files that existed then, and the restoring commit before the re-slim
-for all of them.
+full answers. The full answers of every slimmed file are in the history, at commit
+`d003010`.
 `oracle_check` is about the answers only: after a batch, a W3 match does not show that
 the stored state is right (see State Check).
 
